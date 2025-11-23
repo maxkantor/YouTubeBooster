@@ -77,43 +77,55 @@ class YouTubeAPIClient:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     self.credentials_file, SCOPES)
                 
-                # Try to use local server with browser, fall back to console if no browser
+                # Check if we're in a headless/deployment environment
+                is_headless = (
+                    os.environ.get('DISPLAY') is None or 
+                    os.environ.get('RENDER') is not None or
+                    os.environ.get('FLY_APP_NAME') is not None or
+                    not WEBBROWSER_AVAILABLE or
+                    os.environ.get('HEADLESS') is not None
+                )
+                
+                # Try to use local server with browser, fall back to no browser if headless
                 try:
-                    # Check if we're in a headless/deployment environment
-                    is_headless = (
-                        os.environ.get('DISPLAY') is None or 
-                        os.environ.get('RENDER') is not None or
-                        os.environ.get('FLY_APP_NAME') is not None or
-                        not WEBBROWSER_AVAILABLE
-                    )
-                    
                     if is_headless:
-                        # No browser available, use console method
-                        print("⚠️  Headless environment detected, using console authentication...")
-                        print("📝 Please visit the URL shown below and paste the authorization code:")
-                        creds = flow.run_console()
+                        # No browser available, use local server without opening browser
+                        print("⚠️  Headless environment detected.")
+                        print("📝 Starting local server - check logs for authorization URL...")
+                        print("📝 You'll need to visit the URL manually to authorize.")
+                        creds = flow.run_local_server(port=0, open_browser=False)
+                        print("✅ Authorization successful!")
                     else:
                         # Try browser method first
                         try:
                             # Use local server with automatic browser opening
                             creds = flow.run_local_server(port=0, open_browser=True)
                         except Exception as browser_error:
-                            # If browser fails, fall back to console
+                            # If browser fails, try without opening browser
                             if "browser" in str(browser_error).lower() or "webbrowser" in str(browser_error).lower():
-                                print("⚠️  Could not open browser, using console authentication...")
-                                print("📝 Please visit the URL shown below and paste the authorization code:")
-                                creds = flow.run_console()
+                                print("⚠️  Could not open browser automatically.")
+                                print("📝 Starting local server - visit the URL shown below to authorize:")
+                                creds = flow.run_local_server(port=0, open_browser=False)
                             else:
                                 raise
                 except Exception as e:
-                    # Last resort: try console method
-                    if "browser" not in str(e).lower() and "webbrowser" not in str(e).lower():
-                        print("⚠️  Authentication error, trying console method...")
-                        print("📝 Please visit the URL shown below and paste the authorization code:")
+                    # If all else fails, try without browser but still use local server
+                    error_str = str(e).lower()
+                    if "browser" in error_str or "webbrowser" in error_str or "could not locate runnable browser" in error_str:
+                        print("⚠️  Browser authentication failed, trying without browser...")
+                        print("📝 Visit the authorization URL that will be shown below:")
                         try:
-                            creds = flow.run_console()
-                        except:
-                            raise e
+                            creds = flow.run_local_server(port=0, open_browser=False)
+                        except Exception as final_error:
+                            raise Exception(
+                                f"Authentication failed: {final_error}\n\n"
+                                "💡 For deployment, pre-generate your token locally:\n"
+                                "   1. Run locally once: python3 web_app.py\n"
+                                "   2. Complete OAuth flow\n"
+                                "   3. Convert token.pickle to base64\n"
+                                "   4. Add as GOOGLE_TOKEN_BASE64 environment variable\n\n"
+                                "💡 Or for local development, visit the authorization URL manually."
+                            )
                     else:
                         raise
             
