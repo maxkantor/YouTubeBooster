@@ -56,31 +56,52 @@ Render.com is the easiest way to deploy your dashboard for free!
 
 5. **Click "Create Web Service"**
 
-## Step 4: Upload Credentials (IMPORTANT!)
+## Step 4: Upload Credentials (IMPORTANT!) - FREE METHOD
 
-Since we can't commit `credentials.json`, you need to add it as an environment variable:
+Since we can't commit `credentials.json` and Render Shell is paid, use environment variables:
 
-1. **Convert credentials.json to base64:**
+### Method 1: Base64 Environment Variable (FREE - Recommended)
+
+1. **Convert credentials.json to base64 on your computer:**
    ```bash
    # On macOS/Linux
+   base64 -i credentials.json
+   # Or without -i flag on Linux:
    base64 credentials.json
    ```
-   Copy the output
+   Copy the entire output (it will be a long string)
 
 2. **In Render dashboard:**
    - Go to your service → "Environment"
    - Click "Add Environment Variable"
    - Key: `GOOGLE_CREDENTIALS_BASE64`
-   - Value: (paste the base64 string)
+   - Value: (paste the entire base64 string)
    - Click "Save Changes"
 
-3. **Update web_app.py to load from environment:**
-   (I'll create an updated version that checks for this)
+3. **The code already supports this!** The `web_app.py` I created will automatically:
+   - Check for `GOOGLE_CREDENTIALS_BASE64` environment variable
+   - Decode it and create `credentials.json` automatically
+   - You don't need to do anything else!
 
-4. **Or manually upload via Render shell:**
-   - Go to your service → "Shell"
-   - Upload `credentials.json` file
-   - Place it in the project root
+4. **Redeploy:**
+   - After adding the environment variable, Render will automatically redeploy
+   - Or click "Manual Deploy" → "Deploy latest commit"
+
+✅ **That's it! No shell needed!**
+
+### Method 2: Create credentials.json in build (Alternative)
+
+If Method 1 doesn't work, you can also add credentials during the build:
+
+1. **In Render dashboard → Environment:**
+   - Add individual parts of your credentials as environment variables:
+     - `GOOGLE_CLIENT_ID`
+     - `GOOGLE_CLIENT_SECRET`
+     - etc.
+
+2. **Create a build script** that writes credentials.json from env vars
+
+**But Method 1 (base64) is easier and already supported!**
 
 ## Step 5: Wait for Deployment
 

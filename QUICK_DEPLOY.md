@@ -49,11 +49,20 @@ git push -u origin main
 6. Add env var: `PYTHON_VERSION=3.9.6`
 7. Click "Create"
 
-### 3. Upload credentials:
-- Go to Shell in Render dashboard
-- Upload `credentials.json` file
+### 3. Upload credentials (FREE method - no shell needed):
+```bash
+# Convert credentials to base64
+base64 -i credentials.json
+# Copy the output
+```
+
+- In Render dashboard → Your service → "Environment"
+- Add env var: `GOOGLE_CREDENTIALS_BASE64` = (paste base64 string)
+- Save - Render will auto-redeploy
 
 **Done!** Your app is live at: `https://your-app.onrender.com`
+
+See `SETUP_CREDENTIALS_FOR_RENDER.md` for detailed steps.
 
 See `DEPLOY_TO_RENDER.md` for detailed steps.
 

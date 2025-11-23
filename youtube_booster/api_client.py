@@ -8,6 +8,13 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+# Try to import webbrowser for browser detection
+try:
+    import webbrowser
+    WEBBROWSER_AVAILABLE = True
+except ImportError:
+    WEBBROWSER_AVAILABLE = False
+
 
 SCOPES = [
     'https://www.googleapis.com/auth/youtube.readonly',
@@ -35,10 +42,27 @@ class YouTubeAPIClient:
         """Authenticate and get credentials."""
         creds = None
         
+        # Check if token is in environment variable (for deployment)
+        if not os.path.exists(self.token_file) and os.environ.get('GOOGLE_TOKEN_BASE64'):
+            import base64
+            try:
+                token_base64 = os.environ.get('GOOGLE_TOKEN_BASE64')
+                token_data = base64.b64decode(token_base64)
+                # Write to file
+                with open(self.token_file, 'wb') as f:
+                    f.write(token_data)
+                print("✅ Loaded token from environment variable")
+            except Exception as e:
+                print(f"⚠️  Error loading token from env var: {e}")
+        
         # Load existing token
         if os.path.exists(self.token_file):
-            with open(self.token_file, 'rb') as token:
-                creds = pickle.load(token)
+            try:
+                with open(self.token_file, 'rb') as token:
+                    creds = pickle.load(token)
+            except Exception as e:
+                print(f"⚠️  Error loading token file: {e}")
+                creds = None
         
         # If no valid credentials, get new ones
         if not creds or not creds.valid:
@@ -52,7 +76,46 @@ class YouTubeAPIClient:
                     )
                 flow = InstalledAppFlow.from_client_secrets_file(
                     self.credentials_file, SCOPES)
-                creds = flow.run_local_server(port=0)
+                
+                # Try to use local server with browser, fall back to console if no browser
+                try:
+                    # Check if we're in a headless/deployment environment
+                    is_headless = (
+                        os.environ.get('DISPLAY') is None or 
+                        os.environ.get('RENDER') is not None or
+                        os.environ.get('FLY_APP_NAME') is not None or
+                        not WEBBROWSER_AVAILABLE
+                    )
+                    
+                    if is_headless:
+                        # No browser available, use console method
+                        print("⚠️  Headless environment detected, using console authentication...")
+                        print("📝 Please visit the URL shown below and paste the authorization code:")
+                        creds = flow.run_console()
+                    else:
+                        # Try browser method first
+                        try:
+                            # Use local server with automatic browser opening
+                            creds = flow.run_local_server(port=0, open_browser=True)
+                        except Exception as browser_error:
+                            # If browser fails, fall back to console
+                            if "browser" in str(browser_error).lower() or "webbrowser" in str(browser_error).lower():
+                                print("⚠️  Could not open browser, using console authentication...")
+                                print("📝 Please visit the URL shown below and paste the authorization code:")
+                                creds = flow.run_console()
+                            else:
+                                raise
+                except Exception as e:
+                    # Last resort: try console method
+                    if "browser" not in str(e).lower() and "webbrowser" not in str(e).lower():
+                        print("⚠️  Authentication error, trying console method...")
+                        print("📝 Please visit the URL shown below and paste the authorization code:")
+                        try:
+                            creds = flow.run_console()
+                        except:
+                            raise e
+                    else:
+                        raise
             
             # Save credentials for next run
             with open(self.token_file, 'wb') as token:
@@ -179,23 +242,30 @@ class YouTubeAPIClient:
                 )
                 raise ValueError(error_msg)
             else:
-                # Final fallback: try authenticated user
-                request = self.youtube_data.channels().list(
-                    part='id,snippet',
-                    mine=True
-                )
-                response = request.execute()
-                
-                if response['items']:
-                    channel_info = response['items'][0]
-                    print(f"✅ Using your authenticated channel: {channel_info['snippet']['title']}")
-                    return channel_info['id']
-                else:
-                    raise ValueError(
-                        "❌ Could not determine channel ID.\n\n"
-                        "💡 Please provide your channel ID or URL:\n"
-                        "- Channel ID: UCxxxxx... (from youtube.com/channel/UCxxxxx)\n"
-                        "- Channel URL: https://www.youtube.com/@maxkantorUSA"
+                # Final fallback: try authenticated user (no channel specified)
+                try:
+                    request = self.youtube_data.channels().list(
+                        part='id,snippet',
+                        mine=True
+                    )
+                    response = request.execute()
+                    
+                    if response['items']:
+                        channel_info = response['items'][0]
+                        print(f"✅ Using your authenticated channel: {channel_info['snippet']['title']}")
+                        return channel_info['id']
+                    else:
+                        raise ValueError(
+                            "❌ Could not determine channel ID.\n\n"
+                            "💡 Please provide your channel ID or URL:\n"
+                            "- Channel ID: UCxxxxx... (from youtube.com/channel/UCxxxxx)\n"
+                            "- Channel URL: https://www.youtube.com/@maxkantorUSA\n"
+                            "- Or make sure you're authenticated with the correct Google account"
+                        )
+                except HttpError as e:
+                    raise Exception(
+                        f"❌ Error getting authenticated channel: {e}\n\n"
+                        "💡 Make sure you're authenticated with a Google account that has a YouTube channel."
                     )
         except HttpError as e:
             raise Exception(f"Error getting channel ID: {e}")
