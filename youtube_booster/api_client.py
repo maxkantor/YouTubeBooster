@@ -60,6 +60,7 @@ class YouTubeAPIClient:
             try:
                 with open(self.token_file, 'rb') as token:
                     creds = pickle.load(token)
+                print(f"✅ Loaded existing token from {self.token_file}")
             except Exception as e:
                 print(f"⚠️  Error loading token file: {e}")
                 # If token file is corrupted, delete it
@@ -84,12 +85,16 @@ class YouTubeAPIClient:
                     self.credentials_file, SCOPES)
                 
                 # Check if we're in a headless/deployment environment
+                # On macOS, DISPLAY is typically None but browser still works
+                # Only check DISPLAY on Linux systems
+                import platform
+                is_linux = platform.system() == 'Linux'
                 is_headless = (
-                    os.environ.get('DISPLAY') is None or 
                     os.environ.get('RENDER') is not None or
                     os.environ.get('FLY_APP_NAME') is not None or
-                    not WEBBROWSER_AVAILABLE or
-                    os.environ.get('HEADLESS') is not None
+                    os.environ.get('HEADLESS') is not None or
+                    (is_linux and os.environ.get('DISPLAY') is None) or
+                    not WEBBROWSER_AVAILABLE
                 )
                 
                 # Try to use local server with browser, fall back to no browser if headless

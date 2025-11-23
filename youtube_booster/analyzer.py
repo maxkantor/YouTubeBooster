@@ -49,8 +49,12 @@ class WatchTimeAnalyzer:
             print(f"Warning: Could not fetch analytics data: {e}")
             analytics = None
         
-        # Get videos
-        videos = self.api_client.get_videos(channel_id, max_results=50)
+        # Get videos (limit to 25 for faster initial load)
+        try:
+            videos = self.api_client.get_videos(channel_id, max_results=25)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not fetch videos: {e}")
+            videos = []
         
         # Analyze video performance
         video_analysis = self._analyze_videos(videos)

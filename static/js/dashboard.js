@@ -52,7 +52,29 @@ async function loadOverview() {
     hideError();
     
     try {
-        const response = await fetch('/api/channel/analyze?days=30');
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        let response;
+        try {
+            response = await fetch('/api/channel/analyze?days=30', {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+        } catch (fetchError) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+                throw new Error('Request timed out. The API call took too long. Check server logs.');
+            }
+            throw fetchError;
+        }
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}: ${response.statusText}` }));
+            throw new Error(errorData.error || `Server error: ${response.status}`);
+        }
+        
         const data = await response.json();
         
         if (data.error) {
@@ -98,7 +120,8 @@ async function loadOverview() {
         
         hideLoading();
     } catch (error) {
-        showError(error.message);
+        console.error('Error loading overview:', error);
+        showError(error.message || 'Failed to load channel data. Check console for details.');
         hideLoading();
     }
 }

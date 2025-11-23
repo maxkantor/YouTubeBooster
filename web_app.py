@@ -15,7 +15,8 @@ app = Flask(__name__)
 api_client = None
 
 # Port configuration for deployment
-PORT = int(os.environ.get('PORT', 5000))
+# Use 5001 as default since macOS AirPlay uses 5000
+PORT = int(os.environ.get('PORT', 5001))
 
 
 def ensure_credentials():
@@ -42,7 +43,13 @@ def get_api_client():
     if api_client is None:
         # Ensure credentials exist before initializing
         ensure_credentials()
-        api_client = YouTubeAPIClient()
+        print("🔐 Initializing YouTube API client (this may take a moment on first run)...")
+        try:
+            api_client = YouTubeAPIClient()
+            print("✅ API client initialized successfully")
+        except Exception as e:
+            print(f"❌ Error initializing API client: {e}")
+            raise
     return api_client
 
 
@@ -56,36 +63,60 @@ def index():
 def analyze_channel():
     """API endpoint to analyze channel."""
     try:
+        import traceback
+        print("📊 Starting channel analysis...")
+        
         days = int(request.args.get('days', 30))
         channel_id = request.args.get('channel_id')
         
+        print(f"🔍 Getting API client...")
         client = get_api_client()
+        print(f"✅ API client ready")
+        
         analyzer = WatchTimeAnalyzer(client)
         
         if channel_id is None:
+            print("📍 Looking up channel ID...")
             # Try to get authenticated user's channel first
             try:
                 channel_id = client.get_channel_id()  # No args = authenticated user
-            except Exception:
+                print(f"✅ Found channel ID: {channel_id}")
+            except Exception as e1:
+                print(f"⚠️  Could not get authenticated channel: {e1}")
                 # Fallback: try the handle if available
                 try:
                     channel_id = client.get_channel_id('@maxkantorUSA')
-                except Exception as e:
-                    return jsonify({
-                        'error': f'Could not determine channel ID. Please authenticate or provide channel_id parameter. Error: {str(e)}'
-                    }), 400
+                    print(f"✅ Found channel ID via handle: {channel_id}")
+                except Exception as e2:
+                    error_msg = f'Could not determine channel ID. Error: {str(e1)}'
+                    print(f"❌ {error_msg}")
+                    return jsonify({'error': error_msg}), 400
         
         if not channel_id:
             return jsonify({'error': 'Could not determine channel ID'}), 400
         
-        analysis = analyzer.analyze_channel(channel_id, days=days)
+        print(f"📈 Analyzing channel {channel_id}...")
+        try:
+            analysis = analyzer.analyze_channel(channel_id, days=days)
+            print(f"✅ Analysis complete!")
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"❌ Error during analysis: {e}")
+            print(f"Traceback: {error_trace}")
+            # Return partial data if available
+            raise Exception(f"Analysis failed: {str(e)}")
         
         # Convert to JSON-serializable format
         result = json.loads(json.dumps(analysis, default=str))
         return jsonify(result)
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Error in analyze_channel: {e}")
+        print(f"Traceback: {error_trace}")
+        return jsonify({'error': str(e), 'traceback': error_trace}), 500
 
 
 @app.route('/api/video/seo/<video_id>')
