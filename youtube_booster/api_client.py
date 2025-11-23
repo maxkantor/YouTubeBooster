@@ -62,6 +62,12 @@ class YouTubeAPIClient:
                     creds = pickle.load(token)
             except Exception as e:
                 print(f"⚠️  Error loading token file: {e}")
+                # If token file is corrupted, delete it
+                try:
+                    os.remove(self.token_file)
+                    print("🗑️  Removed corrupted token file")
+                except:
+                    pass
                 creds = None
         
         # If no valid credentials, get new ones
@@ -109,9 +115,39 @@ class YouTubeAPIClient:
                             else:
                                 raise
                 except Exception as e:
-                    # If all else fails, try without browser but still use local server
+                    # Handle different types of errors
                     error_str = str(e).lower()
-                    if "browser" in error_str or "webbrowser" in error_str or "could not locate runnable browser" in error_str:
+                    
+                    # Handle CSRF/state mismatch errors
+                    if "mismatching_state" in error_str or "csrf" in error_str or "state not equal" in error_str:
+                        print("\n❌ CSRF Error: OAuth state mismatch detected.")
+                        print("💡 This usually happens when OAuth flow is interrupted.")
+                        print("\n🔧 Quick Fix:")
+                        print("   1. Delete token.pickle: rm token.pickle")
+                        print("   2. Close all browser tabs related to OAuth")
+                        print("   3. Run the app again: python3 web_app.py")
+                        print("   4. Complete OAuth in a fresh browser window\n")
+                        
+                        # Try to clean up and retry once
+                        if os.path.exists(self.token_file):
+                            try:
+                                os.remove(self.token_file)
+                                print("🗑️  Removed existing token file. Please restart the app.")
+                            except:
+                                pass
+                        
+                        raise Exception(
+                            "CSRF Error: OAuth state mismatch.\n\n"
+                            "💡 Solution:\n"
+                            "   1. Run: rm token.pickle\n"
+                            "   2. Close all OAuth browser tabs\n"
+                            "   3. Run: python3 web_app.py\n"
+                            "   4. Complete OAuth in a fresh window\n\n"
+                            "This error happens when OAuth flow is interrupted or restarted."
+                        )
+                    
+                    # Handle browser errors
+                    elif "browser" in error_str or "webbrowser" in error_str or "could not locate runnable browser" in error_str:
                         print("⚠️  Browser authentication failed, trying without browser...")
                         print("📝 Visit the authorization URL that will be shown below:")
                         try:
