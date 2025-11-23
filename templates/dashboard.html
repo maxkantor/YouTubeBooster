@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Booster - Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📈 YouTube Booster Dashboard</h1>
+            <p class="subtitle">Channel: <strong id="channel-name">@maxkantorUSA</strong></p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('overview')">📊 Overview</button>
+            <button class="tab-btn" onclick="showTab('videos')">📹 Videos</button>
+            <button class="tab-btn" onclick="showTab('suggestions')">💡 Suggestions</button>
+            <button class="tab-btn" onclick="showTab('seo')">🔍 SEO Optimizer</button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Loading your channel data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error" class="error hidden"></div>
+
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-info">
+                        <h3 id="subscribers">-</h3>
+                        <p>Subscribers</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📺</div>
+                    <div class="stat-info">
+                        <h3 id="total-views">-</h3>
+                        <p>Total Views</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🎬</div>
+                    <div class="stat-info">
+                        <h3 id="video-count">-</h3>
+                        <p>Videos</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">💚</div>
+                    <div class="stat-info">
+                        <h3 id="engagement-rate">-</h3>
+                        <p>Avg Engagement</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>⭐ Top Performing Videos</h2>
+                <div id="top-videos" class="video-list"></div>
+            </div>
+
+            <div class="section">
+                <h2>💡 Recommendations</h2>
+                <div id="recommendations" class="recommendations"></div>
+            </div>
+        </div>
+
+        <!-- Videos Tab -->
+        <div id="videos" class="tab-content">
+            <div class="section">
+                <h2>Your Videos</h2>
+                <button class="btn-primary" onclick="loadVideos()">Refresh Videos</button>
+                <div id="all-videos" class="video-list"></div>
+            </div>
+        </div>
+
+        <!-- Suggestions Tab -->
+        <div id="suggestions" class="tab-content">
+            <div class="section">
+                <h2>Content Ideas</h2>
+                <button class="btn-primary" onclick="loadSuggestions()">Get Suggestions</button>
+                <div id="content-suggestions" class="suggestions-list"></div>
+            </div>
+        </div>
+
+        <!-- SEO Tab -->
+        <div id="seo" class="tab-content">
+            <div class="section">
+                <h2>SEO Optimizer</h2>
+                <div class="seo-form">
+                    <input type="text" id="video-id-input" placeholder="Enter YouTube Video ID" class="input-field">
+                    <button class="btn-primary" onclick="analyzeSEO()">Analyze SEO</button>
+                </div>
+                <div id="seo-results"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
+
