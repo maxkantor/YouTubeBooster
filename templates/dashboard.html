@@ -19,6 +19,7 @@
             <button class="tab-btn" onclick="showTab('videos')">📹 Videos</button>
             <button class="tab-btn" onclick="showTab('suggestions')">💡 Suggestions</button>
             <button class="tab-btn" onclick="showTab('seo')">🔍 SEO Optimizer</button>
+            <button class="tab-btn" onclick="showTab('runner')">▶ Continuous Runner</button>
         </div>
 
         <!-- Loading Indicator -->
@@ -103,8 +104,58 @@
                 <div id="seo-results"></div>
             </div>
         </div>
+
+        <!-- Continuous Runner Tab -->
+        <div id="runner" class="tab-content">
+            <div class="section">
+                <h2>▶ Continuous Runner</h2>
+                <div class="runner-controls">
+                    <label>Speed (1–20):
+                        <input type="number" id="runner-speed" class="input-field runner-speed-input"
+                               min="1" max="20" step="0.25" value="10">
+                    </label>
+                    <label class="runner-shuffle-label">
+                        <input type="checkbox" id="runner-shuffle"> Shuffle
+                    </label>
+                    <button class="btn-primary runner-btn" id="runner-start-btn" onclick="runnerStart()">▶ Start</button>
+                    <button class="btn-secondary runner-btn" id="runner-stop-btn" onclick="runnerStop()" disabled>⏹ Stop</button>
+                    <button class="btn-secondary runner-btn" id="runner-skip-btn" onclick="runnerSkip()" disabled>⏭ Skip</button>
+                </div>
+
+                <div class="runner-status" id="runner-status">
+                    <div><strong>Status:</strong> <span id="runner-status-text">Idle</span></div>
+                    <div><strong>Video:</strong> <span id="runner-video-title">—</span>
+                        (<a id="runner-video-link" href="#" target="_blank" rel="noopener">—</a>)</div>
+                    <div><strong>Index:</strong> <span id="runner-index">0</span> / <span id="runner-total">0</span></div>
+                    <div><strong>Desired speed:</strong> <span id="runner-desired-speed">—</span>
+                        &nbsp;|&nbsp; <strong>Actual speed:</strong> <span id="runner-actual-speed">—</span></div>
+                    <div><strong>Position:</strong> <span id="runner-position">—</span>s</div>
+                </div>
+
+                <div class="runner-issue-row">
+                    <input type="text" id="runner-issue-note" class="input-field" placeholder="Issue note…">
+                    <button class="btn-secondary runner-btn" onclick="runnerMarkIssue()">🚩 Mark Issue</button>
+                </div>
+
+                <div id="runner-player-container">
+                    <div id="runner-player"></div>
+                </div>
+
+                <div class="runner-picker-section">
+                    <h3>Video picker <small>(leave all unchecked to play all)</small></h3>
+                    <button class="btn-secondary runner-btn" onclick="runnerLoadVideos()">🔄 Load Videos</button>
+                    <div id="runner-video-list" class="runner-video-list"></div>
+                </div>
+
+                <div class="runner-log-section">
+                    <h3>Runner Log</h3>
+                    <div id="runner-log" class="runner-log"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 </html>
