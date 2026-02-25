@@ -48,3 +48,4 @@ Thumbs.db
 !requirements.txt
 results/
 output/
+runner_data/

@@ -310,3 +310,221 @@ window.addEventListener('DOMContentLoaded', () => {
     loadOverview();
 });
 
+/* ═══════════════════════════════════════════════
+   Continuous Runner
+═══════════════════════════════════════════════ */
+
+const runner = {
+    player: null,
+    ytReady: false,
+    videos: [],        // full list from API
+    playOrder: [],     // indices into this.videos
+    currentIdx: 0,     // position in playOrder
+    running: false,
+    desiredSpeed: 10,
+    actualSpeed: null,
+    rateTimer: null,
+    statusTimer: null,
+};
+
+// Called by YouTube IFrame API once the script loads
+function onYouTubeIframeAPIReady() {
+    runner.ytReady = true;
+    runnerLog('YouTube IFrame API ready.');
+}
+
+function runnerLog(msg) {
+    const el = document.getElementById('runner-log');
+    if (!el) return;
+    const line = `[${new Date().toISOString()}] ${msg}\n`;
+    el.textContent = line + el.textContent;
+}
+
+function runnerUpdateStatus(statusText) {
+    const el = document.getElementById('runner-status-text');
+    if (el) el.textContent = statusText;
+}
+
+async function runnerLoadVideos() {
+    runnerLog('Loading videos…');
+    try {
+        const resp = await fetch('/api/channel/videos?max_results=200');
+        const data = await resp.json();
+        if (data.error) { runnerLog('Error: ' + data.error); return; }
+        runner.videos = Array.isArray(data) ? data : (data.items || []);
+        const listEl = document.getElementById('runner-video-list');
+        listEl.innerHTML = runner.videos.map((v, i) => `
+            <label>
+                <input type="checkbox" class="runner-pick" data-idx="${i}">
+                ${escapeHtml(v.title || v.video_id)}
+            </label>`).join('');
+        document.getElementById('runner-total').textContent = runner.videos.length;
+        runnerLog(`Loaded ${runner.videos.length} videos.`);
+    } catch (e) {
+        runnerLog('Failed to load videos: ' + e.message);
+    }
+}
+
+function runnerBuildPlayOrder() {
+    const checked = Array.from(document.querySelectorAll('.runner-pick:checked'));
+    let indices = checked.length > 0
+        ? checked.map(cb => parseInt(cb.dataset.idx))
+        : runner.videos.map((_, i) => i);
+
+    if (document.getElementById('runner-shuffle').checked) {
+        for (let i = indices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+    }
+    return indices;
+}
+
+function runnerCurrentVideo() {
+    const idx = runner.playOrder[runner.currentIdx];
+    return runner.videos[idx] || null;
+}
+
+function runnerApplySpeed() {
+    if (!runner.player || !runner.running) return;
+    try {
+        runner.player.setPlaybackRate(runner.desiredSpeed);
+        const actual = runner.player.getPlaybackRate();
+        runner.actualSpeed = actual;
+        document.getElementById('runner-actual-speed').textContent = actual;
+        document.getElementById('runner-desired-speed').textContent = runner.desiredSpeed;
+    } catch (e) { /* player not ready yet */ }
+}
+
+function runnerUpdateStatusPanel() {
+    if (!runner.player || !runner.running) return;
+    try {
+        const pos = runner.player.getCurrentTime();
+        document.getElementById('runner-position').textContent =
+            pos !== undefined ? pos.toFixed(1) : '—';
+    } catch (e) { /* ignore */ }
+}
+
+function runnerPlayCurrent() {
+    const video = runnerCurrentVideo();
+    if (!video) { runnerLog('No video to play.'); return; }
+
+    const videoId = video.video_id || video.id;
+    const title = video.title || videoId;
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+
+    document.getElementById('runner-video-title').textContent = title;
+    const linkEl = document.getElementById('runner-video-link');
+    linkEl.href = url;
+    linkEl.textContent = videoId;
+    document.getElementById('runner-index').textContent = runner.currentIdx + 1;
+    document.getElementById('runner-total').textContent = runner.playOrder.length;
+    document.getElementById('runner-desired-speed').textContent = runner.desiredSpeed;
+
+    runnerLog(`Playing [${runner.currentIdx + 1}/${runner.playOrder.length}] ${title} (${videoId})`);
+
+    if (runner.player && runner.player.loadVideoById) {
+        runner.player.loadVideoById(videoId);
+    } else {
+        runner.player = new YT.Player('runner-player', {
+            width: '100%',
+            height: '100%',
+            videoId: videoId,
+            playerVars: { autoplay: 1, controls: 1 },
+            events: {
+                onReady: (e) => { runnerApplySpeed(); },
+                onStateChange: (e) => {
+                    if (e.data === YT.PlayerState.ENDED) {
+                        runnerAdvance();
+                    }
+                },
+                onError: (e) => {
+                    runnerLog(`Player error code ${e.data} on video ${videoId}. Skipping.`);
+                    runnerAdvance();
+                },
+            },
+        });
+    }
+
+    // Start periodic timers
+    clearInterval(runner.rateTimer);
+    clearInterval(runner.statusTimer);
+    runner.rateTimer = setInterval(runnerApplySpeed, 1000);
+    runner.statusTimer = setInterval(runnerUpdateStatusPanel, 500);
+}
+
+function runnerAdvance() {
+    runner.currentIdx = (runner.currentIdx + 1) % runner.playOrder.length;
+    runnerPlayCurrent();
+}
+
+function runnerStart() {
+    if (!runner.ytReady) { runnerLog('YouTube API not ready yet, please wait.'); return; }
+    if (runner.videos.length === 0) { runnerLog('No videos loaded. Click "Load Videos" first.'); return; }
+
+    runner.desiredSpeed = parseFloat(document.getElementById('runner-speed').value) || 10;
+    runner.playOrder = runnerBuildPlayOrder();
+    runner.currentIdx = 0;
+    runner.running = true;
+
+    document.getElementById('runner-start-btn').disabled = true;
+    document.getElementById('runner-stop-btn').disabled = false;
+    document.getElementById('runner-skip-btn').disabled = false;
+    runnerUpdateStatus('Running');
+    runnerPlayCurrent();
+}
+
+function runnerStop() {
+    runner.running = false;
+    clearInterval(runner.rateTimer);
+    clearInterval(runner.statusTimer);
+    try { runner.player && runner.player.stopVideo(); } catch (e) { /* ignore */ }
+    document.getElementById('runner-start-btn').disabled = false;
+    document.getElementById('runner-stop-btn').disabled = true;
+    document.getElementById('runner-skip-btn').disabled = true;
+    runnerUpdateStatus('Stopped');
+    runnerLog('Runner stopped.');
+}
+
+function runnerSkip() {
+    if (!runner.running) return;
+    runnerLog('Skipping current video.');
+    runnerAdvance();
+}
+
+async function runnerMarkIssue() {
+    const video = runnerCurrentVideo();
+    const videoId = video ? (video.video_id || video.id) : '';
+    const title = video ? (video.title || '') : '';
+    const note = document.getElementById('runner-issue-note').value;
+
+    let position = null;
+    try { position = runner.player ? runner.player.getCurrentTime() : null; } catch (e) { /* ignore */ }
+
+    const payload = {
+        video_id: videoId,
+        title: title,
+        desired_speed: runner.desiredSpeed,
+        actual_speed: runner.actualSpeed,
+        position_seconds: position,
+        note: note,
+    };
+
+    try {
+        const resp = await fetch('/api/runner/log_issue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (data.error) {
+            runnerLog('Issue log error: ' + data.error);
+        } else {
+            runnerLog(`Issue marked: "${note}" @ ${position ? position.toFixed(1) : '?'}s (${videoId})`);
+            document.getElementById('runner-issue-note').value = '';
+        }
+    } catch (e) {
+        runnerLog('Failed to post issue: ' + e.message);
+    }
+}
+

@@ -2,6 +2,7 @@
 """Web-based dashboard for YouTube Booster."""
 
 import os
+import datetime
 from flask import Flask, render_template, jsonify, request
 from youtube_booster.api_client import YouTubeAPIClient
 from youtube_booster.analyzer import WatchTimeAnalyzer
@@ -192,6 +193,34 @@ def get_videos():
         result = json.loads(json.dumps(videos, default=str))
         return jsonify(result)
     
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+RUNNER_DATA_DIR = os.path.join(os.path.dirname(__file__), 'runner_data')
+RUNNER_LOG_FILE = os.path.join(RUNNER_DATA_DIR, 'issue_log.jsonl')
+
+
+@app.route('/api/runner/log_issue', methods=['POST'])
+def runner_log_issue():
+    """API endpoint to log a runner issue entry."""
+    try:
+        data = request.get_json(force=True) or {}
+        entry = {
+            'ts': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'video_id': data.get('video_id', ''),
+            'title': data.get('title', ''),
+            'desired_speed': data.get('desired_speed'),
+            'actual_speed': data.get('actual_speed'),
+            'position_seconds': data.get('position_seconds'),
+            'note': data.get('note', ''),
+            'remote_addr': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent', ''),
+        }
+        os.makedirs(RUNNER_DATA_DIR, exist_ok=True)
+        with open(RUNNER_LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry) + '\n')
+        return jsonify({'status': 'ok'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
