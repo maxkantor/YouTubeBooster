@@ -334,12 +334,29 @@ const runner = {
     sessionEnded: 0,
     sessionWallSeconds: 0,
     _sessionTickMs: null,
+    maxTimer: null,
 };
 
 // Called by YouTube IFrame API once the script loads
 function onYouTubeIframeAPIReady() {
     runner.ytReady = true;
     runnerLog('YouTube IFrame API ready.');
+}
+
+// Ensure the callback is registered globally (iframe_api expects window.onYouTubeIframeAPIReady)
+window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+
+// Fallback: if the API is already loaded, mark ready.
+if (window.YT && window.YT.Player) {
+    onYouTubeIframeAPIReady();
+} else {
+    setTimeout(() => {
+        if (window.YT && window.YT.Player) {
+            onYouTubeIframeAPIReady();
+        } else {
+            runnerLog('YouTube IFrame API not ready yet, please wait.');
+        }
+    }, 2000);
 }
 
 function runnerEnsureYouTubeApiLoaded() {
@@ -353,7 +370,7 @@ function runnerEnsureYouTubeApiLoaded() {
         // ignore
     }
 
-    // Best-effort: ensure the iframe_api script is present
+    // Best-effort: ensure the iframe_api script is present.
     const hasScript = !!document.querySelector('script[src*="youtube.com/iframe_api"]');
     if (!hasScript) {
         const tag = document.createElement('script');
@@ -585,6 +602,7 @@ function runnerPlayCurrent() {
     // Start periodic timers
     clearInterval(runner.rateTimer);
     clearInterval(runner.statusTimer);
+    clearTimeout(runner.maxTimer);
     runner.rateTimer = setInterval(runnerApplySpeed, 1000);
     runner.statusTimer = setInterval(() => {
         runnerUpdateStatusPanel();
@@ -599,6 +617,7 @@ function runnerAdvance() {
 }
 
 function runnerStart() {
+    runnerLog('Start clicked.');
     if (!runnerEnsureYouTubeApiLoaded()) {
         runnerUpdateStatus('Waiting for YouTube API…');
         runnerLog('YouTube API not ready yet (maybe blocked by browser/extension). Waiting…');
@@ -638,6 +657,7 @@ function runnerStop() {
     runner.state = 'STOPPED';
     clearInterval(runner.rateTimer);
     clearInterval(runner.statusTimer);
+    clearTimeout(runner.maxTimer);
     try { runner.player && runner.player.stopVideo(); } catch (e) { /* ignore */ }
     runner._sessionTickMs = null;
     document.getElementById('runner-start-btn').disabled = false;

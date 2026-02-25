@@ -50,3 +50,8 @@ Thumbs.db
 results/
 output/
 runner_data/
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml

@@ -17,7 +17,24 @@ api_client = None
 
 # Port configuration for deployment
 # Use 5001 as default since macOS AirPlay uses 5000
-PORT = int(os.environ.get('PORT', 5001))
+DEFAULT_PORT = 5001
+
+
+def find_available_port(preferred_port):
+    """Find an available localhost port, starting from preferred_port."""
+    import socket
+    for port in range(preferred_port, preferred_port + 20):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(('127.0.0.1', port))
+                return port
+            except OSError:
+                continue
+    # Fallback to any free port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(('127.0.0.1', 0))
+        return sock.getsockname()[1]
 
 
 def ensure_credentials():
@@ -260,13 +277,24 @@ if __name__ == '__main__':
         print("\n" + "="*60 + "\n")
         exit(1)
     
+    env_port = os.environ.get('PORT')
+    port = int(env_port) if env_port else find_available_port(DEFAULT_PORT)
+
     print("\n📍 Dashboard will be available at:")
-    print(f"   http://localhost:{PORT}")
+    print(f"   http://localhost:{port}")
     print("\n💡 Open this URL in your browser to view your analytics!")
     print("\n" + "="*60 + "\n")
     
     # Use 0.0.0.0 to allow external connections (for deployment)
     # Set debug=False for production
     debug_mode = os.environ.get('FLASK_ENV') != 'production'
-    app.run(debug=debug_mode, host='0.0.0.0', port=PORT)
+    # Auto-open browser unless disabled
+    if os.environ.get('AUTO_OPEN', '1') != '0':
+        # Avoid double-open when Flask reloader starts
+        if not debug_mode or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            import threading
+            import webbrowser
+            threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
+
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
 
