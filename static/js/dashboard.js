@@ -325,6 +325,15 @@ const runner = {
     actualSpeed: null,
     rateTimer: null,
     statusTimer: null,
+    watchSeconds: 0,
+    _videoStartSeconds: null,
+    _watchLimitFired: false,
+    // session metrics (for testing runner functionality)
+    state: 'IDLE',
+    sessionStarted: 0,
+    sessionEnded: 0,
+    sessionWallSeconds: 0,
+    _sessionTickMs: null,
 };
 
 // Called by YouTube IFrame API once the script loads
@@ -343,6 +352,78 @@ function runnerLog(msg) {
 function runnerUpdateStatus(statusText) {
     const el = document.getElementById('runner-status-text');
     if (el) el.textContent = statusText;
+}
+
+function runnerUpdateSessionPanel() {
+    const startedEl = document.getElementById('runner-session-started');
+    const endedEl = document.getElementById('runner-session-ended');
+    const wallEl = document.getElementById('runner-session-wall');
+
+    if (startedEl) startedEl.textContent = String(runner.sessionStarted);
+    if (endedEl) endedEl.textContent = String(runner.sessionEnded);
+    if (wallEl) wallEl.textContent = String(Math.floor(runner.sessionWallSeconds));
+}
+
+function runnerSetServerStatus(text) {
+    const el = document.getElementById('runner-server-status');
+    if (el) el.textContent = text;
+}
+
+async function runnerTestServer() {
+    runnerSetServerStatus('Testing…');
+    try {
+        const resp = await fetch('/api/runner/ping', { cache: 'no-store' });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || data.error) {
+            runnerSetServerStatus('Error');
+            runnerLog('Server ping failed: ' + (data.error || `HTTP ${resp.status}`));
+            return;
+        }
+        runnerSetServerStatus('OK');
+        runnerLog('Server ping OK.');
+    } catch (e) {
+        runnerSetServerStatus('Offline');
+        runnerLog('Server ping exception: ' + e.message);
+    }
+}
+
+function runnerTickSessionWallTime() {
+    if (!runner.running) return;
+    const now = Date.now();
+    if (runner._sessionTickMs == null) {
+        runner._sessionTickMs = now;
+        return;
+    }
+    const dt = (now - runner._sessionTickMs) / 1000;
+    runner._sessionTickMs = now;
+    if (runner.state === 'PLAYING' && dt > 0 && dt < 10) {
+        runner.sessionWallSeconds += dt;
+        runnerUpdateSessionPanel();
+    }
+}
+
+function runnerMaybeSkipByWatchLimit() {
+    if (!runner.running) return;
+    if (!runner.player) return;
+    if (!runner.watchSeconds || runner.watchSeconds <= 0) return;
+    if (runner._watchLimitFired) return;
+    if (runner.state !== 'PLAYING') return;
+
+    try {
+        const nowPos = runner.player.getCurrentTime();
+        if (nowPos == null || isNaN(nowPos)) return;
+        const startPos = runner._videoStartSeconds == null ? 0 : runner._videoStartSeconds;
+        const elapsed = nowPos - startPos;
+        if (elapsed >= runner.watchSeconds) {
+            runner._watchLimitFired = true;
+            runner.sessionEnded += 1;
+            runnerUpdateSessionPanel();
+            runnerLog(`Watch limit reached (${runner.watchSeconds}s). Advancing.`);
+            runnerAdvance();
+        }
+    } catch (e) {
+        // ignore
+    }
 }
 
 async function runnerLoadVideos() {
@@ -409,6 +490,12 @@ function runnerPlayCurrent() {
     const video = runnerCurrentVideo();
     if (!video) { runnerLog('No video to play.'); return; }
 
+    runner.sessionStarted += 1;
+    runnerUpdateSessionPanel();
+
+    runner._videoStartSeconds = null;
+    runner._watchLimitFired = false;
+
     const videoId = video.video_id || video.id;
     const title = video.title || videoId;
     const url = `https://www.youtube.com/watch?v=${videoId}`;
@@ -425,6 +512,12 @@ function runnerPlayCurrent() {
 
     if (runner.player && runner.player.loadVideoById) {
         runner.player.loadVideoById(videoId);
+        // In the reuse-player path, ensure we capture a start position after the player begins.
+        setTimeout(() => {
+            if (runner._videoStartSeconds == null && runner.player && runner.running) {
+                try { runner._videoStartSeconds = runner.player.getCurrentTime() || 0; } catch (e) { runner._videoStartSeconds = 0; }
+            }
+        }, 800);
     } else {
         runner.player = new YT.Player('runner-player', {
             width: '100%',
@@ -434,7 +527,21 @@ function runnerPlayCurrent() {
             events: {
                 onReady: (e) => { runnerApplySpeed(); },
                 onStateChange: (e) => {
+                    if (e.data === YT.PlayerState.PLAYING) {
+                        runner.state = 'PLAYING';
+                        if (runner._videoStartSeconds == null) {
+                            try { runner._videoStartSeconds = runner.player.getCurrentTime() || 0; } catch (err) { runner._videoStartSeconds = 0; }
+                        }
+                        runnerUpdateSessionPanel();
+                    } else if (e.data === YT.PlayerState.PAUSED) {
+                        runner.state = 'PAUSED';
+                    } else if (e.data === YT.PlayerState.BUFFERING) {
+                        runner.state = 'BUFFERING';
+                    }
                     if (e.data === YT.PlayerState.ENDED) {
+                        runner.state = 'ENDED';
+                        runner.sessionEnded += 1;
+                        runnerUpdateSessionPanel();
                         runnerAdvance();
                     }
                 },
@@ -450,7 +557,11 @@ function runnerPlayCurrent() {
     clearInterval(runner.rateTimer);
     clearInterval(runner.statusTimer);
     runner.rateTimer = setInterval(runnerApplySpeed, 1000);
-    runner.statusTimer = setInterval(runnerUpdateStatusPanel, 500);
+    runner.statusTimer = setInterval(() => {
+        runnerUpdateStatusPanel();
+        runnerTickSessionWallTime();
+        runnerMaybeSkipByWatchLimit();
+    }, 500);
 }
 
 function runnerAdvance() {
@@ -463,22 +574,35 @@ function runnerStart() {
     if (runner.videos.length === 0) { runnerLog('No videos loaded. Click "Load Videos" first.'); return; }
 
     runner.desiredSpeed = parseFloat(document.getElementById('runner-speed').value) || 10;
+    runner.watchSeconds = parseInt(document.getElementById('runner-watch-seconds')?.value || '0', 10) || 0;
     runner.playOrder = runnerBuildPlayOrder();
     runner.currentIdx = 0;
     runner.running = true;
+    runner.state = 'IDLE';
+    runner.sessionStarted = 0;
+    runner.sessionEnded = 0;
+    runner.sessionWallSeconds = 0;
+    runner._sessionTickMs = null;
+    runner._videoStartSeconds = null;
+    runner._watchLimitFired = false;
+    runnerSetServerStatus('—');
+    runnerUpdateSessionPanel();
 
     document.getElementById('runner-start-btn').disabled = true;
     document.getElementById('runner-stop-btn').disabled = false;
     document.getElementById('runner-skip-btn').disabled = false;
     runnerUpdateStatus('Running');
+    runnerTestServer();
     runnerPlayCurrent();
 }
 
 function runnerStop() {
     runner.running = false;
+    runner.state = 'STOPPED';
     clearInterval(runner.rateTimer);
     clearInterval(runner.statusTimer);
     try { runner.player && runner.player.stopVideo(); } catch (e) { /* ignore */ }
+    runner._sessionTickMs = null;
     document.getElementById('runner-start-btn').disabled = false;
     document.getElementById('runner-stop-btn').disabled = true;
     document.getElementById('runner-skip-btn').disabled = true;

@@ -34,6 +34,7 @@ client_secret*.json
 # IDE
 .vscode/
 .idea/
+.elasticbeanstalk/
 *.swp
 *.swo
 *~

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Booster - Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v={{ static_version }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -109,10 +109,20 @@
         <div id="runner" class="tab-content">
             <div class="section">
                 <h2>▶ Continuous Runner</h2>
+                <div class="runner-info-box" role="note">
+                    <strong>What this is for:</strong> Review and test your content — play through videos, use speed/shuffle to scan, and mark issues. 
+                    <strong>Views &amp; watch time:</strong> YouTube does <em>not</em> count plays from this runner toward your public view count or watch hours. 
+                    They filter embedded playback, channel-owner views, and non-normal playback (e.g. high speed) to keep metrics valid. 
+                    To test that a video “counts,” have someone else watch it normally on YouTube (e.g. open the video link in a private window or on another device).
+                </div>
                 <div class="runner-controls">
                     <label>Speed (1–20):
                         <input type="number" id="runner-speed" class="input-field runner-speed-input"
                                min="1" max="20" step="0.25" value="10">
+                    </label>
+                    <label>Watch seconds (0 = full):
+                        <input type="number" id="runner-watch-seconds" class="input-field runner-watch-input"
+                               min="0" max="3600" step="1" value="30">
                     </label>
                     <label class="runner-shuffle-label">
                         <input type="checkbox" id="runner-shuffle"> Shuffle
@@ -130,6 +140,17 @@
                     <div><strong>Desired speed:</strong> <span id="runner-desired-speed">—</span>
                         &nbsp;|&nbsp; <strong>Actual speed:</strong> <span id="runner-actual-speed">—</span></div>
                     <div><strong>Position:</strong> <span id="runner-position">—</span>s</div>
+                    <div class="runner-session-row">
+                        <strong>Session:</strong>
+                        <span><span id="runner-session-started">0</span> started</span>
+                        &nbsp;|&nbsp;
+                        <span><span id="runner-session-ended">0</span> ended</span>
+                        &nbsp;|&nbsp;
+                        <span><span id="runner-session-wall">0</span>s watched</span>
+                        &nbsp;|&nbsp;
+                        <span>Server: <span id="runner-server-status">—</span></span>
+                        <button class="btn-secondary runner-btn runner-test-btn" onclick="runnerTestServer()">🔌 Test Server</button>
+                    </div>
                 </div>
 
                 <div class="runner-issue-row">
@@ -156,7 +177,7 @@
     </div>
 
     <script src="https://www.youtube.com/iframe_api"></script>
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v={{ static_version }}"></script>
 </body>
 </html>
 

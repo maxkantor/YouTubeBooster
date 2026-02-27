@@ -57,7 +57,16 @@ def get_api_client():
 @app.route('/')
 def index():
     """Main dashboard page."""
-    return render_template('dashboard.html')
+    # Cache-buster for static assets (helps on platforms like Elastic Beanstalk where
+    # the browser/proxy may keep old JS/CSS after redeploys)
+    try:
+        js_path = os.path.join(app.root_path, 'static', 'js', 'dashboard.js')
+        css_path = os.path.join(app.root_path, 'static', 'css', 'dashboard.css')
+        static_version = str(int(max(os.path.getmtime(js_path), os.path.getmtime(css_path))))
+    except Exception:
+        static_version = str(int(datetime.datetime.now().timestamp()))
+
+    return render_template('dashboard.html', static_version=static_version)
 
 
 @app.route('/api/channel/analyze')
@@ -199,6 +208,15 @@ def get_videos():
 
 RUNNER_DATA_DIR = os.path.join(os.path.dirname(__file__), 'runner_data')
 RUNNER_LOG_FILE = os.path.join(RUNNER_DATA_DIR, 'issue_log.jsonl')
+
+
+@app.route('/api/runner/ping')
+def runner_ping():
+    """Health-check endpoint for the Continuous Runner UI."""
+    return jsonify({
+        'status': 'ok',
+        'ts': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    })
 
 
 @app.route('/api/runner/log_issue', methods=['POST'])

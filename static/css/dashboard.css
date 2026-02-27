@@ -241,6 +241,28 @@ header h1 {
     color: #dc3545;
 }
 
+/* ═══════════════════════════════════════════════
+   Continuous Runner (extras)
+═══════════════════════════════════════════════ */
+
+.runner-session-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e9ecef;
+    color: #555;
+    font-size: 0.95em;
+}
+
+.runner-test-btn {
+    margin-bottom: 0;
+    padding: 8px 12px;
+    font-size: 0.95em;
+}
+
 .loading {
     text-align: center;
     padding: 60px 20px;
@@ -293,6 +315,17 @@ header h1 {
 }
 
 /* ── Continuous Runner Tab ── */
+.runner-info-box {
+    background: #e7f1ff;
+    border: 1px solid #b6d4fe;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 0.95em;
+    line-height: 1.5;
+    color: #084298;
+}
+
 .runner-controls {
     display: flex;
     flex-wrap: wrap;
@@ -303,6 +336,12 @@ header h1 {
 
 .runner-speed-input {
     width: 80px;
+    display: inline-block;
+    margin-left: 6px;
+}
+
+.runner-watch-input {
+    width: 120px;
     display: inline-block;
     margin-left: 6px;
 }
