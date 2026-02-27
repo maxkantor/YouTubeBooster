@@ -342,6 +342,27 @@ function onYouTubeIframeAPIReady() {
     runnerLog('YouTube IFrame API ready.');
 }
 
+function runnerEnsureYouTubeApiLoaded() {
+    if (runner.ytReady) return true;
+    try {
+        if (window.YT && typeof window.YT.Player === 'function') {
+            runner.ytReady = true;
+            return true;
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    // Best-effort: ensure the iframe_api script is present
+    const hasScript = !!document.querySelector('script[src*="youtube.com/iframe_api"]');
+    if (!hasScript) {
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(tag);
+    }
+    return false;
+}
+
 function runnerLog(msg) {
     const el = document.getElementById('runner-log');
     if (!el) return;
@@ -578,8 +599,16 @@ function runnerAdvance() {
 }
 
 function runnerStart() {
-    if (!runner.ytReady) { runnerLog('YouTube API not ready yet, please wait.'); return; }
-    if (runner.videos.length === 0) { runnerLog('No videos loaded. Click "Load Videos" first.'); return; }
+    if (!runnerEnsureYouTubeApiLoaded()) {
+        runnerUpdateStatus('Waiting for YouTube API…');
+        runnerLog('YouTube API not ready yet (maybe blocked by browser/extension). Waiting…');
+        return;
+    }
+    if (runner.videos.length === 0) {
+        runnerUpdateStatus('No videos loaded');
+        runnerLog('No videos loaded. Click "Load Videos" first.');
+        return;
+    }
 
     runner.desiredSpeed = parseFloat(document.getElementById('runner-speed').value) || 10;
     runner.watchSeconds = parseInt(document.getElementById('runner-watch-seconds')?.value || '0', 10) || 0;
