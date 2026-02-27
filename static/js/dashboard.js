@@ -358,10 +358,18 @@ function runnerUpdateSessionPanel() {
     const startedEl = document.getElementById('runner-session-started');
     const endedEl = document.getElementById('runner-session-ended');
     const wallEl = document.getElementById('runner-session-wall');
+    const viewsEl = document.getElementById('runner-session-views');
+    const hoursEl = document.getElementById('runner-session-hours');
 
     if (startedEl) startedEl.textContent = String(runner.sessionStarted);
     if (endedEl) endedEl.textContent = String(runner.sessionEnded);
     if (wallEl) wallEl.textContent = String(Math.floor(runner.sessionWallSeconds));
+
+    // Local/simulated metrics for testing (not YouTube public metrics)
+    const runnerViews = runner.sessionStarted;
+    const runnerHours = runner.sessionWallSeconds / 3600;
+    if (viewsEl) viewsEl.textContent = String(runnerViews);
+    if (hoursEl) hoursEl.textContent = runnerHours.toFixed(2);
 }
 
 function runnerSetServerStatus(text) {
