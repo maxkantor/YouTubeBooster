@@ -348,11 +348,49 @@ async function loadTrafficTools() {
     }
 }
 
+function extractYouTubeVideoId(input) {
+    const value = (input || '').trim();
+    if (!value) return '';
+
+    // Already looks like a bare YouTube video ID.
+    if (/^[A-Za-z0-9_-]{11}$/.test(value)) {
+        return value;
+    }
+
+    try {
+        const url = new URL(value);
+        const host = url.hostname.toLowerCase();
+
+        if (host === 'youtu.be') {
+            const shortId = url.pathname.replace(/^\/+/, '').split('/')[0];
+            if (/^[A-Za-z0-9_-]{11}$/.test(shortId)) {
+                return shortId;
+            }
+        }
+
+        const videoParam = url.searchParams.get('v');
+        if (videoParam && /^[A-Za-z0-9_-]{11}$/.test(videoParam)) {
+            return videoParam;
+        }
+
+        const pathParts = url.pathname.split('/').filter(Boolean);
+        const knownPrefixes = new Set(['shorts', 'embed', 'live', 'watch']);
+        if (pathParts.length >= 2 && knownPrefixes.has(pathParts[0]) && /^[A-Za-z0-9_-]{11}$/.test(pathParts[1])) {
+            return pathParts[1];
+        }
+    } catch (error) {
+        // Not a valid URL, fall through to validation below.
+    }
+
+    return '';
+}
+
 async function analyzeSEO() {
-    const videoId = document.getElementById('video-id-input').value.trim();
+    const inputValue = document.getElementById('video-id-input').value.trim();
+    const videoId = extractYouTubeVideoId(inputValue);
     
     if (!videoId) {
-        showError('Please enter a video ID');
+        showError('Please enter a valid YouTube video ID or URL');
         return;
     }
     
@@ -360,11 +398,19 @@ async function analyzeSEO() {
     hideError();
     
     try {
-        const response = await fetch(`/api/video/seo/${videoId}`);
-        const data = await response.json();
+        const response = await fetch(`/api/video/seo/${encodeURIComponent(videoId)}`);
+        const responseText = await response.text();
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (parseError) {
+            throw new Error(responseText.startsWith('<')
+                ? 'The server returned a non-JSON error response.'
+                : 'Could not parse the server response.');
+        }
         
-        if (data.error) {
-            showError(data.error);
+        if (!response.ok || data.error) {
+            showError(data.error || `Server error: ${response.status}`);
             hideLoading();
             return;
         }
