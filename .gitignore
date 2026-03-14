@@ -30,6 +30,7 @@ client_secret*.json
 *.pem
 .env
 .env.local
+infra/terraform/terraform.credentials.tfvars
 
 # IDE
 .vscode/
@@ -51,7 +52,18 @@ results/
 output/
 runner_data/
 
+# Lambda zip (regenerate with backend publish script)
+artifacts/*.zip
+artifacts/publish/
+backend/artifacts/*.zip
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

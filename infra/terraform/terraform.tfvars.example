@@ -1,0 +1,29 @@
+aws_region                    = "us-east-1"
+project_name                  = "youtubebooster-ai"
+ssm_prefix                    = "/youtubebooster"
+create_placeholder_parameters = true
+
+# Set to true once you have built and zipped the .NET Lambda artifact.
+deploy_backend_lambda = false
+backend_package_path  = "../artifacts/youtubebooster-api.zip"
+
+# Set to true once the repo is hosted and you want Amplify managed by Terraform.
+enable_amplify_app    = false
+amplify_repository_url = "https://github.com/your-org/your-repo"
+amplify_access_token   = "replace-me"
+amplify_branch_name    = "main"
+
+one_time_price = "49.99"
+currency       = "USD"
+
+# Optional: set to populate SSM with your credentials.json values (run: terraform apply -var-file=terraform.tfvars)
+# Copy from your Google Cloud credentials.json (installed or web).
+# admin_google_client_id     = "123456789-xxx.apps.googleusercontent.com"
+# admin_google_client_secret = "GOCSPX-xxx"
+# admin_google_project_id   = "youtubebooster-479002"
+# admin_google_redirect_uri = "http://localhost"
+# Or pass the full JSON as one variable (overrides granular above):
+# admin_google_credentials_json = "{\"installed\":{\"client_id\":\"...\",\"project_id\":\"...\",\"auth_uri\":\"...\",\"token_uri\":\"...\",\"auth_provider_x509_cert_url\":\"...\",\"client_secret\":\"...\",\"redirect_uris\":[\"http://localhost\"]}}"
+
+# YouTube Data API v3 key (create in same GCP project → APIs & Services → Credentials → API key, enable YouTube Data API v3)
+# youtube_api_key = "AIzaSy..."
