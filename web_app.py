@@ -49,9 +49,9 @@ def ensure_credentials():
                 # Write to file
                 with open('credentials.json', 'w') as f:
                     f.write(creds_json)
-                print("✅ Created credentials.json from environment variable")
+                print("[OK] Created credentials.json from environment variable")
             except Exception as e:
-                print(f"⚠️  Error creating credentials from env var: {e}")
+                print(f"[WARN] Error creating credentials from env var: {e}")
                 raise Exception("Could not create credentials.json from GOOGLE_CREDENTIALS_BASE64")
 
 
@@ -61,12 +61,12 @@ def get_api_client():
     if api_client is None:
         # Ensure credentials exist before initializing
         ensure_credentials()
-        print("🔐 Initializing YouTube API client (this may take a moment on first run)...")
+        print("[AUTH] Initializing YouTube API client (this may take a moment on first run)...")
         try:
             api_client = YouTubeAPIClient()
-            print("✅ API client initialized successfully")
+            print("[OK] API client initialized successfully")
         except Exception as e:
-            print(f"❌ Error initializing API client: {e}")
+            print(f"[ERROR] Error initializing API client: {e}")
             raise
     return api_client
 
@@ -91,45 +91,45 @@ def analyze_channel():
     """API endpoint to analyze channel."""
     try:
         import traceback
-        print("📊 Starting channel analysis...")
+        print("[ANALYZE] Starting channel analysis...")
         
         days = int(request.args.get('days', 30))
         channel_id = request.args.get('channel_id')
         
-        print(f"🔍 Getting API client...")
+        print("[LOOKUP] Getting API client...")
         client = get_api_client()
-        print(f"✅ API client ready")
+        print("[OK] API client ready")
         
         analyzer = WatchTimeAnalyzer(client)
         
         if channel_id is None:
-            print("📍 Looking up channel ID...")
+            print("[LOOKUP] Looking up channel ID...")
             # Try to get authenticated user's channel first
             try:
                 channel_id = client.get_channel_id()  # No args = authenticated user
-                print(f"✅ Found channel ID: {channel_id}")
+                print(f"[OK] Found channel ID: {channel_id}")
             except Exception as e1:
-                print(f"⚠️  Could not get authenticated channel: {e1}")
+                print(f"[WARN] Could not get authenticated channel: {e1}")
                 # Fallback: try the handle if available
                 try:
                     channel_id = client.get_channel_id('@maxkantorUSA')
-                    print(f"✅ Found channel ID via handle: {channel_id}")
+                    print(f"[OK] Found channel ID via handle: {channel_id}")
                 except Exception as e2:
                     error_msg = f'Could not determine channel ID. Error: {str(e1)}'
-                    print(f"❌ {error_msg}")
+                    print(f"[ERROR] {error_msg}")
                     return jsonify({'error': error_msg}), 400
         
         if not channel_id:
             return jsonify({'error': 'Could not determine channel ID'}), 400
         
-        print(f"📈 Analyzing channel {channel_id}...")
+        print(f"[ANALYZE] Analyzing channel {channel_id}...")
         try:
             analysis = analyzer.analyze_channel(channel_id, days=days)
-            print(f"✅ Analysis complete!")
+            print("[OK] Analysis complete!")
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            print(f"❌ Error during analysis: {e}")
+            print(f"[ERROR] Error during analysis: {e}")
             print(f"Traceback: {error_trace}")
             # Return partial data if available
             raise Exception(f"Analysis failed: {str(e)}")
@@ -141,7 +141,7 @@ def analyze_channel():
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ Error in analyze_channel: {e}")
+        print(f"[ERROR] Error in analyze_channel: {e}")
         print(f"Traceback: {error_trace}")
         return jsonify({'error': str(e), 'traceback': error_trace}), 500
 
@@ -227,6 +227,152 @@ RUNNER_DATA_DIR = os.path.join(os.path.dirname(__file__), 'runner_data')
 RUNNER_LOG_FILE = os.path.join(RUNNER_DATA_DIR, 'issue_log.jsonl')
 
 
+def _parse_published_at(timestamp):
+    """Parse a YouTube RFC3339 timestamp into a datetime."""
+    if not timestamp:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+
+
+def _build_watch_url(video_id):
+    """Build the standard watch URL for a YouTube video."""
+    return f'https://www.youtube.com/watch?v={video_id}'
+
+
+def _build_share_text(title, url):
+    """Create a simple share-ready message for a video."""
+    return f"Check out this video: {title}\n{url}"
+
+
+def _serialize_video_for_growth(video, reason):
+    """Add growth-tool metadata to a video payload."""
+    view_count = int(video.get('view_count', 0) or 0)
+    like_count = int(video.get('like_count', 0) or 0)
+    comment_count = int(video.get('comment_count', 0) or 0)
+    engagement_rate = ((like_count + comment_count) / view_count * 100) if view_count else 0.0
+    published_at = video.get('published_at')
+    published_dt = _parse_published_at(published_at)
+    age_days = None
+    if published_dt is not None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        age_days = max((now - published_dt).days, 0)
+
+    watch_url = _build_watch_url(video['video_id'])
+    return {
+        'video_id': video['video_id'],
+        'title': video['title'],
+        'description': video.get('description', ''),
+        'published_at': published_at,
+        'age_days': age_days,
+        'view_count': view_count,
+        'like_count': like_count,
+        'comment_count': comment_count,
+        'engagement_rate': round(engagement_rate, 2),
+        'watch_url': watch_url,
+        'share_text': _build_share_text(video['title'], watch_url),
+        'reason': reason,
+    }
+
+
+@app.route('/api/channel/traffic_tools')
+def get_traffic_tools():
+    """API endpoint for legitimate traffic-driving tools and ideas."""
+    try:
+        channel_id = request.args.get('channel_id')
+
+        client = get_api_client()
+        suggestions_gen = ContentSuggestions(client)
+
+        if channel_id is None:
+            try:
+                channel_id = client.get_channel_id()
+            except Exception:
+                try:
+                    channel_id = client.get_channel_id('@maxkantorUSA')
+                except Exception as e:
+                    return jsonify({'error': f'Could not determine channel ID: {str(e)}'}), 400
+
+        videos = client.get_videos(channel_id, max_results=50)
+        if not videos:
+            return jsonify({'error': 'No videos found'}), 404
+
+        sorted_by_views = sorted(videos, key=lambda video: video.get('view_count', 0), reverse=True)
+        top_performers = [
+            _serialize_video_for_growth(
+                video,
+                'Already a proven winner. Reshare it in community posts, related descriptions, and social posts when the topic is timely.'
+            )
+            for video in sorted_by_views[:5]
+        ]
+
+        recent_cutoff_days = 120
+        recent_videos = []
+        for video in videos:
+            published_dt = _parse_published_at(video.get('published_at'))
+            if published_dt is None:
+                continue
+            age_days = (datetime.datetime.now(datetime.timezone.utc) - published_dt).days
+            if age_days <= recent_cutoff_days:
+                recent_videos.append(video)
+
+        promotion_pool = recent_videos or videos
+        promotion_candidates = sorted(
+            promotion_pool,
+            key=lambda video: (
+                -(((video.get('like_count', 0) or 0) + (video.get('comment_count', 0) or 0)) / max(video.get('view_count', 0) or 0, 1)),
+                video.get('view_count', 0),
+            )
+        )
+        promotion_candidates = [
+            _serialize_video_for_growth(
+                video,
+                'Strong engagement suggests this could travel further. Promote it with direct YouTube links, playlists, pinned comments, and social shares.'
+            )
+            for video in promotion_candidates[:5]
+        ]
+
+        follow_up_ideas = suggestions_gen.analyze_top_performers(channel_id, top_n=5)
+        series_ideas = suggestions_gen.get_video_series_ideas(channel_id)[:3]
+
+        checklist = [
+            {
+                'title': 'Share the standard YouTube watch link',
+                'details': 'Use the normal watch page for community posts, newsletters, texts, and social posts so viewers watch in the standard YouTube experience.',
+            },
+            {
+                'title': 'Link older winners from new uploads',
+                'details': 'Add your strongest related videos in descriptions, pinned comments, end screens, and cards to move real viewers between videos.',
+            },
+            {
+                'title': 'Reshare timely evergreen videos',
+                'details': 'Bring back proven videos when the topic becomes relevant again instead of only promoting the newest upload.',
+            },
+            {
+                'title': 'Turn winners into follow-ups',
+                'details': 'Publish sequels, deeper dives, and series entries based on your highest-performing topics to capture existing demand.',
+            },
+            {
+                'title': 'Improve click-through before promoting',
+                'details': 'Run the SEO optimizer first so the title, description, and tags are stronger before you send more traffic.',
+            },
+        ]
+
+        result = {
+            'promotion_candidates': promotion_candidates,
+            'top_performers': top_performers,
+            'content_suggestions': follow_up_ideas.get('content_suggestions', []),
+            'series_ideas': series_ideas,
+            'common_patterns': follow_up_ideas.get('common_patterns', {}),
+            'checklist': checklist,
+        }
+        return jsonify(json.loads(json.dumps(result, default=str)))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/runner/ping')
 def runner_ping():
     """Health-check endpoint for the Continuous Runner UI."""
@@ -262,15 +408,15 @@ def runner_log_issue():
 
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("🌐 Starting YouTube Booster Web Dashboard")
+    print("Starting YouTube Booster Web Dashboard")
     print("="*60)
     
     # Check for credentials before starting
     try:
         ensure_credentials()
     except Exception as e:
-        print(f"\n❌ {e}")
-        print("\n💡 Options:")
+        print(f"\n[ERROR] {e}")
+        print("\nOptions:")
         print("   1. Make sure credentials.json exists in this folder")
         print("   2. Or set GOOGLE_CREDENTIALS_BASE64 environment variable")
         print("   3. For deployment, add GOOGLE_CREDENTIALS_BASE64 in Render dashboard")
@@ -280,9 +426,9 @@ if __name__ == '__main__':
     env_port = os.environ.get('PORT')
     port = int(env_port) if env_port else find_available_port(DEFAULT_PORT)
 
-    print("\n📍 Dashboard will be available at:")
+    print("\nDashboard will be available at:")
     print(f"   http://localhost:{port}")
-    print("\n💡 Open this URL in your browser to view your analytics!")
+    print("\nOpen this URL in your browser to view your analytics!")
     print("\n" + "="*60 + "\n")
     
     # Use 0.0.0.0 to allow external connections (for deployment)

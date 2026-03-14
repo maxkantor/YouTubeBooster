@@ -51,22 +51,22 @@ class YouTubeAPIClient:
                 # Write to file
                 with open(self.token_file, 'wb') as f:
                     f.write(token_data)
-                print("✅ Loaded token from environment variable")
+                print("[OK] Loaded token from environment variable")
             except Exception as e:
-                print(f"⚠️  Error loading token from env var: {e}")
+                print(f"[WARN] Error loading token from env var: {e}")
         
         # Load existing token
         if os.path.exists(self.token_file):
             try:
                 with open(self.token_file, 'rb') as token:
                     creds = pickle.load(token)
-                print(f"✅ Loaded existing token from {self.token_file}")
+                print(f"[OK] Loaded existing token from {self.token_file}")
             except Exception as e:
-                print(f"⚠️  Error loading token file: {e}")
+                print(f"[WARN] Error loading token file: {e}")
                 # If token file is corrupted, delete it
                 try:
                     os.remove(self.token_file)
-                    print("🗑️  Removed corrupted token file")
+                    print("[CLEANUP] Removed corrupted token file")
                 except:
                     pass
                 creds = None
@@ -101,11 +101,11 @@ class YouTubeAPIClient:
                 try:
                     if is_headless:
                         # No browser available, use local server without opening browser
-                        print("⚠️  Headless environment detected.")
-                        print("📝 Starting local server - check logs for authorization URL...")
-                        print("📝 You'll need to visit the URL manually to authorize.")
+                        print("[WARN] Headless environment detected.")
+                        print("[AUTH] Starting local server - check logs for authorization URL...")
+                        print("[AUTH] You'll need to visit the URL manually to authorize.")
                         creds = flow.run_local_server(port=0, open_browser=False)
-                        print("✅ Authorization successful!")
+                        print("[OK] Authorization successful!")
                     else:
                         # Try browser method first
                         try:
@@ -114,8 +114,8 @@ class YouTubeAPIClient:
                         except Exception as browser_error:
                             # If browser fails, try without opening browser
                             if "browser" in str(browser_error).lower() or "webbrowser" in str(browser_error).lower():
-                                print("⚠️  Could not open browser automatically.")
-                                print("📝 Starting local server - visit the URL shown below to authorize:")
+                                print("[WARN] Could not open browser automatically.")
+                                print("[AUTH] Starting local server - visit the URL shown below to authorize:")
                                 creds = flow.run_local_server(port=0, open_browser=False)
                             else:
                                 raise
@@ -125,9 +125,9 @@ class YouTubeAPIClient:
                     
                     # Handle CSRF/state mismatch errors
                     if "mismatching_state" in error_str or "csrf" in error_str or "state not equal" in error_str:
-                        print("\n❌ CSRF Error: OAuth state mismatch detected.")
-                        print("💡 This usually happens when OAuth flow is interrupted.")
-                        print("\n🔧 Quick Fix:")
+                        print("\n[ERROR] CSRF Error: OAuth state mismatch detected.")
+                        print("[INFO] This usually happens when OAuth flow is interrupted.")
+                        print("\nQuick Fix:")
                         print("   1. Delete token.pickle: rm token.pickle")
                         print("   2. Close all browser tabs related to OAuth")
                         print("   3. Run the app again: python3 web_app.py")
@@ -137,13 +137,13 @@ class YouTubeAPIClient:
                         if os.path.exists(self.token_file):
                             try:
                                 os.remove(self.token_file)
-                                print("🗑️  Removed existing token file. Please restart the app.")
+                                print("[CLEANUP] Removed existing token file. Please restart the app.")
                             except:
                                 pass
                         
                         raise Exception(
                             "CSRF Error: OAuth state mismatch.\n\n"
-                            "💡 Solution:\n"
+                            "Solution:\n"
                             "   1. Run: rm token.pickle\n"
                             "   2. Close all OAuth browser tabs\n"
                             "   3. Run: python3 web_app.py\n"
@@ -153,19 +153,19 @@ class YouTubeAPIClient:
                     
                     # Handle browser errors
                     elif "browser" in error_str or "webbrowser" in error_str or "could not locate runnable browser" in error_str:
-                        print("⚠️  Browser authentication failed, trying without browser...")
-                        print("📝 Visit the authorization URL that will be shown below:")
+                        print("[WARN] Browser authentication failed, trying without browser...")
+                        print("[AUTH] Visit the authorization URL that will be shown below:")
                         try:
                             creds = flow.run_local_server(port=0, open_browser=False)
                         except Exception as final_error:
                             raise Exception(
                                 f"Authentication failed: {final_error}\n\n"
-                                "💡 For deployment, pre-generate your token locally:\n"
+                                "For deployment, pre-generate your token locally:\n"
                                 "   1. Run locally once: python3 web_app.py\n"
                                 "   2. Complete OAuth flow\n"
                                 "   3. Convert token.pickle to base64\n"
                                 "   4. Add as GOOGLE_TOKEN_BASE64 environment variable\n\n"
-                                "💡 Or for local development, visit the authorization URL manually."
+                                "Or for local development, visit the authorization URL manually."
                             )
                     else:
                         raise
@@ -202,7 +202,7 @@ class YouTubeAPIClient:
                     
                     if response['items']:
                         channel_info = response['items'][0]
-                        print(f"✅ Found your channel: {channel_info['snippet']['title']} ({channel_info['id']})")
+                        print(f"[OK] Found your channel: {channel_info['snippet']['title']} ({channel_info['id']})")
                         return channel_info['id']
                 except Exception:
                     pass  # Will try other methods below
@@ -232,7 +232,7 @@ class YouTubeAPIClient:
                                 )
                                 response = request.execute()
                                 if response['items']:
-                                    print(f"✅ Found channel: {response['items'][0]['snippet']['title']}")
+                                    print(f"[OK] Found channel: {response['items'][0]['snippet']['title']}")
                                     return response['items'][0]['id']
                             except:
                                 pass
@@ -262,11 +262,11 @@ class YouTubeAPIClient:
                             # Check if the customUrl matches
                             custom_url = channel_snippet.get('customUrl', '')
                             if custom_url and clean_handle.lower() in custom_url.lower():
-                                print(f"✅ Found channel: {channel_snippet['title']}")
+                                print(f"[OK] Found channel: {channel_snippet['title']}")
                                 return channel_snippet['channelId']
                         
                         # If no exact match, return first result
-                        print(f"✅ Found channel (using search): {response['items'][0]['snippet']['title']}")
+                        print(f"[OK] Found channel (using search): {response['items'][0]['snippet']['title']}")
                         return response['items'][0]['snippet']['channelId']
                 
                 # Try method 2: Username lookup (for older channels)
@@ -278,15 +278,15 @@ class YouTubeAPIClient:
                     response = request.execute()
                     
                     if response['items']:
-                        print(f"✅ Found channel: {response['items'][0]['snippet']['title']}")
+                        print(f"[OK] Found channel: {response['items'][0]['snippet']['title']}")
                         return response['items'][0]['id']
                 except:
                     pass
                 
                 # If we get here, channel not found
                 error_msg = (
-                    f"❌ Channel '{channel_handle}' not found.\n\n"
-                    f"💡 To find your channel ID:\n"
+                    f"Channel '{channel_handle}' not found.\n\n"
+                    f"To find your channel ID:\n"
                     f"1. Go to your YouTube channel page\n"
                     f"2. Look at the URL - it should look like:\n"
                     f"   - youtube.com/channel/CHANNEL_ID_HERE (use the CHANNEL_ID)\n"
@@ -305,20 +305,20 @@ class YouTubeAPIClient:
                     
                     if response['items']:
                         channel_info = response['items'][0]
-                        print(f"✅ Using your authenticated channel: {channel_info['snippet']['title']}")
+                        print(f"[OK] Using your authenticated channel: {channel_info['snippet']['title']}")
                         return channel_info['id']
                     else:
                         raise ValueError(
-                            "❌ Could not determine channel ID.\n\n"
-                            "💡 Please provide your channel ID or URL:\n"
+                            "Could not determine channel ID.\n\n"
+                            "Please provide your channel ID or URL:\n"
                             "- Channel ID: UCxxxxx... (from youtube.com/channel/UCxxxxx)\n"
                             "- Channel URL: https://www.youtube.com/@maxkantorUSA\n"
                             "- Or make sure you're authenticated with the correct Google account"
                         )
                 except HttpError as e:
                     raise Exception(
-                        f"❌ Error getting authenticated channel: {e}\n\n"
-                        "💡 Make sure you're authenticated with a Google account that has a YouTube channel."
+                        f"Error getting authenticated channel: {e}\n\n"
+                        "Make sure you're authenticated with a Google account that has a YouTube channel."
                     )
         except HttpError as e:
             raise Exception(f"Error getting channel ID: {e}")

@@ -26,6 +26,8 @@ function showTab(tabName) {
         // Already loaded
     } else if (tabName === 'overview') {
         loadOverview();
+    } else if (tabName === 'traffic') {
+        loadTrafficTools();
     }
 }
 
@@ -211,6 +213,137 @@ async function loadSuggestions() {
         hideLoading();
     } catch (error) {
         showError(error.message);
+        hideLoading();
+    }
+}
+
+async function copyText(text) {
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (error) {
+        console.warn('Clipboard API unavailable:', error);
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'absolute';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const success = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return success;
+}
+
+async function copyDecodedText(encodedText, successMessage) {
+    const text = decodeURIComponent(encodedText);
+    const copied = await copyText(text);
+    if (copied) {
+        alert(successMessage || 'Copied to clipboard');
+    } else {
+        showError('Could not copy to clipboard');
+    }
+}
+
+function renderTrafficVideoCard(video) {
+    const publishedLabel = video.age_days == null
+        ? 'Published date unavailable'
+        : `${video.age_days} days ago`;
+
+    return `
+        <div class="traffic-card">
+            <div class="traffic-card-header">
+                <h4>${escapeHtml(video.title)}</h4>
+                <span class="traffic-chip">${video.engagement_rate.toFixed(2)}% engagement</span>
+            </div>
+            <p class="traffic-card-reason">${escapeHtml(video.reason)}</p>
+            <div class="video-meta">
+                <span>👁️ ${formatNumber(video.view_count)} views</span>
+                <span>👍 ${formatNumber(video.like_count)} likes</span>
+                <span>💬 ${formatNumber(video.comment_count)} comments</span>
+                <span>🗓️ ${publishedLabel}</span>
+            </div>
+            <div class="traffic-card-actions">
+                <a class="btn-secondary traffic-link-btn" href="${video.watch_url}" target="_blank" rel="noopener">Open on YouTube</a>
+                <button class="btn-secondary" onclick="copyDecodedText('${encodeURIComponent(video.watch_url)}', 'Watch link copied')">Copy Link</button>
+                <button class="btn-secondary" onclick="copyDecodedText('${encodeURIComponent(video.share_text)}', 'Share text copied')">Copy Share Text</button>
+                <button class="btn-primary" onclick="analyzeVideoSEO('${video.video_id}')">Analyze SEO</button>
+            </div>
+        </div>
+    `;
+}
+
+function renderChecklistItem(item) {
+    return `
+        <div class="traffic-checklist-item">
+            <h4>${escapeHtml(item.title)}</h4>
+            <p>${escapeHtml(item.details)}</p>
+        </div>
+    `;
+}
+
+function renderSeriesIdea(series) {
+    const examples = Array.isArray(series.examples) ? series.examples : [];
+    return `
+        <div class="traffic-card">
+            <div class="traffic-card-header">
+                <h4>${escapeHtml(series.title)}</h4>
+            </div>
+            <p class="traffic-card-reason">${escapeHtml(series.description || '')}</p>
+            ${examples.length > 0 ? `
+                <ul class="traffic-example-list">
+                    ${examples.map(example => `<li>${escapeHtml(example)}</li>`).join('')}
+                </ul>
+            ` : ''}
+        </div>
+    `;
+}
+
+async function loadTrafficTools() {
+    showLoading();
+    hideError();
+
+    try {
+        const response = await fetch('/api/channel/traffic_tools');
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `Server error: ${response.status}`);
+        }
+
+        const promotionList = document.getElementById('traffic-promotion-list');
+        const reshareList = document.getElementById('traffic-reshare-list');
+        const checklist = document.getElementById('traffic-checklist');
+        const followups = document.getElementById('traffic-followups');
+        const series = document.getElementById('traffic-series');
+
+        promotionList.innerHTML = (data.promotion_candidates || []).length
+            ? data.promotion_candidates.map(renderTrafficVideoCard).join('')
+            : '<div class="traffic-empty">No promotion candidates available yet.</div>';
+
+        reshareList.innerHTML = (data.top_performers || []).length
+            ? data.top_performers.map(renderTrafficVideoCard).join('')
+            : '<div class="traffic-empty">No top performers available yet.</div>';
+
+        checklist.innerHTML = (data.checklist || []).length
+            ? data.checklist.map(renderChecklistItem).join('')
+            : '<div class="traffic-empty">No checklist items available yet.</div>';
+
+        followups.innerHTML = (data.content_suggestions || []).length
+            ? data.content_suggestions.map(idea => `<div class="suggestion-item">${escapeHtml(idea)}</div>`).join('')
+            : '<div class="traffic-empty">No follow-up ideas available yet.</div>';
+
+        series.innerHTML = (data.series_ideas || []).length
+            ? data.series_ideas.map(renderSeriesIdea).join('')
+            : '<div class="traffic-empty">No series ideas available yet.</div>';
+
+        hideLoading();
+    } catch (error) {
+        showError(error.message || 'Failed to load traffic tools.');
         hideLoading();
     }
 }

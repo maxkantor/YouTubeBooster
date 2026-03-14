@@ -19,6 +19,7 @@
             <button class="tab-btn" onclick="showTab('videos')">📹 Videos</button>
             <button class="tab-btn" onclick="showTab('suggestions')">💡 Suggestions</button>
             <button class="tab-btn" onclick="showTab('seo')">🔍 SEO Optimizer</button>
+            <button class="tab-btn" onclick="showTab('traffic')">🚀 Traffic Tools</button>
             <button class="tab-btn" onclick="showTab('runner')">▶ Continuous Runner</button>
         </div>
 
@@ -102,6 +103,46 @@
                     <button class="btn-primary" onclick="analyzeSEO()">Analyze SEO</button>
                 </div>
                 <div id="seo-results"></div>
+            </div>
+        </div>
+
+        <!-- Traffic Tools Tab -->
+        <div id="traffic" class="tab-content">
+            <div class="section">
+                <h2>🚀 Traffic Tools</h2>
+                <div class="traffic-info-box" role="note">
+                    Use these tools to drive <strong>real traffic</strong> to standard YouTube watch pages. The goal is to promote the right videos, improve discoverability, and make it easy to share normal watch links.
+                </div>
+                <button class="btn-primary" onclick="loadTrafficTools()">Refresh Traffic Tools</button>
+
+                <div class="traffic-section-grid">
+                    <div class="section">
+                        <h3>Best Videos to Promote Next</h3>
+                        <div id="traffic-promotion-list" class="traffic-card-list"></div>
+                    </div>
+
+                    <div class="section">
+                        <h3>Proven Videos to Reshare</h3>
+                        <div id="traffic-reshare-list" class="traffic-card-list"></div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Legitimate Traffic Checklist</h3>
+                    <div id="traffic-checklist" class="traffic-checklist"></div>
+                </div>
+
+                <div class="traffic-section-grid">
+                    <div class="section">
+                        <h3>Follow-up Content Ideas</h3>
+                        <div id="traffic-followups" class="suggestions-list"></div>
+                    </div>
+
+                    <div class="section">
+                        <h3>Series Opportunities</h3>
+                        <div id="traffic-series" class="traffic-card-list"></div>
+                    </div>
+                </div>
             </div>
         </div>
 

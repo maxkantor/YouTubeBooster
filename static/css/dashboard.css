@@ -179,6 +179,115 @@ header h1 {
     border-left: 4px solid #2196F3;
 }
 
+.traffic-info-box {
+    background: #eef7ee;
+    border: 1px solid #cfe6cf;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    color: #245c2a;
+    line-height: 1.5;
+}
+
+.traffic-section-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+}
+
+.traffic-card-list,
+.traffic-checklist {
+    display: grid;
+    gap: 15px;
+}
+
+.traffic-card {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    border-left: 4px solid #28a745;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+}
+
+.traffic-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.traffic-card-header h4 {
+    margin: 0;
+    color: #333;
+}
+
+.traffic-chip {
+    background: #e8f5e9;
+    color: #256029;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 0.85em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.traffic-card-reason {
+    color: #555;
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+
+.traffic-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.traffic-card-actions .btn-primary,
+.traffic-card-actions .btn-secondary {
+    margin-bottom: 0;
+}
+
+.traffic-link-btn {
+    text-decoration: none;
+    display: inline-block;
+}
+
+.traffic-checklist-item {
+    background: #fff8e1;
+    border-left: 4px solid #ffb300;
+    border-radius: 10px;
+    padding: 16px 18px;
+}
+
+.traffic-checklist-item h4 {
+    margin-bottom: 8px;
+}
+
+.traffic-checklist-item p {
+    color: #555;
+    line-height: 1.5;
+}
+
+.traffic-example-list {
+    margin: 10px 0 0 18px;
+    color: #555;
+}
+
+.traffic-example-list li {
+    margin-bottom: 6px;
+}
+
+.traffic-empty {
+    background: #f8f9fa;
+    border: 1px dashed #ced4da;
+    border-radius: 10px;
+    padding: 20px;
+    color: #666;
+}
+
 .btn-primary {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -311,6 +420,10 @@ header h1 {
     
     .tab-content {
         padding: 20px;
+    }
+
+    .traffic-card-header {
+        flex-direction: column;
     }
 }
 
