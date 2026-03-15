@@ -47,13 +47,13 @@ function DemoDashboardView() {
     setDemoError(null);
     publicApi
       .runDemo(raw)
-      .then((data) => {
+      .then((data: DemoPreview) => {
         if (!cancelled) {
           setApiDemoData(data);
           setDemoError(null);
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (!cancelled) {
           setApiDemoData(null);
           setDemoError(err instanceof Error ? err.message : 'Could not load channel preview.');
