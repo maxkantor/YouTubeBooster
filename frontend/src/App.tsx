@@ -2,7 +2,7 @@ import React, { type ReactNode, useCallback, Suspense, useEffect, useState } fro
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, publicApi, userApi } from './lib/api';
-import { getStoredDemoChannel } from './lib/demo';
+import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
 import { SeoHead } from './SeoHead';
 import type {
   AdminSessionStatus,
@@ -18,14 +18,15 @@ const LandingPage = React.lazy(() => import('./LandingPage').then((m) => ({ defa
 const PlatformPage = React.lazy(() => import('./PlatformPage').then((m) => ({ default: m.PlatformPage })));
 const UnifiedDashboard = React.lazy(() => import('./UnifiedDashboard').then((m) => ({ default: m.UnifiedDashboard })));
 
-/** Demo dashboard at /demo — fetches channel from API when URL provided, else static sample. */
+/** Demo dashboard at /demo — full demo (default channel) vs preview (user channel with blur). */
 function DemoDashboardView() {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const channelFromState = (location.state as { channelInput?: string } | null)?.channelInput;
   const channelFromQuery = searchParams.get('channel');
   const channelFromStorage = getStoredDemoChannel();
-  const channelInput = channelFromState ?? channelFromQuery ?? channelFromStorage ?? 'demo';
+  const channelInput = channelFromState ?? channelFromQuery ?? channelFromStorage ?? DEFAULT_DEMO_CHANNEL;
+  const isFullDemo = normalizeChannelForComparison(channelInput) === normalizeChannelForComparison(DEFAULT_DEMO_CHANNEL);
 
   const [apiDemoData, setApiDemoData] = useState<DemoPreview | null>(null);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -37,7 +38,7 @@ function DemoDashboardView() {
 
   useEffect(() => {
     const raw = (channelInput || '').trim();
-    if (!raw || raw === 'demo') {
+    if (!raw) {
       setApiDemoData(null);
       setDemoError(null);
       return;
@@ -70,12 +71,13 @@ function DemoDashboardView() {
   return (
     <UnifiedDashboard
       isDemo
+      isFullDemo={isFullDemo}
       demoData={apiDemoData}
       dashboardOverview={null}
       channelInput={channelInput}
       demoLoading={demoLoading}
       demoError={demoError}
-      onCreateCheckout={async (ch, email) => publicApi.createCheckoutSession(ch || 'demo', email)}
+      onCreateCheckout={async (ch, email) => publicApi.createCheckoutSession(ch || channelInput, email)}
     />
   );
 }
@@ -762,7 +764,7 @@ export default function App() {
             <a href="/#pricing">Pricing</a>
             <a href="/#faq">FAQ</a>
           </div>
-          <Link to="/#demo" className="btn btn-primary nav-cta">
+          <Link to="/#audit" className="btn btn-primary nav-cta">
             Run Free Channel Audit
           </Link>
         </nav>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { analytics } from './lib/analytics';
-import { getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
+import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
 import { publicApi } from './lib/api';
 
 const DEMO_STORAGE_KEY = 'ybai_demo';
@@ -80,12 +80,16 @@ export function LandingPage() {
     return () => obs.disconnect();
   }, []);
 
-  function handleAnalyzeChannel() {
-    const channel = demoInput.trim() || 'https://youtube.com/@channelname';
+  function handleAnalyzeUserChannel() {
+    const channel = demoInput.trim();
     setDemoError('');
+    if (!channel) {
+      setDemoError('Enter a channel URL or @handle.');
+      return;
+    }
     analytics.channelAuditStarted(channel);
     setStoredDemoChannel(channel);
-    navigate('/demo', { replace: true, state: { channelInput: channel } });
+    navigate(`/demo?channel=${encodeURIComponent(channel)}`, { replace: true, state: { channelInput: channel } });
   }
 
   async function handleUnlockReport() {
@@ -153,7 +157,7 @@ export function LandingPage() {
               and hidden growth opportunities.
             </p>
             <div className="landing-hero-buttons">
-              <a href="#demo" className="btn btn-primary btn-lg">
+              <a href="#audit" className="btn btn-primary btn-lg">
                 Run Free Channel Audit
               </a>
               <a href="#example-audit" className="btn btn-secondary btn-lg">
@@ -188,34 +192,69 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 3. Live Demo Entry — command-style input */}
-      <section className="landing-demo-entry" id="demo">
+      {/* 3. Audit entry — two options: default demo (full) vs user channel (preview) */}
+      <section className="landing-demo-entry landing-audit-section" id="audit">
         <div className="landing-demo-entry-inner">
           <h2 className="landing-section-title">Run your free channel audit</h2>
           <p className="landing-section-sub">
-            Paste any public YouTube channel. Results in under 60 seconds.
+            Analyze any YouTube channel and uncover hidden growth opportunities in seconds.
           </p>
-          <div className="landing-demo-input-wrap landing-command-input">
-            <input
-              type="text"
-              className="landing-demo-input"
-              placeholder="Paste a YouTube channel URL or @handle"
-              value={demoInput}
-              onChange={(e) => setDemoInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeChannel()}
-            />
-            <button
-              type="button"
-              className="btn btn-primary landing-demo-btn"
-              onClick={handleAnalyzeChannel}
-            >
-              Analyze Channel
-            </button>
+
+          <div className="landing-audit-options">
+            <div className="landing-audit-option landing-audit-option-highlight">
+              <h3 className="landing-audit-option-label">Default demo channel</h3>
+              <div className="landing-demo-input-wrap">
+                <input
+                  type="text"
+                  className="landing-demo-input"
+                  value={DEFAULT_DEMO_CHANNEL}
+                  readOnly
+                  aria-label="Default demo channel URL"
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-lg landing-audit-cta"
+                onClick={() => {
+                  setStoredDemoChannel(DEFAULT_DEMO_CHANNEL);
+                  analytics.channelAuditStarted(DEFAULT_DEMO_CHANNEL);
+                  navigate('/demo', { replace: true, state: { channelInput: DEFAULT_DEMO_CHANNEL } });
+                }}
+              >
+                Analyze Default Channel
+              </button>
+              <p className="landing-audit-option-hint">Full product showcase — all tabs and analytics visible.</p>
+            </div>
+
+            <div className="landing-audit-separator" aria-hidden>
+              <span>or</span>
+            </div>
+
+            <div className="landing-audit-option">
+              <h3 className="landing-audit-option-label">Analyze your own channel</h3>
+              <div className="landing-demo-input-wrap">
+                <input
+                  type="text"
+                  className="landing-demo-input"
+                  placeholder="Paste a YouTube channel URL or @handle"
+                  value={demoInput}
+                  onChange={(e) => setDemoInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeUserChannel()}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-lg landing-audit-cta"
+                onClick={handleAnalyzeUserChannel}
+              >
+                Analyze Your Channel
+              </button>
+              {demoError && <p className="landing-demo-error">{demoError}</p>}
+              <p className="landing-audit-option-hint">
+                Examples: https://youtube.com/@channelname or @channelname
+              </p>
+            </div>
           </div>
-          {demoError && <p className="landing-demo-error">{demoError}</p>}
-          <p className="landing-demo-helper">
-            Works with any public YouTube channel.
-          </p>
         </div>
       </section>
 
@@ -446,7 +485,7 @@ export function LandingPage() {
         <div className="landing-container">
           <h2 className="landing-cta-title">Stop guessing what the algorithm wants.</h2>
           <p className="landing-cta-sub">Run your AI channel audit now.</p>
-          <a href="#demo" className="btn btn-primary btn-lg landing-cta-btn">
+          <a href="#audit" className="btn btn-primary btn-lg landing-cta-btn">
             Run Free Channel Audit
           </a>
         </div>

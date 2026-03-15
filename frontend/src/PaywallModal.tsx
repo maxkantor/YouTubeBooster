@@ -13,13 +13,15 @@ const BENEFITS = [
 
 export function PaywallModal({
   featureName,
+  channelInput,
   onClose,
   onCreateCheckout,
   isLoading
 }: {
   featureName: string;
+  channelInput?: string;
   onClose: () => void;
-  onCreateCheckout: (email: string) => Promise<CheckoutSession>;
+  onCreateCheckout: (channelInput: string, email: string) => Promise<CheckoutSession>;
   isLoading: boolean;
 }) {
   const [email, setEmail] = useState('');
@@ -33,7 +35,7 @@ export function PaywallModal({
     setError('');
     try {
       analytics.checkoutStarted();
-      const session = await onCreateCheckout(email);
+      const session = await onCreateCheckout(channelInput ?? '', email);
       window.location.href = session.checkoutUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout.');
@@ -44,13 +46,13 @@ export function PaywallModal({
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal-content paywall-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Unlock the Full AI Growth Toolkit</h2>
+          <h2>Unlock full AI channel analysis</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
         <p className="paywall-subtitle">
-          Run live channel analysis, unlock deeper recommendations, and access the full creator dashboard.
+          Unlock the full AI growth report for your channel. One payment. Lifetime access.
         </p>
         <ul className="feature-list paywall-list">
           {BENEFITS.map((item) => (
@@ -78,7 +80,7 @@ export function PaywallModal({
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>
           Continue Demo
         </button>
-        <p className="paywall-reassurance">No subscription. One-time access.</p>
+        <p className="paywall-reassurance">One payment. Lifetime access.</p>
       </div>
     </div>
   );

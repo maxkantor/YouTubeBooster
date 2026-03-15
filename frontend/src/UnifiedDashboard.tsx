@@ -36,6 +36,7 @@ function formatNumber(n: number): string {
 
 export function UnifiedDashboard({
   isDemo,
+  isFullDemo = false,
   demoData,
   dashboardOverview,
   channelInput,
@@ -46,6 +47,8 @@ export function UnifiedDashboard({
   onSignOut
 }: {
   isDemo: boolean;
+  /** When true, default channel demo: all tabs visible, no blur. When false (user channel), preview mode with blur. */
+  isFullDemo?: boolean;
   demoData: DemoPreview | null;
   dashboardOverview: DashboardOverview | null;
   channelInput: string;
@@ -55,6 +58,8 @@ export function UnifiedDashboard({
   onCreateCheckout: (channelInput: string, email: string) => Promise<CheckoutSession>;
   onSignOut?: () => void;
 }) {
+  const isPreviewMode = isDemo && !isFullDemo;
+  const showLockedUI = isDemo && !isFullDemo;
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -125,7 +130,7 @@ export function UnifiedDashboard({
 
   function handleTabClick(tab: (typeof TABS)[number]) {
     setActiveTab(tab.id);
-    if (tab.locked && isDemo) {
+    if (tab.locked && isPreviewMode) {
       setPaywallFeature(tab.label);
     }
   }
@@ -145,9 +150,22 @@ export function UnifiedDashboard({
         <h1 className="dashboard-title">YouTubeBuster Dashboard</h1>
         {isDemo && (
           <>
-            <p className="dashboard-badge demo-badge">Demo Mode — sample analysis preview</p>
-            {previewFor && <p className="dashboard-preview-for">Preview for: <strong>{previewFor}</strong></p>}
-            <p className="dashboard-demo-helper">This sample audit shows how your full dashboard will look after unlock.</p>
+            {isFullDemo ? (
+              <p className="dashboard-badge demo-badge">Full demo — product showcase</p>
+            ) : (
+              <>
+                <div className="dashboard-preview-banner">
+                  <p className="dashboard-badge preview-badge">Preview Mode</p>
+                  <p className="dashboard-preview-banner-text">
+                    Unlock the full dashboard to see your real channel analytics and AI recommendations.
+                  </p>
+                  <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Overview')}>
+                    Unlock Full Analysis
+                  </button>
+                </div>
+                {previewFor && <p className="dashboard-preview-for">Preview for: <strong>{previewFor}</strong></p>}
+              </>
+            )}
           </>
         )}
         {!isDemo && <p className="dashboard-subtitle">Channel: <strong>{channelTitle}</strong></p>}
@@ -168,30 +186,44 @@ export function UnifiedDashboard({
       </header>
 
       <div className="dashboard-tabs">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`tab-btn ${activeTab === tab.id ? 'active' : ''} ${tab.locked && isDemo ? 'locked' : ''}`}
-            onClick={() => handleTabClick(tab)}
-            title={tab.locked && isDemo ? 'Available after unlock' : undefined}
-          >
-            <span className="tab-icon">{tab.icon}</span>
-            <span>{tab.label}</span>
-            {tab.locked && isDemo && (
-              <span className="tab-lock" aria-hidden>🔒</span>
-            )}
-          </button>
-        ))}
+        {TABS.map((tab) => {
+          const locked = tab.locked && isPreviewMode;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              className={`tab-btn ${activeTab === tab.id ? 'active' : ''} ${locked ? 'locked' : ''}`}
+              onClick={() => handleTabClick(tab)}
+              title={locked ? 'Available after unlock' : undefined}
+            >
+              <span className="tab-icon">{tab.icon}</span>
+              <span>{tab.label}</span>
+              {locked && (
+                <span className="tab-lock" aria-hidden>🔒</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Overview */}
       <div className={`tab-panel ${activeTab === 'overview' ? 'active' : ''}`}>
         <div className="growth-score-block" data-animated={scoreAnimated}>
           <h2 className="growth-score-title">Channel Growth Score</h2>
-          <div className="growth-score-value" data-score={isDemo ? displayScore : growthScore}>
-            {isDemo ? displayScore : growthScore} <span className="growth-score-max">/ 100</span>
-          </div>
+          {showLockedUI ? (
+            <div className="growth-score-value-wrap preview-blur-wrap">
+              <div className="growth-score-value" data-score={displayScore} aria-hidden>
+                {displayScore} <span className="growth-score-max">/ 100</span>
+              </div>
+              <div className="preview-blur-overlay" onClick={() => setPaywallFeature('Overview')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}>
+                <span className="preview-blur-copy">Unlock full AI channel analysis</span>
+              </div>
+            </div>
+          ) : (
+            <div className="growth-score-value" data-score={isDemo ? displayScore : growthScore}>
+              {isDemo ? displayScore : growthScore} <span className="growth-score-max">/ 100</span>
+            </div>
+          )}
           <span className="growth-score-label">{growthScoreLabel}</span>
           {isDemo && demoChannelData.scoreFactors && (
             <div className="growth-score-factors">
@@ -202,20 +234,54 @@ export function UnifiedDashboard({
           )}
           {scoreExplanation && <p className="growth-score-explanation">{scoreExplanation}</p>}
         </div>
-        <div className="stats-grid">
-          {displayCards.map((card, i) => (
-            <div key={i} className="stat-card">
-              <div className="stat-icon">{statIcons[i] ?? '📊'}</div>
-              <div className="stat-info">
-                <h3>{card.value}</h3>
-                <p>{card.label}</p>
-              </div>
+        {showLockedUI ? (
+          <div className="stats-grid preview-blur-wrap">
+            <div className="stats-grid-inner">
+              {displayCards.map((card, i) => (
+                <div key={i} className="stat-card">
+                  <div className="stat-icon">{statIcons[i] ?? '📊'}</div>
+                  <div className="stat-info">
+                    <h3>{card.value}</h3>
+                    <p>{card.label}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+            <div className="preview-blur-overlay" onClick={() => setPaywallFeature('Overview')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}>
+              <span className="preview-blur-copy">Unlock full AI channel analysis</span>
+            </div>
+          </div>
+        ) : (
+          <div className="stats-grid">
+            {displayCards.map((card, i) => (
+              <div key={i} className="stat-card">
+                <div className="stat-icon">{statIcons[i] ?? '📊'}</div>
+                <div className="stat-info">
+                  <h3>{card.value}</h3>
+                  <p>{card.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <section className="dashboard-section">
           <h2>⭐ Top Performing Videos</h2>
+          {showLockedUI ? (
+            <div className="video-list preview-blur-wrap">
+              <div className="video-list-inner">
+                {demoTopVideos.slice(0, 5).map((v) => (
+                  <div key={v.key} className="video-card">
+                    <div className="video-card-title">{v.title}</div>
+                    <div className="video-card-meta">{formatNumber(v.viewCount)} views</div>
+                  </div>
+                ))}
+              </div>
+              <div className="preview-blur-overlay" onClick={() => setPaywallFeature('Overview')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}>
+                <span className="preview-blur-copy">Unlock full AI channel analysis</span>
+              </div>
+            </div>
+          ) : (
           <div className="video-list">
             {isDemo && demoData != null && hasMeaningfulMetrics ? (
               topVideosPaid.length > 0 ? (
@@ -249,9 +315,10 @@ export function UnifiedDashboard({
               <p className="muted">No video data in this view. Unlock full access for your full library.</p>
             )}
           </div>
+          )}
         </section>
 
-        {isDemo && (
+        {(isDemo && (isFullDemo || isPreviewMode)) && (
           <>
             <section className="dashboard-section why-score-section">
               <h2>Why this score</h2>
@@ -347,9 +414,9 @@ export function UnifiedDashboard({
         </section>
       </div>
 
-      {/* Suggestions: locked in demo with realistic content behind blur */}
+      {/* Suggestions: locked in preview mode; full content in default demo */}
       <div className={`tab-panel ${activeTab === 'suggestions' ? 'active' : ''}`}>
-        {isDemo ? (
+        {isPreviewMode ? (
           <div className="locked-panel locked-panel-with-content">
             <div className="locked-content-blur">
               <section className="dashboard-section">
@@ -363,13 +430,21 @@ export function UnifiedDashboard({
             </div>
             <div className="locked-overlay">
               <span className="locked-icon">🔒</span>
-              <span className="locked-label">Premium</span>
-              <p>Content ideas and suggestions are available after purchase.</p>
+              <span className="locked-label">Unlock full AI channel analysis</span>
               <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Suggestions')}>
                 Unlock for $49.99
               </button>
             </div>
           </div>
+        ) : isFullDemo ? (
+          <section className="dashboard-section">
+            <h2>Top Content Ideas</h2>
+            <ul className="feature-list">
+              {demoSuggestions.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          </section>
         ) : (
           <section className="dashboard-section">
             <h2>Content ideas</h2>
@@ -378,9 +453,9 @@ export function UnifiedDashboard({
         )}
       </div>
 
-      {/* SEO: locked in demo with realistic analysis behind blur */}
+      {/* SEO: locked in preview mode; full content in default demo */}
       <div className={`tab-panel ${activeTab === 'seo' ? 'active' : ''}`}>
-        {isDemo ? (
+        {isPreviewMode ? (
           <div className="locked-panel locked-panel-with-content">
             <div className="locked-content-blur">
               <section className="dashboard-section">
@@ -403,13 +478,30 @@ export function UnifiedDashboard({
             </div>
             <div className="locked-overlay">
               <span className="locked-icon">🔒</span>
-              <span className="locked-label">Premium</span>
-              <p>SEO Optimizer and title suggestions unlock after purchase.</p>
+              <span className="locked-label">Unlock full AI channel analysis</span>
               <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('SEO Optimizer')}>
                 Unlock for $49.99
               </button>
             </div>
           </div>
+        ) : isFullDemo ? (
+          <section className="dashboard-section">
+            <h2>SEO Optimizer</h2>
+            <p className="video-card-title">{demoSeoAnalysis.title}</p>
+            <p className="seo-score">SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}</p>
+            <h3 className="dashboard-section-h3">Issues</h3>
+            <ul className="feature-list">
+              {demoSeoAnalysis.issues.map((issue, i) => (
+                <li key={i}>{issue}</li>
+              ))}
+            </ul>
+            <h3 className="dashboard-section-h3">Recommendations</h3>
+            <ul className="feature-list">
+              {demoSeoAnalysis.recommendations.map((rec, i) => (
+                <li key={i}>{rec}</li>
+              ))}
+            </ul>
+          </section>
         ) : (
           <section className="dashboard-section">
             <h2>SEO Optimizer</h2>
@@ -418,9 +510,9 @@ export function UnifiedDashboard({
         )}
       </div>
 
-      {/* Traffic: locked in demo with realistic content behind blur */}
+      {/* Traffic: locked in preview mode; full content in default demo */}
       <div className={`tab-panel ${activeTab === 'traffic' ? 'active' : ''}`}>
-        {isDemo ? (
+        {isPreviewMode ? (
           <div className="locked-panel locked-panel-with-content">
             <div className="locked-content-blur">
               <section className="dashboard-section">
@@ -441,13 +533,28 @@ export function UnifiedDashboard({
             </div>
             <div className="locked-overlay">
               <span className="locked-icon">🔒</span>
-              <span className="locked-label">Premium</span>
-              <p>Traffic tools and promotion insights unlock after purchase.</p>
+              <span className="locked-label">Unlock full AI channel analysis</span>
               <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Traffic Tools')}>
                 Unlock for $49.99
               </button>
             </div>
           </div>
+        ) : isFullDemo ? (
+          <section className="dashboard-section">
+            <h2>Traffic Tools</h2>
+            <div className="traffic-demo-cards">
+              <div className="traffic-demo-card">
+                <h3 className="dashboard-section-h3">Best Video To Promote</h3>
+                <p className="video-card-title">{demoTrafficTools.bestVideoToPromote}</p>
+                <p className="traffic-engagement">Engagement: {demoTrafficTools.engagement}%</p>
+              </div>
+              <div className="traffic-demo-card">
+                <h3 className="dashboard-section-h3">Proven Video To Reshare</h3>
+                <p className="video-card-title">{demoTrafficTools.provenVideoToReshare.title}</p>
+                <p className="traffic-engagement">{formatNumber(demoTrafficTools.provenVideoToReshare.views)} views</p>
+              </div>
+            </div>
+          </section>
         ) : (
           <section className="dashboard-section">
             <h2>Traffic tools</h2>
@@ -456,9 +563,9 @@ export function UnifiedDashboard({
         )}
       </div>
 
-      {/* Runner: locked in demo — disabled button + overlay */}
+      {/* Runner: locked in preview mode; full content in default demo */}
       <div className={`tab-panel ${activeTab === 'runner' ? 'active' : ''}`}>
-        {isDemo ? (
+        {isPreviewMode ? (
           <div className="locked-panel locked-panel-with-content">
             <div className="locked-content-blur">
               <section className="dashboard-section">
@@ -469,11 +576,19 @@ export function UnifiedDashboard({
                 </button>
               </section>
             </div>
-            <div className="locked-overlay runner-overlay">
+            <div className="locked-overlay runner-overlay" onClick={() => setPaywallFeature('Continuous Runner')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Continuous Runner')}>
               <span className="locked-icon">🔒</span>
-              <span className="locked-label">Available in full version</span>
+              <span className="locked-label">Unlock full AI channel analysis</span>
             </div>
           </div>
+        ) : isFullDemo ? (
+          <section className="dashboard-section">
+            <h2>Continuous Runner</h2>
+            <p className="muted">Run ongoing analytics and monitoring for your channel.</p>
+            <button type="button" className="btn btn-primary">
+              Start Runner
+            </button>
+          </section>
         ) : (
           <section className="dashboard-section">
             <h2>Continuous runner</h2>
@@ -485,6 +600,7 @@ export function UnifiedDashboard({
       {paywallFeature && (
         <PaywallModal
           featureName={paywallFeature}
+          channelInput={channelInput}
           onClose={() => setPaywallFeature(null)}
           onCreateCheckout={handleCreateCheckout}
           isLoading={checkoutLoading}

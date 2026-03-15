@@ -1,3 +1,11 @@
+/** Default channel used for the full product demo (no blur). Must match backend and landing. */
+export const DEFAULT_DEMO_CHANNEL = 'https://www.youtube.com/@maxkantorUSA';
+
+/** Normalizes channel input for comparison (lowercase, trim, optional trailing slash). */
+export function normalizeChannelForComparison(input: string): string {
+  return (input || '').trim().toLowerCase().replace(/\/+$/, '');
+}
+
 /**
  * Parses YouTube channel URL or handle and returns a clean display identity (e.g. @KeyWestWaterman).
  */
