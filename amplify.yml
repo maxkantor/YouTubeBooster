@@ -9,7 +9,7 @@ frontend:
         - cd frontend && npm ci
     build:
       commands:
-        - cd frontend && npm run build
+        - cd $CODEBUILD_SRC_DIR/frontend && npm run build
   artifacts:
     baseDirectory: frontend/dist
     files:
