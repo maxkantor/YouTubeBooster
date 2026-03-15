@@ -48,6 +48,8 @@ Thumbs.db
 *.json
 !package.json
 !package-lock.json
+!tsconfig.json
+!**/tsconfig*.json
 !requirements.txt
 results/
 output/
