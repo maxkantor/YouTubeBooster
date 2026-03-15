@@ -462,7 +462,8 @@ resource "aws_amplify_app" "frontend" {
   enable_auto_branch_creation = false
 
   environment_variables = {
-    VITE_API_BASE_URL            = var.deploy_backend_lambda ? aws_apigatewayv2_api.http_api[0].api_endpoint : "https://api.example.com"
+    AMPLIFY_MONOREPO_APP_ROOT   = "frontend"
+    VITE_API_BASE_URL           = var.deploy_backend_lambda ? aws_apigatewayv2_api.http_api[0].api_endpoint : "https://api.example.com"
     VITE_STRIPE_PUBLISHABLE_KEY  = "pk_test_replace_me"
   }
 

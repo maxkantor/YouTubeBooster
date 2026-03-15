@@ -1,24 +1,26 @@
-# Amplify build spec (builds on every push when "Build on push" is enabled for the branch)
+# Amplify build spec — app lives in frontend/ (set AMPLIFY_MONOREPO_APP_ROOT=frontend in app env)
 version: 1
-frontend:
-  phases:
-    preBuild:
-      commands:
-        - nvm install 20
-        - nvm use 20
-        - cd frontend && npm ci
-    build:
-      commands:
-        - cd $CODEBUILD_SRC_DIR/frontend && npm run build
-  artifacts:
-    baseDirectory: frontend/dist
-    files:
-      - '**/*'
-  cache:
-    paths:
-      - frontend/node_modules/**/*
-  customHeaders:
-    - pattern: '**/*'
-      headers:
-        - key: Cache-Control
-          value: no-cache
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - nvm install 20
+            - nvm use 20
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+      customHeaders:
+        - pattern: '**/*'
+          headers:
+            - key: Cache-Control
+              value: no-cache
