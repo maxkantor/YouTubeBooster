@@ -458,7 +458,7 @@ resource "aws_amplify_app" "frontend" {
   name                = "${var.project_name}-web"
   repository          = var.amplify_repository_url
   access_token        = var.amplify_access_token
-  build_spec          = file("${path.module}/../amplify.yml")
+  build_spec = file("${path.module}/../../amplify.yml")
   enable_auto_branch_creation = false
 
   environment_variables = {

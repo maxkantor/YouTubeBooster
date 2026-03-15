@@ -139,15 +139,20 @@ The Lambda receives:
 
 ## Amplify Deployment Flow
 
-To manage the frontend with Terraform:
+**One-command deploy (recommended):** From `infra/terraform`, set your GitHub token and run:
 
-1. Set:
-   - `enable_amplify_app = true`
-   - `amplify_repository_url`
-   - `amplify_access_token`
-2. Run `terraform apply`.
+```powershell
+$env:TF_VAR_amplify_access_token = "ghp_your_personal_access_token"
+.\deploy-amplify.ps1
+```
 
-Amplify uses the build config from `infra/amplify.yml`.
+This runs `terraform apply` with Amplify enabled and connects `https://github.com/maxkantor/YouTubeBooster` (main branch). The app will appear in AWS Amplify Console and build on every push.
+
+**Manual Terraform:** Set in `terraform.tfvars`: `enable_amplify_app = true`, `amplify_repository_url`, `amplify_access_token`, then run `terraform apply`.
+
+Amplify uses the build config from the repo root `amplify.yml`.
+
+**Build on push:** With Terraform, the main branch has `enable_auto_build = true`, so each push to that branch starts a build. If you connected the app manually in the Amplify Console, open the app → **Branch** (e.g. main) → **Edit** and enable **Build on push** so Amplify starts a build on every push.
 
 ## Notes
 
