@@ -1,13 +1,15 @@
+# Amplify build spec (builds on every push when "Build on push" is enabled for the branch)
 version: 1
 frontend:
   phases:
     preBuild:
       commands:
-        - cd frontend
-        - npm ci
+        - nvm install 20
+        - nvm use 20
+        - cd frontend && npm ci
     build:
       commands:
-        - npm run build
+        - cd frontend && npm run build
   artifacts:
     baseDirectory: frontend/dist
     files:
