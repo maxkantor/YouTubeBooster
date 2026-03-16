@@ -8,7 +8,6 @@ public static class Infrastructure
 {
     public static IServiceCollection AddApplicationInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddAWSLambdaHosting(LambdaEventSource.RestApi);
         services.AddDataProtection();
         services.AddHttpClient();
 

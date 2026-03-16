@@ -359,6 +359,7 @@ resource "aws_lambda_function" "backend" {
 
   environment {
     variables = {
+      LambdaEventSource              = "HttpApi"
       APP_ENVIRONMENT                = "prod"
       SSM__BASEPATH                  = var.ssm_prefix
       Storage__Provider              = "DynamoDb"

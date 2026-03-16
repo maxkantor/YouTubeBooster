@@ -3,13 +3,11 @@ using Amazon.Lambda.AspNetCoreServer.Hosting;
 using YouTubeBoosterAi.Api;
 
 var builder = WebApplication.CreateBuilder(args);
-
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddApplicationInfrastructure(builder.Configuration);
 
 var app = builder.Build();
-
 app.UseHttpsRedirection();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "youtube-booster-ai-api" }));
