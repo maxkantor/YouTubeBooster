@@ -764,9 +764,14 @@ export default function App() {
             <a href="/#pricing">Pricing</a>
             <a href="/#faq">FAQ</a>
           </div>
-          <Link to="/#audit" className="btn btn-primary nav-cta">
+          <button
+            className="btn btn-primary nav-cta"
+            onClick={() => {
+              window.location.href = '/#audit';
+            }}
+          >
             Run Free Channel Audit
-          </Link>
+          </button>
         </nav>
       )}
       <Suspense fallback={
