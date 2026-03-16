@@ -14,12 +14,17 @@ import type {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const hasBody = init?.body !== undefined && init?.body !== null;
+
+  const headers: Record<string, string> = {};
+  if (hasBody && method !== 'GET' && method !== 'HEAD') {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const response = await fetch(`${apiBaseUrl}${path}`, {
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {})
-    },
+    headers: { ...headers, ...(init?.headers || {}) },
     ...init
   });
 

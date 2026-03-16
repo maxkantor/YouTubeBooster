@@ -148,9 +148,9 @@ export function LandingPage() {
           <a href="#pricing">Pricing</a>
           <a href="#faq">FAQ</a>
         </nav>
-        <a href="#demo" className="btn btn-primary landing-cta">
+        <Link to="/demo" className="btn btn-primary landing-cta">
           Run Free Channel Audit
-        </a>
+        </Link>
       </header>
 
       {/* 2. Hero */}
