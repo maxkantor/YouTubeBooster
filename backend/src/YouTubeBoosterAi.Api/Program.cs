@@ -1,11 +1,7 @@
 using System.Text.Json;
-using Amazon.Lambda.AspNetCoreServer.Hosting;
 using YouTubeBoosterAi.Api;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Configure this ASP.NET Core app to run inside AWS Lambda behind an HTTP API (payload v2).
-builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddApplicationInfrastructure(builder.Configuration);
