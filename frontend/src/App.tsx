@@ -764,9 +764,9 @@ export default function App() {
             <a href="/#pricing">Pricing</a>
             <a href="/#faq">FAQ</a>
           </div>
-          <Link to="/#audit" className="btn btn-primary nav-cta">
+          <a href="/#audit" className="btn btn-primary nav-cta">
             Run Free Channel Audit
-          </Link>
+          </a>
         </nav>
       )}
       <Suspense fallback={

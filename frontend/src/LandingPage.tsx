@@ -61,6 +61,14 @@ export function LandingPage() {
   const pricingViewedRef = useRef(false);
 
   useEffect(() => {
+    if (window.location.hash === '#audit') {
+      const scrollToAudit = () => {
+        const el = document.getElementById('audit');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      requestAnimationFrame(() => requestAnimationFrame(scrollToAudit));
+      return;
+    }
     window.scrollTo(0, 0);
   }, []);
 
