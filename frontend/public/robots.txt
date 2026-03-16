@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://youtubebuster.com/sitemap.xml
+Sitemap: https://youtubebooster.com/sitemap.xml

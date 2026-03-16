@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
 import { publicApi } from './lib/api';
@@ -137,10 +138,12 @@ export function LandingPage() {
       <header className="landing-header">
         <Link
           to="/"
-          className="landing-logo"
+          className="landing-logo brand-link"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label={`${BRAND.name} home`}
         >
-          YouTubeBuster
+          <span className="brand-word brand-word-1">{BRAND.namePart1}</span>
+          <span className="brand-word brand-word-2">{BRAND.namePart2}</span>
         </Link>
         <nav className="landing-nav">
           <a href="#product">Product</a>

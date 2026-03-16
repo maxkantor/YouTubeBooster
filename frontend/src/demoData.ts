@@ -1,5 +1,5 @@
 /**
- * Demo dataset for YouTubeBuster dashboard when user has not purchased.
+ * Demo dataset for YouTube Booster dashboard when user has not purchased.
  * Sample audit data only — not real channel stats.
  */
 

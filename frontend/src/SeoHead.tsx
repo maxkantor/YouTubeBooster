@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 
-const DEFAULT_TITLE = 'YouTubeBuster – AI YouTube Channel Growth Analyzer';
-const DEFAULT_DESC = 'Analyze any YouTube channel with AI and discover SEO gaps, weak titles, traffic leaks, and hidden growth opportunities.';
+import { BRAND_DEFAULT_TITLE } from './config/brand';
+
+const DEFAULT_TITLE = BRAND_DEFAULT_TITLE;
+const DEFAULT_DESC = `Analyze any YouTube channel with AI and discover SEO gaps, weak titles, traffic leaks, and hidden growth opportunities.`;
 
 function getSiteUrl(): string {
   if (typeof window === 'undefined') return '';

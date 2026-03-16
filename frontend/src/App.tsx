@@ -1,5 +1,6 @@
 import React, { type ReactNode, useCallback, Suspense, useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, publicApi, userApi } from './lib/api';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
@@ -735,10 +736,10 @@ export default function App() {
   const showGlobalNav = location.pathname !== '/' && location.pathname !== '/platform';
 
   const path = location.pathname;
-  const seo = path === '/' ? { title: 'YouTubeBuster – AI YouTube Channel Growth Analyzer', canonical: '/' }
-    : path === '/demo' ? { title: 'Demo – YouTubeBuster', canonical: '/demo' }
-    : path === '/dashboard' ? { title: 'Dashboard – YouTubeBuster', canonical: '/dashboard' }
-    : path === '/platform' ? { title: 'MK Platform – YouTubeBuster', canonical: '/platform' }
+  const seo = path === '/' ? { title: BRAND_DEFAULT_TITLE, canonical: '/' }
+    : path === '/demo' ? { title: `Demo – ${BRAND.name}`, canonical: '/demo' }
+    : path === '/dashboard' ? { title: `Dashboard – ${BRAND.name}`, canonical: '/dashboard' }
+    : path === '/platform' ? { title: `MK Platform – ${BRAND.name}`, canonical: '/platform' }
     : path === '/login/admin' ? { title: 'Admin', noindex: true as const }
     : {};
 
@@ -753,10 +754,12 @@ export default function App() {
         <nav className="top-nav landing-top-nav">
           <Link
             to="/"
-            className="brand"
+            className="brand brand-link"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            aria-label={`${BRAND.name} home`}
           >
-            YouTubeBuster
+            <span className="brand-word brand-word-1">{BRAND.namePart1}</span>
+            <span className="brand-word brand-word-2">{BRAND.namePart2}</span>
           </Link>
           <div className="nav-links">
             <a href="/#product">Product</a>

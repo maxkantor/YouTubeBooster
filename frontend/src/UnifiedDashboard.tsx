@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BRAND } from './config/brand';
 import {
   demoChannelData,
   demoDetectedProblems,
@@ -147,7 +148,7 @@ export function UnifiedDashboard({
   return (
     <div className="page dashboard-page">
       <header className="dashboard-header">
-        <h1 className="dashboard-title">YouTubeBuster Dashboard</h1>
+        <h1 className="dashboard-title">{BRAND.name} Dashboard</h1>
         {isDemo && (
           <>
             {isFullDemo ? (

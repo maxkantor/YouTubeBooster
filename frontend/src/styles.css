@@ -56,9 +56,50 @@ a {
   font-size: 0.95rem;
 }
 
-.brand {
+/* Premium brand wordmark: "YouTube" + "Booster" */
+.brand,
+.landing-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  text-decoration: none;
+  color: #f8fafc;
   font-size: 1.1rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  padding: 8px 4px 8px 0;
+  margin: -8px 4px -8px 0;
+  border-radius: 6px;
+  transition: transform 0.25s ease, filter 0.25s ease, box-shadow 0.25s ease;
+}
+.brand-link:hover {
+  filter: brightness(1.08);
+  transform: scale(1.02);
+  box-shadow: 0 0 20px rgba(196, 181, 253, 0.15);
+}
+.brand-link:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+.brand-word {
+  white-space: nowrap;
+}
+.brand-word-1 {
+  color: #e2e8f0;
+  font-weight: 700;
+}
+.brand-word-2 {
+  background: linear-gradient(135deg, #e2e8f0 0%, #c4b5fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+}
+.brand-link:hover .brand-word-2 {
+  background: linear-gradient(135deg, #f1f5f9 0%, #c4b5fd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 
 .nav-links {
@@ -984,7 +1025,7 @@ textarea {
   font-size: 0.95rem;
 }
 
-/* ========== Landing page (YouTubeBuster) ========== */
+/* ========== Landing page (YouTube Booster) ========== */
 .landing {
   background: var(--landing-bg, #0B0F1F);
   color: #e2e8f0;
@@ -1004,11 +1045,8 @@ textarea {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.landing-logo {
+.landing-header .landing-logo {
   font-size: 1.25rem;
-  font-weight: 700;
-  color: #f8fafc;
-  letter-spacing: -0.02em;
 }
 
 .landing-nav {
