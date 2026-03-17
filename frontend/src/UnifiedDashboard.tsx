@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BRAND } from './config/brand';
 import {
   demoChannelData,
@@ -184,6 +184,11 @@ export function UnifiedDashboard({
   const [runnerWatchStartPos, setRunnerWatchStartPos] = useState<number | null>(null);
   const [runnerWatchLimitFired, setRunnerWatchLimitFired] = useState(false);
 
+  /** Synced inside loadVideos so runner can use list immediately after await (React state is async). */
+  const runnerVideosRef = useRef<PublicVideo[]>([]);
+  /** Skip one runnerIndex effect after Start (avoid double player init). */
+  const suppressRunnerIndexEffectRef = useRef(false);
+
   // YouTube iframe API player (kept out of React state)
   const playerRef = (globalThis as any).__ybPlayerRef as { player: any | null } | undefined;
   (globalThis as any).__ybPlayerRef = playerRef ?? { player: null };
@@ -254,14 +259,17 @@ export function UnifiedDashboard({
 
   async function loadVideos(maxResults = 50) {
     const input = (channelInput || '').trim();
-    if (!input) return;
+    if (!input) return null;
     setPyVideosLoading(true);
     setPyError(null);
     try {
       const videos = await publicApi.listVideos(input, maxResults);
-      setPyVideos(videos);
-      return videos;
+      const list = (videos ?? []).filter((v) => v?.video_id);
+      runnerVideosRef.current = list;
+      setPyVideos(videos ?? []);
+      return list;
     } catch (err) {
+      runnerVideosRef.current = [];
       setPyVideos(null);
       setPyError(err instanceof Error ? err.message : 'Could not load videos.');
       return null;
@@ -326,12 +334,51 @@ export function UnifiedDashboard({
     document.head.appendChild(tag);
   }
 
+  function waitForYouTubePlayerCtor(maxMs = 20000): Promise<boolean> {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const tick = () => {
+        if ((window as any).YT?.Player) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() - start >= maxMs) {
+          resolve(false);
+          return;
+        }
+        window.setTimeout(tick, 150);
+      };
+      tick();
+    });
+  }
+
   useEffect(() => {
     if (isPreviewMode) return;
+    const w = window as any;
+    const prev = w.onYouTubeIframeAPIReady;
+    w.onYouTubeIframeAPIReady = () => {
+      try {
+        setRunnerLog((prevLog) =>
+          [`[${new Date().toISOString()}] YouTube IFrame API ready.`, ...prevLog].slice(0, 50)
+        );
+      } catch {
+        // ignore
+      }
+      if (typeof prev === 'function') prev();
+    };
     ensureYouTubeIframeApi();
+    if (w.YT?.Player) {
+      setRunnerLog((prevLog) =>
+        [`[${new Date().toISOString()}] YouTube IFrame API ready.`, ...prevLog].slice(0, 50)
+      );
+    }
+    return () => {
+      w.onYouTubeIframeAPIReady = prev;
+    };
   }, [isPreviewMode]);
 
   function getRunnerVideos() {
+    if (runnerVideosRef.current.length) return runnerVideosRef.current;
     return (pyVideos ?? []).filter((v) => v && v.video_id);
   }
 
@@ -429,15 +476,35 @@ export function UnifiedDashboard({
     setRunnerWatchStartPos(null);
     setRunnerWatchLimitFired(false);
 
+    const origin =
+      typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
+    const playerVars: Record<string, number | string> = {
+      autoplay: 1,
+      controls: 1,
+      enablejsapi: 1,
+      rel: 0,
+      playsinline: 1
+    };
+    if (origin) playerVars.origin = origin;
+
     const load = () => {
       const ref = (globalThis as any).__ybPlayerRef;
       const existingPlayer = ref?.player;
       if (existingPlayer && typeof existingPlayer.loadVideoById === 'function') {
-        existingPlayer.loadVideoById(videoId);
+        try {
+          existingPlayer.loadVideoById(videoId);
+        } catch {
+          appendRunnerLog('loadVideoById failed; try Stop then Start.');
+        }
         setTimeout(() => {
+          try {
+            if (typeof existingPlayer.playVideo === 'function') existingPlayer.playVideo();
+          } catch {
+            // autoplay may block
+          }
           runnerApplySpeed();
           runnerUpdatePosition();
-        }, 800);
+        }, 400);
         return;
       }
 
@@ -446,11 +513,17 @@ export function UnifiedDashboard({
         return;
       }
 
+      const host = document.getElementById('runner-player');
+      if (!host) {
+        appendRunnerLog('Player container #runner-player not in DOM.');
+        return;
+      }
+
       ref.player = new w.YT.Player('runner-player', {
         width: '100%',
         height: '100%',
         videoId,
-        playerVars: { autoplay: 1, controls: 1 },
+        playerVars,
         events: {
           onReady: () => {
             runnerApplySpeed();
@@ -489,9 +562,9 @@ export function UnifiedDashboard({
       });
     };
 
-    // If iframe api hasn't called onYouTubeIframeAPIReady yet, we still try shortly.
     load();
-    setTimeout(load, 1200);
+    setTimeout(load, 800);
+    setTimeout(load, 2200);
   }
 
   // Runner ticking: wall-time + watch-seconds limit + position updates
@@ -531,9 +604,13 @@ export function UnifiedDashboard({
     return () => window.clearInterval(id);
   }, [runnerRunning, runnerSpeed, runnerWatchSeconds, runnerWatchLimitFired, runnerWatchStartPos]);
 
-  // When index changes while running, play next
+  // When index changes while running, play next (Start handles first play with suppress flag)
   useEffect(() => {
     if (!runnerRunning) return;
+    if (suppressRunnerIndexEffectRef.current) {
+      suppressRunnerIndexEffectRef.current = false;
+      return;
+    }
     runnerPlayCurrent();
   }, [runnerIndex]);
 
@@ -1302,7 +1379,13 @@ export function UnifiedDashboard({
           <section className="dashboard-section">
             <h2>Continuous Runner</h2>
             <p className="muted">
-              Review and test your content — play through videos and mark issues (parity with the Python demo).
+              Review and test your content — play through videos, use speed/shuffle to scan, and mark issues.
+            </p>
+            <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
+              <strong>Views &amp; watch time:</strong> YouTube does <em>not</em> count plays from this runner toward
+              your public view count or watch hours. They filter embedded playback, channel-owner views, and
+              non-normal playback (e.g. high speed). To test that a video &quot;counts,&quot; have someone else watch
+              it normally on YouTube.
             </p>
             <div className="surface" style={{ padding: 18, marginTop: 14 }}>
               <div className="pill-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
@@ -1337,31 +1420,51 @@ export function UnifiedDashboard({
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => {
+                  disabled={pyVideosLoading}
+                  onClick={async () => {
+                    const v = await loadVideos(200);
+                    if (!v?.length) {
+                      appendRunnerLog('No videos found for this channel. Check URL/handle and try again.');
+                      setRunnerLoaded(false);
+                      return;
+                    }
                     setRunnerLoaded(true);
                     setRunnerIndex(0);
                     setRunnerPlayOrder(buildPlayOrder());
-                    appendRunnerLog('Videos loaded.');
+                    appendRunnerLog(`Loaded ${v.length} videos.`);
                   }}
                 >
-                  🔄 Load Videos
+                  {pyVideosLoading ? '…' : '🔄'} Load Videos
                 </button>
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={!runnerLoaded || runnerRunning}
+                  disabled={runnerRunning}
                   onClick={async () => {
                     ensureYouTubeIframeApi();
                     setRunnerStatus('RUNNING');
-                    setRunnerRunning(true);
                     setRunnerSessionStarted(0);
                     setRunnerSessionEnded(0);
                     setRunnerSessionWallSeconds(0);
-                    if (!pyVideos?.length) {
-                      await loadVideos(200);
+                    let v = runnerVideosRef.current;
+                    if (!v.length) v = (await loadVideos(200)) ?? [];
+                    if (!v.length) {
+                      appendRunnerLog('No videos to play. Click Load Videos first.');
+                      setRunnerStatus('IDLE');
+                      return;
                     }
+                    setRunnerLoaded(true);
+                    suppressRunnerIndexEffectRef.current = true;
+                    setRunnerIndex(0);
                     setRunnerPlayOrder(buildPlayOrder());
                     setRunnerServerStatus('—');
+                    const ytOk = await waitForYouTubePlayerCtor(20000);
+                    if (!ytOk) {
+                      appendRunnerLog('YouTube IFrame API did not load in time. Refresh the page and try again.');
+                      setRunnerStatus('ERROR');
+                      return;
+                    }
+                    setRunnerRunning(true);
                     await runnerTestServer();
                     runnerPlayCurrent();
                   }}
@@ -1374,7 +1477,7 @@ export function UnifiedDashboard({
                 <button type="button" className="btn btn-secondary" disabled={!runnerRunning} onClick={runnerAdvance}>
                   ⏭ Skip
                 </button>
-                <button type="button" className="btn btn-secondary" disabled={!runnerLoaded} onClick={runnerTestServer}>
+                <button type="button" className="btn btn-secondary" onClick={runnerTestServer}>
                   🔌 Test Server
                 </button>
               </div>
@@ -1390,11 +1493,16 @@ export function UnifiedDashboard({
                         <>
                           {v.title} (<a href={`https://www.youtube.com/watch?v=${v.video_id}`} target="_blank" rel="noreferrer">{v.video_id}</a>)
                         </>
-                      ) : '—';
+                      ) : (
+                        <>
+                          — (<span className="muted">—</span>)
+                        </>
+                      );
                     })()}
                   </div>
                   <div>
-                    <strong>Index:</strong> {runnerPlayOrder.length ? `${runnerIndex + 1} / ${runnerPlayOrder.length}` : '0 / 0'}
+                    <strong>Index:</strong>{' '}
+                    {runnerPlayOrder.length ? `${runnerIndex + 1} / ${runnerPlayOrder.length}` : '0 / 0'}
                   </div>
                   <div>
                     <strong>Desired speed:</strong> {runnerDesiredSpeed ?? '—'} | <strong>Actual speed:</strong> {runnerActualSpeed ?? '—'}
@@ -1403,7 +1511,10 @@ export function UnifiedDashboard({
                     <strong>Position:</strong> {runnerPosition != null ? `${runnerPosition.toFixed(1)}s` : '—'}
                   </div>
                   <div>
-                    <strong>Session:</strong> {runnerSessionStarted} started | {runnerSessionEnded} ended | {Math.floor(runnerSessionWallSeconds)}s watched | Server: {runnerServerStatus}
+                    <strong>Session:</strong> {runnerSessionStarted} started | {runnerSessionEnded} ended |{' '}
+                    {Math.floor(runnerSessionWallSeconds)}s watched | {runnerSessionStarted} runner views |{' '}
+                    {(runnerSessionWallSeconds / 3600).toFixed(2)}h runner watch | <strong>Server:</strong>{' '}
+                    {runnerServerStatus}
                   </div>
                 </div>
               </div>
@@ -1418,7 +1529,7 @@ export function UnifiedDashboard({
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  disabled={!runnerLoaded}
+                  disabled={!runnerLoaded && !runnerVideosRef.current.length}
                   onClick={async () => {
                     const v = runnerCurrentVideo();
                     if (!v) return;
