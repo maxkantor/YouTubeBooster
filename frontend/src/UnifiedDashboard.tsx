@@ -194,6 +194,7 @@ export function UnifiedDashboard({
   const [pySeo, setPySeo] = useState<PublicVideoSeoResponse | null>(null);
   const [pyLoading, setPyLoading] = useState(false);
   const [pyError, setPyError] = useState<string | null>(null);
+  const [pyVideosLoading, setPyVideosLoading] = useState(false);
 
   const channelTitle = isDemo
     ? (pyOverview?.channel_info?.title ?? demoData?.channelTitle ?? demoChannelData.channelTitle)
@@ -231,19 +232,15 @@ export function UnifiedDashboard({
     let cancelled = false;
     setPyLoading(true);
     setPyError(null);
-    Promise.all([
-      publicApi.analyzeChannel(input, 30),
-      publicApi.listVideos(input, 50)
-    ])
-      .then(([overview, videos]) => {
+    publicApi
+      .analyzeChannel(input, 30)
+      .then((overview) => {
         if (cancelled) return;
         setPyOverview(overview);
-        setPyVideos(videos);
       })
       .catch((err) => {
         if (cancelled) return;
         setPyOverview(null);
-        setPyVideos(null);
         setPyError(err instanceof Error ? err.message : 'Could not load channel data.');
       })
       .finally(() => {
@@ -254,6 +251,24 @@ export function UnifiedDashboard({
       cancelled = true;
     };
   }, [channelInput, isPreviewMode]);
+
+  async function loadVideos(maxResults = 50) {
+    const input = (channelInput || '').trim();
+    if (!input) return;
+    setPyVideosLoading(true);
+    setPyError(null);
+    try {
+      const videos = await publicApi.listVideos(input, maxResults);
+      setPyVideos(videos);
+      return videos;
+    } catch (err) {
+      setPyVideos(null);
+      setPyError(err instanceof Error ? err.message : 'Could not load videos.');
+      return null;
+    } finally {
+      setPyVideosLoading(false);
+    }
+  }
 
   const scoreExplanation = isDemo ? demoChannelData.scoreExplanation : null;
   const hasMeaningfulMetrics = Boolean(
@@ -312,9 +327,9 @@ export function UnifiedDashboard({
   }
 
   useEffect(() => {
-    if (!isDemo || !isFullDemo) return;
+    if (isPreviewMode) return;
     ensureYouTubeIframeApi();
-  }, [isDemo, isFullDemo]);
+  }, [isPreviewMode]);
 
   function getRunnerVideos() {
     return (pyVideos ?? []).filter((v) => v && v.video_id);
@@ -348,6 +363,7 @@ export function UnifiedDashboard({
   }
 
   function runnerCurrentVideo() {
+    if (!runnerLoaded) return null;
     const list = getRunnerVideos();
     const order = runnerPlayOrder.length ? runnerPlayOrder : buildPlayOrder();
     const idx = order.length ? order[Math.min(runnerIndex, order.length - 1)] : -1;
@@ -826,12 +842,23 @@ export function UnifiedDashboard({
         </section>
       </div>
 
-      {/* Videos */}
+        {/* Videos */}
       <div className={`tab-panel ${activeTab === 'videos' ? 'active' : ''}`}>
         <section className="dashboard-section">
           <h2>Your Videos</h2>
+          {!isPreviewMode && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void loadVideos(50)}
+              style={{ marginBottom: 12 }}
+              disabled={pyVideosLoading}
+            >
+              {pyVideosLoading ? 'Loading…' : 'Refresh Videos'}
+            </button>
+          )}
           <div className="video-list">
-            {isDemo && isFullDemo && pyVideos ? (
+            {!isPreviewMode && pyVideos ? (
               pyVideos.map((v) => (
                 <div key={v.video_id} className="video-card video-card-with-action">
                   <div className="video-card-main">
@@ -910,7 +937,7 @@ export function UnifiedDashboard({
               </button>
             </div>
           </div>
-        ) : isFullDemo ? (
+        ) : !isPreviewMode ? (
           <section className="dashboard-section">
             <h2>Content Ideas</h2>
             <button
@@ -1000,7 +1027,7 @@ export function UnifiedDashboard({
               </button>
             </div>
           </div>
-        ) : isFullDemo ? (
+        ) : !isPreviewMode ? (
           <section className="dashboard-section">
             <h2>SEO Optimizer</h2>
             <div className="pill-row" style={{ marginBottom: 10 }}>
@@ -1139,7 +1166,7 @@ export function UnifiedDashboard({
               </button>
             </div>
           </div>
-        ) : isFullDemo ? (
+        ) : !isPreviewMode ? (
           <section className="dashboard-section">
             <h2>Traffic Tools</h2>
             <p className="muted">
@@ -1271,7 +1298,7 @@ export function UnifiedDashboard({
               <span className="locked-label">Unlock full AI channel analysis</span>
             </div>
           </div>
-        ) : isFullDemo ? (
+        ) : !isPreviewMode ? (
           <section className="dashboard-section">
             <h2>Continuous Runner</h2>
             <p className="muted">
@@ -1330,6 +1357,9 @@ export function UnifiedDashboard({
                     setRunnerSessionStarted(0);
                     setRunnerSessionEnded(0);
                     setRunnerSessionWallSeconds(0);
+                    if (!pyVideos?.length) {
+                      await loadVideos(200);
+                    }
                     setRunnerPlayOrder(buildPlayOrder());
                     setRunnerServerStatus('—');
                     await runnerTestServer();
