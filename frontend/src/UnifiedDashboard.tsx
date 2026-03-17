@@ -1563,15 +1563,24 @@ export function UnifiedDashboard({
 
               <div className="surface" style={{ marginTop: 12, padding: 16 }}>
                 <h3 className="dashboard-section-h3">Video picker (leave all unchecked to play all)</h3>
-                <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflow: 'auto', paddingRight: 6 }}>
+                <div className="runner-video-picker-list">
                   {getRunnerVideos().map((v) => (
-                    <label key={v.video_id} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <label key={v.video_id} className="runner-video-picker-row">
                       <input
                         type="checkbox"
                         checked={Boolean(runnerPicked[v.video_id])}
                         onChange={(e) => setRunnerPicked((prev) => ({ ...prev, [v.video_id]: e.target.checked }))}
+                        className="runner-video-picker-checkbox"
                       />
-                      <span style={{ opacity: 0.95 }}>{v.title}</span>
+                      <img
+                        className="runner-video-picker-thumb"
+                        src={`https://img.youtube.com/vi/${encodeURIComponent(v.video_id)}/mqdefault.jpg`}
+                        alt=""
+                        loading="lazy"
+                        width={80}
+                        height={45}
+                      />
+                      <span className="runner-video-picker-title">{v.title}</span>
                     </label>
                   ))}
                 </div>

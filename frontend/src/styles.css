@@ -292,6 +292,26 @@ input {
   color: #f8fafc;
 }
 
+/* Global text-input styles must not apply to checkboxes/radios */
+input[type='checkbox'],
+input[type='radio'] {
+  width: 1.125rem;
+  height: 1.125rem;
+  min-width: 1.125rem;
+  min-height: 1.125rem;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  accent-color: #7c3aed;
+  vertical-align: middle;
+}
+
+input[type='radio'] {
+  border-radius: 50%;
+}
+
 textarea {
   width: 100%;
   padding: 14px;
@@ -878,6 +898,56 @@ textarea {
   margin: 16px 0 8px;
   font-size: 1rem;
   font-weight: 600;
+  color: #e2e8f0;
+}
+
+.runner-video-picker-list {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 8px;
+}
+
+.runner-video-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.runner-video-picker-row:hover {
+  border-color: rgba(124, 58, 237, 0.35);
+  background: rgba(124, 58, 237, 0.06);
+}
+
+.runner-video-picker-checkbox {
+  width: 1.125rem !important;
+  height: 1.125rem !important;
+  min-width: 1.125rem !important;
+  min-height: 1.125rem !important;
+}
+
+.runner-video-picker-thumb {
+  width: 80px;
+  height: 45px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.runner-video-picker-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
   color: #e2e8f0;
 }
 
