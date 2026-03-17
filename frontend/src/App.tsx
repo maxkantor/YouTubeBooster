@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParam
 import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, publicApi, userApi } from './lib/api';
-import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
+import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
 import { SeoHead } from './SeoHead';
 import type {
   AdminSessionStatus,
@@ -27,7 +27,14 @@ function DemoDashboardView() {
   const channelFromQuery = searchParams.get('channel');
   const channelFromStorage = getStoredDemoChannel();
   const channelInput = channelFromState ?? channelFromQuery ?? channelFromStorage ?? DEFAULT_DEMO_CHANNEL;
-  const isFullDemo = normalizeChannelForComparison(channelInput) === normalizeChannelForComparison(DEFAULT_DEMO_CHANNEL);
+  const inputNormalized = normalizeChannelForComparison(channelInput);
+  const defaultNormalized = normalizeChannelForComparison(DEFAULT_DEMO_CHANNEL);
+  const inputHandle = normalizeChannelForComparison(getDisplayHandle(channelInput));
+  const defaultHandle = normalizeChannelForComparison(getDisplayHandle(DEFAULT_DEMO_CHANNEL));
+  const isFullDemo =
+    inputNormalized === defaultNormalized ||
+    inputHandle === defaultHandle ||
+    inputHandle === '@maxkantorusa';
 
   const [apiDemoData, setApiDemoData] = useState<DemoPreview | null>(null);
   const [demoLoading, setDemoLoading] = useState(false);

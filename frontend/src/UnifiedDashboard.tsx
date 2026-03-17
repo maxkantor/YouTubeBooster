@@ -35,6 +35,92 @@ function formatNumber(n: number): string {
   return String(n);
 }
 
+function extractYouTubeVideoId(input: string): string {
+  const value = (input || '').trim();
+  if (!value) return '';
+  if (/^[A-Za-z0-9_-]{11}$/.test(value)) return value;
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    if (host === 'youtu.be') {
+      const shortId = url.pathname.replace(/^\/+/, '').split('/')[0];
+      if (/^[A-Za-z0-9_-]{11}$/.test(shortId)) return shortId;
+    }
+    const v = url.searchParams.get('v');
+    if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+
+    const parts = url.pathname.split('/').filter(Boolean);
+    const prefixes = new Set(['shorts', 'embed', 'live', 'watch']);
+    if (parts.length >= 2 && prefixes.has(parts[0]) && /^[A-Za-z0-9_-]{11}$/.test(parts[1])) return parts[1];
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
+type LocalSeoResult = {
+  title: string;
+  score: number;
+  rating: 'good' | 'fair' | 'needs-work';
+  issues: string[];
+  recommendations: string[];
+  suggestedTitles: string[];
+};
+
+function analyzeSeoLocally(title: string): LocalSeoResult {
+  const trimmed = (title || '').trim();
+  const length = trimmed.length;
+  const words = trimmed.split(/\s+/).filter(Boolean);
+
+  let score = 78;
+  const issues: string[] = [];
+  const recommendations: string[] = [];
+
+  if (length < 30) {
+    score -= 18;
+    issues.push('Title is likely too short for strong search intent + curiosity.');
+    recommendations.push('Add a clear outcome + keyword (e.g., dish name + a promise).');
+  } else if (length > 70) {
+    score -= 16;
+    issues.push('Title is likely too long; it may truncate on mobile and weaken CTR.');
+    recommendations.push('Shorten the title while keeping the main keyword near the front.');
+  }
+
+  const hasNumber = /\b\d+\b/.test(trimmed);
+  if (!hasNumber) {
+    score -= 6;
+    issues.push('No numbers present (numbers often improve scannability and CTR).');
+    recommendations.push('Try a number: “3 mistakes…”, “5-minute…”, “2 ways…”.');
+  }
+
+  const hasCapsWord = /\b[A-Z]{3,}\b/.test(trimmed);
+  if (hasCapsWord) {
+    score -= 6;
+    issues.push('Excessive ALL CAPS can look spammy.');
+    recommendations.push('Use emphasis sparingly; prefer clarity over shouting.');
+  }
+
+  const keyword = words.find((w) => w.length >= 5) ?? (words[0] ?? 'Recipe');
+  const suggestedTitles = [
+    `${keyword}: The Fastest Way (Step-by-Step)`,
+    `How to Make ${keyword} (No Mistakes)`,
+    `${keyword} — 5 Tips for Better Results`
+  ];
+
+  score = Math.max(0, Math.min(100, score));
+  const rating: LocalSeoResult['rating'] = score >= 80 ? 'good' : score >= 60 ? 'fair' : 'needs-work';
+
+  return {
+    title: trimmed || 'Video',
+    score,
+    rating,
+    issues,
+    recommendations,
+    suggestedTitles
+  };
+}
+
 export function UnifiedDashboard({
   isDemo,
   isFullDemo = false,
@@ -65,6 +151,13 @@ export function UnifiedDashboard({
   const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [displayScore, setDisplayScore] = useState(0);
+  const [seoInput, setSeoInput] = useState('');
+  const [seoResult, setSeoResult] = useState<LocalSeoResult | null>(null);
+  const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
+  const [trafficLoaded, setTrafficLoaded] = useState(false);
+  const [runnerLoaded, setRunnerLoaded] = useState(false);
+  const [runnerIndex, setRunnerIndex] = useState(0);
+  const [runnerLog, setRunnerLog] = useState<string[]>([]);
 
   const channelTitle = isDemo
     ? (demoData?.channelTitle ?? demoChannelData.channelTitle)
@@ -134,6 +227,34 @@ export function UnifiedDashboard({
     if (tab.locked && isPreviewMode) {
       setPaywallFeature(tab.label);
     }
+  }
+
+  function appendRunnerLog(message: string) {
+    setRunnerLog((prev) => [`[${new Date().toISOString()}] ${message}`, ...prev].slice(0, 50));
+  }
+
+  function handleAnalyzeSeoFromTitle(title: string) {
+    setSeoInput(title);
+    setSeoResult(analyzeSeoLocally(title));
+    setActiveTab('seo');
+  }
+
+  function handleAnalyzeSeo() {
+    const raw = seoInput.trim();
+    if (!raw) {
+      setSeoResult(null);
+      return;
+    }
+    const maybeId = extractYouTubeVideoId(raw);
+    if (maybeId) {
+      // Without an authenticated backend SEO endpoint, best-effort: analyze the title we already have.
+      // If the ID matches our demo list, use that title; otherwise just treat the input as a title-like string.
+      const match = demoVideos.find((v) => v.id === maybeId);
+      const title = match?.title ?? raw;
+      setSeoResult(analyzeSeoLocally(title));
+      return;
+    }
+    setSeoResult(analyzeSeoLocally(raw));
   }
 
   async function handleCreateCheckout(email: string) {
@@ -341,27 +462,31 @@ export function UnifiedDashboard({
                   </ul>
                 </div>
               </div>
-              <div className="dashboard-unlock-blur locked-insights">
-                <ul className="feature-list locked-insight-teasers">
-                  {demoLockedInsightTeasers.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
-                <span className="dashboard-unlock-text">Unlock deeper analysis</span>
-              </div>
+              {isPreviewMode && (
+                <div className="dashboard-unlock-blur locked-insights">
+                  <ul className="feature-list locked-insight-teasers">
+                    {demoLockedInsightTeasers.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                  <span className="dashboard-unlock-text">Unlock deeper analysis</span>
+                </div>
+              )}
             </section>
-            <section className="dashboard-section conversion-bar">
-              <h2 className="conversion-bar-title">Unlock the full AI report for your channel</h2>
-              <p className="conversion-bar-sub">Get live stats, deeper recommendations, SEO tools, and traffic insights.</p>
-              <div className="conversion-bar-actions">
-                <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Overview')}>
-                  Unlock for $49.99
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => setActiveTab('videos')}>
-                  Keep Exploring Demo
-                </button>
-              </div>
-            </section>
+            {isPreviewMode && (
+              <section className="dashboard-section conversion-bar">
+                <h2 className="conversion-bar-title">Unlock the full AI report for your channel</h2>
+                <p className="conversion-bar-sub">Get live stats, deeper recommendations, SEO tools, and traffic insights.</p>
+                <div className="conversion-bar-actions">
+                  <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Overview')}>
+                    Unlock for $49.99
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setActiveTab('videos')}>
+                    Keep Exploring Demo
+                  </button>
+                </div>
+              </section>
+            )}
           </>
         )}
         <section className="dashboard-section">
@@ -371,7 +496,7 @@ export function UnifiedDashboard({
               <li key={i}>{item}</li>
             ))}
             {recommendations.length === 0 && (
-              <li className="muted">Complete purchase to see full AI recommendations.</li>
+              <li className="muted">{isPreviewMode ? 'Complete purchase to see full AI recommendations.' : 'No recommendations available.'}</li>
             )}
           </ul>
         </section>
@@ -394,8 +519,14 @@ export function UnifiedDashboard({
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm video-card-action"
-                    onClick={() => setPaywallFeature('SEO Optimizer')}
-                    title="Available after unlock"
+                    onClick={() => {
+                      if (isPreviewMode) {
+                        setPaywallFeature('SEO Optimizer');
+                      } else {
+                        handleAnalyzeSeoFromTitle(v.title);
+                      }
+                    }}
+                    title={isPreviewMode ? 'Available after unlock' : 'Analyze SEO'}
                   >
                     Analyze SEO
                   </button>
@@ -439,12 +570,36 @@ export function UnifiedDashboard({
           </div>
         ) : isFullDemo ? (
           <section className="dashboard-section">
-            <h2>Top Content Ideas</h2>
-            <ul className="feature-list">
-              {demoSuggestions.map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ul>
+            <h2>Content Ideas</h2>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setSuggestionsLoaded(true)}
+              style={{ marginBottom: 12 }}
+            >
+              Get Suggestions
+            </button>
+            {suggestionsLoaded ? (
+              <>
+                <h3 className="dashboard-section-h3">Top Performing Videos</h3>
+                <div className="video-list">
+                  {demoTopVideos.slice(0, 10).map((v) => (
+                    <div key={v.key} className="video-card">
+                      <div className="video-card-title">{v.title}</div>
+                      <div className="video-card-meta">{formatNumber(v.viewCount)} views</div>
+                    </div>
+                  ))}
+                </div>
+                <h3 className="dashboard-section-h3" style={{ marginTop: 18 }}>Content ideas</h3>
+                <ul className="feature-list">
+                  {demoSuggestions.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="muted">Click “Get Suggestions” to generate ideas based on recent winners.</p>
+            )}
           </section>
         ) : (
           <section className="dashboard-section">
@@ -488,20 +643,54 @@ export function UnifiedDashboard({
         ) : isFullDemo ? (
           <section className="dashboard-section">
             <h2>SEO Optimizer</h2>
-            <p className="video-card-title">{demoSeoAnalysis.title}</p>
-            <p className="seo-score">SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}</p>
-            <h3 className="dashboard-section-h3">Issues</h3>
-            <ul className="feature-list">
-              {demoSeoAnalysis.issues.map((issue, i) => (
-                <li key={i}>{issue}</li>
-              ))}
-            </ul>
-            <h3 className="dashboard-section-h3">Recommendations</h3>
-            <ul className="feature-list">
-              {demoSeoAnalysis.recommendations.map((rec, i) => (
-                <li key={i}>{rec}</li>
-              ))}
-            </ul>
+            <div className="pill-row" style={{ marginBottom: 10 }}>
+              <input
+                value={seoInput}
+                onChange={(e) => setSeoInput(e.target.value)}
+                placeholder="Enter YouTube video title, ID, or URL"
+                style={{ flex: 1, minWidth: 240 }}
+              />
+              <button type="button" className="btn btn-primary" onClick={handleAnalyzeSeo}>
+                Analyze SEO
+              </button>
+            </div>
+            {seoResult ? (
+              <>
+                <p className="video-card-title">{seoResult.title}</p>
+                <p className="seo-score">SEO Score: {seoResult.score} / 100</p>
+                {seoResult.issues.length > 0 && (
+                  <>
+                    <h3 className="dashboard-section-h3">Issues</h3>
+                    <ul className="feature-list">
+                      {seoResult.issues.map((issue, i) => (
+                        <li key={i}>{issue}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                <h3 className="dashboard-section-h3">Recommendations</h3>
+                <ul className="feature-list">
+                  {seoResult.recommendations.length > 0 ? seoResult.recommendations.map((rec, i) => (
+                    <li key={i}>{rec}</li>
+                  )) : <li>No major issues detected. Consider testing a stronger hook.</li>}
+                </ul>
+                <h3 className="dashboard-section-h3">Suggested titles</h3>
+                <ul className="feature-list">
+                  {seoResult.suggestedTitles.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <>
+                <p className="muted">Try analyzing one of the demo videos, or paste a YouTube URL.</p>
+                <div className="status-card" style={{ marginTop: 12 }}>
+                  <strong>Example analysis</strong>
+                  <p className="video-card-title">{demoSeoAnalysis.title}</p>
+                  <p className="seo-score">SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}</p>
+                </div>
+              </>
+            )}
           </section>
         ) : (
           <section className="dashboard-section">
@@ -543,18 +732,81 @@ export function UnifiedDashboard({
         ) : isFullDemo ? (
           <section className="dashboard-section">
             <h2>Traffic Tools</h2>
-            <div className="traffic-demo-cards">
-              <div className="traffic-demo-card">
-                <h3 className="dashboard-section-h3">Best Video To Promote</h3>
-                <p className="video-card-title">{demoTrafficTools.bestVideoToPromote}</p>
-                <p className="traffic-engagement">Engagement: {demoTrafficTools.engagement}%</p>
-              </div>
-              <div className="traffic-demo-card">
-                <h3 className="dashboard-section-h3">Proven Video To Reshare</h3>
-                <p className="video-card-title">{demoTrafficTools.provenVideoToReshare.title}</p>
-                <p className="traffic-engagement">{formatNumber(demoTrafficTools.provenVideoToReshare.views)} views</p>
-              </div>
-            </div>
+            <p className="muted">
+              Use these tools to drive real traffic to standard YouTube watch pages. The goal is to promote the right videos and make sharing easy.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setTrafficLoaded(true)}
+              style={{ marginBottom: 12 }}
+            >
+              Refresh Traffic Tools
+            </button>
+            {trafficLoaded ? (
+              <>
+                <div className="traffic-demo-cards">
+                  <div className="traffic-demo-card">
+                    <h3 className="dashboard-section-h3">Best Video To Promote</h3>
+                    <p className="video-card-title">{demoTrafficTools.bestVideoToPromote}</p>
+                    <p className="traffic-engagement">Engagement: {demoTrafficTools.engagement}%</p>
+                    <div className="pill-row" style={{ marginTop: 10 }}>
+                      <a
+                        className="btn btn-secondary"
+                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(demoTrafficTools.bestVideoToPromote)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open on YouTube
+                      </a>
+                      <button type="button" className="btn btn-secondary" onClick={() => handleAnalyzeSeoFromTitle(demoTrafficTools.bestVideoToPromote)}>
+                        Analyze SEO
+                      </button>
+                    </div>
+                  </div>
+                  <div className="traffic-demo-card">
+                    <h3 className="dashboard-section-h3">Proven Video To Reshare</h3>
+                    <p className="video-card-title">{demoTrafficTools.provenVideoToReshare.title}</p>
+                    <p className="traffic-engagement">{formatNumber(demoTrafficTools.provenVideoToReshare.views)} views</p>
+                    <div className="pill-row" style={{ marginTop: 10 }}>
+                      <a
+                        className="btn btn-secondary"
+                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(demoTrafficTools.provenVideoToReshare.title)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open on YouTube
+                      </a>
+                      <button type="button" className="btn btn-secondary" onClick={() => handleAnalyzeSeoFromTitle(demoTrafficTools.provenVideoToReshare.title)}>
+                        Analyze SEO
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="section-grid" style={{ marginTop: 16 }}>
+                  <div className="surface">
+                    <h3 className="dashboard-section-h3">Legitimate Traffic Checklist</h3>
+                    <ul className="feature-list">
+                      <li>Share the watch link in relevant communities (no spam; add value).</li>
+                      <li>Post a short clip/teaser that links to the full watch page.</li>
+                      <li>Pin a comment linking to the “next” video you want to push.</li>
+                      <li>Update descriptions to include 1–2 internal links to related videos.</li>
+                      <li>Reshare proven videos on a consistent schedule.</li>
+                    </ul>
+                  </div>
+                  <div className="surface">
+                    <h3 className="dashboard-section-h3">Follow-up Content Ideas</h3>
+                    <ul className="feature-list">
+                      {demoSuggestions.slice(0, 6).map((idea) => (
+                        <li key={idea}>{idea}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="muted">Click “Refresh Traffic Tools” to generate promotion and reshare picks.</p>
+            )}
           </section>
         ) : (
           <section className="dashboard-section">
@@ -585,10 +837,51 @@ export function UnifiedDashboard({
         ) : isFullDemo ? (
           <section className="dashboard-section">
             <h2>Continuous Runner</h2>
-            <p className="muted">Run ongoing analytics and monitoring for your channel.</p>
-            <button type="button" className="btn btn-primary">
-              Start Runner
-            </button>
+            <p className="muted">
+              Review and test your content by stepping through videos quickly. (This demo runner uses the sample dataset and opens YouTube search in a new tab.)
+            </p>
+            <div className="pill-row" style={{ marginBottom: 12 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setRunnerLoaded(true); setRunnerIndex(0); appendRunnerLog('Loaded demo video list.'); }}>
+                Load Videos
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!runnerLoaded}
+                onClick={() => {
+                  const current = demoVideos[runnerIndex % demoVideos.length];
+                  if (!current) return;
+                  appendRunnerLog(`Opening: ${current.title}`);
+                  window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(current.title)}`, '_blank', 'noopener,noreferrer');
+                }}
+              >
+                Start
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!runnerLoaded}
+                onClick={() => {
+                  const next = (runnerIndex + 1) % demoVideos.length;
+                  setRunnerIndex(next);
+                  appendRunnerLog(`Skipped to index ${next + 1}/${demoVideos.length}.`);
+                }}
+              >
+                Skip
+              </button>
+            </div>
+            {runnerLoaded && (
+              <div className="status-card">
+                <strong>Current</strong>
+                <p style={{ marginTop: 6 }}>{runnerIndex + 1} / {demoVideos.length}: {demoVideos[runnerIndex]?.title}</p>
+              </div>
+            )}
+            <div className="surface" style={{ marginTop: 12 }}>
+              <h3 className="dashboard-section-h3">Runner Log</h3>
+              <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12, opacity: 0.9 }}>
+                {runnerLog.length ? runnerLog.join('\n') : '—'}
+              </div>
+            </div>
           </section>
         ) : (
           <section className="dashboard-section">
