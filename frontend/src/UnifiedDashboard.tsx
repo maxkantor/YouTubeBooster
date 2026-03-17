@@ -29,10 +29,10 @@ import type {
 const TABS = [
   { id: 'overview', label: 'Overview', icon: '📊', locked: false },
   { id: 'videos', label: 'Videos', icon: '📹', locked: false },
-  { id: 'suggestions', label: 'Suggestions', icon: '💡', locked: true },
-  { id: 'seo', label: 'SEO Optimizer', icon: '🔍', locked: true },
-  { id: 'traffic', label: 'Traffic Tools', icon: '🚀', locked: true },
-  { id: 'runner', label: 'Continuous Runner', icon: '▶', locked: true }
+  { id: 'suggestions', label: 'Suggestions', icon: '💡', locked: false },
+  { id: 'seo', label: 'SEO Optimizer', icon: '🔍', locked: false },
+  { id: 'traffic', label: 'Traffic Tools', icon: '🚀', locked: false },
+  { id: 'runner', label: 'Continuous Runner', icon: '▶', locked: false }
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -230,7 +230,7 @@ export function UnifiedDashboard({
   }, [isDemo, growthScore]);
 
   useEffect(() => {
-    if (isPreviewMode) return;
+    if (!isDemo) return;
     const input = (channelInput || '').trim();
     if (!input) return;
 
@@ -255,7 +255,7 @@ export function UnifiedDashboard({
     return () => {
       cancelled = true;
     };
-  }, [channelInput, isPreviewMode]);
+  }, [channelInput, isDemo]);
 
   async function loadVideos(maxResults = 50) {
     const input = (channelInput || '').trim();
@@ -313,11 +313,38 @@ export function UnifiedDashboard({
     ? statCards.slice(0, 4)
     : [...statCards, ...Array.from({ length: 4 - statCards.length }, () => ({ label: '—', value: '—' }))];
 
+  const previewSnapshotLoading =
+    isPreviewMode && (demoLoading || pyLoading) && !pyOverview?.channel_info && demoData == null;
+  const pvSub = pyOverview?.channel_info?.subscriber_count ?? demoData?.subscriberCount;
+  const pvViews = pyOverview?.channel_info?.view_count ?? demoData?.totalViews;
+  const pvVideos = pyOverview?.channel_info?.video_count ?? demoData?.videoCount;
+  const pvEng =
+    pyOverview?.video_performance?.avg_engagement_rate ?? demoData?.avgEngagement;
+  function previewMetricDisplay(n: number | null | undefined): string {
+    if (previewSnapshotLoading && (n == null || (typeof n === 'number' && Number.isNaN(n)))) return '…';
+    if (n == null || (typeof n === 'number' && Number.isNaN(n))) return '—';
+    return formatNumber(Math.round(Number(n)));
+  }
+  const engN = pvEng != null ? Number(pvEng) : NaN;
+  const previewEngStr =
+    previewSnapshotLoading && pvEng == null
+      ? '…'
+      : Number.isNaN(engN)
+        ? '—'
+        : engN >= 0 && engN <= 1
+          ? `${(engN * 100).toFixed(2)}%`
+          : `${engN.toFixed(2)}%`;
+  const snapshotStatCards = isPreviewMode
+    ? [
+        { label: 'Subscribers', value: previewMetricDisplay(pvSub != null ? Number(pvSub) : undefined) },
+        { label: 'Total Views', value: previewMetricDisplay(pvViews != null ? Number(pvViews) : undefined) },
+        { label: 'Videos', value: previewMetricDisplay(pvVideos != null ? Number(pvVideos) : undefined) },
+        { label: 'Avg Engagement', value: previewEngStr }
+      ]
+    : null;
+
   function handleTabClick(tab: (typeof TABS)[number]) {
     setActiveTab(tab.id);
-    if (tab.locked && isPreviewMode) {
-      setPaywallFeature(tab.label);
-    }
   }
 
   function appendRunnerLog(message: string) {
@@ -707,68 +734,39 @@ export function UnifiedDashboard({
         {isDemo && demoError && (
           <p className="dashboard-demo-error">{demoError}</p>
         )}
-        {!isPreviewMode && pyLoading && (
-          <p className="dashboard-demo-loading">Loading your channel data…</p>
+        {isDemo && pyLoading && (
+          <p className="dashboard-demo-loading">Loading channel analytics…</p>
         )}
-        {!isPreviewMode && pyError && (
+        {isDemo && pyError && (
           <p className="dashboard-demo-error">{pyError}</p>
         )}
       </header>
 
       <div className="dashboard-tabs">
-        {TABS.map((tab) => {
-          const locked = tab.locked && isPreviewMode;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className={`tab-btn ${activeTab === tab.id ? 'active' : ''} ${locked ? 'locked' : ''}`}
-              onClick={() => handleTabClick(tab)}
-              title={locked ? 'Available after unlock' : undefined}
-            >
-              <span className="tab-icon">{tab.icon}</span>
-              <span>{tab.label}</span>
-              {locked && (
-                <span className="tab-lock" aria-hidden>🔒</span>
-              )}
-            </button>
-          );
-        })}
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => handleTabClick(tab)}
+          >
+            <span className="tab-icon">{tab.icon}</span>
+            <span>{tab.label}</span>
+          </button>
+        ))}
       </div>
 
       {/* Overview */}
       <div className={`tab-panel ${activeTab === 'overview' ? 'active' : ''}`}>
-        <div className="growth-score-block" data-animated={scoreAnimated}>
-          <h2 className="growth-score-title">Channel Growth Score</h2>
-          {showLockedUI ? (
-            <div className="growth-score-value-wrap preview-blur-wrap">
-              <div className="growth-score-value" data-score={displayScore} aria-hidden>
-                {displayScore} <span className="growth-score-max">/ 100</span>
-              </div>
-              <div className="preview-blur-overlay" onClick={() => setPaywallFeature('Overview')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}>
-                <span className="preview-blur-copy">Unlock full AI channel analysis</span>
-              </div>
-            </div>
-          ) : (
-            <div className="growth-score-value" data-score={isDemo ? displayScore : growthScore}>
-              {isDemo ? displayScore : growthScore} <span className="growth-score-max">/ 100</span>
-            </div>
-          )}
-          <span className="growth-score-label">{growthScoreLabel}</span>
-          {isDemo && demoChannelData.scoreFactors && (
-            <div className="growth-score-factors">
-              {demoChannelData.scoreFactors.map((f) => (
-                <span key={f.label} className="growth-score-factor">{f.label}: {f.score}</span>
-              ))}
-            </div>
-          )}
-          {scoreExplanation && <p className="growth-score-explanation">{scoreExplanation}</p>}
-        </div>
-        {showLockedUI ? (
-          <div className="stats-grid preview-blur-wrap">
-            <div className="stats-grid-inner">
-              {displayCards.map((card, i) => (
-                <div key={i} className="stat-card">
+        {isPreviewMode && snapshotStatCards && (
+          <section className="dashboard-section preview-channel-snapshot">
+            <h2>Channel snapshot</h2>
+            <p className="muted">
+              Real subscriber, view, and catalog stats from YouTube. Everything below unlocks after purchase.
+            </p>
+            <div className="stats-grid stats-grid-snapshot">
+              {snapshotStatCards.map((card, i) => (
+                <div key={card.label} className="stat-card stat-card-snapshot">
                   <div className="stat-icon">{statIcons[i] ?? '📊'}</div>
                   <div className="stat-info">
                     <h3>{card.value}</h3>
@@ -777,11 +775,60 @@ export function UnifiedDashboard({
                 </div>
               ))}
             </div>
-            <div className="preview-blur-overlay" onClick={() => setPaywallFeature('Overview')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}>
-              <span className="preview-blur-copy">Unlock full AI channel analysis</span>
+          </section>
+        )}
+
+        <div className="growth-score-block" data-animated={scoreAnimated}>
+          <h2 className="growth-score-title">Channel Growth Score</h2>
+          {showLockedUI ? (
+            <div className="preview-blur-wrap preview-growth-full-blur">
+              <div className="preview-growth-blur-inner">
+                <div className="growth-score-value" data-score={displayScore} aria-hidden>
+                  {displayScore} <span className="growth-score-max">/ 100</span>
+                </div>
+                <span className="growth-score-label">{growthScoreLabel}</span>
+                {isDemo && demoChannelData.scoreFactors && (
+                  <div className="growth-score-factors">
+                    {demoChannelData.scoreFactors.map((f) => (
+                      <span key={f.label} className="growth-score-factor">
+                        {f.label}: {f.score}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {scoreExplanation && <p className="growth-score-explanation">{scoreExplanation}</p>}
+              </div>
+              <div
+                className="preview-blur-overlay"
+                onClick={() => setPaywallFeature('Overview')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}
+              >
+                <span className="preview-blur-copy">Unlock full score &amp; breakdown</span>
+              </div>
             </div>
-          </div>
-        ) : (
+          ) : (
+            <>
+              <div className="growth-score-value" data-score={isDemo ? displayScore : growthScore}>
+                {isDemo ? displayScore : growthScore} <span className="growth-score-max">/ 100</span>
+              </div>
+              <span className="growth-score-label">{growthScoreLabel}</span>
+              {isDemo && demoChannelData.scoreFactors && (
+                <div className="growth-score-factors">
+                  {demoChannelData.scoreFactors.map((f) => (
+                    <span key={f.label} className="growth-score-factor">
+                      {f.label}: {f.score}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {scoreExplanation && <p className="growth-score-explanation">{scoreExplanation}</p>}
+            </>
+          )}
+        </div>
+
+        {!isPreviewMode && (
           <div className="stats-grid">
             {displayCards.map((card, i) => (
               <div key={i} className="stat-card">
@@ -861,32 +908,56 @@ export function UnifiedDashboard({
           <>
             <section className="dashboard-section why-score-section">
               <h2>Why this score</h2>
-              <div className="ai-insights-grid">
-                <div className="ai-insights-column">
-                  <h3 className="dashboard-section-h3">Detected problems</h3>
-                  <ul className="feature-list">
-                    {demoDetectedProblems.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
+              {isPreviewMode ? (
+                <div className="preview-blur-wrap preview-why-full-blur">
+                  <div className="preview-growth-blur-inner">
+                    <div className="ai-insights-grid">
+                      <div className="ai-insights-column">
+                        <h3 className="dashboard-section-h3">Detected problems</h3>
+                        <ul className="feature-list">
+                          {demoDetectedProblems.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="ai-insights-column">
+                        <h3 className="dashboard-section-h3">Top opportunities</h3>
+                        <ul className="feature-list">
+                          {demoOpportunities.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className="preview-blur-overlay"
+                    onClick={() => setPaywallFeature('Overview')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}
+                  >
+                    <span className="preview-blur-copy">Unlock your channel&apos;s problems &amp; opportunities</span>
+                  </div>
                 </div>
-                <div className="ai-insights-column">
-                  <h3 className="dashboard-section-h3">Top opportunities</h3>
-                  <ul className="feature-list">
-                    {demoOpportunities.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              {isPreviewMode && (
-                <div className="dashboard-unlock-blur locked-insights">
-                  <ul className="feature-list locked-insight-teasers">
-                    {demoLockedInsightTeasers.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-                  <span className="dashboard-unlock-text">Unlock deeper analysis</span>
+              ) : (
+                <div className="ai-insights-grid">
+                  <div className="ai-insights-column">
+                    <h3 className="dashboard-section-h3">Detected problems</h3>
+                    <ul className="feature-list">
+                      {demoDetectedProblems.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="ai-insights-column">
+                    <h3 className="dashboard-section-h3">Top opportunities</h3>
+                    <ul className="feature-list">
+                      {demoOpportunities.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               )}
             </section>
@@ -908,14 +979,33 @@ export function UnifiedDashboard({
         )}
         <section className="dashboard-section">
           <h2>Recommendations</h2>
-          <ul className="feature-list">
-            {recommendations.map((item, i) => (
-              <li key={i}>{item}</li>
-            ))}
-            {recommendations.length === 0 && (
-              <li className="muted">{isPreviewMode ? 'Complete purchase to see full AI recommendations.' : 'No recommendations available.'}</li>
-            )}
-          </ul>
+          {isPreviewMode ? (
+            <div className="preview-blur-wrap preview-recommendations-blur">
+              <ul className="feature-list preview-growth-blur-inner">
+                {demoRecommendations.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+              <div
+                className="preview-blur-overlay"
+                onClick={() => setPaywallFeature('Overview')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}
+              >
+                <span className="preview-blur-copy">Unlock recommendations tailored to your channel</span>
+              </div>
+            </div>
+          ) : (
+            <ul className="feature-list">
+              {recommendations.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+              {recommendations.length === 0 && (
+                <li className="muted">No recommendations available.</li>
+              )}
+            </ul>
+          )}
         </section>
       </div>
 
@@ -923,6 +1013,11 @@ export function UnifiedDashboard({
       <div className={`tab-panel ${activeTab === 'videos' ? 'active' : ''}`}>
         <section className="dashboard-section">
           <h2>Your Videos</h2>
+          {isPreviewMode && (
+            <p className="muted preview-tab-desc">
+              Full catalog with views, engagement, publish dates, and per-video SEO — unlock after purchase.
+            </p>
+          )}
           {!isPreviewMode && (
             <button
               type="button"
@@ -934,86 +1029,120 @@ export function UnifiedDashboard({
               {pyVideosLoading ? 'Loading…' : 'Refresh Videos'}
             </button>
           )}
-          <div className="video-list">
-            {!isPreviewMode && pyVideos ? (
-              pyVideos.map((v) => (
-                <div key={v.video_id} className="video-card video-card-with-action">
-                  <div className="video-card-main">
-                    <div className="video-card-title">{v.title}</div>
-                    <div className="video-card-meta">
-                      👁️ {formatNumber(v.view_count)} views · 👍 {formatNumber(v.like_count)} likes · 💬 {formatNumber(v.comment_count)} comments · Published {new Date(v.published_at).toLocaleDateString()}
+          {isPreviewMode ? (
+            <div className="preview-blur-wrap preview-tab-panel-blur">
+              <div className="video-list locked-content-blur">
+                {demoVideos.slice(0, 8).map((v) => (
+                  <div key={v.id} className="video-card video-card-with-action">
+                    <div className="video-card-main">
+                      <div className="video-card-title">{v.title}</div>
+                      <div className="video-card-meta">
+                        {v.views} views · {v.likes} likes · {v.comments} comment{v.comments !== 1 ? 's' : ''} · Published{' '}
+                        {v.publishDate}
+                      </div>
                     </div>
+                    <button type="button" className="btn btn-secondary btn-sm video-card-action" disabled>
+                      Analyze SEO
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm video-card-action"
-                    onClick={() => handleAnalyzeVideoSeoById(v.video_id)}
-                  >
-                    Analyze SEO
-                  </button>
-                </div>
-              ))
-            ) : isDemo ? (
-              demoVideos.map((v) => (
-                <div key={v.id} className="video-card video-card-with-action">
-                  <div className="video-card-main">
-                    <div className="video-card-title">{v.title}</div>
-                    <div className="video-card-meta">
-                      {v.views} views · {v.likes} likes · {v.comments} comment{v.comments !== 1 ? 's' : ''} · Published {v.publishDate}
+                ))}
+              </div>
+              <div
+                className="preview-blur-overlay"
+                onClick={() => setPaywallFeature('Videos')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Videos')}
+              >
+                <span className="preview-blur-copy">Unlock your full video library</span>
+              </div>
+            </div>
+          ) : (
+            <div className="video-list">
+              {pyVideos ? (
+                pyVideos.map((v) => (
+                  <div key={v.video_id} className="video-card video-card-with-action">
+                    <div className="video-card-main">
+                      <div className="video-card-title">{v.title}</div>
+                      <div className="video-card-meta">
+                        👁️ {formatNumber(v.view_count)} views · 👍 {formatNumber(v.like_count)} likes · 💬{' '}
+                        {formatNumber(v.comment_count)} comments · Published {new Date(v.published_at).toLocaleDateString()}
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm video-card-action"
+                      onClick={() => handleAnalyzeVideoSeoById(v.video_id)}
+                    >
+                      Analyze SEO
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm video-card-action"
-                    onClick={() => {
-                      if (isPreviewMode) {
-                        setPaywallFeature('SEO Optimizer');
-                      } else {
-                        handleAnalyzeSeoFromTitle(v.title);
-                      }
-                    }}
-                    title={isPreviewMode ? 'Available after unlock' : 'Analyze SEO'}
-                  >
-                    Analyze SEO
-                  </button>
-                </div>
-              ))
-            ) : topVideosPaid.length > 0 ? (
-              topVideosPaid.map((v) => (
-                <div key={v.videoId} className="video-card">
-                  <div className="video-card-title">{v.title}</div>
-                  <div className="video-card-meta">{formatNumber(v.viewCount)} views</div>
-                </div>
-              ))
-            ) : (
-              <p className="muted">Unlock full access to see and manage all videos.</p>
-            )}
-          </div>
+                ))
+              ) : isDemo ? (
+                demoVideos.map((v) => (
+                  <div key={v.id} className="video-card video-card-with-action">
+                    <div className="video-card-main">
+                      <div className="video-card-title">{v.title}</div>
+                      <div className="video-card-meta">
+                        {v.views} views · {v.likes} likes · {v.comments} comment{v.comments !== 1 ? 's' : ''} · Published{' '}
+                        {v.publishDate}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm video-card-action"
+                      onClick={() => handleAnalyzeSeoFromTitle(v.title)}
+                    >
+                      Analyze SEO
+                    </button>
+                  </div>
+                ))
+              ) : topVideosPaid.length > 0 ? (
+                topVideosPaid.map((v) => (
+                  <div key={v.videoId} className="video-card">
+                    <div className="video-card-title">{v.title}</div>
+                    <div className="video-card-meta">{formatNumber(v.viewCount)} views</div>
+                  </div>
+                ))
+              ) : (
+                <p className="muted">Unlock full access to see and manage all videos.</p>
+              )}
+            </div>
+          )}
         </section>
       </div>
 
-      {/* Suggestions: locked in preview mode; full content in default demo */}
+      {/* Suggestions */}
       <div className={`tab-panel ${activeTab === 'suggestions' ? 'active' : ''}`}>
         {isPreviewMode ? (
-          <div className="locked-panel locked-panel-with-content">
-            <div className="locked-content-blur">
-              <section className="dashboard-section">
-                <h2>Top Content Ideas</h2>
+          <section className="dashboard-section">
+            <h2>Suggestions</h2>
+            <p className="muted preview-tab-desc">
+              Content ideas from your winners and whitespace — generated for your channel after purchase.
+            </p>
+            <div className="preview-blur-wrap preview-tab-panel-blur">
+              <div className="locked-content-blur">
+                <h3 className="dashboard-section-h3">Ideas based on your catalog</h3>
                 <ul className="feature-list">
                   {demoSuggestions.map((s, i) => (
                     <li key={i}>{s}</li>
                   ))}
                 </ul>
-              </section>
+              </div>
+              <div
+                className="preview-blur-overlay"
+                onClick={() => setPaywallFeature('Suggestions')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Suggestions')}
+              >
+                <span className="preview-blur-copy">Unlock AI content suggestions</span>
+              </div>
             </div>
-            <div className="locked-overlay">
-              <span className="locked-icon">🔒</span>
-              <span className="locked-label">Unlock full AI channel analysis</span>
-              <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Suggestions')}>
-                Unlock for $49.99
-              </button>
-            </div>
-          </div>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setPaywallFeature('Suggestions')}>
+              Unlock suggestions
+            </button>
+          </section>
         ) : !isPreviewMode ? (
           <section className="dashboard-section">
             <h2>Content Ideas</h2>
@@ -1073,15 +1202,20 @@ export function UnifiedDashboard({
         )}
       </div>
 
-      {/* SEO: locked in preview mode; full content in default demo */}
+      {/* SEO Optimizer */}
       <div className={`tab-panel ${activeTab === 'seo' ? 'active' : ''}`}>
         {isPreviewMode ? (
-          <div className="locked-panel locked-panel-with-content">
-            <div className="locked-content-blur">
-              <section className="dashboard-section">
-                <h2>SEO Optimizer</h2>
+          <section className="dashboard-section">
+            <h2>SEO Optimizer</h2>
+            <p className="muted preview-tab-desc">
+              Title, description, and tag analysis on any video — fix CTR and search visibility after unlock.
+            </p>
+            <div className="preview-blur-wrap preview-tab-panel-blur">
+              <div className="locked-content-blur">
                 <p className="video-card-title">{demoSeoAnalysis.title}</p>
-                <p className="seo-score">SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}</p>
+                <p className="seo-score">
+                  SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}
+                </p>
                 <h3 className="dashboard-section-h3">Issues</h3>
                 <ul className="feature-list">
                   {demoSeoAnalysis.issues.map((issue, i) => (
@@ -1094,16 +1228,21 @@ export function UnifiedDashboard({
                     <li key={i}>{rec}</li>
                   ))}
                 </ul>
-              </section>
+              </div>
+              <div
+                className="preview-blur-overlay"
+                onClick={() => setPaywallFeature('SEO Optimizer')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('SEO Optimizer')}
+              >
+                <span className="preview-blur-copy">Unlock SEO optimizer</span>
+              </div>
             </div>
-            <div className="locked-overlay">
-              <span className="locked-icon">🔒</span>
-              <span className="locked-label">Unlock full AI channel analysis</span>
-              <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('SEO Optimizer')}>
-                Unlock for $49.99
-              </button>
-            </div>
-          </div>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setPaywallFeature('SEO Optimizer')}>
+              Unlock SEO tools
+            </button>
+          </section>
         ) : !isPreviewMode ? (
           <section className="dashboard-section">
             <h2>SEO Optimizer</h2>
@@ -1214,35 +1353,43 @@ export function UnifiedDashboard({
         )}
       </div>
 
-      {/* Traffic: locked in preview mode; full content in default demo */}
+      {/* Traffic Tools */}
       <div className={`tab-panel ${activeTab === 'traffic' ? 'active' : ''}`}>
         {isPreviewMode ? (
-          <div className="locked-panel locked-panel-with-content">
-            <div className="locked-content-blur">
-              <section className="dashboard-section">
-                <h2>Traffic Tools</h2>
+          <section className="dashboard-section">
+            <h2>Traffic Tools</h2>
+            <p className="muted preview-tab-desc">
+              Which videos to promote, reshare, and double down on — tailored to your channel after checkout.
+            </p>
+            <div className="preview-blur-wrap preview-tab-panel-blur">
+              <div className="locked-content-blur">
                 <div className="traffic-demo-cards">
                   <div className="traffic-demo-card">
-                    <h3 className="dashboard-section-h3">Best Video To Promote</h3>
+                    <h3 className="dashboard-section-h3">Best video to promote</h3>
                     <p className="video-card-title">{demoTrafficTools.bestVideoToPromote}</p>
                     <p className="traffic-engagement">Engagement: {demoTrafficTools.engagement}%</p>
                   </div>
                   <div className="traffic-demo-card">
-                    <h3 className="dashboard-section-h3">Proven Video To Reshare</h3>
+                    <h3 className="dashboard-section-h3">Proven video to reshare</h3>
                     <p className="video-card-title">{demoTrafficTools.provenVideoToReshare.title}</p>
                     <p className="traffic-engagement">{formatNumber(demoTrafficTools.provenVideoToReshare.views)} views</p>
                   </div>
                 </div>
-              </section>
+              </div>
+              <div
+                className="preview-blur-overlay"
+                onClick={() => setPaywallFeature('Traffic Tools')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Traffic Tools')}
+              >
+                <span className="preview-blur-copy">Unlock traffic tools</span>
+              </div>
             </div>
-            <div className="locked-overlay">
-              <span className="locked-icon">🔒</span>
-              <span className="locked-label">Unlock full AI channel analysis</span>
-              <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Traffic Tools')}>
-                Unlock for $49.99
-              </button>
-            </div>
-          </div>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setPaywallFeature('Traffic Tools')}>
+              Unlock traffic insights
+            </button>
+          </section>
         ) : !isPreviewMode ? (
           <section className="dashboard-section">
             <h2>Traffic Tools</h2>
@@ -1357,24 +1504,54 @@ export function UnifiedDashboard({
         )}
       </div>
 
-      {/* Runner: locked in preview mode; full content in default demo */}
+      {/* Continuous Runner */}
       <div className={`tab-panel ${activeTab === 'runner' ? 'active' : ''}`}>
         {isPreviewMode ? (
-          <div className="locked-panel locked-panel-with-content">
-            <div className="locked-content-blur">
-              <section className="dashboard-section">
-                <h2>Continuous Runner</h2>
-                <p className="muted">Run ongoing analytics and monitoring for your channel.</p>
-                <button type="button" className="btn btn-primary" disabled>
-                  Start Runner
-                </button>
-              </section>
+          <section className="dashboard-section">
+            <h2>Continuous Runner</h2>
+            <p className="muted preview-tab-desc">
+              Review uploads in sequence, adjust speed, flag issues — playback and logging unlock after purchase.
+            </p>
+            <div className="preview-blur-wrap preview-tab-panel-blur">
+              <div className="locked-content-blur">
+                <div className="surface" style={{ padding: 18 }}>
+                  <div className="pill-row" style={{ flexWrap: 'wrap', gap: 8 }}>
+                    <span className="info-pill">Speed · Watch limit · Shuffle</span>
+                    <button type="button" className="btn btn-primary" disabled>
+                      Start
+                    </button>
+                    <button type="button" className="btn btn-secondary" disabled>
+                      Load Videos
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 16,
+                      aspectRatio: '16/9',
+                      borderRadius: 12,
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid rgba(255,255,255,0.08)'
+                    }}
+                  />
+                  <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>
+                    Video picker · runner log · mark issues
+                  </p>
+                </div>
+              </div>
+              <div
+                className="preview-blur-overlay"
+                onClick={() => setPaywallFeature('Continuous Runner')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Continuous Runner')}
+              >
+                <span className="preview-blur-copy">Unlock Continuous Runner</span>
+              </div>
             </div>
-            <div className="locked-overlay runner-overlay" onClick={() => setPaywallFeature('Continuous Runner')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Continuous Runner')}>
-              <span className="locked-icon">🔒</span>
-              <span className="locked-label">Unlock full AI channel analysis</span>
-            </div>
-          </div>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setPaywallFeature('Continuous Runner')}>
+              Unlock runner
+            </button>
+          </section>
         ) : !isPreviewMode ? (
           <section className="dashboard-section">
             <h2>Continuous Runner</h2>

@@ -60,6 +60,14 @@ export function LandingPage() {
   const [pricingError, setPricingError] = useState('');
 
   const pricingViewedRef = useRef(false);
+  const [navScrolled, setNavScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setNavScrolled(window.scrollY > 16);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     if (window.location.hash === '#audit') {
@@ -135,78 +143,101 @@ export function LandingPage() {
   return (
     <div className="landing">
       {/* 1. Header */}
-      <header className="landing-header">
-        <Link
-          to="/"
-          className="landing-logo brand-link"
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          aria-label={`${BRAND.name} home`}
-        >
-          <span className="brand-word brand-word-1">{BRAND.namePart1}</span>
-          <span className="brand-word brand-word-2">{BRAND.namePart2}</span>
-        </Link>
-        <nav className="landing-nav">
-          <a href="#product">Product</a>
-          <a href="#example-audit">Example Audit</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#faq">FAQ</a>
-        </nav>
-        <a href="/#audit" className="btn btn-primary landing-cta landing-cta-glow">
-          Run my free audit
-        </a>
+      <header className={`landing-header ${navScrolled ? 'landing-header-scrolled' : ''}`}>
+        <div className="landing-header-inner">
+          <Link
+            to="/"
+            className="landing-logo landing-logo-premium brand-link"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            aria-label={`${BRAND.name} home`}
+          >
+            <span className="landing-logo-yt">{BRAND.namePart1}</span>
+            <span className="landing-logo-boost">{BRAND.namePart2}</span>
+          </Link>
+          <nav className="landing-nav landing-nav-center" aria-label="Page">
+            <a href="#product" className="landing-nav-link">
+              Product
+            </a>
+            <a href="#example-audit" className="landing-nav-link">
+              Example Audit
+            </a>
+            <a href="#pricing" className="landing-nav-link">
+              Pricing
+            </a>
+            <a href="#faq" className="landing-nav-link">
+              FAQ
+            </a>
+          </nav>
+          <a href="/#audit" className="landing-nav-cta">
+            Analyze Channel
+          </a>
+        </div>
       </header>
+      <div className="landing-header-rule" aria-hidden />
 
       {/* 2. Hero */}
       <section className="landing-hero">
         <div className="landing-hero-grid">
           <div className="landing-hero-content">
             <h1 className="landing-hero-title">
-              Low views aren’t luck — your funnel is leaking.
+              <span className="landing-hero-title-line">What’s killing your views</span>
+              <span className="landing-hero-title-line landing-hero-title-accent">isn’t luck.</span>
             </h1>
             <p className="landing-hero-sub">
-              More clicks, stronger titles, fewer dead uploads. We show you exactly what’s throttling reach —
-              whether you’re starting out or already past 100K.
+              Map every click leak and scale the same uploads—views, CTR, growth without the guesswork.
             </p>
             <div className="landing-hero-buttons">
-              <a href="#audit" className="btn btn-primary btn-lg landing-hero-cta-primary">
-                Show me what’s wrong with my channel
+              <a href="#audit" className="btn btn-lg landing-hero-cta-primary landing-cta-premium">
+                Analyze My Channel Now
               </a>
-              <a href="#example-audit" className="btn btn-ghost btn-lg landing-hero-cta-secondary">
-                See a sample audit first
+              <a href="#example-audit" className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium">
+                See Real Audit
               </a>
             </div>
-            <p className="landing-hero-micro">Free scan · ~60 seconds · No signup</p>
-            <ul className="landing-hero-trust">
-              <li>Know which titles are costing you clicks</li>
-              <li>Close SEO gaps before your next upload</li>
-              <li>Spot the one fix that could 2× a video</li>
+            <p className="landing-hero-micro">Free • 60 seconds • No signup</p>
+            <ul className="landing-hero-trust" aria-label="Trust">
+              <li>
+                <span className="landing-trust-check" aria-hidden />
+                <span>Surface titles bleeding clicks</span>
+              </li>
+              <li>
+                <span className="landing-trust-check" aria-hidden />
+                <span>Close SEO gaps in one pass</span>
+              </li>
+              <li>
+                <span className="landing-trust-check" aria-hidden />
+                <span>Spot your next breakout fix</span>
+              </li>
             </ul>
           </div>
           <div className="landing-hero-preview" aria-hidden>
-            <div className="landing-hero-insight-panel">
+            <div className="landing-hero-insight-panel landing-insight-glass">
               <div className="landing-insight-panel-top">
                 <span className="landing-insight-pulse" />
-                <span className="landing-insight-panel-label">What you’re not seeing</span>
+                <div className="landing-insight-header-text">
+                  <span className="landing-insight-panel-kicker">Live signal</span>
+                  <span className="landing-insight-panel-label">What you’re not seeing</span>
+                </div>
               </div>
               <ul className="landing-insight-list">
-                <li className="landing-insight-item">
-                  <span className="landing-insight-tag landing-insight-tag-leak">Traffic Leak</span>
-                  <span className="landing-insight-text">CTR is below average for your niche</span>
+                <li className="landing-insight-item landing-insight-item-pulse">
+                  <span className="landing-insight-tag landing-insight-tag-leak">Traffic leak</span>
+                  <span className="landing-insight-text">CTR below niche average</span>
                 </li>
                 <li className="landing-insight-item">
                   <span className="landing-insight-tag landing-insight-tag-bad">Underperforming</span>
-                  <span className="landing-insight-text">Title isn’t competitive with top search results</span>
+                  <span className="landing-insight-text">Title weak vs. top search results</span>
                 </li>
                 <li className="landing-insight-item">
                   <span className="landing-insight-tag landing-insight-tag-opp">Opportunity</span>
-                  <span className="landing-insight-text">High-growth keyword missed in your last 3 videos</span>
+                  <span className="landing-insight-text">High-growth keyword missed (last 3 uploads)</span>
                 </li>
                 <li className="landing-insight-item">
                   <span className="landing-insight-tag landing-insight-tag-opp">Opportunity</span>
-                  <span className="landing-insight-text">One upload has breakout potential — thumbnail/title mismatch</span>
+                  <span className="landing-insight-text">Breakout candidate — title/thumb misaligned</span>
                 </li>
               </ul>
-              <p className="landing-insight-footer">Preview insights — run your channel to see yours.</p>
+              <p className="landing-insight-footer">Run your channel to see your live feed.</p>
             </div>
           </div>
         </div>
