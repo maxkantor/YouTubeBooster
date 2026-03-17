@@ -151,8 +151,8 @@ export function LandingPage() {
           <a href="#pricing">Pricing</a>
           <a href="#faq">FAQ</a>
         </nav>
-        <a href="/#audit" className="btn btn-primary landing-cta">
-          Run Free Channel Audit
+        <a href="/#audit" className="btn btn-primary landing-cta landing-cta-glow">
+          Run my free audit
         </a>
       </header>
 
@@ -161,43 +161,52 @@ export function LandingPage() {
         <div className="landing-hero-grid">
           <div className="landing-hero-content">
             <h1 className="landing-hero-title">
-              Stop guessing why your YouTube channel is not growing.
+              Low views aren’t luck — your funnel is leaking.
             </h1>
             <p className="landing-hero-sub">
-              Run an AI audit on any channel and instantly uncover SEO gaps, weak titles, traffic leaks,
-              and hidden growth opportunities.
+              More clicks, stronger titles, fewer dead uploads. We show you exactly what’s throttling reach —
+              whether you’re starting out or already past 100K.
             </p>
             <div className="landing-hero-buttons">
-              <a href="#audit" className="btn btn-primary btn-lg">
-                Run Free Channel Audit
+              <a href="#audit" className="btn btn-primary btn-lg landing-hero-cta-primary">
+                Show me what’s wrong with my channel
               </a>
-              <a href="#example-audit" className="btn btn-secondary btn-lg">
-                See Example Audit
+              <a href="#example-audit" className="btn btn-ghost btn-lg landing-hero-cta-secondary">
+                See a sample audit first
               </a>
             </div>
+            <p className="landing-hero-micro">Free scan · ~60 seconds · No signup</p>
             <ul className="landing-hero-trust">
-              <li>AI audit in under 60 seconds</li>
-              <li>One-time unlock — no subscription</li>
-              <li>Built for serious creators</li>
+              <li>Know which titles are costing you clicks</li>
+              <li>Close SEO gaps before your next upload</li>
+              <li>Spot the one fix that could 2× a video</li>
             </ul>
           </div>
-          <div className="landing-hero-preview">
-            <div className="landing-hero-preview-card">
-              <div className="landing-preview-metrics">
-                <div className="landing-preview-stat"><span>5,770</span><em>Subscribers</em></div>
-                <div className="landing-preview-stat"><span>515K</span><em>Views</em></div>
-                <div className="landing-preview-stat"><span>188</span><em>Videos</em></div>
-                <div className="landing-preview-stat"><span>3.42%</span><em>Engagement</em></div>
+          <div className="landing-hero-preview" aria-hidden>
+            <div className="landing-hero-insight-panel">
+              <div className="landing-insight-panel-top">
+                <span className="landing-insight-pulse" />
+                <span className="landing-insight-panel-label">What you’re not seeing</span>
               </div>
-              <div className="landing-preview-videos">
-                <div className="landing-preview-videos-title">Top Performing Videos</div>
-                {EXAMPLE_VIDEOS.slice(0, 3).map((v) => (
-                  <div key={v.id} className="landing-preview-video-row">
-                    <span className="landing-preview-video-name">{v.title}</span>
-                    <span className="landing-preview-video-views">{v.views} views</span>
-                  </div>
-                ))}
-              </div>
+              <ul className="landing-insight-list">
+                <li className="landing-insight-item">
+                  <span className="landing-insight-tag landing-insight-tag-leak">Traffic Leak</span>
+                  <span className="landing-insight-text">CTR is below average for your niche</span>
+                </li>
+                <li className="landing-insight-item">
+                  <span className="landing-insight-tag landing-insight-tag-bad">Underperforming</span>
+                  <span className="landing-insight-text">Title isn’t competitive with top search results</span>
+                </li>
+                <li className="landing-insight-item">
+                  <span className="landing-insight-tag landing-insight-tag-opp">Opportunity</span>
+                  <span className="landing-insight-text">High-growth keyword missed in your last 3 videos</span>
+                </li>
+                <li className="landing-insight-item">
+                  <span className="landing-insight-tag landing-insight-tag-opp">Opportunity</span>
+                  <span className="landing-insight-text">One upload has breakout potential — thumbnail/title mismatch</span>
+                </li>
+              </ul>
+              <p className="landing-insight-footer">Preview insights — run your channel to see yours.</p>
             </div>
           </div>
         </div>

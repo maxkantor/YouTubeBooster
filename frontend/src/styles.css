@@ -1144,49 +1144,99 @@ textarea {
 
 /* Hero */
 .landing-hero {
-  padding: 80px 24px 100px;
-  background: linear-gradient(180deg, #0B0F1F 0%, #141B34 50%, #0B0F1F 100%);
+  padding: 88px 24px 108px;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124, 58, 237, 0.18), transparent 55%),
+    linear-gradient(180deg, #070a14 0%, #0f1428 45%, #070a14 100%);
 }
 
 .landing-hero-grid {
-  max-width: 1200px;
+  max-width: 1180px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 64px;
+  gap: 56px 72px;
   align-items: center;
 }
 
 .landing-hero-title {
-  margin: 0 0 24px;
-  font-size: clamp(2.5rem, 4.5vw, 3.75rem);
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-  color: #f8fafc;
-  max-width: 14ch;
+  margin: 0 0 20px;
+  font-size: clamp(2.35rem, 4.2vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  color: #fafafa;
+  max-width: 16ch;
+  text-wrap: balance;
 }
 
 .landing-hero-sub {
-  margin: 0 0 32px;
-  font-size: 1.2rem;
-  line-height: 1.65;
-  color: #94a3b8;
-  max-width: 520px;
+  margin: 0 0 36px;
+  font-size: 1.125rem;
+  line-height: 1.62;
+  color: #a8b4c8;
+  max-width: 540px;
 }
 
 .landing-hero-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: 14px 16px;
+  margin-bottom: 14px;
+  align-items: center;
 }
 
 .btn-lg {
-  padding: 14px 28px;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: 12px;
+  padding: 16px 30px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border-radius: 14px;
+}
+
+.landing-hero-cta-primary {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 50%, #6d28d9 100%);
+  color: #fff !important;
+  box-shadow:
+    0 0 0 1px rgba(167, 139, 250, 0.35),
+    0 4px 24px rgba(124, 58, 237, 0.45),
+    0 12px 40px rgba(91, 33, 182, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-hero-cta-primary:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px rgba(196, 181, 253, 0.5),
+    0 8px 32px rgba(124, 58, 237, 0.55),
+    0 20px 48px rgba(91, 33, 182, 0.4);
+  color: #fff !important;
+}
+
+.btn-ghost {
+  background: transparent !important;
+  color: #c4b5fd !important;
+  border: 1px solid rgba(196, 181, 253, 0.35) !important;
+  box-shadow: none;
+}
+
+.btn-ghost:hover {
+  background: rgba(124, 58, 237, 0.12) !important;
+  border-color: rgba(196, 181, 253, 0.55) !important;
+  color: #e9d5ff !important;
+}
+
+.landing-cta-glow {
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35);
+}
+
+.landing-hero-micro {
+  margin: 0 0 28px;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  color: #64748b;
 }
 
 .landing-hero-trust {
@@ -1194,10 +1244,11 @@ textarea {
   margin: 0;
   padding: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  font-size: 0.9rem;
-  color: #64748b;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.95rem;
+  color: #94a3b8;
+  max-width: 480px;
 }
 
 .landing-hero-trust li::before {
@@ -1210,6 +1261,120 @@ textarea {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+}
+
+.landing-hero-insight-panel {
+  width: 100%;
+  max-width: 420px;
+  padding: 22px 22px 18px;
+  border-radius: 20px;
+  background: linear-gradient(165deg, rgba(22, 28, 48, 0.98) 0%, rgba(10, 14, 28, 0.95) 100%);
+  border: 1px solid rgba(124, 58, 237, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 24px 64px rgba(0, 0, 0, 0.5),
+    0 0 80px rgba(91, 33, 182, 0.12);
+}
+
+.landing-insight-panel-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-insight-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.7);
+  animation: landing-insight-pulse 2s ease-in-out infinite;
+}
+
+@keyframes landing-insight-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.15);
+  }
+}
+
+.landing-insight-panel-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a78bfa;
+}
+
+.landing-insight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.landing-insight-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 14px 16px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-insight-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.landing-insight-tag-leak {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.landing-insight-tag-bad {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fcd34d;
+  border: 1px solid rgba(251, 191, 36, 0.22);
+}
+
+.landing-insight-tag-opp {
+  background: rgba(52, 211, 153, 0.12);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.22);
+}
+
+.landing-insight-text {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.landing-insight-footer {
+  margin: 16px 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.4;
 }
 
 .landing-hero-preview-card {
@@ -2102,10 +2267,27 @@ textarea {
 
   .landing-hero-buttons {
     justify-content: center;
+    flex-direction: column;
+    width: 100%;
+    max-width: 380px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .landing-hero-buttons .btn-lg {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .landing-hero-micro {
+    text-align: center;
   }
 
   .landing-hero-trust {
-    justify-content: center;
+    align-items: center;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .landing-metrics-grid,
