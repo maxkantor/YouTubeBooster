@@ -5,6 +5,12 @@ import type {
   DashboardOverview,
   DemoPreview,
   MagicLinkLoginResponse,
+  PublicChannelAnalyzeResponse,
+  PublicChannelSuggestionsResponse,
+  PublicRunnerPingResponse,
+  PublicTrafficToolsResponse,
+  PublicVideo,
+  PublicVideoSeoResponse,
   SaveUserYouTubeSettingsRequest,
   UserOnboardingState,
   UserSessionStatus,
@@ -63,6 +69,42 @@ export const publicApi = {
       avgEngagement: data.avgEngagement ?? 0,
       topVideos: data.topVideos ?? []
     };
+  },
+  async analyzeChannel(channelInput: string, days = 30): Promise<PublicChannelAnalyzeResponse> {
+    const q = new URLSearchParams({ channel: channelInput, days: String(days) });
+    return fetchJson<PublicChannelAnalyzeResponse>(`/api/public/channel/analyze?${q.toString()}`);
+  },
+  async listVideos(channelInput: string, maxResults = 50): Promise<PublicVideo[]> {
+    const q = new URLSearchParams({ channel: channelInput, max_results: String(maxResults) });
+    return fetchJson<PublicVideo[]>(`/api/public/channel/videos?${q.toString()}`);
+  },
+  async getSuggestions(channelInput: string, topN = 10): Promise<PublicChannelSuggestionsResponse> {
+    const q = new URLSearchParams({ channel: channelInput, top_n: String(topN) });
+    return fetchJson<PublicChannelSuggestionsResponse>(`/api/public/channel/suggestions?${q.toString()}`);
+  },
+  async getTrafficTools(channelInput: string): Promise<PublicTrafficToolsResponse> {
+    const q = new URLSearchParams({ channel: channelInput });
+    return fetchJson<PublicTrafficToolsResponse>(`/api/public/channel/traffic_tools?${q.toString()}`);
+  },
+  async getVideoSeo(channelInput: string, videoId: string): Promise<PublicVideoSeoResponse> {
+    const q = new URLSearchParams({ channel: channelInput });
+    return fetchJson<PublicVideoSeoResponse>(`/api/public/video/seo/${encodeURIComponent(videoId)}?${q.toString()}`);
+  },
+  async runnerPing(): Promise<PublicRunnerPingResponse> {
+    return fetchJson<PublicRunnerPingResponse>('/api/public/runner/ping');
+  },
+  async runnerLogIssue(payload: {
+    video_id: string;
+    title: string;
+    desired_speed?: number | null;
+    actual_speed?: number | null;
+    position_seconds?: number | null;
+    note: string;
+  }): Promise<{ status: string }> {
+    return fetchJson<{ status: string }>('/api/public/runner/log_issue', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
   },
   async createCheckoutSession(channelInput: string, email: string): Promise<CheckoutSession> {
     return fetchJson<CheckoutSession>('/api/checkout/session', {

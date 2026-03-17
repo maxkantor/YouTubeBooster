@@ -13,10 +13,18 @@ import {
   demoVideos
 } from './demoData';
 import { getDisplayHandle } from './lib/demo';
+import { publicApi } from './lib/api';
 import { PaywallModal } from './PaywallModal';
 import type { CheckoutSession } from './types';
 import type { DemoPreview } from './types';
 import type { DashboardOverview } from './types';
+import type {
+  PublicChannelAnalyzeResponse,
+  PublicChannelSuggestionsResponse,
+  PublicTrafficToolsResponse,
+  PublicVideo,
+  PublicVideoSeoResponse
+} from './types';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: '📊', locked: false },
@@ -158,9 +166,16 @@ export function UnifiedDashboard({
   const [runnerLoaded, setRunnerLoaded] = useState(false);
   const [runnerIndex, setRunnerIndex] = useState(0);
   const [runnerLog, setRunnerLog] = useState<string[]>([]);
+  const [pyOverview, setPyOverview] = useState<PublicChannelAnalyzeResponse | null>(null);
+  const [pyVideos, setPyVideos] = useState<PublicVideo[] | null>(null);
+  const [pySuggestions, setPySuggestions] = useState<PublicChannelSuggestionsResponse | null>(null);
+  const [pyTraffic, setPyTraffic] = useState<PublicTrafficToolsResponse | null>(null);
+  const [pySeo, setPySeo] = useState<PublicVideoSeoResponse | null>(null);
+  const [pyLoading, setPyLoading] = useState(false);
+  const [pyError, setPyError] = useState<string | null>(null);
 
   const channelTitle = isDemo
-    ? (demoData?.channelTitle ?? demoChannelData.channelTitle)
+    ? (pyOverview?.channel_info?.title ?? demoData?.channelTitle ?? demoChannelData.channelTitle)
     : (dashboardOverview?.channelTitle ?? 'Channel');
   const displayHandle = isDemo ? getDisplayHandle(channelInput) : null;
   const previewFor = isDemo ? (displayHandle && displayHandle !== '@channel' ? displayHandle : (demoData?.channelHandle ?? demoChannelData.channelHandle)) : null;
@@ -187,25 +202,57 @@ export function UnifiedDashboard({
     return () => cancelAnimationFrame(rafId);
   }, [isDemo, growthScore]);
 
+  useEffect(() => {
+    if (!isDemo || !isFullDemo) return;
+    const input = (channelInput || '').trim();
+    if (!input) return;
+
+    let cancelled = false;
+    setPyLoading(true);
+    setPyError(null);
+    Promise.all([
+      publicApi.analyzeChannel(input, 30),
+      publicApi.listVideos(input, 50)
+    ])
+      .then(([overview, videos]) => {
+        if (cancelled) return;
+        setPyOverview(overview);
+        setPyVideos(videos);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPyOverview(null);
+        setPyVideos(null);
+        setPyError(err instanceof Error ? err.message : 'Could not load channel data.');
+      })
+      .finally(() => {
+        if (!cancelled) setPyLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [channelInput, isDemo, isFullDemo]);
+
   const scoreExplanation = isDemo ? demoChannelData.scoreExplanation : null;
   const hasMeaningfulMetrics = Boolean(
     demoData && (Number(demoData.subscriberCount) > 0 || Number(demoData.totalViews) > 0)
   );
   const subscribers = isDemo
-    ? (hasMeaningfulMetrics && demoData?.subscriberCount != null ? Number(demoData.subscriberCount) : demoChannelData.subscribers)
+    ? (pyOverview?.channel_info?.subscriber_count ?? (hasMeaningfulMetrics && demoData?.subscriberCount != null ? Number(demoData.subscriberCount) : demoChannelData.subscribers))
     : 0;
   const totalViews = isDemo
-    ? (hasMeaningfulMetrics && demoData?.totalViews != null ? Number(demoData.totalViews) : demoChannelData.totalViews)
+    ? (pyOverview?.channel_info?.view_count ?? (hasMeaningfulMetrics && demoData?.totalViews != null ? Number(demoData.totalViews) : demoChannelData.totalViews))
     : 0;
   const videoCount = isDemo
-    ? (hasMeaningfulMetrics && demoData?.videoCount != null ? Number(demoData.videoCount) : demoChannelData.videos)
+    ? (pyOverview?.channel_info?.video_count ?? (hasMeaningfulMetrics && demoData?.videoCount != null ? Number(demoData.videoCount) : demoChannelData.videos))
     : 0;
   const avgEngagement = isDemo
-    ? (hasMeaningfulMetrics && demoData?.avgEngagement != null ? Number(demoData.avgEngagement) : demoChannelData.avgEngagement)
+    ? (pyOverview?.video_performance?.avg_engagement_rate ?? (hasMeaningfulMetrics && demoData?.avgEngagement != null ? Number(demoData.avgEngagement) : demoChannelData.avgEngagement))
     : 0;
   const topVideosPaid = hasMeaningfulMetrics && demoData?.topVideos?.length ? (demoData.topVideos ?? []) : (demoData?.topVideos ?? []);
   const recommendations = isDemo
-    ? [...demoRecommendations]
+    ? [...(pyOverview?.recommendations ?? demoRecommendations)]
     : [...(dashboardOverview?.topOpportunities ?? []), ...(dashboardOverview?.topIssues ?? [])];
 
   const paidMetrics = dashboardOverview?.metrics ?? [];
@@ -239,22 +286,43 @@ export function UnifiedDashboard({
     setActiveTab('seo');
   }
 
+  async function handleAnalyzeVideoSeoById(videoId: string) {
+    const input = (channelInput || '').trim();
+    if (!input) return;
+    setActiveTab('seo');
+    setSeoInput(videoId);
+    setSeoResult(null);
+    setPySeo(null);
+    setPyError(null);
+    try {
+      const data = await publicApi.getVideoSeo(input, videoId);
+      setPySeo(data);
+    } catch (err) {
+      setPySeo(null);
+      setPyError(err instanceof Error ? err.message : 'Could not analyze SEO.');
+    }
+  }
+
   function handleAnalyzeSeo() {
     const raw = seoInput.trim();
     if (!raw) {
       setSeoResult(null);
+      setPySeo(null);
       return;
     }
     const maybeId = extractYouTubeVideoId(raw);
     if (maybeId) {
-      // Without an authenticated backend SEO endpoint, best-effort: analyze the title we already have.
-      // If the ID matches our demo list, use that title; otherwise just treat the input as a title-like string.
+      if (isDemo && isFullDemo) {
+        void handleAnalyzeVideoSeoById(maybeId);
+        return;
+      }
       const match = demoVideos.find((v) => v.id === maybeId);
-      const title = match?.title ?? raw;
-      setSeoResult(analyzeSeoLocally(title));
+      setSeoResult(analyzeSeoLocally(match?.title ?? raw));
+      setPySeo(null);
       return;
     }
     setSeoResult(analyzeSeoLocally(raw));
+    setPySeo(null);
   }
 
   async function handleCreateCheckout(email: string) {
@@ -304,6 +372,12 @@ export function UnifiedDashboard({
         )}
         {isDemo && demoError && (
           <p className="dashboard-demo-error">{demoError}</p>
+        )}
+        {isDemo && isFullDemo && pyLoading && (
+          <p className="dashboard-demo-loading">Loading your channel data…</p>
+        )}
+        {isDemo && isFullDemo && pyError && (
+          <p className="dashboard-demo-error">{pyError}</p>
         )}
       </header>
 
@@ -405,7 +479,16 @@ export function UnifiedDashboard({
             </div>
           ) : (
           <div className="video-list">
-            {isDemo && demoData != null && hasMeaningfulMetrics ? (
+            {isDemo && isFullDemo && pyOverview?.video_performance?.top_videos_by_views?.length ? (
+              pyOverview.video_performance.top_videos_by_views.map((v) => (
+                <div key={v.video_id} className="video-card">
+                  <div className="video-card-title">{v.title}</div>
+                  <div className="video-card-meta">
+                    👁️ {formatNumber(v.view_count)} views · 📝 Video ID: {v.video_id}
+                  </div>
+                </div>
+              ))
+            ) : isDemo && demoData != null && hasMeaningfulMetrics ? (
               topVideosPaid.length > 0 ? (
                 topVideosPaid.map((v) => (
                   <div key={v.videoId} className="video-card">
@@ -507,7 +590,25 @@ export function UnifiedDashboard({
         <section className="dashboard-section">
           <h2>Your Videos</h2>
           <div className="video-list">
-            {isDemo ? (
+            {isDemo && isFullDemo && pyVideos ? (
+              pyVideos.map((v) => (
+                <div key={v.video_id} className="video-card video-card-with-action">
+                  <div className="video-card-main">
+                    <div className="video-card-title">{v.title}</div>
+                    <div className="video-card-meta">
+                      👁️ {formatNumber(v.view_count)} views · 👍 {formatNumber(v.like_count)} likes · 💬 {formatNumber(v.comment_count)} comments · Published {new Date(v.published_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm video-card-action"
+                    onClick={() => handleAnalyzeVideoSeoById(v.video_id)}
+                  >
+                    Analyze SEO
+                  </button>
+                </div>
+              ))
+            ) : isDemo ? (
               demoVideos.map((v) => (
                 <div key={v.id} className="video-card video-card-with-action">
                   <div className="video-card-main">
@@ -574,7 +675,17 @@ export function UnifiedDashboard({
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setSuggestionsLoaded(true)}
+              onClick={async () => {
+                setSuggestionsLoaded(true);
+                setPyError(null);
+                try {
+                  const data = await publicApi.getSuggestions(channelInput, 10);
+                  setPySuggestions(data);
+                } catch (err) {
+                  setPySuggestions(null);
+                  setPyError(err instanceof Error ? err.message : 'Could not load suggestions.');
+                }
+              }}
               style={{ marginBottom: 12 }}
             >
               Get Suggestions
@@ -583,7 +694,15 @@ export function UnifiedDashboard({
               <>
                 <h3 className="dashboard-section-h3">Top Performing Videos</h3>
                 <div className="video-list">
-                  {demoTopVideos.slice(0, 10).map((v) => (
+                  {(pySuggestions?.top_performers?.length ? pySuggestions.top_performers : []).map((v) => (
+                    <div key={v.video_id} className="video-card">
+                      <div className="video-card-title">{v.title}</div>
+                      <div className="video-card-meta">
+                        {formatNumber(v.views)} views · {formatNumber(v.engagement)} engagement
+                      </div>
+                    </div>
+                  ))}
+                  {!pySuggestions?.top_performers?.length && demoTopVideos.slice(0, 10).map((v) => (
                     <div key={v.key} className="video-card">
                       <div className="video-card-title">{v.title}</div>
                       <div className="video-card-meta">{formatNumber(v.viewCount)} views</div>
@@ -592,8 +711,8 @@ export function UnifiedDashboard({
                 </div>
                 <h3 className="dashboard-section-h3" style={{ marginTop: 18 }}>Content ideas</h3>
                 <ul className="feature-list">
-                  {demoSuggestions.map((s, i) => (
-                    <li key={i}>{s}</li>
+                  {(pySuggestions?.content_suggestions?.length ? pySuggestions.content_suggestions : demoSuggestions).map((s, i) => (
+                    <li key={`${s}-${i}`}>{s}</li>
                   ))}
                 </ul>
               </>
@@ -654,7 +773,57 @@ export function UnifiedDashboard({
                 Analyze SEO
               </button>
             </div>
-            {seoResult ? (
+            {pySeo ? (
+              <>
+                <h2>{pySeo.video_title}</h2>
+                <div className={`seo-score ${pySeo.seo_score.rating}`}>{pySeo.seo_score.score}/100</div>
+                <p style={{ textAlign: 'center', fontSize: '1.1em', marginBottom: 18 }}>{pySeo.seo_score.rating.toUpperCase()}</p>
+
+                {pySeo.seo_score.issues?.length ? (
+                  <>
+                    <h3 className="dashboard-section-h3">⚠️ Issues to Fix</h3>
+                    <ul className="feature-list">
+                      {pySeo.seo_score.issues.map((issue) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+
+                <h3 className="dashboard-section-h3">📝 Title Analysis ({pySeo.title_analysis.current_length} characters)</h3>
+                <ul className="feature-list">
+                  {pySeo.title_analysis.suggestions.map((s, i) => (
+                    <li key={`${s.message}-${i}`}>
+                      <strong>[{s.priority.toUpperCase()}]</strong> {s.message}
+                    </li>
+                  ))}
+                </ul>
+
+                {pySeo.title_analysis.optimized_examples?.length ? (
+                  <>
+                    <h3 className="dashboard-section-h3">Suggested Titles</h3>
+                    <ul className="feature-list">
+                      {pySeo.title_analysis.optimized_examples.map((t) => (
+                        <li key={t}>{t}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+
+                <h3 className="dashboard-section-h3">📄 Description Analysis ({pySeo.description_analysis.word_count} words)</h3>
+                <ul className="feature-list">
+                  {pySeo.description_analysis.suggestions.map((s, i) => (
+                    <li key={`${s.message}-${i}`}>
+                      <strong>[{s.priority.toUpperCase()}]</strong> {s.message}
+                    </li>
+                  ))}
+                </ul>
+
+                <h3 className="dashboard-section-h3">🏷️ Tags</h3>
+                <p><strong>Current:</strong> {pySeo.current_tags.slice(0, 10).join(', ') || '—'}</p>
+                <p><strong>Suggested:</strong> {pySeo.suggested_tags.slice(0, 10).join(', ') || '—'}</p>
+              </>
+            ) : seoResult ? (
               <>
                 <p className="video-card-title">{seoResult.title}</p>
                 <p className="seo-score">SEO Score: {seoResult.score} / 100</p>
@@ -738,7 +907,17 @@ export function UnifiedDashboard({
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setTrafficLoaded(true)}
+              onClick={async () => {
+                setTrafficLoaded(true);
+                setPyError(null);
+                try {
+                  const data = await publicApi.getTrafficTools(channelInput);
+                  setPyTraffic(data);
+                } catch (err) {
+                  setPyTraffic(null);
+                  setPyError(err instanceof Error ? err.message : 'Could not load traffic tools.');
+                }
+              }}
               style={{ marginBottom: 12 }}
             >
               Refresh Traffic Tools
@@ -747,57 +926,74 @@ export function UnifiedDashboard({
               <>
                 <div className="traffic-demo-cards">
                   <div className="traffic-demo-card">
-                    <h3 className="dashboard-section-h3">Best Video To Promote</h3>
-                    <p className="video-card-title">{demoTrafficTools.bestVideoToPromote}</p>
-                    <p className="traffic-engagement">Engagement: {demoTrafficTools.engagement}%</p>
-                    <div className="pill-row" style={{ marginTop: 10 }}>
-                      <a
-                        className="btn btn-secondary"
-                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(demoTrafficTools.bestVideoToPromote)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open on YouTube
-                      </a>
-                      <button type="button" className="btn btn-secondary" onClick={() => handleAnalyzeSeoFromTitle(demoTrafficTools.bestVideoToPromote)}>
-                        Analyze SEO
-                      </button>
-                    </div>
+                    <h3 className="dashboard-section-h3">Best Videos to Promote Next</h3>
+                    {(pyTraffic?.promotion_candidates ?? []).slice(0, 5).map((v) => (
+                      <div key={v.video_id} className="video-card" style={{ marginTop: 10 }}>
+                        <div className="video-card-title">{v.title}</div>
+                        <p className="muted" style={{ marginTop: 6 }}>{v.reason}</p>
+                        <div className="video-card-meta">
+                          👁️ {formatNumber(v.view_count)} views · 👍 {formatNumber(v.like_count)} likes · 💬 {formatNumber(v.comment_count)} comments · {v.engagement_rate.toFixed(2)}% engagement
+                        </div>
+                        <div className="pill-row" style={{ marginTop: 10 }}>
+                          <a className="btn btn-secondary" href={v.watch_url} target="_blank" rel="noreferrer">Open on YouTube</a>
+                          <button type="button" className="btn btn-secondary" onClick={async () => { await navigator.clipboard.writeText(v.watch_url); }}>
+                            Copy Link
+                          </button>
+                          <button type="button" className="btn btn-secondary" onClick={async () => { await navigator.clipboard.writeText(v.share_text); }}>
+                            Copy Share Text
+                          </button>
+                          <button type="button" className="btn btn-secondary" onClick={() => handleAnalyzeVideoSeoById(v.video_id)}>
+                            Analyze SEO
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {!pyTraffic?.promotion_candidates?.length && (
+                      <p className="muted">No promotion candidates available yet.</p>
+                    )}
                   </div>
                   <div className="traffic-demo-card">
-                    <h3 className="dashboard-section-h3">Proven Video To Reshare</h3>
-                    <p className="video-card-title">{demoTrafficTools.provenVideoToReshare.title}</p>
-                    <p className="traffic-engagement">{formatNumber(demoTrafficTools.provenVideoToReshare.views)} views</p>
-                    <div className="pill-row" style={{ marginTop: 10 }}>
-                      <a
-                        className="btn btn-secondary"
-                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(demoTrafficTools.provenVideoToReshare.title)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open on YouTube
-                      </a>
-                      <button type="button" className="btn btn-secondary" onClick={() => handleAnalyzeSeoFromTitle(demoTrafficTools.provenVideoToReshare.title)}>
-                        Analyze SEO
-                      </button>
-                    </div>
+                    <h3 className="dashboard-section-h3">Proven Videos to Reshare</h3>
+                    {(pyTraffic?.top_performers ?? []).slice(0, 5).map((v) => (
+                      <div key={v.video_id} className="video-card" style={{ marginTop: 10 }}>
+                        <div className="video-card-title">{v.title}</div>
+                        <p className="muted" style={{ marginTop: 6 }}>{v.reason}</p>
+                        <div className="video-card-meta">
+                          👁️ {formatNumber(v.view_count)} views · 👍 {formatNumber(v.like_count)} likes · 💬 {formatNumber(v.comment_count)} comments · {v.engagement_rate.toFixed(2)}% engagement
+                        </div>
+                        <div className="pill-row" style={{ marginTop: 10 }}>
+                          <a className="btn btn-secondary" href={v.watch_url} target="_blank" rel="noreferrer">Open on YouTube</a>
+                          <button type="button" className="btn btn-secondary" onClick={async () => { await navigator.clipboard.writeText(v.watch_url); }}>
+                            Copy Link
+                          </button>
+                          <button type="button" className="btn btn-secondary" onClick={async () => { await navigator.clipboard.writeText(v.share_text); }}>
+                            Copy Share Text
+                          </button>
+                          <button type="button" className="btn btn-secondary" onClick={() => handleAnalyzeVideoSeoById(v.video_id)}>
+                            Analyze SEO
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {!pyTraffic?.top_performers?.length && (
+                      <p className="muted">No top performers available yet.</p>
+                    )}
                   </div>
                 </div>
                 <div className="section-grid" style={{ marginTop: 16 }}>
                   <div className="surface">
                     <h3 className="dashboard-section-h3">Legitimate Traffic Checklist</h3>
                     <ul className="feature-list">
-                      <li>Share the watch link in relevant communities (no spam; add value).</li>
-                      <li>Post a short clip/teaser that links to the full watch page.</li>
-                      <li>Pin a comment linking to the “next” video you want to push.</li>
-                      <li>Update descriptions to include 1–2 internal links to related videos.</li>
-                      <li>Reshare proven videos on a consistent schedule.</li>
+                      {(pyTraffic?.checklist ?? []).map((item) => (
+                        <li key={item.title}><strong>{item.title}</strong>: {item.details}</li>
+                      ))}
                     </ul>
+                    {!pyTraffic?.checklist?.length && <p className="muted">No checklist items available yet.</p>}
                   </div>
                   <div className="surface">
                     <h3 className="dashboard-section-h3">Follow-up Content Ideas</h3>
                     <ul className="feature-list">
-                      {demoSuggestions.slice(0, 6).map((idea) => (
+                      {(pyTraffic?.content_suggestions ?? demoSuggestions).slice(0, 10).map((idea) => (
                         <li key={idea}>{idea}</li>
                       ))}
                     </ul>
@@ -838,10 +1034,20 @@ export function UnifiedDashboard({
           <section className="dashboard-section">
             <h2>Continuous Runner</h2>
             <p className="muted">
-              Review and test your content by stepping through videos quickly. (This demo runner uses the sample dataset and opens YouTube search in a new tab.)
+              Review and test your content — play through videos and mark issues (parity with the Python demo).
             </p>
             <div className="pill-row" style={{ marginBottom: 12 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setRunnerLoaded(true); setRunnerIndex(0); appendRunnerLog('Loaded demo video list.'); }}>
+              <button type="button" className="btn btn-secondary" onClick={async () => {
+                setRunnerLoaded(true);
+                setRunnerIndex(0);
+                appendRunnerLog('Loaded video list.');
+                try {
+                  const ping = await publicApi.runnerPing();
+                  appendRunnerLog(`Server ping: ${ping.status}`);
+                } catch (err) {
+                  appendRunnerLog(`Server ping failed: ${err instanceof Error ? err.message : 'error'}`);
+                }
+              }}>
                 Load Videos
               </button>
               <button
@@ -849,10 +1055,12 @@ export function UnifiedDashboard({
                 className="btn btn-primary"
                 disabled={!runnerLoaded}
                 onClick={() => {
-                  const current = demoVideos[runnerIndex % demoVideos.length];
+                  const list = pyVideos ?? [];
+                  const current = list.length ? list[runnerIndex % list.length] : null;
                   if (!current) return;
-                  appendRunnerLog(`Opening: ${current.title}`);
-                  window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(current.title)}`, '_blank', 'noopener,noreferrer');
+                  const url = `https://www.youtube.com/watch?v=${current.video_id}`;
+                  appendRunnerLog(`Opening: ${current.title} (${current.video_id})`);
+                  window.open(url, '_blank', 'noopener,noreferrer');
                 }}
               >
                 Start
@@ -862,18 +1070,48 @@ export function UnifiedDashboard({
                 className="btn btn-secondary"
                 disabled={!runnerLoaded}
                 onClick={() => {
-                  const next = (runnerIndex + 1) % demoVideos.length;
+                  const total = (pyVideos ?? []).length || 1;
+                  const next = (runnerIndex + 1) % total;
                   setRunnerIndex(next);
-                  appendRunnerLog(`Skipped to index ${next + 1}/${demoVideos.length}.`);
+                  appendRunnerLog(`Skipped to index ${next + 1}/${total}.`);
                 }}
               >
                 Skip
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!runnerLoaded}
+                onClick={async () => {
+                  const list = pyVideos ?? [];
+                  const current = list.length ? list[runnerIndex % list.length] : null;
+                  if (!current) return;
+                  const note = prompt('Issue note…') || '';
+                  if (!note.trim()) return;
+                  try {
+                    await publicApi.runnerLogIssue({ video_id: current.video_id, title: current.title, note });
+                    appendRunnerLog(`Issue marked: "${note}" (${current.video_id})`);
+                  } catch (err) {
+                    appendRunnerLog(`Issue log failed: ${err instanceof Error ? err.message : 'error'}`);
+                  }
+                }}
+              >
+                🚩 Mark Issue
               </button>
             </div>
             {runnerLoaded && (
               <div className="status-card">
                 <strong>Current</strong>
-                <p style={{ marginTop: 6 }}>{runnerIndex + 1} / {demoVideos.length}: {demoVideos[runnerIndex]?.title}</p>
+                <p style={{ marginTop: 6 }}>
+                  {(() => {
+                    const list = pyVideos ?? [];
+                    const total = list.length || 0;
+                    const current = total ? list[runnerIndex % total] : null;
+                    return total && current
+                      ? `${runnerIndex + 1} / ${total}: ${current.title} (${current.video_id})`
+                      : 'No videos loaded yet.';
+                  })()}
+                </p>
               </div>
             )}
             <div className="surface" style={{ marginTop: 12 }}>

@@ -21,6 +21,110 @@ export type DemoPreview = {
   topVideos?: DemoTopVideo[];
 };
 
+// ---- Public demo dashboard (Python EB parity) ----
+export type PublicChannelInfo = {
+  channel_id: string;
+  title: string;
+  subscriber_count: number;
+  video_count: number;
+  view_count: number;
+};
+
+export type PublicTopVideoByViews = {
+  title: string;
+  view_count: number;
+  video_id: string;
+};
+
+export type PublicVideoPerformance = {
+  total_videos: number;
+  total_views: number;
+  total_likes: number;
+  avg_views_per_video: number;
+  avg_engagement_rate: number;
+  top_videos_by_views: PublicTopVideoByViews[];
+};
+
+export type PublicChannelAnalyzeResponse = {
+  channel_info: PublicChannelInfo;
+  videos_analyzed: number;
+  video_performance: PublicVideoPerformance;
+  recommendations: string[];
+};
+
+export type PublicVideo = {
+  video_id: string;
+  title: string;
+  description: string;
+  published_at: string;
+  view_count: number;
+  like_count: number;
+  comment_count: number;
+  duration: string;
+  tags: string[];
+};
+
+export type PublicChannelSuggestionsResponse = {
+  top_performers: { title: string; views: number; engagement: number; video_id: string }[];
+  common_patterns: { common_words: string[]; common_tags: string[] };
+  content_suggestions: string[];
+};
+
+export type PublicVideoSeoResponse = {
+  video_id: string;
+  video_title: string;
+  title_analysis: {
+    current_title: string;
+    current_length: number;
+    suggestions: { type: string; message: string; priority: string }[];
+    optimized_examples: string[];
+  };
+  description_analysis: {
+    current_length: number;
+    word_count: number;
+    suggestions: { type: string; message: string; priority: string }[];
+  };
+  current_tags: string[];
+  suggested_tags: string[];
+  seo_score: { score: number; rating: string; issues: string[] };
+};
+
+export type PublicTrafficToolsResponse = {
+  promotion_candidates: Array<{
+    video_id: string;
+    title: string;
+    description: string;
+    published_at: string | null;
+    age_days: number | null;
+    view_count: number;
+    like_count: number;
+    comment_count: number;
+    engagement_rate: number;
+    watch_url: string;
+    share_text: string;
+    reason: string;
+  }>;
+  top_performers: Array<{
+    video_id: string;
+    title: string;
+    description: string;
+    published_at: string | null;
+    age_days: number | null;
+    view_count: number;
+    like_count: number;
+    comment_count: number;
+    engagement_rate: number;
+    watch_url: string;
+    share_text: string;
+    reason: string;
+  }>;
+  checklist: { title: string; details: string }[];
+  content_suggestions: string[];
+  series_ideas: { title: string; description: string; examples: string[] }[];
+};
+
+export type PublicRunnerPingResponse = { status: string; ts: string };
+
 export type DashboardMetric = {
   label: string;
   value: string;
