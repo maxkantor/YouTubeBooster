@@ -46,19 +46,44 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
 
         DemoAnalysisResponse response;
 
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (!HasUsableYouTubeApiKey(apiKey))
         {
             response = await BuildFallbackResponseAsync(client, resolvedInput, cancellationToken);
         }
         else
         {
-            var channel = await ResolveChannelAsync(client, apiKey, resolvedInput, cancellationToken);
-            var videos = await LoadRecentVideosAsync(client, apiKey, channel.UploadsPlaylistId, cancellationToken);
-            response = BuildResponseFromChannelData(resolvedInput, channel, videos);
+            try
+            {
+                var channel = await ResolveChannelAsync(client, apiKey!, resolvedInput, cancellationToken);
+                var videos = await LoadRecentVideosAsync(client, apiKey!, channel.UploadsPlaylistId, cancellationToken);
+                response = BuildResponseFromChannelData(resolvedInput, channel, videos);
+            }
+            catch
+            {
+                // If the YouTube API key is missing/invalid/over-quota or the channel can't be resolved,
+                // fall back to the demo dataset instead of returning a 500.
+                response = await BuildFallbackResponseAsync(client, resolvedInput, cancellationToken);
+            }
         }
 
         await _appDataStore.SaveDemoAsync(request with { ChannelInput = resolvedInput }, response, cancellationToken);
         return response;
+    }
+
+    private static bool HasUsableYouTubeApiKey(string? apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return false;
+        }
+
+        var trimmed = apiKey.Trim();
+        // common placeholders / migration values
+        if (trimmed.Equals("replace-me", StringComparison.OrdinalIgnoreCase)) return false;
+        if (trimmed.Contains("replace", StringComparison.OrdinalIgnoreCase)) return false;
+        if (trimmed.Equals("changeme", StringComparison.OrdinalIgnoreCase)) return false;
+
+        return trimmed.Length >= 20;
     }
 
     private async Task<string> NormalizeChannelInputAsync(HttpClient client, string channelInput, CancellationToken cancellationToken)
