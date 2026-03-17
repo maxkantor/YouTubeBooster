@@ -224,7 +224,7 @@ export function UnifiedDashboard({
   }, [isDemo, growthScore]);
 
   useEffect(() => {
-    if (!isDemo || !isFullDemo) return;
+    if (isPreviewMode) return;
     const input = (channelInput || '').trim();
     if (!input) return;
 
@@ -253,7 +253,7 @@ export function UnifiedDashboard({
     return () => {
       cancelled = true;
     };
-  }, [channelInput, isDemo, isFullDemo]);
+  }, [channelInput, isPreviewMode]);
 
   const scoreExplanation = isDemo ? demoChannelData.scoreExplanation : null;
   const hasMeaningfulMetrics = Boolean(
@@ -614,10 +614,10 @@ export function UnifiedDashboard({
         {isDemo && demoError && (
           <p className="dashboard-demo-error">{demoError}</p>
         )}
-        {isDemo && isFullDemo && pyLoading && (
+        {!isPreviewMode && pyLoading && (
           <p className="dashboard-demo-loading">Loading your channel data…</p>
         )}
-        {isDemo && isFullDemo && pyError && (
+        {!isPreviewMode && pyError && (
           <p className="dashboard-demo-error">{pyError}</p>
         )}
       </header>

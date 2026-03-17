@@ -332,7 +332,7 @@ function DashboardPage({
       isDemo={false}
       demoData={null}
       dashboardOverview={overview ?? null}
-      channelInput={overview?.channelTitle ?? ''}
+      channelInput={userSession.user?.channelUrl ?? overview?.channelTitle ?? ''}
       userEmail={userSession.user?.email}
       onCreateCheckout={async (_, email) => publicApi.createCheckoutSession(channelTitle, email)}
       onSignOut={handleSignOut}
