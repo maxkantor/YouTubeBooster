@@ -7,7 +7,39 @@ builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddApplicationInfrastructure(builder.Configuration);
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("default", policy =>
+    {
+        policy
+            .SetIsOriginAllowed(origin =>
+            {
+                if (string.IsNullOrWhiteSpace(origin)) return false;
+
+                if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+
+                // Local dev + common production hosts
+                if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)) return true;
+                if (uri.Host.EndsWith(".amplifyapp.com", StringComparison.OrdinalIgnoreCase)) return true;
+                if (uri.Host.Equals("youtubebooster.com", StringComparison.OrdinalIgnoreCase)) return true;
+                if (uri.Host.Equals("www.youtubebooster.com", StringComparison.OrdinalIgnoreCase)) return true;
+
+                // Optional explicit allow-list via config/env: "https://foo.com,https://bar.com"
+                var configured = builder.Configuration["CORS_ALLOWED_ORIGINS"];
+                if (string.IsNullOrWhiteSpace(configured)) return false;
+
+                return configured
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(o => string.Equals(o, origin, StringComparison.OrdinalIgnoreCase));
+            })
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 var app = builder.Build();
+app.UseCors("default");
 app.UseHttpsRedirection();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "youtube-booster-ai-api" }));
