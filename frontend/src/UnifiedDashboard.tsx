@@ -166,6 +166,27 @@ export function UnifiedDashboard({
   const [runnerLoaded, setRunnerLoaded] = useState(false);
   const [runnerIndex, setRunnerIndex] = useState(0);
   const [runnerLog, setRunnerLog] = useState<string[]>([]);
+  const [runnerSpeed, setRunnerSpeed] = useState(10);
+  const [runnerWatchSeconds, setRunnerWatchSeconds] = useState(30);
+  const [runnerShuffle, setRunnerShuffle] = useState(false);
+  const [runnerRunning, setRunnerRunning] = useState(false);
+  const [runnerStatus, setRunnerStatus] = useState<'IDLE' | 'RUNNING' | 'STOPPED' | 'ERROR'>('IDLE');
+  const [runnerDesiredSpeed, setRunnerDesiredSpeed] = useState<number | null>(null);
+  const [runnerActualSpeed, setRunnerActualSpeed] = useState<number | null>(null);
+  const [runnerPosition, setRunnerPosition] = useState<number | null>(null);
+  const [runnerSessionStarted, setRunnerSessionStarted] = useState(0);
+  const [runnerSessionEnded, setRunnerSessionEnded] = useState(0);
+  const [runnerSessionWallSeconds, setRunnerSessionWallSeconds] = useState(0);
+  const [runnerServerStatus, setRunnerServerStatus] = useState<'—' | 'Testing…' | 'OK' | 'Offline' | 'Error'>('—');
+  const [runnerIssueNote, setRunnerIssueNote] = useState('');
+  const [runnerPicked, setRunnerPicked] = useState<Record<string, boolean>>({});
+  const [runnerPlayOrder, setRunnerPlayOrder] = useState<number[]>([]);
+  const [runnerWatchStartPos, setRunnerWatchStartPos] = useState<number | null>(null);
+  const [runnerWatchLimitFired, setRunnerWatchLimitFired] = useState(false);
+
+  // YouTube iframe API player (kept out of React state)
+  const playerRef = (globalThis as any).__ybPlayerRef as { player: any | null } | undefined;
+  (globalThis as any).__ybPlayerRef = playerRef ?? { player: null };
   const [pyOverview, setPyOverview] = useState<PublicChannelAnalyzeResponse | null>(null);
   const [pyVideos, setPyVideos] = useState<PublicVideo[] | null>(null);
   const [pySuggestions, setPySuggestions] = useState<PublicChannelSuggestionsResponse | null>(null);
@@ -279,6 +300,226 @@ export function UnifiedDashboard({
   function appendRunnerLog(message: string) {
     setRunnerLog((prev) => [`[${new Date().toISOString()}] ${message}`, ...prev].slice(0, 50));
   }
+
+  function ensureYouTubeIframeApi() {
+    const w = window as any;
+    if (w.YT && w.YT.Player) return;
+    const existing = document.querySelector('script[src*="youtube.com/iframe_api"]');
+    if (existing) return;
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  }
+
+  useEffect(() => {
+    if (!isDemo || !isFullDemo) return;
+    ensureYouTubeIframeApi();
+  }, [isDemo, isFullDemo]);
+
+  function getRunnerVideos() {
+    return (pyVideos ?? []).filter((v) => v && v.video_id);
+  }
+
+  function buildPlayOrder() {
+    const list = getRunnerVideos();
+    const pickedIndices = list
+      .map((v, idx) => (runnerPicked[v.video_id] ? idx : -1))
+      .filter((idx) => idx >= 0);
+    const indices = pickedIndices.length ? pickedIndices : list.map((_, i) => i);
+    if (!runnerShuffle) return indices;
+    const shuffled = [...indices];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
+  async function runnerTestServer() {
+    setRunnerServerStatus('Testing…');
+    try {
+      const resp = await publicApi.runnerPing();
+      setRunnerServerStatus(resp.status === 'ok' ? 'OK' : 'Error');
+      appendRunnerLog(resp.status === 'ok' ? 'Server ping OK.' : `Server ping error: ${resp.status}`);
+    } catch (err) {
+      setRunnerServerStatus('Offline');
+      appendRunnerLog(`Server ping exception: ${err instanceof Error ? err.message : 'error'}`);
+    }
+  }
+
+  function runnerCurrentVideo() {
+    const list = getRunnerVideos();
+    const order = runnerPlayOrder.length ? runnerPlayOrder : buildPlayOrder();
+    const idx = order.length ? order[Math.min(runnerIndex, order.length - 1)] : -1;
+    return idx >= 0 ? list[idx] : null;
+  }
+
+  function runnerApplySpeed() {
+    try {
+      const player = (globalThis as any).__ybPlayerRef?.player;
+      if (!player) return;
+      if (typeof player.setPlaybackRate === 'function') {
+        player.setPlaybackRate(runnerSpeed);
+      }
+      const actual = typeof player.getPlaybackRate === 'function' ? player.getPlaybackRate() : null;
+      setRunnerDesiredSpeed(runnerSpeed);
+      setRunnerActualSpeed(typeof actual === 'number' ? actual : null);
+    } catch {
+      // ignore
+    }
+  }
+
+  function runnerUpdatePosition() {
+    try {
+      const player = (globalThis as any).__ybPlayerRef?.player;
+      if (!player || typeof player.getCurrentTime !== 'function') return;
+      const pos = player.getCurrentTime();
+      if (typeof pos === 'number' && !Number.isNaN(pos)) setRunnerPosition(pos);
+    } catch {
+      // ignore
+    }
+  }
+
+  function runnerStopInternal() {
+    setRunnerRunning(false);
+    setRunnerStatus('STOPPED');
+    setRunnerWatchStartPos(null);
+    setRunnerWatchLimitFired(false);
+    try {
+      const player = (globalThis as any).__ybPlayerRef?.player;
+      if (player && typeof player.stopVideo === 'function') player.stopVideo();
+    } catch {
+      // ignore
+    }
+  }
+
+  function runnerAdvance() {
+    const order = runnerPlayOrder.length ? runnerPlayOrder : buildPlayOrder();
+    if (!order.length) return;
+    const next = (runnerIndex + 1) % order.length;
+    setRunnerIndex(next);
+  }
+
+  function runnerPlayCurrent() {
+    const w = window as any;
+    const video = runnerCurrentVideo();
+    if (!video) {
+      appendRunnerLog('No video to play.');
+      return;
+    }
+    const videoId = video.video_id;
+    appendRunnerLog(`Playing ${video.title} (${videoId})`);
+    setRunnerSessionStarted((v) => v + 1);
+    setRunnerWatchStartPos(null);
+    setRunnerWatchLimitFired(false);
+
+    const load = () => {
+      const ref = (globalThis as any).__ybPlayerRef;
+      const existingPlayer = ref?.player;
+      if (existingPlayer && typeof existingPlayer.loadVideoById === 'function') {
+        existingPlayer.loadVideoById(videoId);
+        setTimeout(() => {
+          runnerApplySpeed();
+          runnerUpdatePosition();
+        }, 800);
+        return;
+      }
+
+      if (!(w.YT && w.YT.Player)) {
+        appendRunnerLog('YouTube IFrame API not ready yet.');
+        return;
+      }
+
+      ref.player = new w.YT.Player('runner-player', {
+        width: '100%',
+        height: '100%',
+        videoId,
+        playerVars: { autoplay: 1, controls: 1 },
+        events: {
+          onReady: () => {
+            runnerApplySpeed();
+            try {
+              const player = ref.player;
+              const pos = player && typeof player.getCurrentTime === 'function' ? player.getCurrentTime() : 0;
+              setRunnerWatchStartPos(typeof pos === 'number' ? pos : 0);
+            } catch {
+              setRunnerWatchStartPos(0);
+            }
+          },
+          onStateChange: (e: any) => {
+            // PLAYING
+            if (e?.data === w.YT.PlayerState.PLAYING) {
+              setRunnerStatus('RUNNING');
+              try {
+                const player = ref.player;
+                const pos = player && typeof player.getCurrentTime === 'function' ? player.getCurrentTime() : 0;
+                setRunnerWatchStartPos((prev) => (prev == null ? (typeof pos === 'number' ? pos : 0) : prev));
+              } catch {
+                setRunnerWatchStartPos((prev) => prev ?? 0);
+              }
+              runnerApplySpeed();
+            }
+            // ENDED
+            if (e?.data === w.YT.PlayerState.ENDED) {
+              setRunnerSessionEnded((v: number) => v + 1);
+              runnerAdvance();
+            }
+          },
+          onError: (e: any) => {
+            appendRunnerLog(`Player error code ${e?.data ?? 'unknown'} on ${videoId}. Skipping.`);
+            runnerAdvance();
+          }
+        }
+      });
+    };
+
+    // If iframe api hasn't called onYouTubeIframeAPIReady yet, we still try shortly.
+    load();
+    setTimeout(load, 1200);
+  }
+
+  // Runner ticking: wall-time + watch-seconds limit + position updates
+  useEffect(() => {
+    if (!runnerRunning) return;
+    let lastTick = Date.now();
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      const dt = (now - lastTick) / 1000;
+      lastTick = now;
+      if (dt > 0 && dt < 10) {
+        setRunnerSessionWallSeconds((v) => v + dt);
+      }
+
+      runnerUpdatePosition();
+      runnerApplySpeed();
+
+      // Watch limit
+      if (runnerWatchSeconds > 0 && !runnerWatchLimitFired) {
+        try {
+          const player = (globalThis as any).__ybPlayerRef?.player;
+          if (player && typeof player.getCurrentTime === 'function') {
+            const pos = player.getCurrentTime();
+            const startPos = runnerWatchStartPos ?? 0;
+            if (typeof pos === 'number' && pos - startPos >= runnerWatchSeconds) {
+              setRunnerWatchLimitFired(true);
+              setRunnerSessionEnded((v) => v + 1);
+              appendRunnerLog(`Watch limit reached (${runnerWatchSeconds}s). Advancing.`);
+              runnerAdvance();
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [runnerRunning, runnerSpeed, runnerWatchSeconds, runnerWatchLimitFired, runnerWatchStartPos]);
+
+  // When index changes while running, play next
+  useEffect(() => {
+    if (!runnerRunning) return;
+    runnerPlayCurrent();
+  }, [runnerIndex]);
 
   function handleAnalyzeSeoFromTitle(title: string) {
     setSeoInput(title);
@@ -1036,88 +1277,170 @@ export function UnifiedDashboard({
             <p className="muted">
               Review and test your content — play through videos and mark issues (parity with the Python demo).
             </p>
-            <div className="pill-row" style={{ marginBottom: 12 }}>
-              <button type="button" className="btn btn-secondary" onClick={async () => {
-                setRunnerLoaded(true);
-                setRunnerIndex(0);
-                appendRunnerLog('Loaded video list.');
-                try {
-                  const ping = await publicApi.runnerPing();
-                  appendRunnerLog(`Server ping: ${ping.status}`);
-                } catch (err) {
-                  appendRunnerLog(`Server ping failed: ${err instanceof Error ? err.message : 'error'}`);
-                }
-              }}>
-                Load Videos
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!runnerLoaded}
-                onClick={() => {
-                  const list = pyVideos ?? [];
-                  const current = list.length ? list[runnerIndex % list.length] : null;
-                  if (!current) return;
-                  const url = `https://www.youtube.com/watch?v=${current.video_id}`;
-                  appendRunnerLog(`Opening: ${current.title} (${current.video_id})`);
-                  window.open(url, '_blank', 'noopener,noreferrer');
-                }}
-              >
-                Start
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={!runnerLoaded}
-                onClick={() => {
-                  const total = (pyVideos ?? []).length || 1;
-                  const next = (runnerIndex + 1) % total;
-                  setRunnerIndex(next);
-                  appendRunnerLog(`Skipped to index ${next + 1}/${total}.`);
-                }}
-              >
-                Skip
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={!runnerLoaded}
-                onClick={async () => {
-                  const list = pyVideos ?? [];
-                  const current = list.length ? list[runnerIndex % list.length] : null;
-                  if (!current) return;
-                  const note = prompt('Issue note…') || '';
-                  if (!note.trim()) return;
-                  try {
-                    await publicApi.runnerLogIssue({ video_id: current.video_id, title: current.title, note });
-                    appendRunnerLog(`Issue marked: "${note}" (${current.video_id})`);
-                  } catch (err) {
-                    appendRunnerLog(`Issue log failed: ${err instanceof Error ? err.message : 'error'}`);
-                  }
-                }}
-              >
-                🚩 Mark Issue
-              </button>
-            </div>
-            {runnerLoaded && (
-              <div className="status-card">
-                <strong>Current</strong>
-                <p style={{ marginTop: 6 }}>
-                  {(() => {
-                    const list = pyVideos ?? [];
-                    const total = list.length || 0;
-                    const current = total ? list[runnerIndex % total] : null;
-                    return total && current
-                      ? `${runnerIndex + 1} / ${total}: ${current.title} (${current.video_id})`
-                      : 'No videos loaded yet.';
-                  })()}
-                </p>
+            <div className="surface" style={{ padding: 18, marginTop: 14 }}>
+              <div className="pill-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+                <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                  Speed (1–20)
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    step={0.25}
+                    value={runnerSpeed}
+                    onChange={(e) => setRunnerSpeed(Number(e.target.value) || 10)}
+                    style={{ width: 90 }}
+                  />
+                </label>
+                <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                  Watch seconds (0 = full)
+                  <input
+                    type="number"
+                    min={0}
+                    max={3600}
+                    step={1}
+                    value={runnerWatchSeconds}
+                    onChange={(e) => setRunnerWatchSeconds(Number(e.target.value) || 0)}
+                    style={{ width: 110 }}
+                  />
+                </label>
+                <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                  <input type="checkbox" checked={runnerShuffle} onChange={(e) => setRunnerShuffle(e.target.checked)} />
+                  Shuffle
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setRunnerLoaded(true);
+                    setRunnerIndex(0);
+                    setRunnerPlayOrder(buildPlayOrder());
+                    appendRunnerLog('Videos loaded.');
+                  }}
+                >
+                  🔄 Load Videos
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!runnerLoaded || runnerRunning}
+                  onClick={async () => {
+                    ensureYouTubeIframeApi();
+                    setRunnerStatus('RUNNING');
+                    setRunnerRunning(true);
+                    setRunnerSessionStarted(0);
+                    setRunnerSessionEnded(0);
+                    setRunnerSessionWallSeconds(0);
+                    setRunnerPlayOrder(buildPlayOrder());
+                    setRunnerServerStatus('—');
+                    await runnerTestServer();
+                    runnerPlayCurrent();
+                  }}
+                >
+                  ▶ Start
+                </button>
+                <button type="button" className="btn btn-secondary" disabled={!runnerRunning} onClick={runnerStopInternal}>
+                  ⏹ Stop
+                </button>
+                <button type="button" className="btn btn-secondary" disabled={!runnerRunning} onClick={runnerAdvance}>
+                  ⏭ Skip
+                </button>
+                <button type="button" className="btn btn-secondary" disabled={!runnerLoaded} onClick={runnerTestServer}>
+                  🔌 Test Server
+                </button>
               </div>
-            )}
-            <div className="surface" style={{ marginTop: 12 }}>
-              <h3 className="dashboard-section-h3">Runner Log</h3>
-              <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12, opacity: 0.9 }}>
-                {runnerLog.length ? runnerLog.join('\n') : '—'}
+
+              <div className="status-card">
+                <strong>Status:</strong> {runnerRunning ? 'Running' : runnerStatus === 'STOPPED' ? 'Stopped' : 'Idle'}
+                <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+                  <div>
+                    <strong>Video:</strong>{' '}
+                    {(() => {
+                      const v = runnerCurrentVideo();
+                      return v ? (
+                        <>
+                          {v.title} (<a href={`https://www.youtube.com/watch?v=${v.video_id}`} target="_blank" rel="noreferrer">{v.video_id}</a>)
+                        </>
+                      ) : '—';
+                    })()}
+                  </div>
+                  <div>
+                    <strong>Index:</strong> {runnerPlayOrder.length ? `${runnerIndex + 1} / ${runnerPlayOrder.length}` : '0 / 0'}
+                  </div>
+                  <div>
+                    <strong>Desired speed:</strong> {runnerDesiredSpeed ?? '—'} | <strong>Actual speed:</strong> {runnerActualSpeed ?? '—'}
+                  </div>
+                  <div>
+                    <strong>Position:</strong> {runnerPosition != null ? `${runnerPosition.toFixed(1)}s` : '—'}
+                  </div>
+                  <div>
+                    <strong>Session:</strong> {runnerSessionStarted} started | {runnerSessionEnded} ended | {Math.floor(runnerSessionWallSeconds)}s watched | Server: {runnerServerStatus}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pill-row" style={{ marginTop: 12 }}>
+                <input
+                  value={runnerIssueNote}
+                  onChange={(e) => setRunnerIssueNote(e.target.value)}
+                  placeholder="Issue note…"
+                  style={{ flex: 1, minWidth: 240 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={!runnerLoaded}
+                  onClick={async () => {
+                    const v = runnerCurrentVideo();
+                    if (!v) return;
+                    const note = runnerIssueNote.trim();
+                    if (!note) return;
+                    try {
+                      await publicApi.runnerLogIssue({
+                        video_id: v.video_id,
+                        title: v.title,
+                        desired_speed: runnerDesiredSpeed,
+                        actual_speed: runnerActualSpeed,
+                        position_seconds: runnerPosition,
+                        note
+                      });
+                      appendRunnerLog(`Issue marked: "${note}" @ ${runnerPosition != null ? runnerPosition.toFixed(1) : '?'}s (${v.video_id})`);
+                      setRunnerIssueNote('');
+                    } catch (err) {
+                      appendRunnerLog(`Issue log failed: ${err instanceof Error ? err.message : 'error'}`);
+                    }
+                  }}
+                >
+                  🚩 Mark Issue
+                </button>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <div style={{ aspectRatio: '16 / 9', width: '100%', borderRadius: 16, overflow: 'hidden', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div id="runner-player" style={{ width: '100%', height: '100%' }} />
+                </div>
+              </div>
+
+              <div className="surface" style={{ marginTop: 12, padding: 16 }}>
+                <h3 className="dashboard-section-h3">Video picker (leave all unchecked to play all)</h3>
+                <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflow: 'auto', paddingRight: 6 }}>
+                  {getRunnerVideos().map((v) => (
+                    <label key={v.video_id} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(runnerPicked[v.video_id])}
+                        onChange={(e) => setRunnerPicked((prev) => ({ ...prev, [v.video_id]: e.target.checked }))}
+                      />
+                      <span style={{ opacity: 0.95 }}>{v.title}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="surface" style={{ marginTop: 12, padding: 16 }}>
+                <h3 className="dashboard-section-h3">Runner Log</h3>
+                <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace', fontSize: 12, opacity: 0.9 }}>
+                  {runnerLog.length ? runnerLog.join('\n') : '—'}
+                </div>
               </div>
             </div>
           </section>
