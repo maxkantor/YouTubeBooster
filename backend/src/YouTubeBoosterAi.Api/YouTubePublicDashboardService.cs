@@ -601,37 +601,54 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
 
     private static IReadOnlyList<string> GenerateTags(string? topic, string videoTitle, IReadOnlyList<string> existingTags)
     {
-        var tags = new List<string>();
-        if (existingTags is not null)
+        var suggested = new List<string>();
+
+        // Build recommended tags first (so Suggested is visibly different from Current)
+        if (!string.IsNullOrWhiteSpace(topic))
         {
-            tags.AddRange(existingTags);
+            foreach (var t in new[] { topic, $"{topic} tutorial", $"{topic} guide", $"how to {topic}", $"{topic} tips", $"{topic} 2024" })
+            {
+                var trimmed = t?.Trim();
+                if (!string.IsNullOrWhiteSpace(trimmed) && suggested.Count < 15)
+                    suggested.Add(trimmed);
+            }
         }
 
         var titleWords = Regex.Matches(videoTitle.ToLowerInvariant(), @"\b\w+\b")
             .Select(m => m.Value)
             .Where(w => w.Length > 4)
             .ToArray();
-        tags.AddRange(titleWords);
-
-        if (!string.IsNullOrWhiteSpace(topic))
+        var suggestedSet = new HashSet<string>(suggested, StringComparer.OrdinalIgnoreCase);
+        foreach (var w in titleWords)
         {
-            tags.AddRange([
-                topic,
-                $"{topic} tutorial",
-                $"{topic} guide",
-                $"how to {topic}",
-                $"{topic} tips",
-                $"{topic} 2024"
-            ]);
+            if (string.IsNullOrWhiteSpace(w)) continue;
+            var t = w.Trim();
+            if (suggestedSet.Count >= 15) break;
+            if (suggestedSet.Add(t))
+                suggested.Add(t);
         }
 
-        tags.AddRange(["youtube", "tutorial", "how to", "guide", "tips"]);
-        return tags
-            .Where(t => !string.IsNullOrWhiteSpace(t))
-            .Select(t => t.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(15)
-            .ToArray();
+        foreach (var g in new[] { "youtube", "tutorial", "how to", "guide", "tips" })
+        {
+            if (suggestedSet.Count >= 15) break;
+            if (suggestedSet.Add(g))
+                suggested.Add(g);
+        }
+
+        // Then add existing tags that are not already in suggested (up to 15 total)
+        if (existingTags is not null)
+        {
+            foreach (var t in existingTags)
+            {
+                if (suggestedSet.Count >= 15) break;
+                var trimmed = t?.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed)) continue;
+                if (suggestedSet.Add(trimmed))
+                    suggested.Add(trimmed);
+            }
+        }
+
+        return suggested.Take(15).ToArray();
     }
 
     private static PublicSeoScoreDto CalculateSeoScore(PublicSeoTitleAnalysisDto titleAnalysis, PublicSeoDescriptionAnalysisDto descriptionAnalysis, int tagCount)

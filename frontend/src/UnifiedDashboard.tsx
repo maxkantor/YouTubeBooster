@@ -43,6 +43,30 @@ function formatNumber(n: number): string {
   return String(n);
 }
 
+/** Copy text to clipboard; works in secure and fallback contexts. Returns true if successful. */
+async function copyToClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function extractYouTubeVideoId(input: string): string {
   const value = (input || '').trim();
   if (!value) return '';
@@ -200,6 +224,8 @@ export function UnifiedDashboard({
   const [pyLoading, setPyLoading] = useState(false);
   const [pyError, setPyError] = useState<string | null>(null);
   const [pyVideosLoading, setPyVideosLoading] = useState(false);
+  /** Id of the last "Copy" button that succeeded, for showing "Copied!" (e.g. "link-abc123"). */
+  const [copyFeedbackId, setCopyFeedbackId] = useState<string | null>(null);
 
   const channelTitle = isDemo
     ? (pyOverview?.channel_info?.title ?? demoData?.channelTitle ?? demoChannelData.channelTitle)
@@ -1304,8 +1330,11 @@ export function UnifiedDashboard({
                 </ul>
 
                 <h3 className="dashboard-section-h3">🏷️ Tags</h3>
-                <p><strong>Current:</strong> {pySeo.current_tags.slice(0, 10).join(', ') || '—'}</p>
-                <p><strong>Suggested:</strong> {pySeo.suggested_tags.slice(0, 10).join(', ') || '—'}</p>
+                <p><strong>Current:</strong> <span className="tags-current">{pySeo.current_tags.length ? pySeo.current_tags.join(', ') : '—'}</span></p>
+                <p><strong>Suggested:</strong> <span className="tags-suggested">{pySeo.suggested_tags.length ? pySeo.suggested_tags.join(', ') : '—'}</span></p>
+                {pySeo.current_tags.length > 0 && pySeo.suggested_tags.length > 0 && (
+                  <p className="tags-hint muted">Suggested list is optimized (topic + title + generic first, 10–15 tags). Replace or merge with current as needed.</p>
+                )}
               </>
             ) : seoResult ? (
               <>
@@ -1427,12 +1456,18 @@ export function UnifiedDashboard({
                           👁️ {formatNumber(v.view_count)} views · 👍 {formatNumber(v.like_count)} likes · 💬 {formatNumber(v.comment_count)} comments · {v.engagement_rate.toFixed(2)}% engagement
                         </div>
                         <div className="pill-row" style={{ marginTop: 10 }}>
-                          <a className="btn btn-secondary" href={v.watch_url} target="_blank" rel="noreferrer">Open on YouTube</a>
-                          <button type="button" className="btn btn-secondary" onClick={async () => { await navigator.clipboard.writeText(v.watch_url); }}>
-                            Copy Link
+                          <a className="btn btn-secondary" href={v.watch_url || `https://www.youtube.com/watch?v=${v.video_id}`} target="_blank" rel="noreferrer">Open on YouTube</a>
+                          <button type="button" className="btn btn-secondary" onClick={async () => {
+                            const url = v.watch_url || `https://www.youtube.com/watch?v=${v.video_id}`;
+                            if (await copyToClipboard(url)) { setCopyFeedbackId(`link-${v.video_id}`); setTimeout(() => setCopyFeedbackId(null), 1500); }
+                          }}>
+                            {copyFeedbackId === `link-${v.video_id}` ? 'Copied!' : 'Copy Link'}
                           </button>
-                          <button type="button" className="btn btn-secondary" onClick={async () => { await navigator.clipboard.writeText(v.share_text); }}>
-                            Copy Share Text
+                          <button type="button" className="btn btn-secondary" onClick={async () => {
+                            const text = v.share_text || `${v.title || 'Video'} ${v.watch_url || `https://www.youtube.com/watch?v=${v.video_id}`}`;
+                            if (await copyToClipboard(text)) { setCopyFeedbackId(`share-${v.video_id}`); setTimeout(() => setCopyFeedbackId(null), 1500); }
+                          }}>
+                            {copyFeedbackId === `share-${v.video_id}` ? 'Copied!' : 'Copy Share Text'}
                           </button>
                           <button type="button" className="btn btn-secondary" onClick={() => handleAnalyzeVideoSeoById(v.video_id)}>
                             Analyze SEO
@@ -1454,12 +1489,18 @@ export function UnifiedDashboard({
                           👁️ {formatNumber(v.view_count)} views · 👍 {formatNumber(v.like_count)} likes · 💬 {formatNumber(v.comment_count)} comments · {v.engagement_rate.toFixed(2)}% engagement
                         </div>
                         <div className="pill-row" style={{ marginTop: 10 }}>
-                          <a className="btn btn-secondary" href={v.watch_url} target="_blank" rel="noreferrer">Open on YouTube</a>
-                          <button type="button" className="btn btn-secondary" onClick={async () => { await navigator.clipboard.writeText(v.watch_url); }}>
-                            Copy Link
+                          <a className="btn btn-secondary" href={v.watch_url || `https://www.youtube.com/watch?v=${v.video_id}`} target="_blank" rel="noreferrer">Open on YouTube</a>
+                          <button type="button" className="btn btn-secondary" onClick={async () => {
+                            const url = v.watch_url || `https://www.youtube.com/watch?v=${v.video_id}`;
+                            if (await copyToClipboard(url)) { setCopyFeedbackId(`link-${v.video_id}`); setTimeout(() => setCopyFeedbackId(null), 1500); }
+                          }}>
+                            {copyFeedbackId === `link-${v.video_id}` ? 'Copied!' : 'Copy Link'}
                           </button>
-                          <button type="button" className="btn btn-secondary" onClick={async () => { await navigator.clipboard.writeText(v.share_text); }}>
-                            Copy Share Text
+                          <button type="button" className="btn btn-secondary" onClick={async () => {
+                            const text = v.share_text || `${v.title || 'Video'} ${v.watch_url || `https://www.youtube.com/watch?v=${v.video_id}`}`;
+                            if (await copyToClipboard(text)) { setCopyFeedbackId(`share-${v.video_id}`); setTimeout(() => setCopyFeedbackId(null), 1500); }
+                          }}>
+                            {copyFeedbackId === `share-${v.video_id}` ? 'Copied!' : 'Copy Share Text'}
                           </button>
                           <button type="button" className="btn btn-secondary" onClick={() => handleAnalyzeVideoSeoById(v.video_id)}>
                             Analyze SEO

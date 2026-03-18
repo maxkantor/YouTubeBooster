@@ -1127,6 +1127,22 @@ textarea {
   font-size: 0.95rem;
 }
 
+/* SEO Tags: Current vs Suggested (wrap long lists, distinguish visually) */
+.tags-current,
+.tags-suggested {
+  display: inline;
+  word-break: break-word;
+}
+.tags-suggested {
+  background: rgba(102, 126, 234, 0.12);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.tags-hint {
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+
 /* ========== Landing page (YouTube Booster) ========== */
 .landing {
   background: var(--landing-bg, #0B0F1F);
@@ -1482,10 +1498,27 @@ textarea {
   background: rgba(0, 0, 0, 0.15);
 }
 
+.landing-insight-channel-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.landing-insight-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), rgba(59, 130, 246, 0.4));
+  flex-shrink: 0;
+}
+
 .landing-insight-header-text {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .landing-insight-panel-kicker {
