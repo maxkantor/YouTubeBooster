@@ -755,13 +755,13 @@ export function UnifiedDashboard({
           </div>
         )}
         {isDemo && demoLoading && (
-          <p className="dashboard-demo-loading">Loading channel data…</p>
+          <p className="dashboard-demo-loading">Analyzing your channel…</p>
         )}
         {isDemo && demoError && (
           <p className="dashboard-demo-error">{demoError}</p>
         )}
         {isDemo && pyLoading && (
-          <p className="dashboard-demo-loading">Loading channel analytics…</p>
+          <p className="dashboard-demo-loading">Analyzing your channel…</p>
         )}
         {isDemo && pyError && (
           <p className="dashboard-demo-error">{pyError}</p>

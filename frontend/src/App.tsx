@@ -1,4 +1,4 @@
-import React, { type ReactNode, useCallback, Suspense, useEffect, useState } from 'react';
+import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
 import { analytics } from './lib/analytics';
@@ -743,6 +743,21 @@ export default function App() {
   const showGlobalNav = location.pathname !== '/' && location.pathname !== '/platform';
 
   const path = location.pathname;
+  const [navScrolled, setNavScrolled] = useState(false);
+  const navScrolledRef = useRef(false);
+  useEffect(() => {
+    const onScroll = () => {
+      const v = window.scrollY > 20;
+      if (v !== navScrolledRef.current) {
+        navScrolledRef.current = v;
+        setNavScrolled(v);
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   const seo = path === '/' ? { title: BRAND_DEFAULT_TITLE, canonical: '/' }
     : path === '/demo' ? { title: `Demo – ${BRAND.name}`, canonical: '/demo' }
     : path === '/dashboard' ? { title: `Dashboard – ${BRAND.name}`, canonical: '/dashboard' }
@@ -758,30 +773,33 @@ export default function App() {
         noindex={'noindex' in seo ? seo.noindex : undefined}
       />
       {showGlobalNav && (
-        <nav className="top-nav landing-top-nav">
-          <Link
-            to="/"
-            className="brand brand-link"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            aria-label={`${BRAND.name} home`}
-          >
-            <span className="brand-word brand-word-1">{BRAND.namePart1}</span>
-            <span className="brand-word brand-word-2">{BRAND.namePart2}</span>
-          </Link>
-          <div className="nav-links">
-            <a href="/#product">Product</a>
-            <a href="/#example-audit">Example Audit</a>
-            <a href="/#pricing">Pricing</a>
-            <a href="/#faq">FAQ</a>
+        <nav className={`top-nav landing-top-nav ${navScrolled ? 'top-nav-scrolled' : ''}`}>
+          <div className="container nav-shell">
+            <Link
+              to="/"
+              className="brand brand-link brand-with-play"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              aria-label={`${BRAND.name} home`}
+            >
+              <span className="brand-play-icon" aria-hidden />
+              <span className="brand-word brand-word-1">{BRAND.namePart1}</span>
+              <span className="brand-word brand-word-2">{BRAND.namePart2}</span>
+            </Link>
+            <div className="nav-links nav-links-center" aria-label="Primary">
+              <a href="/#product">Product</a>
+              <a href="/#example-audit">Example Audit</a>
+              <a href="/#pricing">Pricing</a>
+              <a href="/#faq">FAQ</a>
+            </div>
+            <button
+              className="btn btn-primary nav-cta"
+              onClick={() => {
+                window.location.href = '/#audit';
+              }}
+            >
+              Analyze Your Channel
+            </button>
           </div>
-          <button
-            className="btn btn-primary nav-cta"
-            onClick={() => {
-              window.location.href = '/#audit';
-            }}
-          >
-            Analyze Your Channel
-          </button>
         </nav>
       )}
       <Suspense fallback={

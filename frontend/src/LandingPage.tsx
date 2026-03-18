@@ -144,13 +144,14 @@ export function LandingPage() {
     <div className="landing">
       {/* 1. Header */}
       <header className={`landing-header ${navScrolled ? 'landing-header-scrolled' : ''}`}>
-        <div className="landing-header-inner">
+        <div className="container landing-header-inner nav-shell">
           <Link
             to="/"
-            className="landing-logo landing-logo-premium brand-link"
+            className="landing-logo landing-logo-premium brand-link brand-with-play"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             aria-label={`${BRAND.name} home`}
           >
+            <span className="brand-play-icon" aria-hidden />
             <span className="landing-logo-yt">{BRAND.namePart1}</span>
             <span className="landing-logo-boost">{BRAND.namePart2}</span>
           </Link>
@@ -177,14 +178,31 @@ export function LandingPage() {
 
       {/* 2. Hero */}
       <section className="landing-hero">
-        <div className="landing-hero-grid">
+        <div className="landing-hero-bg" aria-hidden>
+          <div className="landing-hero-bg-vignette" />
+          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-1" />
+          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-2" />
+          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-3" />
+          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-4" />
+          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-5" />
+          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-6" />
+          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-7" />
+          <div className="landing-hero-bg-glow-red" />
+          <div className="landing-hero-bg-lines">
+            <span className="landing-hero-bg-line landing-hero-bg-line-1" />
+            <span className="landing-hero-bg-line landing-hero-bg-line-2" />
+            <span className="landing-hero-bg-line landing-hero-bg-line-3" />
+          </div>
+          <div className="landing-hero-bg-content-overlay" />
+          <div className="landing-hero-bg-audit-overlay" />
+        </div>
+        <div className="container landing-hero-grid">
           <div className="landing-hero-content">
             <h1 className="landing-hero-title">
-              <span className="landing-hero-title-line">Fix Your YouTube Channel</span>
-              <span className="landing-hero-title-line landing-hero-title-second">Get More Views Without Guessing</span>
+              <span className="landing-hero-title-line">Get More Views Without Guessing</span>
             </h1>
             <p className="landing-hero-sub">
-              See exactly what’s stopping your videos from getting clicks—and fix it in minutes.
+              See exactly what’s stopping your growth—and fix it to increase views, subscribers, and watch time in minutes.
             </p>
             <div className="landing-hero-buttons">
               <a href="#audit" className="btn btn-lg landing-hero-cta-primary landing-cta-premium">
@@ -243,6 +261,7 @@ export function LandingPage() {
       {/* 3. Audit entry — two options: default demo (full) vs user channel (preview) */}
       <section className="landing-demo-entry landing-audit-section" id="audit">
         <div className="landing-demo-entry-inner">
+          <span className="landing-section-eyebrow">Free audit</span>
           <h2 className="landing-section-title">Run your free channel audit</h2>
           <p className="landing-section-sub">
             Analyze any YouTube channel and uncover hidden growth opportunities in seconds.
@@ -308,7 +327,8 @@ export function LandingPage() {
 
       {/* 4. Product Dashboard Preview */}
       <section className="landing-section landing-section-alt" id="product">
-        <div className="landing-container">
+        <div className="container landing-container">
+          <span className="landing-section-eyebrow">Dashboard</span>
           <h2 className="landing-section-title">Product dashboard preview</h2>
           <p className="landing-section-sub">
             The same dashboard you get after purchase — metrics and top videos at a glance.
@@ -349,7 +369,7 @@ export function LandingPage() {
 
       {/* 5. AI Insight Preview */}
       <section className="landing-section">
-        <div className="landing-container">
+        <div className="container landing-container">
           <h2 className="landing-section-title">AI Channel Insights</h2>
           <p className="landing-section-sub">
             Sample insights from the audit. Unlock the full plan for actionable recommendations.
@@ -385,7 +405,7 @@ export function LandingPage() {
 
       {/* 6. What The AI Detects */}
       <section className="landing-section landing-section-alt">
-        <div className="landing-container">
+        <div className="container landing-container">
           <h2 className="landing-section-title">What the AI detects</h2>
           <p className="landing-section-sub">
             Six areas the audit analyzes to give you a clear growth path.
@@ -403,7 +423,7 @@ export function LandingPage() {
 
       {/* 7. Example Channel Audit */}
       <section className="landing-section" id="example-audit">
-        <div className="landing-container">
+        <div className="container landing-container">
           <h2 className="landing-section-title">Example channel audit</h2>
           <p className="landing-section-sub">
             A sample growth score and report. Your audit will look like this.
@@ -446,7 +466,7 @@ export function LandingPage() {
 
       {/* 8. Why Creators Buy */}
       <section className="landing-section landing-section-alt">
-        <div className="landing-container">
+        <div className="container landing-container">
           <h2 className="landing-section-title">Why creators buy this</h2>
           <div className="landing-why-grid">
             <div className="landing-why-card">
@@ -467,7 +487,8 @@ export function LandingPage() {
 
       {/* 9. Pricing */}
       <section className="landing-section landing-pricing-section" id="pricing">
-        <div className="landing-container">
+        <div className="container landing-container">
+          <span className="landing-section-eyebrow">One-time unlock</span>
           <h2 className="landing-section-title">Unlock the Full AI Growth Report</h2>
           <div className="landing-pricing-card">
             <div className="landing-pricing-price">49.99 USD <span className="landing-pricing-period">one-time</span></div>
@@ -507,7 +528,7 @@ export function LandingPage() {
 
       {/* 10. FAQ */}
       <section className="landing-section landing-section-alt" id="faq">
-        <div className="landing-container landing-faq-container">
+        <div className="container landing-container landing-faq-container">
           <h2 className="landing-section-title">FAQ</h2>
           <div className="landing-faq-list">
             {FAQ_ITEMS.map((item, i) => (
@@ -530,7 +551,7 @@ export function LandingPage() {
 
       {/* 11. Final CTA */}
       <section className="landing-section landing-cta-section">
-        <div className="landing-container">
+        <div className="container landing-container">
           <h2 className="landing-cta-title">Stop guessing what the algorithm wants.</h2>
           <p className="landing-cta-sub">Run your AI channel audit now.</p>
           <a href="#audit" className="btn btn-primary btn-lg landing-cta-btn">
