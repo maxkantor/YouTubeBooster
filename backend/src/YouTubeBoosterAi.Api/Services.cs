@@ -84,6 +84,7 @@ public sealed class StripeCheckoutService : ICheckoutService
         Stripe.StripeConfiguration.ApiKey = stripeSecret;
 
         var sessionService = new Stripe.Checkout.SessionService();
+        var planCode = request.PlanCode ?? request.PriceKey ?? settings.StripePriceLookupKey;
         var session = await sessionService.CreateAsync(new Stripe.Checkout.SessionCreateOptions
         {
             Mode = "payment",
@@ -95,7 +96,15 @@ public sealed class StripeCheckoutService : ICheckoutService
             {
                 ["channelInput"] = request.ChannelInput,
                 ["email"] = request.Email,
-                ["priceVersion"] = request.PriceKey ?? settings.StripePriceLookupKey
+                ["priceVersion"] = request.PriceKey ?? settings.StripePriceLookupKey,
+                ["planCode"] = planCode,
+                ["userId"] = request.UserId ?? string.Empty,
+                ["cognitoSub"] = request.CognitoSub ?? string.Empty,
+                ["accountEmail"] = request.AccountEmail ?? request.Email,
+                ["utmSource"] = request.UtmSource ?? string.Empty,
+                ["utmMedium"] = request.UtmMedium ?? string.Empty,
+                ["utmCampaign"] = request.UtmCampaign ?? string.Empty,
+                ["referrer"] = request.Referrer ?? string.Empty
             },
             LineItems =
             [
@@ -150,16 +159,80 @@ public sealed class StripeCheckoutService : ICheckoutService
             return;
         }
 
-        var email = session.CustomerEmail ?? session.CustomerDetails?.Email ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(email))
+        var metadata = session.Metadata ?? new Dictionary<string, string>();
+        var userId = metadata.GetValueOrDefault("userId") ?? string.Empty;
+        var cognitoSub = metadata.GetValueOrDefault("cognitoSub") ?? string.Empty;
+        var accountEmail = metadata.GetValueOrDefault("accountEmail")
+                           ?? metadata.GetValueOrDefault("email")
+                           ?? session.CustomerEmail
+                           ?? session.CustomerDetails?.Email
+                           ?? string.Empty;
+
+        UserAccount? user = null;
+        if (!string.IsNullOrWhiteSpace(cognitoSub))
         {
+            user = await _appDataStore.GetUserByCognitoSubAsync(cognitoSub, cancellationToken);
+        }
+        if (user is null && !string.IsNullOrWhiteSpace(userId))
+        {
+            user = await _appDataStore.GetUserByIdAsync(userId, cancellationToken);
+        }
+        if (user is null && !string.IsNullOrWhiteSpace(accountEmail))
+        {
+            // Recovery path: do NOT rely on Stripe email for entitlements in normal flow.
+            user = await _appDataStore.GetUserByEmailAsync(accountEmail, cancellationToken);
+        }
+        if (user is null)
+        {
+            await _appDataStore.TrackEventAsync("stripe_webhook_user_unresolved", session.Id, new Dictionary<string, string?>
+            {
+                ["checkoutSessionId"] = session.Id,
+                ["accountEmail"] = accountEmail,
+                ["stripeEmail"] = session.CustomerEmail ?? session.CustomerDetails?.Email,
+                ["userId"] = userId,
+                ["cognitoSub"] = cognitoSub
+            }, cancellationToken);
             return;
         }
 
-        var user = await _appDataStore.UpsertPurchasedUserAsync(
-            email,
-            session.Metadata?.GetValueOrDefault("channelInput"),
-            cancellationToken);
+        var stripeEmail = session.CustomerEmail ?? session.CustomerDetails?.Email;
+        if (!string.IsNullOrWhiteSpace(stripeEmail) && !string.Equals(stripeEmail.Trim(), user.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            await _appDataStore.TrackEventAsync("stripe_email_mismatch", user.UserId, new Dictionary<string, string?>
+            {
+                ["accountEmail"] = user.Email,
+                ["stripeEmail"] = stripeEmail,
+                ["checkoutSessionId"] = session.Id
+            }, cancellationToken);
+        }
+
+        // Idempotency: skip if payment already recorded.
+        var existingPayment = await _appDataStore.GetPaymentByCheckoutSessionIdAsync(session.Id, cancellationToken);
+        if (existingPayment is null)
+        {
+            var payment = new PaymentRecord(
+                PaymentId: $"pay_{Guid.NewGuid():N}",
+                UserId: user.UserId,
+                AccountEmail: user.Email,
+                StripeCustomerId: session.CustomerId,
+                StripeCheckoutSessionId: session.Id,
+                StripePaymentIntentId: session.PaymentIntentId,
+                StripeSubscriptionId: null,
+                StripeEmail: stripeEmail,
+                Amount: (session.AmountTotal ?? 0) / 100m,
+                Currency: (session.Currency ?? "usd").ToUpperInvariant(),
+                Status: "completed",
+                PlanCode: metadata.GetValueOrDefault("planCode") ?? "premium",
+                PaymentMethodBrand: null,
+                PaymentMethodLast4: null,
+                BillingCountry: session.CustomerDetails?.Address?.Country,
+                BillingName: session.CustomerDetails?.Name,
+                ReceiptUrl: null,
+                CreatedAt: DateTimeOffset.UtcNow,
+                UpdatedAt: DateTimeOffset.UtcNow
+            );
+            await _appDataStore.SavePaymentAsync(payment, cancellationToken);
+        }
 
         var record = new PurchaseRecord(
             PurchaseId: session.Id,
@@ -173,6 +246,21 @@ public sealed class StripeCheckoutService : ICheckoutService
         );
 
         await _appDataStore.SavePurchaseAsync(record, cancellationToken);
+
+        var entitlement = new EntitlementRecord(
+            EntitlementId: $"ent_{session.Id}",
+            UserId: user.UserId,
+            AccessType: "premium",
+            Status: "active",
+            Source: "stripe",
+            GrantedAt: DateTimeOffset.UtcNow,
+            ExpiresAt: null,
+            PaymentId: session.Id,
+            Notes: stripeEmail,
+            CreatedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow
+        );
+        await _appDataStore.SaveEntitlementAsync(entitlement, cancellationToken);
     }
 }
 

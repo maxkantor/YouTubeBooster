@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { analytics } from './lib/analytics';
+import { useAuth } from './AuthContext';
 import type { CheckoutSession } from './types';
 
 const BENEFITS = [
@@ -24,18 +26,22 @@ export function PaywallModal({
   onCreateCheckout: (channelInput: string, email: string) => Promise<CheckoutSession>;
   isLoading: boolean;
 }) {
-  const [email, setEmail] = useState('');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { session: authSession } = useAuth();
   const [error, setError] = useState('');
 
   async function handleUnlock() {
-    if (!email.trim()) {
-      setError('Enter your email to unlock.');
+    if (!authSession) {
+      const returnTo = `${location.pathname}${location.search}`;
+      navigate(`/auth/signup?returnTo=${encodeURIComponent(returnTo)}&channel=${encodeURIComponent(channelInput ?? '')}&plan=premium`);
+      onClose();
       return;
     }
     setError('');
     try {
       analytics.checkoutStarted();
-      const session = await onCreateCheckout(channelInput ?? '', email);
+      const session = await onCreateCheckout(channelInput ?? '', '');
       window.location.href = session.checkoutUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout.');
@@ -61,20 +67,12 @@ export function PaywallModal({
         </ul>
         <p className="paywall-price">$49.99 one-time</p>
         <div className="input-stack">
-          <input
-            type="email"
-            placeholder="Your email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+          <p className="muted" style={{ margin: 0 }}>
+            Your purchase unlocks the account you’re signed into (works across all devices).
+          </p>
           {error && <p className="error-text">{error}</p>}
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleUnlock}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Starting checkout…' : 'Unlock Full Report'}
+          <button type="button" className="btn btn-primary" onClick={handleUnlock} disabled={isLoading}>
+            {authSession ? (isLoading ? 'Starting checkout…' : 'Unlock Full Report') : 'Sign in to unlock'}
           </button>
         </div>
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>

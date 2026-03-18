@@ -58,6 +58,12 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+async function fetchJsonAuthed<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const hdrs = new Headers(init?.headers || {});
+  hdrs.set('Authorization', `Bearer ${token}`);
+  return fetchJson<T>(path, { ...init, headers: hdrs });
+}
+
 export const publicApi = {
   async runDemo(channelInput: string): Promise<DemoPreview> {
     const data = await fetchJson<DemoPreview & { gatedInsights?: string[] }>('/api/public/demo', {
@@ -123,6 +129,43 @@ export const publicApi = {
         cancelUrl: `${window.location.origin}/dashboard`
       })
     });
+  }
+};
+
+export const meApi = {
+  async getMe(idToken: string) {
+    return fetchJsonAuthed<{ userId: string; email: string; purchased: boolean; onboardingCompleted: boolean; channelUrl: string | null; accessStatus: string }>(
+      '/api/me',
+      idToken
+    );
+  },
+  async getAccessStatus(idToken: string) {
+    return fetchJsonAuthed<{ userId: string; premium: boolean; accessStatus: string }>('/api/me/access-status', idToken);
+  },
+  async getEntitlements(idToken: string) {
+    return fetchJsonAuthed<{ userId: string; entitlements: any[] }>('/api/me/entitlements', idToken);
+  }
+};
+
+export const billingApi = {
+  async createCheckoutSession(idToken: string, channelInput: string, planCode = 'premium'): Promise<CheckoutSession> {
+    return fetchJsonAuthed<CheckoutSession>('/api/billing/create-checkout-session', idToken, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: 'account', // server overrides; included for backward compat shape
+        channelInput,
+        priceKey: planCode,
+        planCode,
+        successUrl: `${window.location.origin}/checkout/success`,
+        cancelUrl: `${window.location.origin}/#pricing`
+      })
+    });
+  }
+};
+
+export const premiumApi = {
+  async loadDashboardOverview(idToken: string): Promise<DashboardOverview> {
+    return fetchJsonAuthed<DashboardOverview>('/api/premium/dashboard/overview', idToken);
   }
 };
 

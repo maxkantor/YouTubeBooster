@@ -1,0 +1,45 @@
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { AuthSession } from './lib/auth';
+import { getSession as cognitoGetSession, signOut as cognitoSignOut } from './lib/auth';
+
+type AuthState = {
+  loading: boolean;
+  session: AuthSession | null;
+  refresh: () => Promise<void>;
+  signOut: () => void;
+};
+
+const Ctx = createContext<AuthState | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<AuthSession | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const s = await cognitoGetSession();
+      setSession(s);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const signOut = useCallback(() => {
+    cognitoSignOut();
+    setSession(null);
+  }, []);
+
+  const value = useMemo<AuthState>(() => ({ loading, session, refresh, signOut }), [loading, session, refresh, signOut]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useAuth() {
+  const v = useContext(Ctx);
+  if (!v) throw new Error('useAuth must be used within AuthProvider');
+  return v;
+}
+

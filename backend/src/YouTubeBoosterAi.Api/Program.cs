@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using Amazon.SimpleEmail;
 using Amazon.Lambda.AspNetCoreServer.Hosting;
 using YouTubeBoosterAi.Api;
 
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddApplicationInfrastructure(builder.Configuration);
+builder.Services.AddCognitoJwtAuth(builder.Configuration);
 
 builder.Services.AddCors(options =>
 {
@@ -59,6 +61,8 @@ var app = builder.Build();
 app.UseCors("default");
 app.UseHttpsRedirection();
 app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "youtube-booster-ai-api" }));
 
@@ -162,6 +166,105 @@ webhookApi.MapPost("/stripe", async (HttpRequest request, ICheckoutService servi
 
     await service.HandleStripeWebhookAsync(payload, signature, cancellationToken);
     return Results.Ok(new { received = true });
+});
+
+// Authenticated account endpoints (Cognito JWT Bearer)
+var meApi = app.MapGroup("/api/me").RequireAuthorization();
+meApi.MapGet("", async (HttpContext httpContext, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var principal = httpContext.User;
+    var sub = principal.FindFirst("sub")?.Value;
+    var email = principal.FindFirst("email")?.Value ?? principal.FindFirst("cognito:username")?.Value;
+    var emailVerified = string.Equals(principal.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+    if (string.IsNullOrWhiteSpace(sub) || string.IsNullOrWhiteSpace(email))
+    {
+        return Results.Unauthorized();
+    }
+
+    var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
+    await appDataStore.RecordUserLoginAsync(user.UserId, DateTimeOffset.UtcNow, cancellationToken);
+    return Results.Ok(ToSessionUserDto(user));
+});
+
+meApi.MapGet("/entitlements", async (HttpContext httpContext, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var sub = httpContext.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
+    var user = await appDataStore.GetUserByCognitoSubAsync(sub, cancellationToken);
+    if (user is null) return Results.NotFound();
+    var entitlements = await appDataStore.ListEntitlementsByUserAsync(user.UserId, cancellationToken);
+    return Results.Ok(new
+    {
+        userId = user.UserId,
+        entitlements = entitlements.Select(e => new
+        {
+            entitlementId = e.EntitlementId,
+            accessType = e.AccessType,
+            status = e.Status,
+            source = e.Source,
+            grantedAt = e.GrantedAt.ToString("O"),
+            expiresAt = e.ExpiresAt?.ToString("O"),
+            paymentId = e.PaymentId,
+            notes = e.Notes
+        })
+    });
+});
+
+meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var sub = httpContext.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
+    var user = await appDataStore.GetUserByCognitoSubAsync(sub, cancellationToken);
+    if (user is null) return Results.NotFound();
+    var hasPremium = await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
+                     || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
+    return Results.Ok(new { userId = user.UserId, premium = hasPremium, accessStatus = hasPremium ? "active" : "free" });
+});
+
+var billingApi = app.MapGroup("/api/billing").RequireAuthorization();
+billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionRequest request, HttpContext httpContext, ICheckoutService service, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var sub = httpContext.User.FindFirst("sub")?.Value;
+    var email = httpContext.User.FindFirst("email")?.Value ?? string.Empty;
+    var emailVerified = string.Equals(httpContext.User.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+    if (string.IsNullOrWhiteSpace(sub) || string.IsNullOrWhiteSpace(email)) return Results.Unauthorized();
+    var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
+
+    // Do not trust client for identity; override request email with account email for metadata.
+    var safeReq = request with
+    {
+        Email = user.Email,
+        UserId = user.UserId,
+        CognitoSub = user.CognitoSub ?? sub,
+        AccountEmail = user.Email,
+        PlanCode = request.PlanCode ?? request.PriceKey ?? "premium",
+        Referrer = request.Referrer ?? httpContext.Request.Headers.Referer.ToString()
+    };
+    var session = await service.CreateSessionAsync(safeReq, cancellationToken);
+    return Results.Ok(session);
+});
+
+var premiumApi = app.MapGroup("/api/premium").RequireAuthorization();
+premiumApi.AddEndpointFilter(async (context, next) =>
+{
+    var httpContext = context.HttpContext;
+    var sub = httpContext.User.FindFirst("sub")?.Value;
+    if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
+    var store = httpContext.RequestServices.GetRequiredService<IAppDataStore>();
+    var user = await store.GetUserByCognitoSubAsync(sub, httpContext.RequestAborted);
+    if (user is null) return Results.Unauthorized();
+    var hasPremium = await store.UserHasActiveEntitlementAsync(user.UserId, "premium", httpContext.RequestAborted)
+                     || await store.UserHasActiveEntitlementAsync(user.UserId, "lifetime", httpContext.RequestAborted);
+    if (!hasPremium) return Results.Forbid();
+    httpContext.Items["authenticatedUser"] = user;
+    return await next(context);
+});
+
+premiumApi.MapGet("/dashboard/overview", async (HttpContext httpContext, IUserDashboardService service, CancellationToken cancellationToken) =>
+{
+    var user = GetAuthenticatedUser(httpContext);
+    var result = await service.GetOverviewAsync(user.UserId, cancellationToken);
+    return Results.Ok(result);
 });
 
 var authApi = app.MapGroup("/api/auth");

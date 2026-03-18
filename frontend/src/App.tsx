@@ -2,9 +2,12 @@ import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useSta
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
 import { analytics } from './lib/analytics';
-import { adminApi, authApi, publicApi, userApi } from './lib/api';
+import { adminApi, authApi, billingApi, meApi, premiumApi, publicApi, userApi } from './lib/api';
 import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
 import { SeoHead } from './SeoHead';
+import { AuthProvider } from './AuthContext';
+import { ForgotPasswordPage, SignInPage, SignUpPage } from './AuthPages';
+import { useAuth } from './AuthContext';
 import type {
   AdminSessionStatus,
   DashboardOverview,
@@ -22,6 +25,8 @@ const AdminCrmApp = React.lazy(() => import('./admin/AdminCrmApp'));
 /** Demo dashboard at /demo — full demo (default channel) vs preview (user channel with blur). */
 function DemoDashboardView() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { session: authSession } = useAuth();
   const searchParams = new URLSearchParams(location.search);
   const channelFromState = (location.state as { channelInput?: string } | null)?.channelInput;
   const channelFromQuery = searchParams.get('channel');
@@ -85,7 +90,14 @@ function DemoDashboardView() {
       channelInput={channelInput}
       demoLoading={demoLoading}
       demoError={demoError}
-      onCreateCheckout={async (ch, email) => publicApi.createCheckoutSession(ch || channelInput, email)}
+      onCreateCheckout={async (ch, _email) => {
+        const channel = ch || channelInput;
+        if (!authSession) {
+          navigate(`/auth/signup?returnTo=${encodeURIComponent(`/demo?channel=${encodeURIComponent(channel)}`)}&channel=${encodeURIComponent(channel)}&plan=premium`);
+          return { checkoutUrl: '/auth/signup', sessionId: 'auth_required', amount: 0, currency: 'USD' };
+        }
+        return billingApi.createCheckoutSession(authSession.idToken, channel, 'premium');
+      }}
     />
   );
 }
@@ -168,103 +180,77 @@ function CheckoutSuccessPage({
 }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [email, setEmail] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const { session: authSession } = useAuth();
+  const [status, setStatus] = useState<'idle' | 'checking' | 'active' | 'error'>('idle');
   const [error, setError] = useState('');
-  const [magicLink, setMagicLink] = useState<MagicLinkLoginResponse | null>(null);
 
   useEffect(() => {
-    if (!sessionLoading && userSession.authenticated && userSession.user) {
-      navigate(userSession.user.onboardingCompleted ? '/dashboard' : '/app/onboarding', { replace: true });
-    }
-  }, [navigate, sessionLoading, userSession]);
-
-  useEffect(() => {
-    const token = searchParams.get('token');
-    if (!token) {
-      return;
-    }
-    const magicToken = token;
-
+    if (!authSession) return;
+    const token = authSession.idToken;
     let cancelled = false;
-    async function verifyToken() {
-      setSubmitting(true);
+    async function poll() {
+      setStatus('checking');
       setError('');
-      try {
-        await authApi.verifyMagicLink(magicToken);
-        const session = await refreshUserSession();
-        if (!cancelled && session.authenticated && session.user) {
-          analytics.purchaseCompleted();
-          navigate(session.user.onboardingCompleted ? '/dashboard' : '/app/onboarding', { replace: true });
+      const start = Date.now();
+      while (!cancelled && Date.now() - start < 30_000) {
+        try {
+          const data = await meApi.getAccessStatus(token);
+          if (data.premium) {
+            analytics.purchaseCompleted();
+            setStatus('active');
+            navigate('/dashboard', { replace: true });
+            return;
+          }
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Could not confirm access.');
+          setStatus('error');
+          return;
         }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not verify magic link.');
-        }
-      } finally {
-        if (!cancelled) {
-          setSubmitting(false);
-        }
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+      if (!cancelled) {
+        setError('Still confirming your access. Refresh in a moment.');
+        setStatus('error');
       }
     }
-
-    verifyToken();
+    void poll();
     return () => {
       cancelled = true;
     };
-  }, [navigate, refreshUserSession, searchParams]);
-
-  async function handleSendMagicLink() {
-    if (!email) {
-      setError('Enter the purchase email you used at checkout.');
-      return;
-    }
-
-    setSubmitting(true);
-    setError('');
-    try {
-      const response = await authApi.requestMagicLink(email, '/checkout/success');
-      setMagicLink(response);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send your magic link.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  }, [authSession, navigate]);
 
   return (
     <div className="page narrow-page">
       <div className="surface">
-        <div className="locked-label">Purchased access</div>
-        <h1>Complete your sign-in</h1>
-        <p>
-          {searchParams.get('mockCheckout')
-            ? 'Mock checkout completed. Enter your purchase email to continue.'
-            : 'Use your purchase email to receive a secure magic link and continue into onboarding.'}
+        <div className="locked-label">Checkout</div>
+        <h1>Confirming your access…</h1>
+        <p className="muted">
+          Your purchase unlocks the account you’re signed into. This page will update as soon as Stripe confirms payment.
         </p>
-        <div className="input-stack">
-          <input
-            type="email"
-            placeholder="Purchase email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <button className="btn btn-primary" onClick={handleSendMagicLink} disabled={submitting}>
-            {submitting ? 'Sending link...' : 'Email Me a Sign-in Link'}
-          </button>
-        </div>
-        {error && <p className="error-text">{error}</p>}
-        {magicLink && (
-          <div className="status-card">
-            <strong>{magicLink.message}</strong>
-            <p>Delivery mode: {magicLink.delivery}</p>
-            {magicLink.magicLinkUrl && (
-              <a className="btn btn-secondary" href={magicLink.magicLinkUrl}>
-                Open Magic Link
-              </a>
-            )}
+        {!authSession ? (
+          <div className="status-card" style={{ marginTop: 16 }}>
+            <strong>Sign in to finish</strong>
+            <p className="muted" style={{ marginTop: 8 }}>
+              You must be signed in to attach this purchase to your account.
+            </p>
+            <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+              <Link className="btn btn-primary" to={`/auth/signin?returnTo=${encodeURIComponent('/checkout/success')}`}>
+                Sign in
+              </Link>
+              <Link className="btn btn-secondary" to={`/auth/signup?returnTo=${encodeURIComponent('/checkout/success')}`}>
+                Create account
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="status-card" style={{ marginTop: 16 }}>
+            <strong>{status === 'active' ? 'Full access active' : status === 'checking' ? 'Checking Stripe confirmation…' : 'Waiting for confirmation'}</strong>
+            <p className="muted" style={{ marginTop: 8 }}>
+              Session: {searchParams.get('session_id') ?? '—'}
+            </p>
           </div>
         )}
+        {error && <p className="error-text" style={{ marginTop: 14 }}>{error}</p>}
       </div>
     </div>
   );
@@ -278,6 +264,7 @@ function DashboardPage({
   refreshUserSession: () => Promise<UserSessionStatus>;
 }) {
   const navigate = useNavigate();
+  const { session: authSession } = useAuth();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -286,7 +273,9 @@ function DashboardPage({
     let cancelled = false;
     async function loadOverview() {
       try {
-        const data = await userApi.loadDashboardOverview();
+        const data = authSession
+          ? await premiumApi.loadDashboardOverview(authSession.idToken)
+          : await userApi.loadDashboardOverview();
         if (!cancelled) {
           setOverview(data);
         }
@@ -334,7 +323,14 @@ function DashboardPage({
       dashboardOverview={overview ?? null}
       channelInput={userSession.user?.channelUrl ?? overview?.channelTitle ?? ''}
       userEmail={userSession.user?.email}
-      onCreateCheckout={async (_, email) => publicApi.createCheckoutSession(channelTitle, email)}
+      onCreateCheckout={async (ch, _email) => {
+        const channel = ch || userSession.user?.channelUrl || channelTitle;
+        if (!authSession) {
+          navigate(`/auth/signup?returnTo=${encodeURIComponent('/dashboard')}&channel=${encodeURIComponent(channel)}&plan=premium`);
+          return { checkoutUrl: '/auth/signup', sessionId: 'auth_required', amount: 0, currency: 'USD' };
+        }
+        return billingApi.createCheckoutSession(authSession.idToken, channel, 'premium');
+      }}
       onSignOut={handleSignOut}
     />
   );
@@ -589,7 +585,7 @@ function AdminLoginPage({
   );
 }
 
-export default function App() {
+function AppInner() {
   const [userSession, setUserSession] = useState<UserSessionStatus>({ authenticated: false, user: null });
   const [adminSession, setAdminSession] = useState<AdminSessionStatus>({ authenticated: false, email: null });
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -719,6 +715,9 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/demo" element={<DemoDashboardView />} />
+        <Route path="/auth/signin" element={<SignInPage />} />
+        <Route path="/auth/signup" element={<SignUpPage />} />
+        <Route path="/auth/forgot" element={<ForgotPasswordPage />} />
         <Route
           path="/dashboard"
           element={
@@ -787,5 +786,13 @@ export default function App() {
         </footer>
       )}
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }

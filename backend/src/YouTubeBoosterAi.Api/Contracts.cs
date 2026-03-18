@@ -26,7 +26,15 @@ public sealed record CreateCheckoutSessionRequest(
     string ChannelInput,
     string? PriceKey,
     string SuccessUrl,
-    string CancelUrl
+    string CancelUrl,
+    string? UserId = null,
+    string? CognitoSub = null,
+    string? AccountEmail = null,
+    string? PlanCode = null,
+    string? UtmSource = null,
+    string? UtmMedium = null,
+    string? UtmCampaign = null,
+    string? Referrer = null
 );
 
 public sealed record CheckoutSessionResponse(string CheckoutUrl, string SessionId, decimal Amount, string Currency);

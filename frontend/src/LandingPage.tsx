@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
-import { publicApi } from './lib/api';
+import { billingApi, publicApi } from './lib/api';
+import { useAuth } from './AuthContext';
 
 const DEMO_STORAGE_KEY = 'ybai_demo';
 
@@ -51,6 +52,7 @@ const PLATFORM_URL = 'https://mk-ai-performance.com';
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const { session: authSession, signOut: authSignOut } = useAuth();
   const [demoInput, setDemoInput] = useState('');
   const [demoError, setDemoError] = useState('');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -131,8 +133,12 @@ export function LandingPage() {
       if (!channelInput && storedDemo) channelInput = storedDemo;
       setPricingLoading(true);
       setPricingError('');
-      const session = await publicApi.createCheckoutSession(channelInput || email, email);
-      window.location.href = session.checkoutUrl;
+      if (!authSession) {
+        navigate(`/auth/signup?returnTo=${encodeURIComponent('/#pricing')}&channel=${encodeURIComponent(channelInput || '')}&plan=premium`);
+        return;
+      }
+      const checkout = await billingApi.createCheckoutSession(authSession.idToken, channelInput || email, 'premium');
+      window.location.href = checkout.checkoutUrl;
     } catch (err) {
       setPricingError(err instanceof Error ? err.message : 'Could not start checkout.');
     } finally {
@@ -169,9 +175,28 @@ export function LandingPage() {
               FAQ
             </a>
           </nav>
-          <a href="/#audit" className="landing-nav-cta">
-            Analyze Your Channel
-          </a>
+          <div className="landing-nav-actions">
+            {authSession ? (
+              <>
+                <span className="landing-nav-user">{authSession.email ?? 'Account'}</span>
+                <button type="button" className="landing-nav-link landing-nav-signout" onClick={authSignOut}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link className="landing-nav-link landing-nav-auth" to="/auth/signin">
+                  Sign In
+                </Link>
+                <Link className="landing-nav-link landing-nav-auth landing-nav-auth-strong" to="/auth/signup">
+                  Sign Up
+                </Link>
+              </>
+            )}
+            <a href="/#audit" className="landing-nav-cta landing-nav-cta-primary">
+              Analyze Channel
+            </a>
+          </div>
         </div>
       </header>
       <div className="landing-header-rule" aria-hidden />

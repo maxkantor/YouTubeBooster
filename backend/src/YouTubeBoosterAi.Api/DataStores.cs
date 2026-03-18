@@ -12,6 +12,15 @@ public interface IAppDataStore
     Task<UserAccount> UpsertPurchasedUserAsync(string email, string? channelInput, CancellationToken cancellationToken);
     Task<UserAccount?> GetUserByEmailAsync(string email, CancellationToken cancellationToken);
     Task<UserAccount?> GetUserByIdAsync(string userId, CancellationToken cancellationToken);
+    Task<UserAccount> UpsertCognitoUserAsync(string cognitoSub, string email, bool emailVerified, string? signupSource, CancellationToken cancellationToken);
+    Task<UserAccount?> GetUserByCognitoSubAsync(string cognitoSub, CancellationToken cancellationToken);
+    Task RecordUserLoginAsync(string userId, DateTimeOffset when, CancellationToken cancellationToken);
+    Task SavePaymentAsync(PaymentRecord payment, CancellationToken cancellationToken);
+    Task<PaymentRecord?> GetPaymentByCheckoutSessionIdAsync(string stripeCheckoutSessionId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PaymentRecord>> ListPaymentsByUserAsync(string userId, CancellationToken cancellationToken);
+    Task SaveEntitlementAsync(EntitlementRecord entitlement, CancellationToken cancellationToken);
+    Task<IReadOnlyList<EntitlementRecord>> ListEntitlementsByUserAsync(string userId, CancellationToken cancellationToken);
+    Task<bool> UserHasActiveEntitlementAsync(string userId, string accessType, CancellationToken cancellationToken);
     Task SaveMagicLinkTokenAsync(MagicLinkTokenRecord tokenRecord, CancellationToken cancellationToken);
     Task<MagicLinkTokenRecord?> ConsumeMagicLinkTokenAsync(string token, CancellationToken cancellationToken);
     Task SaveUserSessionAsync(UserSessionRecord sessionRecord, CancellationToken cancellationToken);
@@ -62,12 +71,16 @@ public sealed class InMemoryAppDataStore : IAppDataStore
 {
     private readonly List<DemoAnalysisResponse> _demos = [];
     private readonly List<PurchaseRecord> _purchases = [];
+    private readonly List<PaymentRecord> _payments = [];
+    private readonly Dictionary<string, PaymentRecord> _paymentsByCheckoutSessionId = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<EntitlementRecord>> _entitlementsByUserId = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ActivityFeedItem> _activity = [];
     private readonly List<string> _supportTickets = [];
     private readonly Dictionary<string, SupportTicketRequest> _supportTicketsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<AdminSupportMessageDto>> _supportThreads = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UserAccount> _usersById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _userIdsByEmail = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _userIdsByCognitoSub = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, MagicLinkTokenRecord> _magicLinkTokens = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UserSessionRecord> _userSessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AdminSessionRecord> _adminSessions = new(StringComparer.OrdinalIgnoreCase);
@@ -125,12 +138,15 @@ public sealed class InMemoryAppDataStore : IAppDataStore
         var existing = _usersById.GetValueOrDefault(userId);
         var user = new UserAccount(
             UserId: userId,
+            CognitoSub: existing?.CognitoSub,
             Email: normalizedEmail,
+            EmailVerified: existing?.EmailVerified ?? false,
             Purchased: true,
             OnboardingCompleted: existing?.OnboardingCompleted ?? false,
             AccessStatus: "purchased",
             ChannelUrl: existing?.ChannelUrl ?? channelInput,
             GrowthGoal: existing?.GrowthGoal,
+            LastLoginAt: existing?.LastLoginAt,
             CreatedAt: existing?.CreatedAt ?? now,
             UpdatedAt: now
         );
@@ -154,6 +170,127 @@ public sealed class InMemoryAppDataStore : IAppDataStore
     {
         _usersById.TryGetValue(userId, out var user);
         return Task.FromResult<UserAccount?>(user);
+    }
+
+    public Task<UserAccount> UpsertCognitoUserAsync(string cognitoSub, string email, bool emailVerified, string? signupSource, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = NormalizeEmail(email);
+        if (!_userIdsByCognitoSub.TryGetValue(cognitoSub, out var userId))
+        {
+            // Prefer reusing an existing email user if present (migration path from email-based purchase).
+            if (_userIdsByEmail.TryGetValue(normalizedEmail, out var existingUserId))
+            {
+                userId = existingUserId;
+            }
+            else
+            {
+                userId = $"user_{Guid.NewGuid():N}";
+                _userIdsByEmail[normalizedEmail] = userId;
+            }
+            _userIdsByCognitoSub[cognitoSub] = userId;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var existing = _usersById.GetValueOrDefault(userId);
+        var purchased = existing?.Purchased ?? false;
+        var user = new UserAccount(
+            UserId: userId,
+            CognitoSub: cognitoSub,
+            Email: normalizedEmail,
+            EmailVerified: emailVerified,
+            Purchased: purchased,
+            OnboardingCompleted: existing?.OnboardingCompleted ?? false,
+            AccessStatus: purchased ? "entitled" : (existing?.AccessStatus ?? "free"),
+            ChannelUrl: existing?.ChannelUrl,
+            GrowthGoal: existing?.GrowthGoal,
+            LastLoginAt: now,
+            CreatedAt: existing?.CreatedAt ?? now,
+            UpdatedAt: now
+        );
+        _usersById[userId] = user;
+        return Task.FromResult(user);
+    }
+
+    public Task<UserAccount?> GetUserByCognitoSubAsync(string cognitoSub, CancellationToken cancellationToken)
+    {
+        if (_userIdsByCognitoSub.TryGetValue(cognitoSub, out var userId) && _usersById.TryGetValue(userId, out var user))
+        {
+            return Task.FromResult<UserAccount?>(user);
+        }
+
+        return Task.FromResult<UserAccount?>(null);
+    }
+
+    public Task RecordUserLoginAsync(string userId, DateTimeOffset when, CancellationToken cancellationToken)
+    {
+        if (_usersById.TryGetValue(userId, out var user))
+        {
+            _usersById[userId] = user with { LastLoginAt = when, UpdatedAt = DateTimeOffset.UtcNow };
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task SavePaymentAsync(PaymentRecord payment, CancellationToken cancellationToken)
+    {
+        _payments.Add(payment);
+        _paymentsByCheckoutSessionId[payment.StripeCheckoutSessionId] = payment;
+        _activity.Insert(0, new ActivityFeedItem("Payment recorded", payment.AccountEmail, DateTimeOffset.UtcNow));
+        return Task.CompletedTask;
+    }
+
+    public Task<PaymentRecord?> GetPaymentByCheckoutSessionIdAsync(string stripeCheckoutSessionId, CancellationToken cancellationToken)
+    {
+        _paymentsByCheckoutSessionId.TryGetValue(stripeCheckoutSessionId, out var payment);
+        return Task.FromResult<PaymentRecord?>(payment);
+    }
+
+    public Task<IReadOnlyList<PaymentRecord>> ListPaymentsByUserAsync(string userId, CancellationToken cancellationToken)
+    {
+        var items = _payments.Where(p => string.Equals(p.UserId, userId, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(50)
+            .ToArray();
+        return Task.FromResult<IReadOnlyList<PaymentRecord>>(items);
+    }
+
+    public Task SaveEntitlementAsync(EntitlementRecord entitlement, CancellationToken cancellationToken)
+    {
+        if (!_entitlementsByUserId.TryGetValue(entitlement.UserId, out var list))
+        {
+            list = new List<EntitlementRecord>();
+            _entitlementsByUserId[entitlement.UserId] = list;
+        }
+
+        var idx = list.FindIndex(e => string.Equals(e.EntitlementId, entitlement.EntitlementId, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0) list[idx] = entitlement; else list.Add(entitlement);
+
+        if (_usersById.TryGetValue(entitlement.UserId, out var user) && string.Equals(entitlement.Status, "active", StringComparison.OrdinalIgnoreCase))
+        {
+            _usersById[entitlement.UserId] = user with { Purchased = true, AccessStatus = "entitled", UpdatedAt = DateTimeOffset.UtcNow };
+        }
+
+        _activity.Insert(0, new ActivityFeedItem("Entitlement updated", entitlement.UserId, DateTimeOffset.UtcNow));
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<EntitlementRecord>> ListEntitlementsByUserAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (_entitlementsByUserId.TryGetValue(userId, out var list))
+        {
+            return Task.FromResult<IReadOnlyList<EntitlementRecord>>(list.OrderByDescending(e => e.GrantedAt).ToArray());
+        }
+
+        return Task.FromResult<IReadOnlyList<EntitlementRecord>>(Array.Empty<EntitlementRecord>());
+    }
+
+    public async Task<bool> UserHasActiveEntitlementAsync(string userId, string accessType, CancellationToken cancellationToken)
+    {
+        var list = await ListEntitlementsByUserAsync(userId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        return list.Any(e =>
+            string.Equals(e.AccessType, accessType, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(e.Status, "active", StringComparison.OrdinalIgnoreCase) &&
+            (e.ExpiresAt is null || e.ExpiresAt > now));
     }
 
     public Task SaveMagicLinkTokenAsync(MagicLinkTokenRecord tokenRecord, CancellationToken cancellationToken)
@@ -501,12 +638,15 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
         var existing = await GetUserByEmailAsync(normalizedEmail, cancellationToken);
         var user = new UserAccount(
             UserId: existing?.UserId ?? $"user_{Guid.NewGuid():N}",
+            CognitoSub: existing?.CognitoSub,
             Email: normalizedEmail,
+            EmailVerified: existing?.EmailVerified ?? false,
             Purchased: true,
             OnboardingCompleted: existing?.OnboardingCompleted ?? false,
             AccessStatus: "purchased",
             ChannelUrl: existing?.ChannelUrl ?? channelInput,
             GrowthGoal: existing?.GrowthGoal,
+            LastLoginAt: existing?.LastLoginAt,
             CreatedAt: existing?.CreatedAt ?? DateTimeOffset.UtcNow,
             UpdatedAt: DateTimeOffset.UtcNow
         );
@@ -554,6 +694,216 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
         }, cancellationToken);
 
         return response.Item is { Count: > 0 } ? ReadUserAccount(response.Item) : null;
+    }
+
+    public async Task<UserAccount> UpsertCognitoUserAsync(string cognitoSub, string email, bool emailVerified, string? signupSource, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = NormalizeEmail(email);
+        var existing = await GetUserByCognitoSubAsync(cognitoSub, cancellationToken)
+            ?? await GetUserByEmailAsync(normalizedEmail, cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+        var user = new UserAccount(
+            UserId: existing?.UserId ?? $"user_{Guid.NewGuid():N}",
+            CognitoSub: cognitoSub,
+            Email: normalizedEmail,
+            EmailVerified: emailVerified,
+            Purchased: existing?.Purchased ?? false,
+            OnboardingCompleted: existing?.OnboardingCompleted ?? false,
+            AccessStatus: existing?.AccessStatus ?? "free",
+            ChannelUrl: existing?.ChannelUrl,
+            GrowthGoal: existing?.GrowthGoal,
+            LastLoginAt: now,
+            CreatedAt: existing?.CreatedAt ?? now,
+            UpdatedAt: now
+        );
+
+        await SaveUserProfileAsync(user, cancellationToken);
+
+        // Email -> user mapping
+        await PutItemAsync(GetUsersTableName(), new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"EMAIL#{normalizedEmail}"),
+            ["sk"] = StringValue("USER"),
+            ["userId"] = StringValue(user.UserId),
+            ["email"] = StringValue(normalizedEmail),
+            ["updatedAt"] = StringValue(user.UpdatedAt.ToString("O"))
+        }, cancellationToken);
+
+        // Cognito sub -> user mapping (source of truth for auth)
+        await PutItemAsync(GetUsersTableName(), new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"COGNITO#{cognitoSub}"),
+            ["sk"] = StringValue("USER"),
+            ["userId"] = StringValue(user.UserId),
+            ["email"] = StringValue(normalizedEmail),
+            ["emailVerified"] = BoolValue(emailVerified),
+            ["signupSource"] = StringValue(signupSource ?? string.Empty),
+            ["updatedAt"] = StringValue(user.UpdatedAt.ToString("O"))
+        }, cancellationToken);
+
+        return user;
+    }
+
+    public async Task<UserAccount?> GetUserByCognitoSubAsync(string cognitoSub, CancellationToken cancellationToken)
+    {
+        var response = await _dynamoDb.GetItemAsync(new GetItemRequest
+        {
+            TableName = GetUsersTableName(),
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = StringValue($"COGNITO#{cognitoSub}"),
+                ["sk"] = StringValue("USER")
+            }
+        }, cancellationToken);
+
+        var userId = response.Item?.GetValueOrDefault("userId")?.S;
+        return string.IsNullOrWhiteSpace(userId) ? null : await GetUserByIdAsync(userId, cancellationToken);
+    }
+
+    public async Task RecordUserLoginAsync(string userId, DateTimeOffset when, CancellationToken cancellationToken)
+    {
+        var existing = await GetUserByIdAsync(userId, cancellationToken);
+        if (existing is null) return;
+        await SaveUserProfileAsync(existing with { LastLoginAt = when, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken);
+        await TrackEventAsync("user_login", userId, new Dictionary<string, string?>
+        {
+            ["when"] = when.ToString("O")
+        }, cancellationToken);
+    }
+
+    public async Task SavePaymentAsync(PaymentRecord payment, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:PaymentsTable", GetTableName("Storage:PurchasesTable", "ybai-purchases"));
+        var item = new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"PAYMENT#{payment.StripeCheckoutSessionId}"),
+            ["sk"] = StringValue("DETAILS"),
+            ["paymentId"] = StringValue(payment.PaymentId),
+            ["userId"] = StringValue(payment.UserId),
+            ["accountEmail"] = StringValue(payment.AccountEmail),
+            ["stripeCustomerId"] = StringValue(payment.StripeCustomerId ?? string.Empty),
+            ["stripeCheckoutSessionId"] = StringValue(payment.StripeCheckoutSessionId),
+            ["stripePaymentIntentId"] = StringValue(payment.StripePaymentIntentId ?? string.Empty),
+            ["stripeSubscriptionId"] = StringValue(payment.StripeSubscriptionId ?? string.Empty),
+            ["stripeEmail"] = StringValue(payment.StripeEmail ?? string.Empty),
+            ["amount"] = StringValue(payment.Amount.ToString("F2")),
+            ["currency"] = StringValue(payment.Currency),
+            ["status"] = StringValue(payment.Status),
+            ["planCode"] = StringValue(payment.PlanCode),
+            ["paymentMethodBrand"] = StringValue(payment.PaymentMethodBrand ?? string.Empty),
+            ["paymentMethodLast4"] = StringValue(payment.PaymentMethodLast4 ?? string.Empty),
+            ["billingCountry"] = StringValue(payment.BillingCountry ?? string.Empty),
+            ["billingName"] = StringValue(payment.BillingName ?? string.Empty),
+            ["receiptUrl"] = StringValue(payment.ReceiptUrl ?? string.Empty),
+            ["createdAt"] = StringValue(payment.CreatedAt.ToString("O")),
+            ["updatedAt"] = StringValue(payment.UpdatedAt.ToString("O"))
+        };
+
+        await PutItemAsync(tableName, item, cancellationToken);
+        await TrackEventAsync("payment_recorded", payment.UserId, new Dictionary<string, string?>
+        {
+            ["checkoutSessionId"] = payment.StripeCheckoutSessionId,
+            ["planCode"] = payment.PlanCode,
+            ["stripeEmail"] = payment.StripeEmail,
+            ["accountEmail"] = payment.AccountEmail
+        }, cancellationToken);
+    }
+
+    public async Task<PaymentRecord?> GetPaymentByCheckoutSessionIdAsync(string stripeCheckoutSessionId, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:PaymentsTable", GetTableName("Storage:PurchasesTable", "ybai-purchases"));
+        var response = await _dynamoDb.GetItemAsync(new GetItemRequest
+        {
+            TableName = tableName,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = StringValue($"PAYMENT#{stripeCheckoutSessionId}"),
+                ["sk"] = StringValue("DETAILS")
+            }
+        }, cancellationToken);
+
+        return response.Item is { Count: > 0 } ? ReadPayment(response.Item) : null;
+    }
+
+    public async Task<IReadOnlyList<PaymentRecord>> ListPaymentsByUserAsync(string userId, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:PaymentsTable", GetTableName("Storage:PurchasesTable", "ybai-purchases"));
+        var response = await _dynamoDb.ScanAsync(new ScanRequest
+        {
+            TableName = tableName,
+            FilterExpression = "begins_with(pk, :pk) AND userId = :uid",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":pk"] = StringValue("PAYMENT#"),
+                [":uid"] = StringValue(userId)
+            },
+            Limit = 200
+        }, cancellationToken);
+
+        return response.Items.Select(ReadPayment).OrderByDescending(p => p.CreatedAt).ToArray();
+    }
+
+    public async Task SaveEntitlementAsync(EntitlementRecord entitlement, CancellationToken cancellationToken)
+    {
+        var item = new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"USER#{entitlement.UserId}"),
+            ["sk"] = StringValue($"ENTITLEMENT#{entitlement.EntitlementId}"),
+            ["entitlementId"] = StringValue(entitlement.EntitlementId),
+            ["accessType"] = StringValue(entitlement.AccessType),
+            ["status"] = StringValue(entitlement.Status),
+            ["source"] = StringValue(entitlement.Source),
+            ["grantedAt"] = StringValue(entitlement.GrantedAt.ToString("O")),
+            ["expiresAt"] = StringValue(entitlement.ExpiresAt?.ToString("O") ?? string.Empty),
+            ["paymentId"] = StringValue(entitlement.PaymentId ?? string.Empty),
+            ["notes"] = StringValue(entitlement.Notes ?? string.Empty),
+            ["createdAt"] = StringValue(entitlement.CreatedAt.ToString("O")),
+            ["updatedAt"] = StringValue(entitlement.UpdatedAt.ToString("O"))
+        };
+
+        await PutItemAsync(GetUsersTableName(), item, cancellationToken);
+
+        // Also update the user profile purchased/accessStatus for quick access checks.
+        var user = await GetUserByIdAsync(entitlement.UserId, cancellationToken);
+        if (user is not null && string.Equals(entitlement.Status, "active", StringComparison.OrdinalIgnoreCase))
+        {
+            await SaveUserProfileAsync(user with { Purchased = true, AccessStatus = "entitled", UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken);
+        }
+
+        await TrackEventAsync("entitlement_saved", entitlement.UserId, new Dictionary<string, string?>
+        {
+            ["accessType"] = entitlement.AccessType,
+            ["status"] = entitlement.Status,
+            ["source"] = entitlement.Source
+        }, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<EntitlementRecord>> ListEntitlementsByUserAsync(string userId, CancellationToken cancellationToken)
+    {
+        var response = await _dynamoDb.QueryAsync(new QueryRequest
+        {
+            TableName = GetUsersTableName(),
+            KeyConditionExpression = "pk = :pk AND begins_with(sk, :sk)",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":pk"] = StringValue($"USER#{userId}"),
+                [":sk"] = StringValue("ENTITLEMENT#")
+            },
+            Limit = 200
+        }, cancellationToken);
+
+        return response.Items.Select(ReadEntitlement).OrderByDescending(e => e.GrantedAt).ToArray();
+    }
+
+    public async Task<bool> UserHasActiveEntitlementAsync(string userId, string accessType, CancellationToken cancellationToken)
+    {
+        var entitlements = await ListEntitlementsByUserAsync(userId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        return entitlements.Any(e =>
+            string.Equals(e.AccessType, accessType, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(e.Status, "active", StringComparison.OrdinalIgnoreCase) &&
+            (e.ExpiresAt is null || e.ExpiresAt > now));
     }
 
     public async Task SaveMagicLinkTokenAsync(MagicLinkTokenRecord tokenRecord, CancellationToken cancellationToken)
@@ -1106,12 +1456,15 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
         {
             ["pk"] = StringValue($"USER#{user.UserId}"),
             ["sk"] = StringValue("PROFILE"),
+            ["cognitoSub"] = StringValue(user.CognitoSub ?? string.Empty),
             ["email"] = StringValue(user.Email),
+            ["emailVerified"] = BoolValue(user.EmailVerified),
             ["purchased"] = BoolValue(user.Purchased),
             ["onboardingCompleted"] = BoolValue(user.OnboardingCompleted),
             ["accessStatus"] = StringValue(user.AccessStatus),
             ["channelUrl"] = StringValue(user.ChannelUrl ?? string.Empty),
             ["growthGoal"] = StringValue(user.GrowthGoal ?? string.Empty),
+            ["lastLoginAt"] = StringValue(user.LastLoginAt?.ToString("O") ?? string.Empty),
             ["createdAt"] = StringValue(user.CreatedAt.ToString("O")),
             ["updatedAt"] = StringValue(user.UpdatedAt.ToString("O"))
         }, cancellationToken);
@@ -1122,12 +1475,70 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
         var userId = item.GetValueOrDefault("pk")?.S?.Replace("USER#", string.Empty, StringComparison.OrdinalIgnoreCase) ?? string.Empty;
         return new UserAccount(
             UserId: userId,
+            CognitoSub: EmptyToNull(item.GetValueOrDefault("cognitoSub")?.S),
             Email: item.GetValueOrDefault("email")?.S ?? string.Empty,
+            EmailVerified: item.GetValueOrDefault("emailVerified")?.BOOL ?? false,
             Purchased: item.GetValueOrDefault("purchased")?.BOOL ?? false,
             OnboardingCompleted: item.GetValueOrDefault("onboardingCompleted")?.BOOL ?? false,
             AccessStatus: item.GetValueOrDefault("accessStatus")?.S ?? "demo",
             ChannelUrl: EmptyToNull(item.GetValueOrDefault("channelUrl")?.S),
             GrowthGoal: EmptyToNull(item.GetValueOrDefault("growthGoal")?.S),
+            LastLoginAt: ParseNullableDate(item.GetValueOrDefault("lastLoginAt")?.S),
+            CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
+            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S)
+        );
+    }
+
+    private static DateTimeOffset? ParseNullableDate(string? value)
+        => DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;
+
+    private static PaymentRecord ReadPayment(Dictionary<string, AttributeValue> item)
+    {
+        var paymentId = item.GetValueOrDefault("paymentId")?.S ?? string.Empty;
+        var userId = item.GetValueOrDefault("userId")?.S ?? string.Empty;
+        var accountEmail = item.GetValueOrDefault("accountEmail")?.S ?? string.Empty;
+        return new PaymentRecord(
+            PaymentId: paymentId,
+            UserId: userId,
+            AccountEmail: accountEmail,
+            StripeCustomerId: EmptyToNull(item.GetValueOrDefault("stripeCustomerId")?.S),
+            StripeCheckoutSessionId: item.GetValueOrDefault("stripeCheckoutSessionId")?.S
+                ?? item.GetValueOrDefault("pk")?.S?.Replace("PAYMENT#", string.Empty, StringComparison.OrdinalIgnoreCase)
+                ?? string.Empty,
+            StripePaymentIntentId: EmptyToNull(item.GetValueOrDefault("stripePaymentIntentId")?.S),
+            StripeSubscriptionId: EmptyToNull(item.GetValueOrDefault("stripeSubscriptionId")?.S),
+            StripeEmail: EmptyToNull(item.GetValueOrDefault("stripeEmail")?.S),
+            Amount: decimal.TryParse(item.GetValueOrDefault("amount")?.S, out var amt) ? amt : 0m,
+            Currency: item.GetValueOrDefault("currency")?.S ?? "USD",
+            Status: item.GetValueOrDefault("status")?.S ?? "unknown",
+            PlanCode: item.GetValueOrDefault("planCode")?.S ?? "default",
+            PaymentMethodBrand: EmptyToNull(item.GetValueOrDefault("paymentMethodBrand")?.S),
+            PaymentMethodLast4: EmptyToNull(item.GetValueOrDefault("paymentMethodLast4")?.S),
+            BillingCountry: EmptyToNull(item.GetValueOrDefault("billingCountry")?.S),
+            BillingName: EmptyToNull(item.GetValueOrDefault("billingName")?.S),
+            ReceiptUrl: EmptyToNull(item.GetValueOrDefault("receiptUrl")?.S),
+            CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
+            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S)
+        );
+    }
+
+    private static EntitlementRecord ReadEntitlement(Dictionary<string, AttributeValue> item)
+    {
+        var userPk = item.GetValueOrDefault("pk")?.S ?? string.Empty;
+        var userId = userPk.Replace("USER#", string.Empty, StringComparison.OrdinalIgnoreCase);
+        var entId = item.GetValueOrDefault("entitlementId")?.S
+            ?? item.GetValueOrDefault("sk")?.S?.Replace("ENTITLEMENT#", string.Empty, StringComparison.OrdinalIgnoreCase)
+            ?? string.Empty;
+        return new EntitlementRecord(
+            EntitlementId: entId,
+            UserId: userId,
+            AccessType: item.GetValueOrDefault("accessType")?.S ?? "premium",
+            Status: item.GetValueOrDefault("status")?.S ?? "active",
+            Source: item.GetValueOrDefault("source")?.S ?? "stripe",
+            GrantedAt: ParseDate(item.GetValueOrDefault("grantedAt")?.S),
+            ExpiresAt: ParseNullableDate(item.GetValueOrDefault("expiresAt")?.S),
+            PaymentId: EmptyToNull(item.GetValueOrDefault("paymentId")?.S),
+            Notes: EmptyToNull(item.GetValueOrDefault("notes")?.S),
             CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
             UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S)
         );

@@ -1435,6 +1435,56 @@ textarea {
   width: calc(100% - 4px);
 }
 
+.landing-nav-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.landing-nav-user {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.landing-nav-auth {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  text-decoration: none !important;
+  padding: 10px 6px;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.landing-nav-auth:hover {
+  color: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.landing-nav-auth-strong {
+  color: #c4b5fd;
+}
+
+.landing-nav-signout {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.landing-nav-cta-primary {
+  margin-left: 4px;
+}
+
 .landing-nav-cta {
   justify-self: end;
   display: inline-flex;
