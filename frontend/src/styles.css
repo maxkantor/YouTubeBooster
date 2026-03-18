@@ -360,6 +360,133 @@ a {
   margin-top: 12px;
 }
 
+.auth-header {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-badge {
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  color: #c4b5fd;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  font-weight: 700;
+}
+
+.auth-title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.auth-form {
+  gap: 14px;
+}
+
+.field-block {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+.auth-pass-meter {
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  background: rgba(79, 70, 229, 0.08);
+  border: 1px solid rgba(79, 70, 229, 0.22);
+}
+
+.auth-pass-meter-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.auth-pass-strength {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.auth-pass-strength-ok {
+  color: #86efac;
+  font-weight: 700;
+}
+
+.auth-pass-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.auth-pass-bar-inner {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #4f46e5, #2563eb);
+  border-radius: 999px;
+}
+
+.auth-validation-box {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.auth-validation-title {
+  margin-bottom: 10px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #cbd5e1;
+}
+
+.auth-validation-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.auth-validation-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+  color: #64748b;
+}
+
+.auth-validation-list li.ok {
+  color: #86efac;
+}
+
+.auth-validation-list li.no {
+  color: #94a3b8;
+}
+
+.auth-validation-list .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.auth-validation-list li.ok .dot {
+  background: rgba(134, 239, 172, 0.25);
+  border-color: rgba(134, 239, 172, 0.6);
+}
+
 .btn {
   display: inline-flex;
   justify-content: center;

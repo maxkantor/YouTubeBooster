@@ -4,6 +4,28 @@ import { confirmSignUp, forgotPassword, signIn, signUp, confirmForgotPassword } 
 import { useAuth } from './AuthContext';
 import { authApi } from './lib/api';
 
+function readCachedEmail(): string {
+  try {
+    return window.localStorage.getItem('yb_last_email') ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function passwordChecks(password: string) {
+  return {
+    length: password.length >= 8,
+    lower: /[a-z]/.test(password),
+    upper: /[A-Z]/.test(password),
+    number: /[0-9]/.test(password),
+    special: /[^A-Za-z0-9]/.test(password),
+  };
+}
+
+function countTrue(obj: Record<string, boolean>): number {
+  return Object.values(obj).reduce((acc, v) => acc + (v ? 1 : 0), 0);
+}
+
 function useReturnTo() {
   const [sp] = useSearchParams();
   const returnTo = sp.get('returnTo') || '/dashboard';
@@ -16,13 +38,7 @@ export function SignInPage() {
   const nav = useNavigate();
   const { refresh } = useAuth();
   const { returnTo } = useReturnTo();
-  const [email, setEmail] = useState(() => {
-    try {
-      return window.localStorage.getItem('yb_last_email') ?? '';
-    } catch {
-      return '';
-    }
-  });
+  const [email, setEmail] = useState(() => readCachedEmail());
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,19 +52,59 @@ export function SignInPage() {
     }
   }, [email]);
 
+  const onEmailFocus = () => {
+    // Defensive: if anything ever resets our controlled input to "", rehydrate from cache.
+    if (!email.trim()) setEmail(readCachedEmail());
+  };
+
   return (
     <div className="page narrow-page">
       <div className="surface">
-        <h1>Sign in</h1>
-        <p className="muted">Access your premium unlocks across all devices.</p>
-        <div className="input-stack" style={{ marginTop: 14 }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password" />
+        <div className="auth-header">
+          <div className="auth-badge">Premium Access</div>
+          <h1 className="auth-title">Sign in</h1>
+          <p className="muted">Unlock across all devices. No device lock-in.</p>
+        </div>
+
+        <div className="input-stack auth-form" style={{ marginTop: 16 }}>
+          <div className="field-block">
+            <label className="field-label" htmlFor="auth-signin-email">
+              Email
+            </label>
+            <input
+              id="auth-signin-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onFocus={onEmailFocus}
+              placeholder="you@example.com"
+            />
+          </div>
+
+          <div className="field-block">
+            <label className="field-label" htmlFor="auth-signin-password">
+              Password
+            </label>
+            <input
+              id="auth-signin-password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Your password"
+            />
+          </div>
+
           {error && <p className="error-text">{error}</p>}
+
           <button
             type="button"
             className="btn btn-primary"
-            disabled={loading}
+            disabled={loading || !email.trim() || !password}
             onClick={async () => {
               setLoading(true);
               setError('');
@@ -85,7 +141,8 @@ export function SignInPage() {
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+
+          <div className="auth-links">
             <Link to={`/auth/forgot?returnTo=${encodeURIComponent(returnTo)}`} className="muted" style={{ textDecoration: 'none' }}>
               Forgot password?
             </Link>
@@ -104,14 +161,9 @@ export function SignUpPage() {
   const { refresh } = useAuth();
   const { returnTo } = useReturnTo();
   const [step, setStep] = useState<'signup' | 'confirm'>('signup');
-  const [email, setEmail] = useState(() => {
-    try {
-      return window.localStorage.getItem('yb_last_email') ?? '';
-    } catch {
-      return '';
-    }
-  });
+  const [email, setEmail] = useState(() => readCachedEmail());
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -124,6 +176,17 @@ export function SignUpPage() {
     }
   }, [email]);
 
+  const checks = useMemo(() => passwordChecks(password), [password]);
+  const checkCount = useMemo(() => countTrue(checks), [checks]);
+  const passwordStrengthLabel = checkCount <= 2 ? 'Weak' : checkCount === 3 ? 'Good' : 'Strong';
+
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
+  const canCreateAccount = checkCount === 5 && passwordsMatch;
+
+  const onEmailFocus = () => {
+    if (!email.trim()) setEmail(readCachedEmail());
+  };
+
   const help = useMemo(() => {
     if (step === 'confirm') return 'Check your email for the verification code.';
     return 'Create your account to unlock and save your report across devices.';
@@ -132,20 +195,120 @@ export function SignUpPage() {
   return (
     <div className="page narrow-page">
       <div className="surface">
-        <h1>{step === 'signup' ? 'Create account' : 'Verify email'}</h1>
-        <p className="muted">{help}</p>
-        <div className="input-stack" style={{ marginTop: 14 }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" disabled={step === 'confirm'} />
+        <div className="auth-header">
+          <div className="auth-badge">{step === 'signup' ? 'Create Account' : 'Verify Email'}</div>
+          <h1 className="auth-title">{step === 'signup' ? 'Create account' : 'Verify email'}</h1>
+          <p className="muted">{help}</p>
+        </div>
+
+        <div className="input-stack auth-form" style={{ marginTop: 16 }}>
+          <div className="field-block">
+            <label className="field-label" htmlFor="auth-signup-email">
+              Email
+            </label>
+            <input
+              id="auth-signup-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onFocus={onEmailFocus}
+              placeholder="you@example.com"
+              disabled={step === 'confirm'}
+            />
+          </div>
+
           {step === 'signup' ? (
-            <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password" />
+            <>
+              <div className="field-block">
+                <label className="field-label" htmlFor="auth-signup-password">
+                  Password
+                </label>
+                <input
+                  id="auth-signup-password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Create a strong password"
+                />
+              </div>
+
+              <div className="field-block">
+                <label className="field-label" htmlFor="auth-signup-password-confirm">
+                  Confirm password
+                </label>
+                <input
+                  id="auth-signup-password-confirm"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your password"
+                />
+              </div>
+
+              <div className="auth-pass-meter">
+                <div className="auth-pass-meter-top">
+                  <span className="muted">Strength</span>
+                  <span className={canCreateAccount ? 'auth-pass-strength-ok' : 'auth-pass-strength'}>{passwordStrengthLabel}</span>
+                </div>
+                <div className="auth-pass-bar" aria-label="Password strength">
+                  <div className="auth-pass-bar-inner" style={{ width: `${Math.round((checkCount / 5) * 100)}%` }} />
+                </div>
+              </div>
+
+              <div className="auth-validation-box" aria-live="polite">
+                <div className="auth-validation-title">Requirements</div>
+                <ul className="auth-validation-list">
+                  <li className={checks.length ? 'ok' : 'no'}>
+                    <span className="dot" /> 8+ characters
+                  </li>
+                  <li className={checks.lower ? 'ok' : 'no'}>
+                    <span className="dot" /> Lowercase letter
+                  </li>
+                  <li className={checks.upper ? 'ok' : 'no'}>
+                    <span className="dot" /> Uppercase letter
+                  </li>
+                  <li className={checks.number ? 'ok' : 'no'}>
+                    <span className="dot" /> Number
+                  </li>
+                  <li className={checks.special ? 'ok' : 'no'}>
+                    <span className="dot" /> Special character
+                  </li>
+                </ul>
+                {!passwordsMatch && confirmPassword.length > 0 && <p className="error-text" style={{ marginTop: 10 }}>Passwords do not match.</p>}
+              </div>
+            </>
           ) : (
-            <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Verification code" />
+            <div className="field-block">
+              <label className="field-label" htmlFor="auth-signup-code">
+                Verification code
+              </label>
+              <input
+                id="auth-signup-code"
+                name="code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="123456"
+                inputMode="numeric"
+              />
+            </div>
           )}
           {error && <p className="error-text">{error}</p>}
+
           <button
             type="button"
             className="btn btn-primary"
-            disabled={loading}
+            disabled={
+              loading ||
+              !email.trim() ||
+              (step === 'signup' ? !canCreateAccount : !code.trim())
+            }
             onClick={async () => {
               setLoading(true);
               setError('');
@@ -180,7 +343,8 @@ export function SignUpPage() {
           >
             {loading ? 'Working…' : step === 'signup' ? 'Create account' : 'Verify & continue'}
           </button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+
+          <div className="auth-links">
             <Link to={`/auth/signin?returnTo=${encodeURIComponent(returnTo)}`} className="muted" style={{ textDecoration: 'none' }}>
               Already have an account?
             </Link>
@@ -195,13 +359,7 @@ export function ForgotPasswordPage() {
   const nav = useNavigate();
   const { returnTo } = useReturnTo();
   const [step, setStep] = useState<'request' | 'reset'>('request');
-  const [email, setEmail] = useState(() => {
-    try {
-      return window.localStorage.getItem('yb_last_email') ?? '';
-    } catch {
-      return '';
-    }
-  });
+  const [email, setEmail] = useState(() => readCachedEmail());
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -215,13 +373,26 @@ export function ForgotPasswordPage() {
     }
   }, [email]);
 
+  const onEmailFocus = () => {
+    if (!email.trim()) setEmail(readCachedEmail());
+  };
+
   return (
     <div className="page narrow-page">
       <div className="surface">
         <h1>Reset password</h1>
         <p className="muted">{step === 'request' ? 'Send a reset code to your email.' : 'Enter your code and new password.'}</p>
         <div className="input-stack" style={{ marginTop: 14 }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            type="email"
+            autoComplete="email"
+            name="email"
+            inputMode="email"
+            onFocus={onEmailFocus}
+          />
           {step === 'reset' && (
             <>
               <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Reset code" />
