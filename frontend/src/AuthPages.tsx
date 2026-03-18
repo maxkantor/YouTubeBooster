@@ -43,7 +43,26 @@ export function SignInPage() {
                 await refresh();
                 window.location.href = returnTo;
               } catch (e) {
-                setError(e instanceof Error ? e.message : 'Sign in failed.');
+                const anyErr = e as any;
+                const code = anyErr?.code ?? anyErr?.name;
+                const msg = anyErr?.message as string | undefined;
+
+                // Avoid account-enumeration style messaging (e.g. "User is not confirmed" / "User exists").
+                if (
+                  code === 'UserNotConfirmedException' ||
+                  code === 'NotAuthorizedException' && msg && /not\s*confirmed|unconfirmed/i.test(msg) ||
+                  (msg && /not\s*confirmed|unconfirmed/i.test(msg))
+                ) {
+                  setError('Sign in failed.');
+                } else if (code === 'NotAuthorizedException') {
+                  setError('Invalid email or password.');
+                } else if (e instanceof Error && e.message) {
+                  setError('Sign in failed.');
+                  // Keep the underlying details in DevTools without exposing them to users.
+                  console.warn('Sign in failed (suppressed message):', { code, message: e.message });
+                } else {
+                  setError('Sign in failed.');
+                }
               } finally {
                 setLoading(false);
               }
@@ -114,7 +133,17 @@ export function SignUpPage() {
                   window.location.href = returnTo;
                 }
               } catch (e) {
-                setError(e instanceof Error ? e.message : 'Could not continue.');
+                const anyErr = e as any;
+                const codeId = anyErr?.code ?? anyErr?.name;
+                const msg = anyErr?.message as string | undefined;
+
+                // Avoid leaking whether an account/email exists.
+                if (codeId === 'UsernameExistsException' || (msg && /already exists|user exists/i.test(msg))) {
+                  setError('Could not create account. Please sign in or try again.');
+                } else {
+                  setError('Could not continue.');
+                  console.warn('Sign up flow failed (suppressed message):', { code: codeId, message: anyErr?.message });
+                }
               } finally {
                 setLoading(false);
               }
