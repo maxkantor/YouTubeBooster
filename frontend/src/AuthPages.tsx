@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmSignUp, forgotPassword, signIn, signUp, confirmForgotPassword } from './lib/auth';
 import { useAuth } from './AuthContext';
@@ -16,10 +16,25 @@ export function SignInPage() {
   const nav = useNavigate();
   const { refresh } = useAuth();
   const { returnTo } = useReturnTo();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    try {
+      return window.localStorage.getItem('yb_last_email') ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Keep the last email typed so redirects/errors don't force users to retype.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('yb_last_email', email);
+    } catch {
+      // ignore
+    }
+  }, [email]);
 
   return (
     <div className="page narrow-page">
@@ -89,11 +104,25 @@ export function SignUpPage() {
   const { refresh } = useAuth();
   const { returnTo } = useReturnTo();
   const [step, setStep] = useState<'signup' | 'confirm'>('signup');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    try {
+      return window.localStorage.getItem('yb_last_email') ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('yb_last_email', email);
+    } catch {
+      // ignore
+    }
+  }, [email]);
 
   const help = useMemo(() => {
     if (step === 'confirm') return 'Check your email for the verification code.';
@@ -166,11 +195,25 @@ export function ForgotPasswordPage() {
   const nav = useNavigate();
   const { returnTo } = useReturnTo();
   const [step, setStep] = useState<'request' | 'reset'>('request');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    try {
+      return window.localStorage.getItem('yb_last_email') ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('yb_last_email', email);
+    } catch {
+      // ignore
+    }
+  }, [email]);
 
   return (
     <div className="page narrow-page">
