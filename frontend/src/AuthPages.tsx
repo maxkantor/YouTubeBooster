@@ -351,7 +351,7 @@ export function SignUpPage() {
 
                 // Avoid leaking whether an account/email exists.
                 if (codeId === 'UsernameExistsException' || (msg && /already exists|user exists/i.test(msg))) {
-                  setError('Could not create account. Please sign in or try again.');
+                  setError('An account with this email already exists. Please sign in (or reset your password).');
                 } else {
                   setError('Could not continue.');
                   console.warn('Sign up flow failed (suppressed message):', { code: codeId, message: anyErr?.message });
