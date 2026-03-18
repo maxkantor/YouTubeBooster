@@ -20,6 +20,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const s = await cognitoGetSession();
       setSession(s);
+    } catch (e) {
+      // If Cognito isn't configured (or the config endpoint fails), treat as logged out.
+      setSession(null);
     } finally {
       setLoading(false);
     }

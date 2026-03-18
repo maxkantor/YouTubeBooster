@@ -5,6 +5,7 @@ import {
   CognitoUserSession,
   CognitoUserAttribute
 } from 'amazon-cognito-identity-js';
+import { publicApi } from './api';
 
 type CognitoConfig = {
   region: string;
@@ -12,26 +13,23 @@ type CognitoConfig = {
   appClientId: string;
 };
 
-function getConfig(): CognitoConfig {
-  const region = import.meta.env.VITE_COGNITO_REGION as string | undefined;
-  const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID as string | undefined;
-  const appClientId = import.meta.env.VITE_COGNITO_APP_CLIENT_ID as string | undefined;
-  if (!region || !userPoolId || !appClientId) {
-    throw new Error('Cognito is not configured (missing VITE_COGNITO_* env vars).');
-  }
-  return { region, userPoolId, appClientId };
-}
+let pool: CognitoUserPool | null = null;
+let poolInitPromise: Promise<void> | null = null;
 
-const pool = (() => {
-  try {
-    const cfg = getConfig();
-    return new CognitoUserPool({ UserPoolId: cfg.userPoolId, ClientId: cfg.appClientId });
-  } catch {
-    return null;
+async function ensurePoolInitialized(): Promise<CognitoUserPool> {
+  if (pool) return pool;
+  if (!poolInitPromise) {
+    poolInitPromise = (async () => {
+      const cfg: CognitoConfig = await publicApi.getCognitoConfig();
+      // NOTE: region is not used by amazon-cognito-identity-js's user pool wrapper, but it is returned for completeness.
+      pool = new CognitoUserPool({ UserPoolId: cfg.userPoolId, ClientId: cfg.appClientId });
+    })().catch((err) => {
+      poolInitPromise = null;
+      throw err;
+    });
   }
-})();
 
-function requirePool(): CognitoUserPool {
+  await poolInitPromise;
   if (!pool) throw new Error('Cognito is not configured.');
   return pool;
 }
@@ -64,12 +62,13 @@ function sessionToAuthSession(s: CognitoUserSession): AuthSession {
 }
 
 export function getCurrentUser(): CognitoUser | null {
-  return requirePool().getCurrentUser();
+  return pool?.getCurrentUser() ?? null;
 }
 
-export function getSession(): Promise<AuthSession | null> {
+export async function getSession(): Promise<AuthSession | null> {
+  await ensurePoolInitialized();
   const user = getCurrentUser();
-  if (!user) return Promise.resolve(null);
+  if (!user) return null;
   return new Promise((resolve, reject) => {
     user.getSession((err: any, session: CognitoUserSession | null) => {
       if (err) return reject(err);
@@ -80,7 +79,8 @@ export function getSession(): Promise<AuthSession | null> {
 }
 
 export async function signIn(email: string, password: string): Promise<AuthSession> {
-  const user = new CognitoUser({ Username: email.trim(), Pool: requirePool() });
+  const userPool = await ensurePoolInitialized();
+  const user = new CognitoUser({ Username: email.trim(), Pool: userPool });
   const authDetails = new AuthenticationDetails({ Username: email.trim(), Password: password });
   return new Promise((resolve, reject) => {
     user.authenticateUser(authDetails, {
@@ -95,8 +95,9 @@ export async function signIn(email: string, password: string): Promise<AuthSessi
 
 export async function signUp(email: string, password: string): Promise<void> {
   const attrs = [new CognitoUserAttribute({ Name: 'email', Value: email.trim() })];
+  const userPool = await ensurePoolInitialized();
   return new Promise((resolve, reject) => {
-    requirePool().signUp(email.trim(), password, attrs, [], (err) => {
+    userPool.signUp(email.trim(), password, attrs, [], (err) => {
       if (err) return reject(err);
       resolve();
     });
@@ -104,7 +105,8 @@ export async function signUp(email: string, password: string): Promise<void> {
 }
 
 export async function confirmSignUp(email: string, code: string): Promise<void> {
-  const user = new CognitoUser({ Username: email.trim(), Pool: requirePool() });
+  const userPool = await ensurePoolInitialized();
+  const user = new CognitoUser({ Username: email.trim(), Pool: userPool });
   return new Promise((resolve, reject) => {
     user.confirmRegistration(code.trim(), true, (err) => {
       if (err) return reject(err);
@@ -114,7 +116,8 @@ export async function confirmSignUp(email: string, code: string): Promise<void> 
 }
 
 export async function forgotPassword(email: string): Promise<void> {
-  const user = new CognitoUser({ Username: email.trim(), Pool: requirePool() });
+  const userPool = await ensurePoolInitialized();
+  const user = new CognitoUser({ Username: email.trim(), Pool: userPool });
   return new Promise((resolve, reject) => {
     user.forgotPassword({
       onSuccess: () => resolve(),
@@ -125,7 +128,8 @@ export async function forgotPassword(email: string): Promise<void> {
 }
 
 export async function confirmForgotPassword(email: string, code: string, newPassword: string): Promise<void> {
-  const user = new CognitoUser({ Username: email.trim(), Pool: requirePool() });
+  const userPool = await ensurePoolInitialized();
+  const user = new CognitoUser({ Username: email.trim(), Pool: userPool });
   return new Promise((resolve, reject) => {
     user.confirmPassword(code.trim(), newPassword, {
       onSuccess: () => resolve(),

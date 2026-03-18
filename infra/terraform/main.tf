@@ -138,6 +138,21 @@ locals {
       value       = "10"
       description = "Public demo rate limit"
     }
+    "${var.ssm_prefix}/cognito/region" = {
+      type        = "String"
+      value       = var.aws_region
+      description = "Cognito user pool region for auth"
+    }
+    "${var.ssm_prefix}/cognito/user-pool-id" = {
+      type        = "String"
+      value       = aws_cognito_user_pool.users.id
+      description = "Cognito user pool id for auth"
+    }
+    "${var.ssm_prefix}/cognito/app-client-id" = {
+      type        = "String"
+      value       = aws_cognito_user_pool_client.users_spa.id
+      description = "Cognito app client id for auth"
+    }
   }
 }
 
@@ -265,6 +280,44 @@ resource "aws_dynamodb_table" "activity" {
   }
 
   tags = local.common_tags
+}
+
+resource "aws_cognito_user_pool" "users" {
+  name = "youtubebooster-users"
+
+  username_attributes = ["email"]
+
+  auto_verified_attributes = ["email"]
+
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  password_policy {
+    minimum_length    = 8
+    require_lowercase = true
+    require_uppercase = true
+    require_numbers   = true
+    require_symbols   = false
+  }
+}
+
+resource "aws_cognito_user_pool_client" "users_spa" {
+  name         = "youtubebooster-users-spa"
+  user_pool_id = aws_cognito_user_pool.users.id
+
+  generate_secret = false
+
+  explicit_auth_flows = [
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_USER_SRP_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH"
+  ]
+
+  enable_token_revocation = true
 }
 
 resource "aws_iam_role" "lambda_exec" {
@@ -466,7 +519,6 @@ resource "aws_amplify_app" "frontend" {
   environment_variables = {
     AMPLIFY_MONOREPO_APP_ROOT   = "frontend"
     VITE_API_BASE_URL           = var.deploy_backend_lambda ? aws_apigatewayv2_api.http_api[0].api_endpoint : "https://api.example.com"
-    VITE_STRIPE_PUBLISHABLE_KEY  = "pk_test_replace_me"
   }
 
   tags = local.common_tags

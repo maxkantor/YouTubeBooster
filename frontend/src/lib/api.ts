@@ -129,6 +129,9 @@ export const publicApi = {
         cancelUrl: `${window.location.origin}/dashboard`
       })
     });
+  },
+  async getCognitoConfig(): Promise<{ region: string; userPoolId: string; appClientId: string }> {
+    return fetchJson<{ region: string; userPoolId: string; appClientId: string }>('/api/public/cognito/config');
   }
 };
 

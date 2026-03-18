@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using Amazon.SimpleEmail;
+using Amazon.SimpleSystemsManagement;
+using Amazon.SimpleSystemsManagement.Model;
 using Amazon.Lambda.AspNetCoreServer.Hosting;
 using YouTubeBoosterAi.Api;
 
@@ -8,6 +10,68 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddApplicationInfrastructure(builder.Configuration);
+
+static async Task<(string Region, string UserPoolId, string AppClientId)> LoadCognitoConfigAsync(IConfiguration configuration)
+{
+    // Prefer directly configured values (local dev / explicit override)
+    var region = configuration["Cognito:Region"] ?? configuration["COGNITO_REGION"];
+    var userPoolId = configuration["Cognito:UserPoolId"] ?? configuration["COGNITO_USER_POOL_ID"];
+    var appClientId = configuration["Cognito:AppClientId"] ?? configuration["COGNITO_APP_CLIENT_ID"];
+
+    if (!string.IsNullOrWhiteSpace(region) &&
+        !string.IsNullOrWhiteSpace(userPoolId) &&
+        !string.IsNullOrWhiteSpace(appClientId))
+    {
+        return (region, userPoolId, appClientId);
+    }
+
+    // Otherwise pull from SSM so Lambda env vars do not need to mirror Cognito config.
+    var basePath = configuration["SSM:BasePath"] ?? configuration["SSM__BASEPATH"];
+    if (string.IsNullOrWhiteSpace(basePath))
+    {
+        throw new InvalidOperationException("Cognito config missing: set Cognito:* or COGNITO_* env vars, or set SSM__BASEPATH.");
+    }
+
+    var ssm = new AmazonSimpleSystemsManagementClient();
+
+    async Task<string> GetAsync(string relativeKey)
+    {
+        var fullName = $"{basePath.TrimEnd('/')}/{relativeKey}";
+        try
+        {
+            var resp = await ssm.GetParameterAsync(new GetParameterRequest
+            {
+                Name = fullName,
+                WithDecryption = false
+            });
+
+            return resp.Parameter?.Value ?? string.Empty;
+        }
+        catch (ParameterNotFoundException)
+        {
+            return string.Empty;
+        }
+    }
+
+    region = await GetAsync("cognito/region");
+    userPoolId = await GetAsync("cognito/user-pool-id");
+    appClientId = await GetAsync("cognito/app-client-id");
+
+    if (string.IsNullOrWhiteSpace(region) ||
+        string.IsNullOrWhiteSpace(userPoolId) ||
+        string.IsNullOrWhiteSpace(appClientId))
+    {
+        throw new InvalidOperationException($"Cognito config missing from SSM under base path '{basePath}'. Expected: cognito/region, cognito/user-pool-id, cognito/app-client-id.");
+    }
+
+    return (region, userPoolId, appClientId);
+}
+
+var (cognitoRegion, cognitoUserPoolId, cognitoAppClientId) = await LoadCognitoConfigAsync(builder.Configuration);
+builder.Configuration["COGNITO_REGION"] = cognitoRegion;
+builder.Configuration["COGNITO_USER_POOL_ID"] = cognitoUserPoolId;
+builder.Configuration["COGNITO_APP_CLIENT_ID"] = cognitoAppClientId;
+
 builder.Services.AddCognitoJwtAuth(builder.Configuration);
 
 builder.Services.AddCors(options =>
@@ -67,6 +131,15 @@ app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "youtube-booster-ai-api" }));
 
 var publicApi = app.MapGroup("/api/public");
+publicApi.MapGet("/cognito/config", () =>
+{
+    return Results.Ok(new
+    {
+        region = cognitoRegion,
+        userPoolId = cognitoUserPoolId,
+        appClientId = cognitoAppClientId
+    });
+});
 publicApi.MapPost("/demo", async (DemoAnalysisRequest request, IDemoAnalysisService service, CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.ChannelInput))
