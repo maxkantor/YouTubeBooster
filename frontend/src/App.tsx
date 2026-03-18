@@ -7,7 +7,6 @@ import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, getStoredDemoChannel, normalize
 import { SeoHead } from './SeoHead';
 import type {
   AdminSessionStatus,
-  AdminSummary,
   DashboardOverview,
   DemoPreview,
   MagicLinkLoginResponse,
@@ -18,6 +17,7 @@ import type {
 const LandingPage = React.lazy(() => import('./LandingPage').then((m) => ({ default: m.LandingPage })));
 const PlatformPage = React.lazy(() => import('./PlatformPage').then((m) => ({ default: m.PlatformPage })));
 const UnifiedDashboard = React.lazy(() => import('./UnifiedDashboard').then((m) => ({ default: m.UnifiedDashboard })));
+const AdminCrmApp = React.lazy(() => import('./admin/AdminCrmApp'));
 
 /** Demo dashboard at /demo — full demo (default channel) vs preview (user channel with blur). */
 function DemoDashboardView() {
@@ -151,7 +151,7 @@ function AdminRoute({
   }
 
   if (!adminSession.authenticated) {
-    return <Navigate to="/login/admin" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
 
   return <>{children}</>;
@@ -548,7 +548,7 @@ function AdminLoginPage({
 
   useEffect(() => {
     if (!sessionLoading && adminSession.authenticated) {
-      navigate('/login/admin', { replace: true });
+      navigate('/admin', { replace: true });
     }
   }, [adminSession.authenticated, navigate, sessionLoading]);
 
@@ -563,7 +563,7 @@ function AdminLoginPage({
     try {
       await adminApi.login(email, password);
       await refreshAdminSession();
-      navigate('/login/admin', { replace: true });
+      navigate('/admin', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not sign in.');
     } finally {
@@ -584,100 +584,6 @@ function AdminLoginPage({
           </button>
         </div>
         {error && <p className="error-text">{error}</p>}
-      </div>
-    </div>
-  );
-}
-
-function AdminDashboardPage({
-  adminSession,
-  refreshAdminSession
-}: {
-  adminSession: AdminSessionStatus;
-  refreshAdminSession: () => Promise<AdminSessionStatus>;
-}) {
-  const navigate = useNavigate();
-  const [summary, setSummary] = useState<AdminSummary | null>(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadSummary() {
-      try {
-        const data = await adminApi.loadSummary();
-        if (!cancelled) {
-          setSummary(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load admin summary.');
-        }
-      }
-    }
-
-    loadSummary();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function handleSignOut() {
-    await adminApi.logout();
-    await refreshAdminSession();
-    navigate('/login/admin', { replace: true });
-  }
-
-  return (
-    <div className="page">
-      <div className="surface">
-        <h1>Admin CRM Dashboard</h1>
-        <p>Visibility into demos, purchases, support, drop-offs, and customer activity.</p>
-        <div className="pill-row">
-          <span className="info-pill">Signed in as {adminSession.email}</span>
-          <button className="btn btn-secondary" onClick={handleSignOut}>Sign out</button>
-        </div>
-      </div>
-      {error && <p className="error-text">{error}</p>}
-      {summary && (
-        <>
-          <div className="metric-grid">
-            <div className="metric-tile"><span>Total Users</span><strong>{summary.totalUsers}</strong></div>
-            <div className="metric-tile"><span>Total Demos</span><strong>{summary.totalDemos}</strong></div>
-            <div className="metric-tile"><span>Total Purchases</span><strong>{summary.totalPurchases}</strong></div>
-            <div className="metric-tile"><span>Conversion Rate</span><strong>{summary.conversionRate}</strong></div>
-            <div className="metric-tile"><span>Gross Revenue</span><strong>{summary.grossRevenue}</strong></div>
-          </div>
-          <div className="surface">
-            <h2>Recent activity</h2>
-            <ul className="feature-list">
-              {summary.recentActivity.map((item) => (
-                <li key={`${item.title}-${item.timestamp}`}>{item.title}: {item.detail}</li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-      <div className="section-grid">
-        <div className="surface">
-          <h2>CRM areas</h2>
-          <ul className="feature-list">
-            <li>User management</li>
-            <li>Purchase records</li>
-            <li>Demo funnel analytics</li>
-            <li>Support inbox and replies via SES</li>
-            <li>Audit trail and internal notes</li>
-          </ul>
-        </div>
-        <div className="surface">
-          <h2>Operational alerts</h2>
-          <ul className="feature-list">
-            <li>Failed onboarding flows</li>
-            <li>Support backlog</li>
-            <li>Demo abuse spikes</li>
-            <li>Checkout drop-off anomalies</li>
-            <li>Feature usage trends</li>
-          </ul>
-        </div>
       </div>
     </div>
   );
@@ -740,7 +646,9 @@ export default function App() {
   }, []);
 
   const location = useLocation();
-  const showGlobalNav = location.pathname !== '/' && location.pathname !== '/platform';
+  const pathAdmin = location.pathname.startsWith('/admin');
+  const showGlobalNav =
+    !pathAdmin && location.pathname !== '/' && location.pathname !== '/platform';
 
   const path = location.pathname;
   const [navScrolled, setNavScrolled] = useState(false);
@@ -762,7 +670,7 @@ export default function App() {
     : path === '/demo' ? { title: `Demo – ${BRAND.name}`, canonical: '/demo' }
     : path === '/dashboard' ? { title: `Dashboard – ${BRAND.name}`, canonical: '/dashboard' }
     : path === '/platform' ? { title: `MK Platform – ${BRAND.name}`, canonical: '/platform' }
-    : path === '/login/admin' ? { title: 'Admin', noindex: true as const }
+    : path.startsWith('/admin') ? { title: 'Admin', noindex: true as const }
     : {};
 
   return (
@@ -846,21 +754,23 @@ export default function App() {
           }
         />
         <Route
-          path="/login/admin"
+          path="/admin/login"
           element={
-            sessionLoading ? (
-              <LoadingSurface title="Loading" detail="Checking session." />
-            ) : adminSession.authenticated ? (
-              <AdminRoute adminSession={adminSession} loading={false}>
-                <AdminDashboardPage adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
-              </AdminRoute>
-            ) : (
-              <AdminLoginPage
-                adminSession={adminSession}
-                sessionLoading={sessionLoading}
-                refreshAdminSession={refreshAdminSession}
-              />
-            )
+            <AdminLoginPage
+              adminSession={adminSession}
+              sessionLoading={sessionLoading}
+              refreshAdminSession={refreshAdminSession}
+            />
+          }
+        />
+        <Route
+          path="/admin/*"
+          element={
+            <AdminRoute adminSession={adminSession} loading={sessionLoading}>
+              <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
+                <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
+              </React.Suspense>
+            </AdminRoute>
           }
         />
       </Routes>

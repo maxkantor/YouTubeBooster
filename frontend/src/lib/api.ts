@@ -1,6 +1,13 @@
 import type {
+  AdminDemoAuditRow,
+  AdminListResponse,
+  AdminPurchaseRow,
   AdminSessionStatus,
   AdminSummary,
+  AdminSupportTicketDetail,
+  AdminSupportTicketRow,
+  AdminUserDetailResponse,
+  AdminUserRow,
   CheckoutSession,
   DashboardOverview,
   DemoPreview,
@@ -188,5 +195,39 @@ export const adminApi = {
   },
   async loadSummary(): Promise<AdminSummary> {
     return fetchJson<AdminSummary>('/api/admin/dashboard/summary');
+  },
+  async crmUsers(limit = 50, cursor?: string | null): Promise<AdminListResponse<AdminUserRow>> {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (cursor) q.set('cursor', cursor);
+    return fetchJson<AdminListResponse<AdminUserRow>>(`/api/admin/crm/users?${q}`);
+  },
+  async crmUser(userId: string): Promise<AdminUserDetailResponse> {
+    return fetchJson<AdminUserDetailResponse>(`/api/admin/crm/users/${encodeURIComponent(userId)}`);
+  },
+  async crmPayments(limit = 50, cursor?: string | null): Promise<AdminListResponse<AdminPurchaseRow>> {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (cursor) q.set('cursor', cursor);
+    return fetchJson<AdminListResponse<AdminPurchaseRow>>(`/api/admin/crm/payments?${q}`);
+  },
+  async crmAudits(limit = 50, cursor?: string | null): Promise<AdminListResponse<AdminDemoAuditRow>> {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (cursor) q.set('cursor', cursor);
+    return fetchJson<AdminListResponse<AdminDemoAuditRow>>(`/api/admin/crm/audits?${q}`);
+  },
+  async crmSupportTickets(limit = 50, cursor?: string | null): Promise<AdminListResponse<AdminSupportTicketRow>> {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (cursor) q.set('cursor', cursor);
+    return fetchJson<AdminListResponse<AdminSupportTicketRow>>(`/api/admin/crm/support/tickets?${q}`);
+  },
+  async crmSupportTicket(ticketId: string): Promise<AdminSupportTicketDetail> {
+    return fetchJson<AdminSupportTicketDetail>(
+      `/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}`
+    );
+  },
+  async crmSupportReply(ticketId: string, subject: string, body: string): Promise<{ status?: string }> {
+    return fetchJson(`/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ subject, body })
+    });
   }
 };

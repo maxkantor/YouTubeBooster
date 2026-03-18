@@ -27,6 +27,15 @@ public interface IAppDataStore
     Task<UserYouTubeSettingsResponse?> GetUserYouTubeSettingsAsync(string userId, CancellationToken cancellationToken);
     Task TrackEventAsync(string eventName, string scope, IDictionary<string, string?> metadata, CancellationToken cancellationToken);
     Task<AdminDataSnapshot> GetAdminSnapshotAsync(CancellationToken cancellationToken);
+
+    // Admin CRM queries
+    Task<AdminListResponse<AdminUserDto>> ListUsersAsync(int limit, string? cursor, CancellationToken cancellationToken);
+    Task<AdminUserDetailResponse?> GetUserDetailAsync(string userId, CancellationToken cancellationToken);
+    Task<AdminListResponse<PurchaseRecord>> ListPurchasesAsync(int limit, string? cursor, CancellationToken cancellationToken);
+    Task<AdminListResponse<AdminSupportTicketDto>> ListSupportTicketsAsync(int limit, string? cursor, CancellationToken cancellationToken);
+    Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken);
+    Task SaveSupportReplyAsync(string ticketId, string subject, string body, CancellationToken cancellationToken);
+    Task<AdminListResponse<AdminDemoAuditDto>> ListDemoAuditsAsync(int limit, string? cursor, CancellationToken cancellationToken);
 }
 
 public sealed record AdminDataSnapshot(
@@ -55,6 +64,8 @@ public sealed class InMemoryAppDataStore : IAppDataStore
     private readonly List<PurchaseRecord> _purchases = [];
     private readonly List<ActivityFeedItem> _activity = [];
     private readonly List<string> _supportTickets = [];
+    private readonly Dictionary<string, SupportTicketRequest> _supportTicketsById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<AdminSupportMessageDto>> _supportThreads = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UserAccount> _usersById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _userIdsByEmail = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, MagicLinkTokenRecord> _magicLinkTokens = new(StringComparer.OrdinalIgnoreCase);
@@ -79,6 +90,17 @@ public sealed class InMemoryAppDataStore : IAppDataStore
     {
         var ticketId = $"ticket_{Guid.NewGuid():N}";
         _supportTickets.Add(ticketId);
+        _supportTicketsById[ticketId] = request;
+        _supportThreads[ticketId] = new List<AdminSupportMessageDto>
+        {
+            new(
+                MessageId: $"msg_{Guid.NewGuid():N}",
+                Direction: "inbound",
+                Subject: request.Subject,
+                Body: request.Message,
+                SentAt: DateTimeOffset.UtcNow
+            )
+        };
         _activity.Insert(0, new ActivityFeedItem("Support ticket", request.Subject, DateTimeOffset.UtcNow));
         return Task.FromResult(ticketId);
     }
@@ -299,6 +321,85 @@ public sealed class InMemoryAppDataStore : IAppDataStore
             TotalPurchases: _purchases.Count,
             RecentActivity: _activity.Take(10).ToArray()
         ));
+    }
+
+    public Task<AdminListResponse<AdminUserDto>> ListUsersAsync(int limit, string? cursor, CancellationToken cancellationToken)
+    {
+        var items = _usersById.Values
+            .OrderByDescending(u => u.CreatedAt)
+            .Select(u => new AdminUserDto(u.UserId, u.Email, u.ChannelUrl, u.Purchased, u.OnboardingCompleted, u.AccessStatus, u.CreatedAt, u.UpdatedAt))
+            .Take(Math.Max(1, limit))
+            .ToArray();
+        return Task.FromResult(new AdminListResponse<AdminUserDto>(items, null));
+    }
+
+    public async Task<AdminUserDetailResponse?> GetUserDetailAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (!_usersById.TryGetValue(userId, out var user))
+            return null;
+
+        var dto = new AdminUserDto(user.UserId, user.Email, user.ChannelUrl, user.Purchased, user.OnboardingCompleted, user.AccessStatus, user.CreatedAt, user.UpdatedAt);
+        var onboarding = await GetUserOnboardingStateAsync(userId, cancellationToken);
+        var yt = await GetUserYouTubeSettingsAsync(userId, cancellationToken);
+        var purchases = _purchases.Where(p => string.Equals(p.UserId, userId, StringComparison.OrdinalIgnoreCase)).OrderByDescending(p => p.PurchasedAt).Take(25).ToArray();
+        var events = _activity.Take(50).ToArray();
+        return new AdminUserDetailResponse(dto, onboarding, yt, purchases, events);
+    }
+
+    public Task<AdminListResponse<PurchaseRecord>> ListPurchasesAsync(int limit, string? cursor, CancellationToken cancellationToken)
+    {
+        var items = _purchases.OrderByDescending(p => p.PurchasedAt).Take(Math.Max(1, limit)).ToArray();
+        return Task.FromResult(new AdminListResponse<PurchaseRecord>(items, null));
+    }
+
+    public Task<AdminListResponse<AdminSupportTicketDto>> ListSupportTicketsAsync(int limit, string? cursor, CancellationToken cancellationToken)
+    {
+        var items = _supportTicketsById
+            .Select(pair => new { TicketId = pair.Key, Req = pair.Value })
+            .Select(x => new AdminSupportTicketDto(
+                TicketId: x.TicketId,
+                Email: x.Req.Email,
+                Subject: x.Req.Subject,
+                Status: "new",
+                ProductArea: x.Req.ProductArea,
+                ChannelUrl: x.Req.ChannelUrl,
+                CreatedAt: DateTimeOffset.UtcNow,
+                UpdatedAt: DateTimeOffset.UtcNow
+            ))
+            .Take(Math.Max(1, limit))
+            .ToArray();
+        return Task.FromResult(new AdminListResponse<AdminSupportTicketDto>(items, null));
+    }
+
+    public Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken)
+    {
+        if (!_supportTicketsById.TryGetValue(ticketId, out var req))
+            return Task.FromResult<AdminSupportTicketDetailResponse?>(null);
+        var ticket = new AdminSupportTicketDto(ticketId, req.Email, req.Subject, "new", req.ProductArea, req.ChannelUrl, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        var thread = _supportThreads.TryGetValue(ticketId, out var list) ? list.ToArray() : Array.Empty<AdminSupportMessageDto>();
+        return Task.FromResult<AdminSupportTicketDetailResponse?>(new AdminSupportTicketDetailResponse(ticket, req.Name, req.Message, thread));
+    }
+
+    public Task SaveSupportReplyAsync(string ticketId, string subject, string body, CancellationToken cancellationToken)
+    {
+        if (!_supportThreads.TryGetValue(ticketId, out var list))
+        {
+            list = new List<AdminSupportMessageDto>();
+            _supportThreads[ticketId] = list;
+        }
+        list.Add(new AdminSupportMessageDto($"msg_{Guid.NewGuid():N}", "outbound", subject, body, DateTimeOffset.UtcNow));
+        _activity.Insert(0, new ActivityFeedItem("support_reply_sent", ticketId, DateTimeOffset.UtcNow));
+        return Task.CompletedTask;
+    }
+
+    public Task<AdminListResponse<AdminDemoAuditDto>> ListDemoAuditsAsync(int limit, string? cursor, CancellationToken cancellationToken)
+    {
+        var items = _demos
+            .OrderByDescending(d => d.DemoId)
+            .Take(Math.Max(1, limit))
+            .Select(d => new AdminDemoAuditDto(d.DemoId, d.ChannelInput, d.ChannelTitle, d.ChannelHandle, d.HealthScore, null, DateTimeOffset.UtcNow))
+            .ToArray();
+        return Task.FromResult(new AdminListResponse<AdminDemoAuditDto>(items, null));
     }
 
     private string? Protect(string? value) => string.IsNullOrWhiteSpace(value) ? null : _protector.Protect(value);
@@ -762,6 +863,241 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
         var recentActivity = await GetRecentActivityAsync(cancellationToken);
 
         return new AdminDataSnapshot(totalUsers, totalDemos, totalPurchases, recentActivity);
+    }
+
+    public async Task<AdminListResponse<AdminUserDto>> ListUsersAsync(int limit, string? cursor, CancellationToken cancellationToken)
+    {
+        var tableName = GetUsersTableName();
+        var response = await _dynamoDb.ScanAsync(new ScanRequest
+        {
+            TableName = tableName,
+            FilterExpression = "sk = :sk",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":sk"] = StringValue("PROFILE")
+            },
+            Limit = Math.Max(1, Math.Min(limit, 200)),
+            ExclusiveStartKey = DecodeCursor(cursor)
+        }, cancellationToken);
+
+        var items = response.Items
+            .Select(ReadUserAccount)
+            .Select(u => new AdminUserDto(u.UserId, u.Email, u.ChannelUrl, u.Purchased, u.OnboardingCompleted, u.AccessStatus, u.CreatedAt, u.UpdatedAt))
+            .OrderByDescending(u => u.CreatedAt)
+            .ToArray();
+
+        return new AdminListResponse<AdminUserDto>(items, EncodeCursor(response.LastEvaluatedKey));
+    }
+
+    public async Task<AdminUserDetailResponse?> GetUserDetailAsync(string userId, CancellationToken cancellationToken)
+    {
+        var user = await GetUserByIdAsync(userId, cancellationToken);
+        if (user is null) return null;
+
+        var dto = new AdminUserDto(user.UserId, user.Email, user.ChannelUrl, user.Purchased, user.OnboardingCompleted, user.AccessStatus, user.CreatedAt, user.UpdatedAt);
+        var onboarding = await GetUserOnboardingStateAsync(userId, cancellationToken);
+        var yt = await GetUserYouTubeSettingsAsync(userId, cancellationToken);
+        var purchases = await ListPurchasesByUserAsync(userId, cancellationToken);
+        var events = await GetRecentActivityAsync(cancellationToken);
+        return new AdminUserDetailResponse(dto, onboarding, yt, purchases, events);
+    }
+
+    public async Task<AdminListResponse<PurchaseRecord>> ListPurchasesAsync(int limit, string? cursor, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:PurchasesTable", "ybai-purchases");
+        var response = await _dynamoDb.ScanAsync(new ScanRequest
+        {
+            TableName = tableName,
+            Limit = Math.Max(1, Math.Min(limit, 200)),
+            ExclusiveStartKey = DecodeCursor(cursor)
+        }, cancellationToken);
+
+        var items = response.Items
+            .Select(ReadPurchase)
+            .OrderByDescending(p => p.PurchasedAt)
+            .ToArray();
+
+        return new AdminListResponse<PurchaseRecord>(items, EncodeCursor(response.LastEvaluatedKey));
+    }
+
+    public async Task<AdminListResponse<AdminSupportTicketDto>> ListSupportTicketsAsync(int limit, string? cursor, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:SupportTable", "ybai-support");
+        var response = await _dynamoDb.ScanAsync(new ScanRequest
+        {
+            TableName = tableName,
+            FilterExpression = "sk = :sk",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":sk"] = StringValue("DETAILS")
+            },
+            Limit = Math.Max(1, Math.Min(limit, 200)),
+            ExclusiveStartKey = DecodeCursor(cursor)
+        }, cancellationToken);
+
+        var items = response.Items
+            .Select(ReadSupportTicket)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToArray();
+
+        return new AdminListResponse<AdminSupportTicketDto>(items, EncodeCursor(response.LastEvaluatedKey));
+    }
+
+    public async Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:SupportTable", "ybai-support");
+        var response = await _dynamoDb.GetItemAsync(new GetItemRequest
+        {
+            TableName = tableName,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = StringValue($"TICKET#{ticketId}"),
+                ["sk"] = StringValue("DETAILS")
+            }
+        }, cancellationToken);
+
+        if (response.Item is null || response.Item.Count == 0) return null;
+        var ticket = ReadSupportTicket(response.Item);
+        var thread = await ListSupportThreadAsync(ticketId, cancellationToken);
+        var message = response.Item.GetValueOrDefault("message")?.S ?? string.Empty;
+        var name = EmptyToNull(response.Item.GetValueOrDefault("name")?.S);
+        return new AdminSupportTicketDetailResponse(ticket, name, message, thread);
+    }
+
+    public async Task SaveSupportReplyAsync(string ticketId, string subject, string body, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:SupportTable", "ybai-support");
+        var sentAt = DateTimeOffset.UtcNow;
+        var messageId = $"msg_{Guid.NewGuid():N}";
+        await PutItemAsync(tableName, new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"TICKET#{ticketId}"),
+            ["sk"] = StringValue($"MSG#{sentAt:O}#{messageId}"),
+            ["direction"] = StringValue("outbound"),
+            ["subject"] = StringValue(subject),
+            ["body"] = StringValue(body),
+            ["sentAt"] = StringValue(sentAt.ToString("O"))
+        }, cancellationToken);
+
+        await TrackEventAsync("support_reply_sent", ticketId, new Dictionary<string, string?>
+        {
+            ["messageId"] = messageId
+        }, cancellationToken);
+    }
+
+    public async Task<AdminListResponse<AdminDemoAuditDto>> ListDemoAuditsAsync(int limit, string? cursor, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:DemoTable", "ybai-demo-analyses");
+        var response = await _dynamoDb.ScanAsync(new ScanRequest
+        {
+            TableName = tableName,
+            FilterExpression = "sk = :sk",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":sk"] = StringValue("DETAILS")
+            },
+            Limit = Math.Max(1, Math.Min(limit, 200)),
+            ExclusiveStartKey = DecodeCursor(cursor)
+        }, cancellationToken);
+
+        var items = response.Items.Select(ReadDemoAudit).OrderByDescending(d => d.CreatedAt).ToArray();
+        return new AdminListResponse<AdminDemoAuditDto>(items, EncodeCursor(response.LastEvaluatedKey));
+    }
+
+    private PurchaseRecord ReadPurchase(Dictionary<string, AttributeValue> item)
+    {
+        return new PurchaseRecord(
+            PurchaseId: item.GetValueOrDefault("purchaseId")?.S ?? item.GetValueOrDefault("pk")?.S?.Replace("PURCHASE#", string.Empty, StringComparison.OrdinalIgnoreCase) ?? string.Empty,
+            UserId: item.GetValueOrDefault("userId")?.S ?? string.Empty,
+            Email: item.GetValueOrDefault("email")?.S ?? string.Empty,
+            Amount: decimal.TryParse(item.GetValueOrDefault("amount")?.N, out var amount) ? amount : 0m,
+            Currency: item.GetValueOrDefault("currency")?.S ?? "USD",
+            Status: item.GetValueOrDefault("status")?.S ?? "unknown",
+            PriceVersion: item.GetValueOrDefault("priceVersion")?.S ?? string.Empty,
+            PurchasedAt: ParseDate(item.GetValueOrDefault("purchasedAt")?.S)
+        );
+    }
+
+    private AdminSupportTicketDto ReadSupportTicket(Dictionary<string, AttributeValue> item)
+    {
+        var pk = item.GetValueOrDefault("pk")?.S ?? string.Empty;
+        var ticketId = pk.Replace("TICKET#", string.Empty, StringComparison.OrdinalIgnoreCase);
+        return new AdminSupportTicketDto(
+            TicketId: ticketId,
+            Email: item.GetValueOrDefault("email")?.S ?? string.Empty,
+            Subject: item.GetValueOrDefault("subject")?.S ?? string.Empty,
+            Status: item.GetValueOrDefault("status")?.S ?? "new",
+            ProductArea: item.GetValueOrDefault("productArea")?.S ?? "general",
+            ChannelUrl: EmptyToNull(item.GetValueOrDefault("channelUrl")?.S),
+            CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
+            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S)
+        );
+    }
+
+    private AdminDemoAuditDto ReadDemoAudit(Dictionary<string, AttributeValue> item)
+    {
+        var pk = item.GetValueOrDefault("pk")?.S ?? string.Empty;
+        var demoId = pk.Replace("DEMO#", string.Empty, StringComparison.OrdinalIgnoreCase);
+        return new AdminDemoAuditDto(
+            DemoId: demoId,
+            ChannelInput: item.GetValueOrDefault("channelInput")?.S ?? string.Empty,
+            ChannelTitle: item.GetValueOrDefault("channelTitle")?.S ?? string.Empty,
+            ChannelHandle: item.GetValueOrDefault("channelHandle")?.S ?? string.Empty,
+            HealthScore: int.TryParse(item.GetValueOrDefault("healthScore")?.S, out var score) ? score : 0,
+            Email: EmptyToNull(item.GetValueOrDefault("email")?.S),
+            CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S)
+        );
+    }
+
+    private async Task<IReadOnlyList<AdminSupportMessageDto>> ListSupportThreadAsync(string ticketId, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:SupportTable", "ybai-support");
+        var response = await _dynamoDb.QueryAsync(new QueryRequest
+        {
+            TableName = tableName,
+            KeyConditionExpression = "pk = :pk and begins_with(sk, :skPrefix)",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":pk"] = StringValue($"TICKET#{ticketId}"),
+                [":skPrefix"] = StringValue("MSG#")
+            },
+            ScanIndexForward = true
+        }, cancellationToken);
+
+        return response.Items.Select(item => new AdminSupportMessageDto(
+            MessageId: item.GetValueOrDefault("sk")?.S?.Split('#').LastOrDefault() ?? string.Empty,
+            Direction: item.GetValueOrDefault("direction")?.S ?? "outbound",
+            Subject: item.GetValueOrDefault("subject")?.S ?? string.Empty,
+            Body: item.GetValueOrDefault("body")?.S ?? string.Empty,
+            SentAt: ParseDate(item.GetValueOrDefault("sentAt")?.S)
+        )).ToArray();
+    }
+
+    private async Task<IReadOnlyList<PurchaseRecord>> ListPurchasesByUserAsync(string userId, CancellationToken cancellationToken)
+    {
+        var purchases = await ListPurchasesAsync(50, null, cancellationToken);
+        return purchases.Items.Where(p => string.Equals(p.UserId, userId, StringComparison.OrdinalIgnoreCase)).ToArray();
+    }
+
+    private static Dictionary<string, AttributeValue>? DecodeCursor(string? cursor)
+    {
+        if (string.IsNullOrWhiteSpace(cursor)) return null;
+        try
+        {
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, AttributeValue>>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? EncodeCursor(Dictionary<string, AttributeValue>? key)
+    {
+        if (key is null || key.Count == 0) return null;
+        var json = System.Text.Json.JsonSerializer.Serialize(key);
+        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
     }
 
     private async Task SaveUserProfileAsync(UserAccount user, CancellationToken cancellationToken)

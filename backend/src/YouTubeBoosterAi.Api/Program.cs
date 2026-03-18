@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using Amazon.Lambda.AspNetCoreServer.Hosting;
 using YouTubeBoosterAi.Api;
 
@@ -38,9 +39,26 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("admin-login", httpContext =>
+    {
+        var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 8,
+            Window = TimeSpan.FromMinutes(5),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+});
+
 var app = builder.Build();
 app.UseCors("default");
 app.UseHttpsRedirection();
+app.UseRateLimiter();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "youtube-booster-ai-api" }));
 
@@ -313,17 +331,28 @@ adminApi.MapPost("/login", async (AdminLoginRequest request, HttpContext httpCon
 {
     var adminEmail = await secretValueProvider.GetValueAsync("admin/email", secure: false, cancellationToken);
     var adminPassword = await secretValueProvider.GetValueAsync("admin/password", secure: true, cancellationToken);
+    var passwordFormat = await secretValueProvider.GetValueAsync("admin/password-format", secure: false, cancellationToken);
 
     if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
     {
         return Results.Problem("Admin credentials are not configured.");
     }
 
-    if (!string.Equals(request.Email, adminEmail, StringComparison.OrdinalIgnoreCase) || request.Password != adminPassword)
+    var emailOk = string.Equals(request.Email?.Trim(), adminEmail.Trim(), StringComparison.OrdinalIgnoreCase);
+    var format = (passwordFormat ?? "plain").Trim().ToLowerInvariant();
+    var passwordOk = format switch
+    {
+        "bcrypt" => BCrypt.Net.BCrypt.Verify(request.Password ?? string.Empty, adminPassword),
+        "plain" => FixedTimeEquals(request.Password ?? string.Empty, adminPassword),
+        _ => false
+    };
+
+    if (!emailOk || !passwordOk)
     {
         await appDataStore.TrackEventAsync("admin_login_failed", request.Email, new Dictionary<string, string?>
         {
-            ["scope"] = "admin"
+            ["scope"] = "admin",
+            ["reason"] = "invalid_credentials"
         }, cancellationToken);
         return Results.Unauthorized();
     }
@@ -335,7 +364,7 @@ adminApi.MapPost("/login", async (AdminLoginRequest request, HttpContext httpCon
     }, cancellationToken);
 
     return Results.Ok(new AdminSessionStatusResponse(true, request.Email.Trim().ToLowerInvariant()));
-});
+}).RequireRateLimiting("admin-login");
 
 adminApi.MapGet("/session", async (HttpContext httpContext, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>
 {
@@ -389,6 +418,81 @@ adminProtectedApi.MapGet("/support/tickets", () => Results.Ok(new
     items = Array.Empty<object>()
 }));
 
+adminProtectedApi.MapGet("/crm/users", async (int? limit, string? cursor, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.ListUsersAsync(limit ?? 50, cursor, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapGet("/crm/users/{userId}", async (string userId, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.GetUserDetailAsync(userId, cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+adminProtectedApi.MapGet("/crm/payments", async (int? limit, string? cursor, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.ListPurchasesAsync(limit ?? 50, cursor, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapGet("/crm/audits", async (int? limit, string? cursor, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.ListDemoAuditsAsync(limit ?? 50, cursor, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapGet("/crm/support/tickets", async (int? limit, string? cursor, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.ListSupportTicketsAsync(limit ?? 50, cursor, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapGet("/crm/support/tickets/{ticketId}", async (string ticketId, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.GetSupportTicketAsync(ticketId, cancellationToken);
+    return result is null ? Results.NotFound() : Results.Ok(result);
+});
+
+adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
+    string ticketId,
+    AdminSupportReplyRequest request,
+    IAppDataStore appDataStore,
+    IAmazonSimpleEmailService ses,
+    ISecretValueProvider secretValueProvider,
+    IAppSettingsProvider appSettingsProvider,
+    CancellationToken cancellationToken) =>
+{
+    var ticket = await appDataStore.GetSupportTicketAsync(ticketId, cancellationToken);
+    if (ticket is null) return Results.NotFound();
+
+    var fromAddress = await secretValueProvider.GetValueAsync("ses/from-email", secure: true, cancellationToken);
+    if (string.IsNullOrWhiteSpace(fromAddress)) return Results.Problem("SES sender identity is not configured.");
+
+    var subject = string.IsNullOrWhiteSpace(request.Subject) ? $"Re: {ticket.Ticket.Subject}" : request.Subject.Trim();
+    await ses.SendEmailAsync(new Amazon.SimpleEmail.Model.SendEmailRequest
+    {
+        Source = fromAddress,
+        Destination = new Amazon.SimpleEmail.Model.Destination { ToAddresses = [ticket.Ticket.Email] },
+        Message = new Amazon.SimpleEmail.Model.Message
+        {
+            Subject = new Amazon.SimpleEmail.Model.Content(subject),
+            Body = new Amazon.SimpleEmail.Model.Body
+            {
+                Text = new Amazon.SimpleEmail.Model.Content(request.Body ?? string.Empty)
+            }
+        }
+    }, cancellationToken);
+
+    await appDataStore.SaveSupportReplyAsync(ticketId, subject, request.Body ?? string.Empty, cancellationToken);
+    await appDataStore.TrackEventAsync("admin_support_reply_sent", ticketId, new Dictionary<string, string?>
+    {
+        ["to"] = ticket.Ticket.Email
+    }, cancellationToken);
+
+    return Results.Ok(new { ok = true });
+});
+
 var ogApi = app.MapGroup("/api/og");
 ogApi.MapPost("/render", (OgImageRequest request) =>
 {
@@ -432,6 +536,14 @@ app.MapGet("/api/route-plan", () =>
 });
 
 app.Run();
+
+static bool FixedTimeEquals(string left, string right)
+{
+    var a = System.Text.Encoding.UTF8.GetBytes(left);
+    var b = System.Text.Encoding.UTF8.GetBytes(right);
+    if (a.Length != b.Length) return false;
+    return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(a, b);
+}
 
 static string NormalizeRedirectPath(string? redirectPath)
 {

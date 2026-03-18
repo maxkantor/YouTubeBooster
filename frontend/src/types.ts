@@ -155,6 +155,96 @@ export type AdminSummary = {
   recentActivity: ActivityFeedItem[];
 };
 
+/** Paginated CRM list (API camelCase). */
+export type AdminListResponse<T> = {
+  items: T[];
+  nextCursor: string | null;
+};
+
+export type AdminUserRow = {
+  userId: string;
+  email: string;
+  channelUrl: string | null;
+  purchased: boolean;
+  onboardingCompleted: boolean;
+  accessStatus: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminOnboardingDetail = {
+  userId: string;
+  email: string;
+  purchased: boolean;
+  onboardingCompleted: boolean;
+  channelUrl: string | null;
+  growthGoal: string | null;
+  youTubeSettings: {
+    userId: string;
+    hasCredentialsJson: boolean;
+    hasClientId: boolean;
+    hasClientSecret: boolean;
+    channelUrl: string | null;
+    updatedAt: string;
+    storageModel: string;
+  } | null;
+};
+
+export type AdminPurchaseRow = {
+  purchaseId: string;
+  userId: string;
+  email: string;
+  amount: number;
+  currency: string;
+  status: string;
+  priceVersion: string;
+  purchasedAt: string;
+};
+
+export type AdminUserDetailResponse = {
+  user: AdminUserRow;
+  onboarding: AdminOnboardingDetail | null;
+  youTubeSettings: AdminOnboardingDetail['youTubeSettings'];
+  purchases: AdminPurchaseRow[];
+  recentEvents: ActivityFeedItem[];
+};
+
+export type AdminSupportTicketRow = {
+  ticketId: string;
+  email: string;
+  subject: string;
+  status: string;
+  productArea: string;
+  channelUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminSupportMessage = {
+  messageId: string;
+  direction: string;
+  subject: string;
+  body: string;
+  sentAt: string;
+};
+
+export type AdminSupportTicketDetail = {
+  ticket: AdminSupportTicketRow;
+  name: string | null;
+  message: string;
+  thread: AdminSupportMessage[];
+};
+
+export type AdminDemoAuditRow = {
+  demoId: string;
+  channelInput: string;
+  channelTitle: string;
+  channelHandle: string;
+  healthScore: number;
+  email: string | null;
+  createdAt: string;
+};
+
 export type CheckoutSession = {
   checkoutUrl: string;
   sessionId: string;

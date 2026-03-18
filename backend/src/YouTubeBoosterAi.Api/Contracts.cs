@@ -137,6 +137,66 @@ public sealed record AdminDashboardSummaryResponse(
 
 public sealed record ActivityFeedItem(string Title, string Detail, DateTimeOffset Timestamp);
 
+// ===== Admin CRM DTOs =====
+public sealed record AdminListResponse<T>(IReadOnlyList<T> Items, string? NextCursor);
+
+public sealed record AdminUserDto(
+    string UserId,
+    string Email,
+    string? ChannelUrl,
+    bool Purchased,
+    bool OnboardingCompleted,
+    string AccessStatus,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+public sealed record AdminUserDetailResponse(
+    AdminUserDto User,
+    UserOnboardingStateResponse? Onboarding,
+    UserYouTubeSettingsResponse? YouTubeSettings,
+    IReadOnlyList<PurchaseRecord> Purchases,
+    IReadOnlyList<ActivityFeedItem> RecentEvents
+);
+
+public sealed record AdminSupportTicketDto(
+    string TicketId,
+    string Email,
+    string Subject,
+    string Status,
+    string ProductArea,
+    string? ChannelUrl,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);
+
+public sealed record AdminSupportTicketDetailResponse(
+    AdminSupportTicketDto Ticket,
+    string? Name,
+    string Message,
+    IReadOnlyList<AdminSupportMessageDto> Thread
+);
+
+public sealed record AdminSupportMessageDto(
+    string MessageId,
+    string Direction,
+    string Subject,
+    string Body,
+    DateTimeOffset SentAt
+);
+
+public sealed record AdminSupportReplyRequest(string Subject, string Body);
+
+public sealed record AdminDemoAuditDto(
+    string DemoId,
+    string ChannelInput,
+    string ChannelTitle,
+    string ChannelHandle,
+    int HealthScore,
+    string? Email,
+    DateTimeOffset CreatedAt
+);
+
 public sealed record OgImageRequest(string Title, string Subtitle, string Theme, string? ShareId);
 
 public sealed record AppSettings(
