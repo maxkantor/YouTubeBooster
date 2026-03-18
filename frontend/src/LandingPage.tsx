@@ -169,7 +169,7 @@ export function LandingPage() {
             </a>
           </nav>
           <a href="/#audit" className="landing-nav-cta">
-            Analyze Channel
+            Analyze Your Channel
           </a>
         </div>
       </header>
@@ -180,47 +180,41 @@ export function LandingPage() {
         <div className="landing-hero-grid">
           <div className="landing-hero-content">
             <h1 className="landing-hero-title">
-              <span className="landing-hero-title-line">Analyze Your YouTube Channel.</span>
-              <span className="landing-hero-title-line landing-hero-title-accent">Get More Views.</span>
+              <span className="landing-hero-title-line">Fix Your YouTube Channel</span>
+              <span className="landing-hero-title-line landing-hero-title-second">Get More Views Without Guessing</span>
             </h1>
             <p className="landing-hero-sub">
-              We analyze your channel and show what’s killing your views—titles, thumbnails, SEO, CTR—and exactly how to fix it.
+              See exactly what’s stopping your videos from getting clicks—and fix it in minutes.
             </p>
             <div className="landing-hero-buttons">
               <a href="#audit" className="btn btn-lg landing-hero-cta-primary landing-cta-premium">
-                Analyze My YouTube Channel
+                Analyze Your Channel
               </a>
-              <a href="#example-audit" className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium">
-                See Example Audit
+              <a href="#audit" className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium">
+                Analyze Default Channel
               </a>
             </div>
-            <p className="landing-hero-micro">Free • Takes 60 seconds • No signup</p>
+            <p className="landing-hero-micro">Free • 60 seconds • No signup</p>
             <ul className="landing-hero-trust" aria-label="Trust">
               <li>
                 <span className="landing-trust-check" aria-hidden />
-                <span>Find why your videos don’t get clicks</span>
+                <span>Find what’s killing your clicks</span>
               </li>
               <li>
                 <span className="landing-trust-check" aria-hidden />
-                <span>Get exact fixes for titles, thumbnails, SEO</span>
+                <span>Fix titles, thumbnails, and SEO fast</span>
               </li>
               <li>
                 <span className="landing-trust-check" aria-hidden />
-                <span>Discover videos with breakout potential</span>
+                <span>Spot videos with breakout potential</span>
               </li>
             </ul>
           </div>
           <div className="landing-hero-preview" aria-hidden>
             <div className="landing-hero-insight-panel landing-insight-glass">
               <div className="landing-insight-panel-top">
-                <span className="landing-insight-pulse" />
-                <div className="landing-insight-channel-context">
-                  <div className="landing-insight-avatar" aria-hidden />
-                  <div className="landing-insight-header-text">
-                    <span className="landing-insight-panel-kicker">Channel Audit Results</span>
-                    <span className="landing-insight-panel-label">Video Performance Issues</span>
-                  </div>
-                </div>
+                <span className="landing-insight-pulse" aria-hidden />
+                <span className="landing-insight-panel-label-single">Live Channel Audit</span>
               </div>
               <ul className="landing-insight-list">
                 <li className="landing-insight-item landing-insight-item-pulse">
@@ -540,7 +534,7 @@ export function LandingPage() {
           <h2 className="landing-cta-title">Stop guessing what the algorithm wants.</h2>
           <p className="landing-cta-sub">Run your AI channel audit now.</p>
           <a href="#audit" className="btn btn-primary btn-lg landing-cta-btn">
-            Run Free Channel Audit
+            Analyze Your Channel
           </a>
         </div>
       </section>

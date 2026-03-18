@@ -780,7 +780,7 @@ export default function App() {
               window.location.href = '/#audit';
             }}
           >
-            Run Free Channel Audit
+            Analyze Your Channel
           </button>
         </nav>
       )}
