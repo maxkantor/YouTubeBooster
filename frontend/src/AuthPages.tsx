@@ -176,6 +176,20 @@ export function SignUpPage() {
     }
   }, [email]);
 
+  useEffect(() => {
+    // UX requirement: while verifying, prevent navigating away via global navbar links.
+    if (step !== 'confirm') return;
+    const globalNav = document.querySelector('nav.top-nav') as HTMLElement | null;
+    if (!globalNav) return;
+
+    const prev = globalNav.style.pointerEvents;
+    globalNav.style.pointerEvents = 'none';
+
+    return () => {
+      globalNav.style.pointerEvents = prev;
+    };
+  }, [step]);
+
   const checks = useMemo(() => passwordChecks(password), [password]);
   const checkCount = useMemo(() => countTrue(checks), [checks]);
   const passwordStrengthLabel = checkCount <= 2 ? 'Weak' : checkCount === 3 ? 'Good' : 'Strong';
