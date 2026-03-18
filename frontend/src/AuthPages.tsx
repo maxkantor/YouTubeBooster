@@ -320,7 +320,13 @@ export function SignUpPage() {
                   await confirmSignUp(email, code);
                   // Auto sign-in after verification
                   const session = await signIn(email, password);
-                  await authApi.cognitoLogin(session.idToken);
+                  // Best-effort backend session exchange.
+                  // If it fails (e.g. transient 401), we still want the user to proceed.
+                  try {
+                    await authApi.cognitoLogin(session.idToken);
+                  } catch (err) {
+                    console.warn('cognitoLogin failed after verify (suppressed):', err);
+                  }
                   await refresh();
                   window.location.href = returnTo;
                 }
@@ -344,11 +350,17 @@ export function SignUpPage() {
             {loading ? 'Working…' : step === 'signup' ? 'Create account' : 'Verify & continue'}
           </button>
 
-          <div className="auth-links">
-            <Link to={`/auth/signin?returnTo=${encodeURIComponent(returnTo)}`} className="muted" style={{ textDecoration: 'none' }}>
-              Already have an account?
-            </Link>
-          </div>
+          {step === 'signup' ? (
+            <div className="auth-links">
+              <Link to={`/auth/signin?returnTo=${encodeURIComponent(returnTo)}`} className="muted" style={{ textDecoration: 'none' }}>
+                Already have an account?
+              </Link>
+            </div>
+          ) : (
+            <div className="auth-links" aria-hidden="true" style={{ opacity: 0.9 }}>
+              <span className="muted">Verification in progress</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
