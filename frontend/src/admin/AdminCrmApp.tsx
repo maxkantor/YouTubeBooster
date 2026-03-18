@@ -11,7 +11,7 @@ import type {
 } from '../types';
 import './admin-crm.css';
 
-const NAV = [
+const NAV: { to: string; end?: boolean; label: string }[] = [
   { to: '', end: true, label: 'Dashboard' },
   { to: 'users', label: 'Users' },
   { to: 'payments', label: 'Payments' },
@@ -23,7 +23,7 @@ const NAV = [
   { to: 'analytics', label: 'Analytics' },
   { to: 'settings', label: 'Settings' },
   { to: 'system-logs', label: 'System logs' }
-] as const;
+];
 
 function formatDt(iso: string) {
   try {
@@ -864,13 +864,12 @@ export default function AdminCrmApp({
   }
 
   return (
-    <Routes basename="/admin">
-      <Route index element={<AdminHomePage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route path="users" element={<UsersPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route path="user/:id" element={<UserDetailPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route path="payments" element={<PaymentsPage adminSession={adminSession} onSignOut={onSignOut} />} />
+    <Routes>
+      <Route path="/admin/users" element={<UsersPage adminSession={adminSession} onSignOut={onSignOut} />} />
+      <Route path="/admin/user/:id" element={<UserDetailPage adminSession={adminSession} onSignOut={onSignOut} />} />
+      <Route path="/admin/payments" element={<PaymentsPage adminSession={adminSession} onSignOut={onSignOut} />} />
       <Route
-        path="subscriptions"
+        path="/admin/subscriptions"
         element={
           <PlaceholderPage
             title="Subscriptions"
@@ -880,9 +879,9 @@ export default function AdminCrmApp({
           />
         }
       />
-      <Route path="audits" element={<AuditsPage adminSession={adminSession} onSignOut={onSignOut} />} />
+      <Route path="/admin/audits" element={<AuditsPage adminSession={adminSession} onSignOut={onSignOut} />} />
       <Route
-        path="demo-unlocks"
+        path="/admin/demo-unlocks"
         element={
           <PlaceholderPage
             title="Demo unlocks"
@@ -892,10 +891,10 @@ export default function AdminCrmApp({
           />
         }
       />
-      <Route path="contact" element={<ContactListPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route path="contact/:ticketId" element={<ContactTicketPage adminSession={adminSession} onSignOut={onSignOut} />} />
+      <Route path="/admin/contact/:ticketId" element={<ContactTicketPage adminSession={adminSession} onSignOut={onSignOut} />} />
+      <Route path="/admin/contact" element={<ContactListPage adminSession={adminSession} onSignOut={onSignOut} />} />
       <Route
-        path="email"
+        path="/admin/email"
         element={
           <PlaceholderPage
             title="Email (SES)"
@@ -905,9 +904,9 @@ export default function AdminCrmApp({
           />
         }
       />
-      <Route path="analytics" element={<AnalyticsPage adminSession={adminSession} onSignOut={onSignOut} />} />
+      <Route path="/admin/analytics" element={<AnalyticsPage adminSession={adminSession} onSignOut={onSignOut} />} />
       <Route
-        path="settings"
+        path="/admin/settings"
         element={
           <PlaceholderPage
             title="Settings"
@@ -917,7 +916,8 @@ export default function AdminCrmApp({
           />
         }
       />
-      <Route path="system-logs" element={<SystemLogsPage adminSession={adminSession} onSignOut={onSignOut} />} />
+      <Route path="/admin/system-logs" element={<SystemLogsPage adminSession={adminSession} onSignOut={onSignOut} />} />
+      <Route path="/admin" element={<AdminHomePage adminSession={adminSession} onSignOut={onSignOut} />} />
     </Routes>
   );
 }
