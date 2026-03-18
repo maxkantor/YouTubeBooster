@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { AuthSession } from './lib/auth';
 import { getSession as cognitoGetSession, signOut as cognitoSignOut } from './lib/auth';
+import { authApi } from './lib/api';
 
 type AuthState = {
   loading: boolean;
@@ -29,8 +30,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const signOut = useCallback(() => {
-    cognitoSignOut();
-    setSession(null);
+    // Best-effort logout for both Cognito tokens and backend cookie.
+    void authApi.logout().catch(() => undefined).finally(() => {
+      cognitoSignOut();
+      setSession(null);
+    });
   }, []);
 
   const value = useMemo<AuthState>(() => ({ loading, session, refresh, signOut }), [loading, session, refresh, signOut]);

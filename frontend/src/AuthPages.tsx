@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmSignUp, forgotPassword, signIn, signUp, confirmForgotPassword } from './lib/auth';
 import { useAuth } from './AuthContext';
+import { authApi } from './lib/api';
 
 function useReturnTo() {
   const [sp] = useSearchParams();
@@ -37,9 +38,10 @@ export function SignInPage() {
               setLoading(true);
               setError('');
               try {
-                await signIn(email, password);
+                const session = await signIn(email, password);
+                await authApi.cognitoLogin(session.idToken);
                 await refresh();
-                nav(returnTo, { replace: true });
+                window.location.href = returnTo;
               } catch (e) {
                 setError(e instanceof Error ? e.message : 'Sign in failed.');
               } finally {
@@ -106,9 +108,10 @@ export function SignUpPage() {
                 } else {
                   await confirmSignUp(email, code);
                   // Auto sign-in after verification
-                  await signIn(email, password);
+                  const session = await signIn(email, password);
+                  await authApi.cognitoLogin(session.idToken);
                   await refresh();
-                  nav(returnTo, { replace: true });
+                  window.location.href = returnTo;
                 }
               } catch (e) {
                 setError(e instanceof Error ? e.message : 'Could not continue.');

@@ -189,6 +189,12 @@ export const authApi = {
     return fetchJson<UserSessionStatus>('/api/auth/logout', {
       method: 'POST'
     });
+  },
+  async cognitoLogin(idToken: string): Promise<UserSessionStatus> {
+    return fetchJson<UserSessionStatus>('/api/auth/cognito/login', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}` }
+    });
   }
 };
 

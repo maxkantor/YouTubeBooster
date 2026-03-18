@@ -329,6 +329,25 @@ authApi.MapPost("/magic-link/verify", async (MagicLinkVerifyRequest request, Htt
     return Results.Ok(new UserSessionStatusResponse(true, ToSessionUserDto(user)));
 });
 
+// Cognito JWT -> backend cookie session exchange
+authApi.MapPost("/cognito/login", async (HttpContext httpContext, IAppDataStore appDataStore, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>
+{
+    var sub = httpContext.User.FindFirst("sub")?.Value;
+    var email = httpContext.User.FindFirst("email")?.Value ?? httpContext.User.FindFirst("cognito:username")?.Value ?? string.Empty;
+    var emailVerifiedClaim = httpContext.User.FindFirst("email_verified")?.Value;
+    var emailVerified = string.Equals(emailVerifiedClaim, "true", StringComparison.OrdinalIgnoreCase);
+
+    if (string.IsNullOrWhiteSpace(sub) || string.IsNullOrWhiteSpace(email))
+    {
+        return Results.Unauthorized();
+    }
+
+    var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
+    await appDataStore.RecordUserLoginAsync(user.UserId, DateTimeOffset.UtcNow, cancellationToken);
+    await sessionCookieService.SignInUserAsync(httpContext, user, cancellationToken);
+    return Results.Ok(new UserSessionStatusResponse(true, ToSessionUserDto(user)));
+}).RequireAuthorization();
+
 authApi.MapGet("/session", async (HttpContext httpContext, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>
 {
     var user = await sessionCookieService.GetAuthenticatedUserAsync(httpContext, cancellationToken);
