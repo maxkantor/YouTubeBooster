@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { analytics } from './lib/analytics';
 import { useAuth } from './AuthContext';
-import { meApi } from './lib/api';
+import { billingApi, meApi } from './lib/api';
+import { getSession as cognitoGetSession } from './lib/auth';
 import type { CheckoutSession } from './types';
 
 const BENEFITS = [
@@ -69,6 +70,24 @@ export function PaywallModal({
       const session = await onCreateCheckout(channelInput?.trim() ? channelInput : 'account', '');
       window.location.href = session.checkoutUrl;
     } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+
+      // If we got a 401, the JWT we used for the request can be expired/invalid.
+      // Retry once using a fresh Cognito session token so the user sees the Stripe redirect.
+      if (msg.includes('status 401')) {
+        try {
+          const fresh = await cognitoGetSession();
+          if (fresh?.idToken) {
+            const retryChannel = channelInput?.trim() ? channelInput : 'account';
+            const retrySession = await billingApi.createCheckoutSession(fresh.idToken, retryChannel, 'premium');
+            window.location.href = retrySession.checkoutUrl;
+            return;
+          }
+        } catch {
+          // Fall through to normal error UI.
+        }
+      }
+
       setError(err instanceof Error ? err.message : 'Could not start checkout.');
     }
   }
