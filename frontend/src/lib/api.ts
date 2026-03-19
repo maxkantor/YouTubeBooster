@@ -30,15 +30,15 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const hasBody = init?.body !== undefined && init?.body !== null;
 
-  const headers: Record<string, string> = {};
-  if (hasBody && method !== 'GET' && method !== 'HEAD') {
-    headers['Content-Type'] = 'application/json';
+  const headers = new Headers(init?.headers);
+  if (hasBody && method !== 'GET' && method !== 'HEAD' && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
     credentials: 'include',
-    headers: { ...headers, ...(init?.headers || {}) },
-    ...init
+    headers
   });
 
   const text = await response.text();
@@ -59,9 +59,9 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function fetchJsonAuthed<T>(path: string, token: string, init?: RequestInit): Promise<T> {
-  const hdrs = new Headers(init?.headers || {});
-  hdrs.set('Authorization', `Bearer ${token}`);
-  return fetchJson<T>(path, { ...init, headers: hdrs });
+  const headers = new Headers(init?.headers);
+  headers.set('Authorization', `Bearer ${token}`);
+  return fetchJson<T>(path, { ...init, headers });
 }
 
 export const publicApi = {
