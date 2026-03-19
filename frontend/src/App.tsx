@@ -800,10 +800,10 @@ function AppInner() {
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {authSession ? (
+              {userSession.authenticated && userSession.user ? (
                 <>
                   <span style={{ color: 'rgba(226,232,240,0.95)', fontSize: 13, whiteSpace: 'nowrap' }}>
-                    {authSession.email ?? 'Account'}
+                    {userSession.user.email ?? 'Account'}
                   </span>
                   <button type="button" className="btn btn-secondary" onClick={handleGlobalSignOut}>
                     Sign out
