@@ -61,6 +61,8 @@ export function SignInPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
 
   const normalizedReturnTo = useMemo(() => {
     // Normalize URLs so `/dashboard/` doesn't accidentally miss a client route.
@@ -96,12 +98,24 @@ export function SignInPage() {
           style={{ marginTop: 16 }}
           onSubmit={async (e) => {
             e.preventDefault();
-            if (loading || !email.trim() || !password) return;
+            if (loading) return;
+
+            const emailVal = emailInputRef.current?.value ?? email;
+            const passwordVal = passwordInputRef.current?.value ?? password;
+            const emailTrimmed = emailVal.trim();
+            if (!emailTrimmed || !passwordVal) {
+              setError('Enter your email and password.');
+              return;
+            }
 
             setLoading(true);
             setError('');
             try {
-              const session = await signIn(email, password);
+              // Keep controlled inputs in sync in case Chrome autofill mutated DOM values.
+              setEmail(emailTrimmed);
+              setPassword(passwordVal);
+
+              const session = await signIn(emailTrimmed, passwordVal);
               await authApi.cognitoLogin(session.idToken);
               await refresh();
               nav(normalizedReturnTo, { replace: true });
@@ -146,6 +160,7 @@ export function SignInPage() {
               onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
               onFocus={onEmailFocus}
               placeholder="you@example.com"
+              ref={emailInputRef}
             />
           </div>
 
@@ -162,6 +177,7 @@ export function SignInPage() {
               onChange={(e) => setPassword(e.target.value)}
               onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
               placeholder="Your password"
+              ref={passwordInputRef}
             />
           </div>
 
@@ -170,7 +186,7 @@ export function SignInPage() {
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={loading || !email.trim() || !password}
+            disabled={loading}
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
