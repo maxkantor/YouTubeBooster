@@ -41,7 +41,7 @@ export function PaywallModal({
     setError('');
     try {
       analytics.checkoutStarted();
-      const session = await onCreateCheckout(channelInput ?? '', '');
+      const session = await onCreateCheckout(channelInput?.trim() ? channelInput : 'account', '');
       window.location.href = session.checkoutUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout.');

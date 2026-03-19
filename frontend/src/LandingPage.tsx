@@ -138,10 +138,9 @@ export function LandingPage() {
         return;
       }
 
-      if (!channelInput) {
-        setPricingError('Enter a channel URL (or analyze a demo first).');
-        return;
-      }
+      // Channel is optional for purchase. If missing, send a safe placeholder.
+      // Backend uses it for metadata only; user can connect their channel later.
+      if (!channelInput) channelInput = 'account';
 
       setPricingLoading(true);
       setPricingError('');
