@@ -183,6 +183,10 @@ function CheckoutSuccessPage({
   const { session: authSession } = useAuth();
   const [status, setStatus] = useState<'idle' | 'checking' | 'active' | 'error'>('idle');
   const [error, setError] = useState('');
+  const sessionId = searchParams.get('session_id');
+  const checkoutReturnPath = searchParams.toString()
+    ? `/checkout/success?${searchParams.toString()}`
+    : '/checkout/success';
 
   useEffect(() => {
     if (!authSession) return;
@@ -234,10 +238,16 @@ function CheckoutSuccessPage({
               You must be signed in to attach this purchase to your account.
             </p>
             <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-              <Link className="btn btn-primary" to={`/auth/signin?returnTo=${encodeURIComponent('/checkout/success')}`}>
+              <Link
+                className="btn btn-primary"
+                to={`/auth/signin?returnTo=${encodeURIComponent(checkoutReturnPath)}`}
+              >
                 Sign in
               </Link>
-              <Link className="btn btn-secondary" to={`/auth/signup?returnTo=${encodeURIComponent('/checkout/success')}`}>
+              <Link
+                className="btn btn-secondary"
+                to={`/auth/signup?returnTo=${encodeURIComponent(checkoutReturnPath)}`}
+              >
                 Create account
               </Link>
             </div>
@@ -246,8 +256,15 @@ function CheckoutSuccessPage({
           <div className="status-card" style={{ marginTop: 16 }}>
             <strong>{status === 'active' ? 'Full access active' : status === 'checking' ? 'Checking Stripe confirmation…' : 'Waiting for confirmation'}</strong>
             <p className="muted" style={{ marginTop: 8 }}>
-              Session: {searchParams.get('session_id') ?? '—'}
+              Session: {sessionId ?? '—'}
             </p>
+            {!sessionId && (
+              <p style={{ marginTop: 10 }}>
+                <span className="muted">
+                  No `session_id` was provided in the URL. If payment completed, access should still activate automatically.
+                </span>
+              </p>
+            )}
           </div>
         )}
         {error && <p className="error-text" style={{ marginTop: 14 }}>{error}</p>}
