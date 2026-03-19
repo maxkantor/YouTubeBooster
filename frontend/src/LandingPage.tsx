@@ -112,11 +112,6 @@ export function LandingPage() {
   }
 
   async function handleUnlockReport() {
-    const email = pricingEmail.trim();
-    if (!email) {
-      setPricingError('Enter your email.');
-      return;
-    }
     const channel = pricingChannel.trim() || undefined;
     try {
       const stored = sessionStorage.getItem(DEMO_STORAGE_KEY);
@@ -131,13 +126,26 @@ export function LandingPage() {
         }
       }
       if (!channelInput && storedDemo) channelInput = storedDemo;
-      setPricingLoading(true);
-      setPricingError('');
+
       if (!authSession) {
-        navigate(`/auth/signup?returnTo=${encodeURIComponent('/#pricing')}&channel=${encodeURIComponent(channelInput || '')}&plan=premium`);
+        // Never allow purchase when not authenticated. Redirect to signup and let the user unlock
+        // again after authentication.
+        navigate(
+          `/auth/signup?returnTo=${encodeURIComponent('/#pricing')}&channel=${encodeURIComponent(
+            channelInput || ''
+          )}&plan=premium`
+        );
         return;
       }
-      const checkout = await billingApi.createCheckoutSession(authSession.idToken, channelInput || email, 'premium');
+
+      if (!channelInput) {
+        setPricingError('Enter a channel URL (or analyze a demo first).');
+        return;
+      }
+
+      setPricingLoading(true);
+      setPricingError('');
+      const checkout = await billingApi.createCheckoutSession(authSession.idToken, channelInput, 'premium');
       window.location.href = checkout.checkoutUrl;
     } catch (err) {
       setPricingError(err instanceof Error ? err.message : 'Could not start checkout.');
@@ -523,13 +531,15 @@ export function LandingPage() {
               ))}
             </ul>
             <div className="landing-pricing-form">
-              <input
-                type="email"
-                placeholder="Your email"
-                className="landing-pricing-email"
-                value={pricingEmail}
-                onChange={(e) => setPricingEmail(e.target.value)}
-              />
+              {!authSession && (
+                <input
+                  type="email"
+                  placeholder="Your email (used for sign-in)"
+                  className="landing-pricing-email"
+                  value={pricingEmail}
+                  onChange={(e) => setPricingEmail(e.target.value)}
+                />
+              )}
               <input
                 type="text"
                 placeholder="Channel URL (optional)"

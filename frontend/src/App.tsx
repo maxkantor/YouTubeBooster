@@ -589,6 +589,7 @@ function AppInner() {
   const [userSession, setUserSession] = useState<UserSessionStatus>({ authenticated: false, user: null });
   const [adminSession, setAdminSession] = useState<AdminSessionStatus>({ authenticated: false, email: null });
   const [sessionLoading, setSessionLoading] = useState(true);
+  const { signOut: authSignOut } = useAuth();
 
   const refreshUserSession = useCallback(async () => {
     try {
@@ -662,6 +663,12 @@ function AppInner() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  async function handleGlobalSignOut() {
+    // Best-effort logout for both the frontend session cookie and Cognito.
+    await authSignOut();
+    await refreshUserSession();
+  }
+
   const seo = path === '/' ? { title: BRAND_DEFAULT_TITLE, canonical: '/' }
     : path === '/demo' ? { title: `Demo – ${BRAND.name}`, canonical: '/demo' }
     : path === '/dashboard' ? { title: `Dashboard – ${BRAND.name}`, canonical: '/dashboard' }
@@ -703,6 +710,28 @@ function AppInner() {
             >
               Analyze Your Channel
             </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {userSession.authenticated && userSession.user ? (
+                <>
+                  <span style={{ color: 'rgba(226,232,240,0.95)', fontSize: 13, whiteSpace: 'nowrap' }}>
+                    {userSession.user.email}
+                  </span>
+                  <button type="button" className="btn btn-secondary" onClick={handleGlobalSignOut}>
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link to="/auth/signin" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
+                    Sign in
+                  </Link>
+                  <Link to="/auth/signup" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+                    Sign up
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         </nav>
       )}
