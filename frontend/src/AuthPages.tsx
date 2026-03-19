@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmSignUp, forgotPassword, signIn, signUp, confirmForgotPassword } from './lib/auth';
 import { useAuth } from './AuthContext';
@@ -179,6 +179,21 @@ export function SignUpPage() {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const codeInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    // Ensure keyboard focus is moved to the top of the Sign Up view after redirect.
+    window.scrollTo(0, 0);
+    const t = window.setTimeout(() => {
+      if (step === 'signup') {
+        emailInputRef.current?.focus();
+      } else {
+        codeInputRef.current?.focus();
+      }
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [step]);
 
   useEffect(() => {
     try {
@@ -238,6 +253,7 @@ export function SignUpPage() {
               type="email"
               autoComplete="email"
               inputMode="email"
+              ref={emailInputRef}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onFocus={onEmailFocus}
@@ -318,6 +334,7 @@ export function SignUpPage() {
               <input
                 id="auth-signup-code"
                 name="code"
+                ref={codeInputRef}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="123456"

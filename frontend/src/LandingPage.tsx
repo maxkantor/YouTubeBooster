@@ -531,22 +531,19 @@ export function LandingPage() {
               ))}
             </ul>
             <div className="landing-pricing-form">
-              {!authSession && (
+              {authSession ? (
                 <input
-                  type="email"
-                  placeholder="Your email (used for sign-in)"
-                  className="landing-pricing-email"
-                  value={pricingEmail}
-                  onChange={(e) => setPricingEmail(e.target.value)}
+                  type="text"
+                  placeholder="Channel URL (optional)"
+                  className="landing-pricing-channel"
+                  value={pricingChannel}
+                  onChange={(e) => setPricingChannel(e.target.value)}
                 />
+              ) : (
+                <p className="muted" style={{ margin: 0 }}>
+                  Sign up to unlock. We’ll take you back to pricing after authentication.
+                </p>
               )}
-              <input
-                type="text"
-                placeholder="Channel URL (optional)"
-                className="landing-pricing-channel"
-                value={pricingChannel}
-                onChange={(e) => setPricingChannel(e.target.value)}
-              />
               {pricingError && <p className="landing-pricing-error">{pricingError}</p>}
               <button
                 type="button"
