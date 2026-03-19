@@ -116,14 +116,26 @@ public sealed class SessionCookieService
 
     private static void ClearCookie(HttpResponse response, string name, bool secure)
     {
-        response.Cookies.Delete(name, new CookieOptions
+        // Aggressively delete the cookie across common paths and secure modes.
+        // Cookie `Path` defaults to the request path when not explicitly set,
+        // so older cookies might exist under `/api/auth` instead of `/`.
+        var paths = new[] { "/", "/api", "/api/auth" };
+        var secureModes = new[] { secure, !secure };
+
+        foreach (var s in secureModes)
         {
-            HttpOnly = true,
-            IsEssential = true,
-            SameSite = SameSiteMode.Lax,
-            Secure = secure,
-            Path = "/",
-            Expires = DateTimeOffset.UnixEpoch
-        });
+            foreach (var p in paths)
+            {
+                response.Cookies.Delete(name, new CookieOptions
+                {
+                    HttpOnly = true,
+                    IsEssential = true,
+                    SameSite = SameSiteMode.Lax,
+                    Secure = s,
+                    Path = p,
+                    Expires = DateTimeOffset.UnixEpoch
+                });
+            }
+        }
     }
 }
