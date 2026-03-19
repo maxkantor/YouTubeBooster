@@ -131,11 +131,10 @@ export function LandingPage() {
   }
 
   async function handleUnlockReport() {
-    const channel = undefined;
     try {
       const stored = sessionStorage.getItem(DEMO_STORAGE_KEY);
       const storedDemo = getStoredDemoChannel();
-      let channelInput = channel;
+      let channelInput: string | undefined = undefined;
       if (!channelInput && stored) {
         try {
           const parsed = JSON.parse(stored) as { channelInput?: string };
@@ -150,9 +149,7 @@ export function LandingPage() {
         // Never allow purchase when not authenticated. Redirect to signup and let the user unlock
         // again after authentication.
         navigate(
-          `/auth/signup?returnTo=${encodeURIComponent('/#pricing')}&channel=${encodeURIComponent(
-            channelInput || ''
-          )}&plan=premium`
+          `/auth/signup?returnTo=${encodeURIComponent('/#pricing')}&channel=${encodeURIComponent('')}&plan=premium`
         );
         return;
       }
