@@ -124,6 +124,7 @@ export function SignInPage() {
               inputMode="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
               onFocus={onEmailFocus}
               placeholder="you@example.com"
             />
@@ -140,6 +141,7 @@ export function SignInPage() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
               placeholder="Your password"
             />
           </div>
