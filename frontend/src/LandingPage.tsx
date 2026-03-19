@@ -57,7 +57,6 @@ export function LandingPage() {
   const [demoError, setDemoError] = useState('');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [pricingEmail, setPricingEmail] = useState('');
-  const [pricingChannel, setPricingChannel] = useState('');
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
@@ -132,7 +131,7 @@ export function LandingPage() {
   }
 
   async function handleUnlockReport() {
-    const channel = pricingChannel.trim() || undefined;
+    const channel = undefined;
     try {
       const stored = sessionStorage.getItem(DEMO_STORAGE_KEY);
       const storedDemo = getStoredDemoChannel();
@@ -561,15 +560,7 @@ export function LandingPage() {
               ))}
             </ul>
             <div className="landing-pricing-form">
-              {authSession ? (
-                <input
-                  type="text"
-                  placeholder="Channel URL (optional)"
-                  className="landing-pricing-channel"
-                  value={pricingChannel}
-                  onChange={(e) => setPricingChannel(e.target.value)}
-                />
-              ) : (
+              {!authSession && (
                 <p className="muted" style={{ margin: 0 }}>
                   Sign up to unlock. We’ll take you back to pricing after authentication.
                 </p>
