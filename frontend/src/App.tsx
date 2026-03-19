@@ -320,7 +320,7 @@ function DashboardPage({
   refreshUserSession: () => Promise<UserSessionStatus>;
 }) {
   const navigate = useNavigate();
-  const { session: authSession } = useAuth();
+  const { session: authSession, signOut: authSignOut } = useAuth();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -353,9 +353,9 @@ function DashboardPage({
   }, []);
 
   async function handleSignOut() {
-    await authApi.logout();
-    await refreshUserSession();
-    navigate('/demo', { replace: true });
+    await authSignOut();
+    // Hard navigation so stale route state/cookies can't cause protected pages to render.
+    window.location.href = '/demo';
   }
 
   if (error) {
@@ -754,7 +754,8 @@ function AppInner() {
   async function handleGlobalSignOut() {
     // Best-effort logout for both the frontend session cookie and Cognito.
     await authSignOut();
-    await refreshUserSession();
+    // Hard navigation so AuthProvider re-fetches backend cookie session state.
+    window.location.reload();
   }
 
   const seo = path === '/' ? { title: BRAND_DEFAULT_TITLE, canonical: '/' }

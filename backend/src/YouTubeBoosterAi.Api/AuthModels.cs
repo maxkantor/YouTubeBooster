@@ -64,6 +64,7 @@ public sealed record UserSessionRecord(
     string SessionId,
     string UserId,
     string Email,
+    long AuthEpoch,
     DateTimeOffset ExpiresAt,
     DateTimeOffset CreatedAt
 );
@@ -71,6 +72,7 @@ public sealed record UserSessionRecord(
 public sealed record AdminSessionRecord(
     string SessionId,
     string Email,
+    long AuthEpoch,
     DateTimeOffset ExpiresAt,
     DateTimeOffset CreatedAt
 );

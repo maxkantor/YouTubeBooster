@@ -7,7 +7,7 @@ type AuthState = {
   loading: boolean;
   session: AuthSession | null;
   refresh: () => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 };
 
 const Ctx = createContext<AuthState | null>(null);
@@ -32,12 +32,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback(async () => {
     // Best-effort logout for both Cognito tokens and backend cookie.
-    void authApi.logout().catch(() => undefined).finally(() => {
-      cognitoSignOut();
-      setSession(null);
-    });
+    // Must be awaitable because callers hard-reload immediately after.
+    try {
+      await authApi.logout();
+    } catch {
+      // ignore; backend cookie might already be gone
+    }
+
+    cognitoSignOut();
+    setSession(null);
   }, []);
 
   const value = useMemo<AuthState>(() => ({ loading, session, refresh, signOut }), [loading, session, refresh, signOut]);

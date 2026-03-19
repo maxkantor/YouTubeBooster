@@ -26,9 +26,19 @@ public interface IAppDataStore
     Task SaveUserSessionAsync(UserSessionRecord sessionRecord, CancellationToken cancellationToken);
     Task<UserSessionRecord?> GetUserSessionAsync(string sessionId, CancellationToken cancellationToken);
     Task DeleteUserSessionAsync(string sessionId, CancellationToken cancellationToken);
+
+    // Aggressive server-side logout invalidation.
+    // When user logs out we bump an auth epoch; any session created with an old epoch becomes invalid.
+    Task<long> GetUserAuthEpochAsync(string userId, CancellationToken cancellationToken);
+    Task<long> BumpUserAuthEpochAsync(string userId, CancellationToken cancellationToken);
+
     Task SaveAdminSessionAsync(AdminSessionRecord sessionRecord, CancellationToken cancellationToken);
     Task<AdminSessionRecord?> GetAdminSessionAsync(string sessionId, CancellationToken cancellationToken);
     Task DeleteAdminSessionAsync(string sessionId, CancellationToken cancellationToken);
+
+    Task<long> GetAdminAuthEpochAsync(string email, CancellationToken cancellationToken);
+    Task<long> BumpAdminAuthEpochAsync(string email, CancellationToken cancellationToken);
+
     Task SaveUserOnboardingAsync(string userId, SaveUserOnboardingRequest request, CancellationToken cancellationToken);
     Task<UserOnboardingStateResponse?> GetUserOnboardingStateAsync(string userId, CancellationToken cancellationToken);
     Task CompleteUserOnboardingAsync(string userId, CancellationToken cancellationToken);
@@ -84,6 +94,8 @@ public sealed class InMemoryAppDataStore : IAppDataStore
     private readonly Dictionary<string, MagicLinkTokenRecord> _magicLinkTokens = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UserSessionRecord> _userSessions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AdminSessionRecord> _adminSessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _userAuthEpoch = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _adminAuthEpochByEmail = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, StoredProtectedYouTubeSettings> _userYouTubeSettings = new(StringComparer.OrdinalIgnoreCase);
     private readonly IDataProtector _protector;
 
@@ -332,6 +344,20 @@ public sealed class InMemoryAppDataStore : IAppDataStore
         return Task.CompletedTask;
     }
 
+    public Task<long> GetUserAuthEpochAsync(string userId, CancellationToken cancellationToken)
+    {
+        _userAuthEpoch.TryGetValue(userId, out var epoch);
+        return Task.FromResult(epoch);
+    }
+
+    public Task<long> BumpUserAuthEpochAsync(string userId, CancellationToken cancellationToken)
+    {
+        // Use unix seconds so we can store as a simple number.
+        var nowEpoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        _userAuthEpoch[userId] = nowEpoch;
+        return Task.FromResult(nowEpoch);
+    }
+
     public Task SaveAdminSessionAsync(AdminSessionRecord sessionRecord, CancellationToken cancellationToken)
     {
         _adminSessions[sessionRecord.SessionId] = sessionRecord;
@@ -353,6 +379,21 @@ public sealed class InMemoryAppDataStore : IAppDataStore
     {
         _adminSessions.Remove(sessionId);
         return Task.CompletedTask;
+    }
+
+    public Task<long> GetAdminAuthEpochAsync(string email, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeEmail(email);
+        _adminAuthEpochByEmail.TryGetValue(normalized, out var epoch);
+        return Task.FromResult(epoch);
+    }
+
+    public Task<long> BumpAdminAuthEpochAsync(string email, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeEmail(email);
+        var nowEpoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        _adminAuthEpochByEmail[normalized] = nowEpoch;
+        return Task.FromResult(nowEpoch);
     }
 
     public async Task SaveUserOnboardingAsync(string userId, SaveUserOnboardingRequest request, CancellationToken cancellationToken)
@@ -965,6 +1006,7 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             ["sk"] = StringValue("DETAILS"),
             ["userId"] = StringValue(sessionRecord.UserId),
             ["email"] = StringValue(sessionRecord.Email),
+            ["authEpoch"] = NumberValue(sessionRecord.AuthEpoch),
             ["expiresAt"] = StringValue(sessionRecord.ExpiresAt.ToString("O")),
             ["createdAt"] = StringValue(sessionRecord.CreatedAt.ToString("O"))
         }, cancellationToken);
@@ -991,6 +1033,7 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             SessionId: sessionId,
             UserId: response.Item.GetValueOrDefault("userId")?.S ?? string.Empty,
             Email: response.Item.GetValueOrDefault("email")?.S ?? string.Empty,
+            AuthEpoch: response.Item.TryGetValue("authEpoch", out var epochAttr) ? ParseLong(epochAttr) : 0L,
             ExpiresAt: ParseDate(response.Item.GetValueOrDefault("expiresAt")?.S),
             CreatedAt: ParseDate(response.Item.GetValueOrDefault("createdAt")?.S)
         );
@@ -1017,6 +1060,38 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
         }, cancellationToken);
     }
 
+    public async Task<long> GetUserAuthEpochAsync(string userId, CancellationToken cancellationToken)
+    {
+        var response = await _dynamoDb.GetItemAsync(new GetItemRequest
+        {
+            TableName = GetUsersTableName(),
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = StringValue($"USERAUTH#{userId}"),
+                ["sk"] = StringValue("EPOCH")
+            }
+        }, cancellationToken);
+
+        return response.Item is { Count: > 0 }
+            && response.Item.TryGetValue("authEpoch", out var epochAttr)
+                ? ParseLong(epochAttr)
+                : 0L;
+    }
+
+    public async Task<long> BumpUserAuthEpochAsync(string userId, CancellationToken cancellationToken)
+    {
+        var nowEpoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await PutItemAsync(GetUsersTableName(), new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"USERAUTH#{userId}"),
+            ["sk"] = StringValue("EPOCH"),
+            ["authEpoch"] = NumberValue(nowEpoch),
+            ["updatedAt"] = StringValue(DateTimeOffset.UtcNow.ToString("O"))
+        }, cancellationToken);
+
+        return nowEpoch;
+    }
+
     public async Task SaveAdminSessionAsync(AdminSessionRecord sessionRecord, CancellationToken cancellationToken)
     {
         await PutItemAsync(GetUsersTableName(), new Dictionary<string, AttributeValue>
@@ -1024,6 +1099,7 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             ["pk"] = StringValue($"ADMINSESSION#{sessionRecord.SessionId}"),
             ["sk"] = StringValue("DETAILS"),
             ["email"] = StringValue(sessionRecord.Email),
+            ["authEpoch"] = NumberValue(sessionRecord.AuthEpoch),
             ["expiresAt"] = StringValue(sessionRecord.ExpiresAt.ToString("O")),
             ["createdAt"] = StringValue(sessionRecord.CreatedAt.ToString("O"))
         }, cancellationToken);
@@ -1049,6 +1125,7 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
         var record = new AdminSessionRecord(
             SessionId: sessionId,
             Email: response.Item.GetValueOrDefault("email")?.S ?? string.Empty,
+            AuthEpoch: response.Item.TryGetValue("authEpoch", out var epochAttr) ? ParseLong(epochAttr) : 0L,
             ExpiresAt: ParseDate(response.Item.GetValueOrDefault("expiresAt")?.S),
             CreatedAt: ParseDate(response.Item.GetValueOrDefault("createdAt")?.S)
         );
@@ -1073,6 +1150,40 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
                 ["sk"] = StringValue("DETAILS")
             }
         }, cancellationToken);
+    }
+
+    public async Task<long> GetAdminAuthEpochAsync(string email, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeEmail(email);
+        var response = await _dynamoDb.GetItemAsync(new GetItemRequest
+        {
+            TableName = GetUsersTableName(),
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = StringValue($"ADMINEPOCH#{normalized}"),
+                ["sk"] = StringValue("EPOCH")
+            }
+        }, cancellationToken);
+
+        return response.Item is { Count: > 0 }
+            && response.Item.TryGetValue("authEpoch", out var epochAttr)
+                ? ParseLong(epochAttr)
+                : 0L;
+    }
+
+    public async Task<long> BumpAdminAuthEpochAsync(string email, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeEmail(email);
+        var nowEpoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await PutItemAsync(GetUsersTableName(), new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"ADMINEPOCH#{normalized}"),
+            ["sk"] = StringValue("EPOCH"),
+            ["authEpoch"] = NumberValue(nowEpoch),
+            ["updatedAt"] = StringValue(DateTimeOffset.UtcNow.ToString("O"))
+        }, cancellationToken);
+
+        return nowEpoch;
     }
 
     public async Task SaveUserOnboardingAsync(string userId, SaveUserOnboardingRequest request, CancellationToken cancellationToken)
@@ -1609,9 +1720,19 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
 
     private static DateTimeOffset ParseDate(string? value) => DateTimeOffset.TryParse(value, out var parsed) ? parsed : DateTimeOffset.UtcNow;
 
+    private static long ParseLong(AttributeValue attribute)
+    {
+        // Dynamo stores numeric attributes as `N`; older/alternate writes may have used `S`.
+        if (!string.IsNullOrWhiteSpace(attribute.N) && long.TryParse(attribute.N, out var parsedN)) return parsedN;
+        if (!string.IsNullOrWhiteSpace(attribute.S) && long.TryParse(attribute.S, out var parsedS)) return parsedS;
+        return 0L;
+    }
+
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static AttributeValue StringValue(string value) => new() { S = value };
 
     private static AttributeValue BoolValue(bool value) => new() { BOOL = value };
+
+    private static AttributeValue NumberValue(long value) => new() { N = value.ToString() };
 }

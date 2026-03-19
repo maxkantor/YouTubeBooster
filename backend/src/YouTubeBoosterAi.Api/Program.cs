@@ -4,6 +4,8 @@ using Amazon.SimpleEmail;
 using Amazon.SimpleSystemsManagement;
 using Amazon.SimpleSystemsManagement.Model;
 using Amazon.Lambda.AspNetCoreServer.Hosting;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using YouTubeBoosterAi.Api;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -405,21 +407,58 @@ authApi.MapPost("/magic-link/verify", async (MagicLinkVerifyRequest request, Htt
 // Cognito JWT -> backend cookie session exchange
 authApi.MapPost("/cognito/login", async (HttpContext httpContext, IAppDataStore appDataStore, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>
 {
-    var sub = httpContext.User.FindFirst("sub")?.Value;
-    var email = httpContext.User.FindFirst("email")?.Value ?? httpContext.User.FindFirst("cognito:username")?.Value ?? string.Empty;
-    var emailVerifiedClaim = httpContext.User.FindFirst("email_verified")?.Value;
+    // We intentionally validate the JWT inside the handler so we can log the exact reason
+    // when Cognito token exchange fails (instead of failing silently via middleware short-circuit).
+    var authResult = await httpContext.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
+    if (!authResult.Succeeded || authResult.Principal is null)
+    {
+        // Ensure we can debug the exact failure reason from lambda logs.
+        var failure = authResult.Failure?.Message ?? "unknown";
+        Console.WriteLine($"[cognito/login] JWT authenticate failed: {failure}");
+        Console.WriteLine($"[cognito/login] Auth header present: {(!string.IsNullOrWhiteSpace(httpContext.Request.Headers.Authorization))}");
+        return Results.Json(new { error = "invalid_token", detail = failure }, statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    var principal = authResult.Principal;
+
+    // Sometimes the JWT principal doesn't expose a `sub` claim as `sub` (claim type mapping differs).
+    // We still require JWT validation to succeed (AuthenticateAsync succeeded),
+    // but we use fallbacks to obtain a stable identifier.
+    var sub =
+        principal.FindFirst("sub")?.Value
+        ?? principal.FindFirst("cognito:username")?.Value
+        ?? principal.FindFirst("preferred_username")?.Value
+        ?? principal.FindFirst("username")?.Value
+        ?? principal.FindFirst("email")?.Value
+        ?? principal.FindFirst("emailaddress")?.Value;
+    // Cognito ID tokens should always have `sub`, but `email` claims can be missing depending on client configuration.
+    // Use multiple fallbacks; if we still have no email, synthesize a unique placeholder based on `sub`.
+    var email = principal.FindFirst("email")?.Value
+                ?? principal.FindFirst("cognito:username")?.Value
+                ?? principal.FindFirst("preferred_username")?.Value
+                ?? principal.FindFirst("username")?.Value
+                ?? principal.FindFirst("emailaddress")?.Value
+                ?? string.Empty;
+    var emailVerifiedClaim = principal.FindFirst("email_verified")?.Value;
     var emailVerified = string.Equals(emailVerifiedClaim, "true", StringComparison.OrdinalIgnoreCase);
 
-    if (string.IsNullOrWhiteSpace(sub) || string.IsNullOrWhiteSpace(email))
+    if (string.IsNullOrWhiteSpace(sub))
     {
-        return Results.Unauthorized();
+        // If we can't derive a stable identifier, stop here.
+        return Results.Json(new { error = "invalid_token_missing_sub" }, statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    if (string.IsNullOrWhiteSpace(email))
+    {
+        // Ensure uniqueness to avoid mixing multiple users under the same empty email.
+        email = $"{sub}@cognito.local";
     }
 
     var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
     await appDataStore.RecordUserLoginAsync(user.UserId, DateTimeOffset.UtcNow, cancellationToken);
     await sessionCookieService.SignInUserAsync(httpContext, user, cancellationToken);
     return Results.Ok(new UserSessionStatusResponse(true, ToSessionUserDto(user)));
-}).RequireAuthorization();
+});
 
 authApi.MapGet("/session", async (HttpContext httpContext, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>
 {

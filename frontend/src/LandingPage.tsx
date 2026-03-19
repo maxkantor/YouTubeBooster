@@ -187,7 +187,13 @@ export function LandingPage() {
             {authSession ? (
               <>
                 <span className="landing-nav-user">{authSession.email ?? 'Account'}</span>
-                <button type="button" className="landing-nav-link landing-nav-signout" onClick={authSignOut}>
+                <button
+                  type="button"
+                  className="landing-nav-link landing-nav-signout"
+                  onClick={() => {
+                    void authSignOut();
+                  }}
+                >
                   Sign out
                 </button>
               </>

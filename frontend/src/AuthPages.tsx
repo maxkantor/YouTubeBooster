@@ -117,8 +117,9 @@ export function SignInPage() {
 
               const session = await signIn(emailTrimmed, passwordVal);
               await authApi.cognitoLogin(session.idToken);
-              await refresh();
-              nav(normalizedReturnTo, { replace: true });
+              // Hard navigation to fully re-run route guards after backend sets cookies.
+              // This prevents the SPA race where `/dashboard` renders before `/api/auth/session` confirms.
+              window.location.replace(normalizedReturnTo);
             } catch (e) {
               const anyErr = e as any;
               const code = anyErr?.code ?? anyErr?.name;

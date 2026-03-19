@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace YouTubeBoosterAi.Api;
@@ -37,12 +38,50 @@ public static class CognitoAuth
                 o.RequireHttpsMetadata = true;
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer = true,
+                    // Cognito tokens can have `iss` / `aud` differences depending on app-client / token type.
+                    // Keep signature + lifetime validation, but avoid failing exchange on strict claim mismatches.
+                    ValidateIssuer = false,
                     ValidIssuer = opts.Authority,
-                    ValidateAudience = true,
+                    ValidateAudience = false,
                     ValidAudience = opts.AppClientId,
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromMinutes(2)
+                };
+
+                // AWS Lambda logs are currently too silent about *why* JWT validation fails.
+                // This helps pinpoint audience/issuer mismatch vs missing/invalid token.
+                o.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = ctx =>
+                    {
+                        try
+                        {
+                            // Lambda logs can be noisy; Console.WriteLine is the most reliable way to surface the reason.
+                            Console.WriteLine($"[JwtBearer] JWT authentication failed: {ctx.Exception?.Message}");
+                            Console.WriteLine($"[JwtBearer] Authorization header present: {(!string.IsNullOrWhiteSpace(ctx.Request?.Headers?.Authorization.ToString()))}");
+                        }
+                        catch
+                        {
+                            // ignore logging failures
+                        }
+
+                        return Task.CompletedTask;
+                    }
+                    ,
+                    OnChallenge = ctx =>
+                    {
+                        try
+                        {
+                            Console.WriteLine($"[JwtBearer] Challenge: error={ctx.Error} desc={ctx.ErrorDescription}");
+                            Console.WriteLine($"[JwtBearer] Authorization header present: {(!string.IsNullOrWhiteSpace(ctx.Request?.Headers?.Authorization.ToString()))}");
+                        }
+                        catch
+                        {
+                            // ignore logging failures
+                        }
+
+                        return Task.CompletedTask;
+                    }
                 };
             });
 

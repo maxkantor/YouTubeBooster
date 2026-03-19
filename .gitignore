@@ -57,6 +57,20 @@ results/
 output/
 runner_data/
 
+# Node / frontend build outputs
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# .NET build outputs
+**/bin/
+**/obj/
+
+# Backend publish folders + generated zips
+backend/publish*/
+backend/backend-publish*/
+backend/backend-latest-*.zip
+
 # Lambda zip (regenerate with backend publish script)
 artifacts/*.zip
 artifacts/publish/

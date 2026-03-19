@@ -26,6 +26,15 @@ public sealed class SessionCookieService
             return null;
         }
 
+        // Aggressive invalidation: if user logged out, we bump epoch and every older cookie/session becomes invalid.
+        var currentEpoch = await _appDataStore.GetUserAuthEpochAsync(session.UserId, cancellationToken);
+        if (session.AuthEpoch != currentEpoch)
+        {
+            await _appDataStore.DeleteUserSessionAsync(sessionId, cancellationToken);
+            ClearCookie(httpContext.Response, UserCookieName, httpContext.Request.IsHttps);
+            return null;
+        }
+
         var user = await _appDataStore.GetUserByIdAsync(session.UserId, cancellationToken);
         if (user is null)
         {
@@ -39,10 +48,12 @@ public sealed class SessionCookieService
     public async Task SignInUserAsync(HttpContext httpContext, UserAccount user, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
+        var epoch = await _appDataStore.GetUserAuthEpochAsync(user.UserId, cancellationToken);
         var session = new UserSessionRecord(
             SessionId: $"us_{Guid.NewGuid():N}",
             UserId: user.UserId,
             Email: user.Email,
+            AuthEpoch: epoch,
             ExpiresAt: now.AddDays(14),
             CreatedAt: now
         );
@@ -55,9 +66,19 @@ public sealed class SessionCookieService
     {
         if (httpContext.Request.Cookies.TryGetValue(UserCookieName, out var sessionId) && !string.IsNullOrWhiteSpace(sessionId))
         {
+            // If we can resolve the session, bump the epoch so every previous cookie is invalid.
+            var existingSession = await _appDataStore.GetUserSessionAsync(sessionId, cancellationToken);
+            if (existingSession is not null)
+            {
+                await _appDataStore.BumpUserAuthEpochAsync(existingSession.UserId, cancellationToken);
+            }
+
             await _appDataStore.DeleteUserSessionAsync(sessionId, cancellationToken);
         }
 
+        // Aggressive: clear every cookie name the browser sent.
+        // This ensures no stale cookies survive logout across browsers/tabs.
+        ClearAllCookies(httpContext.Response, httpContext.Request, httpContext.Request.IsHttps);
         ClearCookie(httpContext.Response, UserCookieName, httpContext.Request.IsHttps);
     }
 
@@ -72,6 +93,15 @@ public sealed class SessionCookieService
         if (session is null)
         {
             ClearCookie(httpContext.Response, AdminCookieName, httpContext.Request.IsHttps);
+            return null;
+        }
+
+        var currentEpoch = await _appDataStore.GetAdminAuthEpochAsync(session.Email, cancellationToken);
+        if (session.AuthEpoch != currentEpoch)
+        {
+            await _appDataStore.DeleteAdminSessionAsync(sessionId, cancellationToken);
+            ClearCookie(httpContext.Response, AdminCookieName, httpContext.Request.IsHttps);
+            return null;
         }
 
         return session;
@@ -80,9 +110,12 @@ public sealed class SessionCookieService
     public async Task SignInAdminAsync(HttpContext httpContext, string email, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var epoch = await _appDataStore.GetAdminAuthEpochAsync(normalizedEmail, cancellationToken);
         var session = new AdminSessionRecord(
             SessionId: $"ad_{Guid.NewGuid():N}",
-            Email: email.Trim().ToLowerInvariant(),
+            Email: normalizedEmail,
+            AuthEpoch: epoch,
             ExpiresAt: now.AddHours(12),
             CreatedAt: now
         );
@@ -95,9 +128,16 @@ public sealed class SessionCookieService
     {
         if (httpContext.Request.Cookies.TryGetValue(AdminCookieName, out var sessionId) && !string.IsNullOrWhiteSpace(sessionId))
         {
+            var existingSession = await _appDataStore.GetAdminSessionAsync(sessionId, cancellationToken);
+            if (existingSession is not null)
+            {
+                await _appDataStore.BumpAdminAuthEpochAsync(existingSession.Email, cancellationToken);
+            }
+
             await _appDataStore.DeleteAdminSessionAsync(sessionId, cancellationToken);
         }
 
+        ClearAllCookies(httpContext.Response, httpContext.Request, httpContext.Request.IsHttps);
         ClearCookie(httpContext.Response, AdminCookieName, httpContext.Request.IsHttps);
     }
 
@@ -136,6 +176,17 @@ public sealed class SessionCookieService
                     Expires = DateTimeOffset.UnixEpoch
                 });
             }
+        }
+    }
+
+    private static void ClearAllCookies(HttpResponse response, HttpRequest request, bool requestIsHttps)
+    {
+        // Clear across both secure modes and common paths.
+        // Domain is host-only by default; `Cookies.Delete` without Domain uses request host.
+        foreach (var key in request.Cookies.Keys)
+        {
+            if (string.IsNullOrWhiteSpace(key)) continue;
+            ClearCookie(response, key, requestIsHttps);
         }
     }
 }
