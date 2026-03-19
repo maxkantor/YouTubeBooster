@@ -22,7 +22,7 @@ public sealed class SessionCookieService
         var session = await _appDataStore.GetUserSessionAsync(sessionId, cancellationToken);
         if (session is null)
         {
-            ClearCookie(httpContext.Response, UserCookieName);
+            ClearCookie(httpContext.Response, UserCookieName, httpContext.Request.IsHttps);
             return null;
         }
 
@@ -30,7 +30,7 @@ public sealed class SessionCookieService
         if (user is null)
         {
             await _appDataStore.DeleteUserSessionAsync(sessionId, cancellationToken);
-            ClearCookie(httpContext.Response, UserCookieName);
+            ClearCookie(httpContext.Response, UserCookieName, httpContext.Request.IsHttps);
         }
 
         return user;
@@ -58,7 +58,7 @@ public sealed class SessionCookieService
             await _appDataStore.DeleteUserSessionAsync(sessionId, cancellationToken);
         }
 
-        ClearCookie(httpContext.Response, UserCookieName);
+        ClearCookie(httpContext.Response, UserCookieName, httpContext.Request.IsHttps);
     }
 
     public async Task<AdminSessionRecord?> GetAuthenticatedAdminAsync(HttpContext httpContext, CancellationToken cancellationToken)
@@ -71,7 +71,7 @@ public sealed class SessionCookieService
         var session = await _appDataStore.GetAdminSessionAsync(sessionId, cancellationToken);
         if (session is null)
         {
-            ClearCookie(httpContext.Response, AdminCookieName);
+            ClearCookie(httpContext.Response, AdminCookieName, httpContext.Request.IsHttps);
         }
 
         return session;
@@ -98,7 +98,7 @@ public sealed class SessionCookieService
             await _appDataStore.DeleteAdminSessionAsync(sessionId, cancellationToken);
         }
 
-        ClearCookie(httpContext.Response, AdminCookieName);
+        ClearCookie(httpContext.Response, AdminCookieName, httpContext.Request.IsHttps);
     }
 
     private static void AppendCookie(HttpResponse response, string name, string value, DateTimeOffset expiresAt, bool secure)
@@ -113,13 +113,16 @@ public sealed class SessionCookieService
         });
     }
 
-    private static void ClearCookie(HttpResponse response, string name)
+    private static void ClearCookie(HttpResponse response, string name, bool secure)
     {
         response.Cookies.Delete(name, new CookieOptions
         {
             HttpOnly = true,
             IsEssential = true,
-            SameSite = SameSiteMode.Lax
+            SameSite = SameSiteMode.Lax,
+            Secure = secure,
+            Path = "/",
+            Expires = DateTimeOffset.UnixEpoch
         });
     }
 }
