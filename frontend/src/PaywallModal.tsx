@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { analytics } from './lib/analytics';
 import { useAuth } from './AuthContext';
+import { meApi } from './lib/api';
 import type { CheckoutSession } from './types';
 
 const BENEFITS = [
@@ -30,12 +31,36 @@ export function PaywallModal({
   const location = useLocation();
   const { session: authSession } = useAuth();
   const [error, setError] = useState('');
+  const [hasPremium, setHasPremium] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!authSession?.idToken) {
+      setHasPremium(false);
+      return;
+    }
+    (async () => {
+      try {
+        const status = await meApi.getAccessStatus(authSession.idToken);
+        if (!cancelled) setHasPremium(!!status.premium);
+      } catch {
+        if (!cancelled) setHasPremium(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.idToken]);
 
   async function handleUnlock() {
     if (!authSession) {
       const returnTo = `${location.pathname}${location.search}`;
       navigate(`/auth/signup?returnTo=${encodeURIComponent(returnTo)}&channel=${encodeURIComponent(channelInput ?? '')}&plan=premium`);
       onClose();
+      return;
+    }
+    if (hasPremium) {
+      setError('You already have premium access.');
       return;
     }
     setError('');
@@ -71,8 +96,8 @@ export function PaywallModal({
             Your purchase unlocks the account you’re signed into (works across all devices).
           </p>
           {error && <p className="error-text">{error}</p>}
-          <button type="button" className="btn btn-primary" onClick={handleUnlock} disabled={isLoading}>
-            {authSession ? (isLoading ? 'Starting checkout…' : 'Unlock Full Report') : 'Sign in to unlock'}
+          <button type="button" className="btn btn-primary" onClick={handleUnlock} disabled={isLoading || hasPremium}>
+            {authSession ? (hasPremium ? 'Already unlocked' : (isLoading ? 'Starting checkout…' : 'Unlock Full Report')) : 'Sign in to unlock'}
           </button>
         </div>
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>

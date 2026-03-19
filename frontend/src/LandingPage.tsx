@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
-import { billingApi, publicApi } from './lib/api';
+import { billingApi, meApi, publicApi } from './lib/api';
 import { useAuth } from './AuthContext';
 
 const DEMO_STORAGE_KEY = 'ybai_demo';
@@ -60,6 +60,7 @@ export function LandingPage() {
   const [pricingChannel, setPricingChannel] = useState('');
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState('');
+  const [hasPremium, setHasPremium] = useState(false);
 
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
@@ -70,6 +71,25 @@ export function LandingPage() {
     onScroll();
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!authSession?.idToken) {
+      setHasPremium(false);
+      return;
+    }
+    (async () => {
+      try {
+        const status = await meApi.getAccessStatus(authSession.idToken);
+        if (!cancelled) setHasPremium(!!status.premium);
+      } catch {
+        if (!cancelled) setHasPremium(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.idToken]);
 
   useEffect(() => {
     if (window.location.hash === '#audit') {
@@ -135,6 +155,11 @@ export function LandingPage() {
             channelInput || ''
           )}&plan=premium`
         );
+        return;
+      }
+
+      if (hasPremium) {
+        setPricingError('You already have premium access.');
         return;
       }
 
@@ -554,9 +579,9 @@ export function LandingPage() {
                 type="button"
                 className="btn btn-primary btn-lg landing-pricing-cta"
                 onClick={handleUnlockReport}
-                disabled={pricingLoading}
+                disabled={pricingLoading || hasPremium}
               >
-                {pricingLoading ? 'Starting checkout…' : 'Unlock Full Report'}
+                {hasPremium ? 'Already unlocked' : (pricingLoading ? 'Starting checkout…' : 'Unlock Full Report')}
               </button>
             </div>
           </div>
