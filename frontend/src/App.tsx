@@ -190,18 +190,41 @@ function CheckoutSuccessPage({
       : '/checkout/success'
     : '/dashboard';
 
+  // When session_id is missing, stop the "confirming access" loop.
+  // If backend cookie session isn't ready, exchange Cognito JWT -> backend cookie first.
   useEffect(() => {
     if (!authSession) return;
-    // If the checkout page is missing the checkout session id, it's almost certainly
-    // the "wrong screen" loop (after sign out/in or after deploy).
-    // Immediately go to dashboard so the user never gets stuck.
-    if (!sessionId) {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [authSession, sessionId, navigate]);
+    if (sessionId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!userSession.authenticated) {
+          await authApi.cognitoLogin(authSession.idToken);
+          await refreshUserSession();
+        }
+      } catch {
+        // ignore; we'll route to sign-in below
+      }
+
+      if (cancelled) return;
+      // Re-read after refresh.
+      const ok = !cancelled && (await refreshUserSession()).authenticated;
+      if (ok) {
+        navigate('/dashboard', { replace: true });
+      } else {
+        navigate(`/auth/signin?returnTo=${encodeURIComponent('/dashboard')}`, { replace: true });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession, sessionId, navigate, refreshUserSession, userSession.authenticated]);
 
   useEffect(() => {
     if (!authSession) return;
+    if (!sessionId) return; // avoid polling while we are redirecting away
     const token = authSession.idToken;
     let cancelled = false;
     async function poll() {
