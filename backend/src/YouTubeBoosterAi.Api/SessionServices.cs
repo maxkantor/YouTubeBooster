@@ -109,6 +109,7 @@ public sealed class SessionCookieService
             IsEssential = true,
             SameSite = SameSiteMode.Lax,
             Secure = secure,
+            Path = "/",
             Expires = expiresAt
         });
     }
