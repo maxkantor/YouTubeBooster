@@ -192,6 +192,16 @@ function CheckoutSuccessPage({
 
   useEffect(() => {
     if (!authSession) return;
+    // If the checkout page is missing the checkout session id, it's almost certainly
+    // the "wrong screen" loop (after sign out/in or after deploy).
+    // Immediately go to dashboard so the user never gets stuck.
+    if (!sessionId) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [authSession, sessionId, navigate]);
+
+  useEffect(() => {
+    if (!authSession) return;
     const token = authSession.idToken;
     let cancelled = false;
     async function poll() {
