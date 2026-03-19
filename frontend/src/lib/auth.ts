@@ -139,7 +139,31 @@ export async function confirmForgotPassword(email: string, code: string, newPass
 }
 
 export function signOut(): void {
-  const user = pool?.getCurrentUser();
-  user?.signOut();
+  // amazon-cognito-identity-js stores tokens in localStorage.
+  // If we don't clear them, Cognito may appear "logged back in" after a redeploy.
+  void (async () => {
+    try {
+      // Ensure we have access to the pool before attempting to sign out.
+      // (If pool isn't initialized yet, pool?.getCurrentUser() would be null and signOut would be a no-op.)
+      await ensurePoolInitialized();
+      const user = pool?.getCurrentUser();
+      user?.signOut();
+    } catch {
+      // best-effort
+    } finally {
+      try {
+        for (const k of Object.keys(window.localStorage)) {
+          if (k.startsWith('CognitoIdentityServiceProvider.')) {
+            window.localStorage.removeItem(k);
+          }
+        }
+      } catch {
+        // ignore
+      }
+      // Drop in-memory singleton so next call forces fresh init.
+      pool = null;
+      poolInitPromise = null;
+    }
+  })();
 }
 

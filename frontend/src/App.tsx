@@ -606,7 +606,7 @@ function AppInner() {
   const [userSession, setUserSession] = useState<UserSessionStatus>({ authenticated: false, user: null });
   const [adminSession, setAdminSession] = useState<AdminSessionStatus>({ authenticated: false, email: null });
   const [sessionLoading, setSessionLoading] = useState(true);
-  const { signOut: authSignOut } = useAuth();
+  const { session: authSession, signOut: authSignOut, refresh: refreshAuth } = useAuth();
 
   const refreshUserSession = useCallback(async () => {
     try {
@@ -659,10 +659,33 @@ function AppInner() {
     };
   }, []);
 
+  // If Cognito is authenticated but our backend cookie session isn't established yet
+  // (can happen after deploys/reloads), exchange Cognito JWT -> backend cookie.
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (!authSession?.idToken) return;
+    if (userSession.authenticated) return;
+    void (async () => {
+      try {
+        await authApi.cognitoLogin(authSession.idToken);
+        await refreshUserSession();
+      } catch {
+        // ignore; if cookie exchange fails, user will remain unauthenticated server-side.
+      } finally {
+        try {
+          await refreshAuth();
+        } catch {
+          // ignore
+        }
+      }
+    })();
+  }, [authSession?.idToken, refreshAuth, refreshUserSession, sessionLoading, userSession.authenticated]);
+
   const location = useLocation();
   const pathAdmin = location.pathname.startsWith('/admin');
   const showGlobalNav =
     !pathAdmin && location.pathname !== '/' && location.pathname !== '/platform';
+  const globalReturnTo = `${location.pathname}${location.search}`;
 
   const path = location.pathname;
   const [navScrolled, setNavScrolled] = useState(false);
@@ -729,10 +752,10 @@ function AppInner() {
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {userSession.authenticated && userSession.user ? (
+              {authSession ? (
                 <>
                   <span style={{ color: 'rgba(226,232,240,0.95)', fontSize: 13, whiteSpace: 'nowrap' }}>
-                    {userSession.user.email}
+                    {authSession.email ?? 'Account'}
                   </span>
                   <button type="button" className="btn btn-secondary" onClick={handleGlobalSignOut}>
                     Sign out
@@ -740,10 +763,18 @@ function AppInner() {
                 </>
               ) : (
                 <>
-                  <Link to="/auth/signin" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
+                  <Link
+                    to={`/auth/signin?returnTo=${encodeURIComponent(globalReturnTo)}`}
+                    className="btn btn-secondary"
+                    style={{ textDecoration: 'none' }}
+                  >
                     Sign in
                   </Link>
-                  <Link to="/auth/signup" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+                  <Link
+                    to={`/auth/signup?returnTo=${encodeURIComponent(globalReturnTo)}`}
+                    className="btn btn-primary"
+                    style={{ textDecoration: 'none' }}
+                  >
                     Sign up
                   </Link>
                 </>
