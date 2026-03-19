@@ -43,6 +43,12 @@ export function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const normalizedReturnTo = useMemo(() => {
+    // Normalize URLs so `/dashboard/` doesn't accidentally miss a client route.
+    const raw = (returnTo || '/dashboard').trim();
+    return raw.replace(/\/+(?=[?#]|$)/g, '');
+  }, [returnTo]);
+
   // Keep the last email typed so redirects/errors don't force users to retype.
   useEffect(() => {
     try {
@@ -66,7 +72,46 @@ export function SignInPage() {
           <p className="muted">Unlock across all devices. No device lock-in.</p>
         </div>
 
-        <div className="input-stack auth-form" style={{ marginTop: 16 }}>
+        <form
+          className="input-stack auth-form"
+          style={{ marginTop: 16 }}
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (loading || !email.trim() || !password) return;
+
+            setLoading(true);
+            setError('');
+            try {
+              const session = await signIn(email, password);
+              await authApi.cognitoLogin(session.idToken);
+              await refresh();
+              nav(normalizedReturnTo, { replace: true });
+            } catch (e) {
+              const anyErr = e as any;
+              const code = anyErr?.code ?? anyErr?.name;
+              const msg = anyErr?.message as string | undefined;
+
+              // Avoid account-enumeration style messaging (e.g. "User is not confirmed" / "User exists").
+              if (
+                code === 'UserNotConfirmedException' ||
+                (code === 'NotAuthorizedException' && msg && /not\s*confirmed|unconfirmed/i.test(msg)) ||
+                (msg && /not\s*confirmed|unconfirmed/i.test(msg))
+              ) {
+                setError('Sign in failed.');
+              } else if (code === 'NotAuthorizedException') {
+                setError('Invalid email or password.');
+              } else if (e instanceof Error && e.message) {
+                setError('Sign in failed.');
+                // Keep the underlying details in DevTools without exposing them to users.
+                console.warn('Sign in failed (suppressed message):', { code, message: e.message });
+              } else {
+                setError('Sign in failed.');
+              }
+            } finally {
+              setLoading(false);
+            }
+          }}
+        >
           <div className="field-block">
             <label className="field-label" htmlFor="auth-signin-email">
               Email
@@ -102,42 +147,9 @@ export function SignInPage() {
           {error && <p className="error-text">{error}</p>}
 
           <button
-            type="button"
+            type="submit"
             className="btn btn-primary"
             disabled={loading || !email.trim() || !password}
-            onClick={async () => {
-              setLoading(true);
-              setError('');
-              try {
-                const session = await signIn(email, password);
-                await authApi.cognitoLogin(session.idToken);
-                await refresh();
-                window.location.href = returnTo;
-              } catch (e) {
-                const anyErr = e as any;
-                const code = anyErr?.code ?? anyErr?.name;
-                const msg = anyErr?.message as string | undefined;
-
-                // Avoid account-enumeration style messaging (e.g. "User is not confirmed" / "User exists").
-                if (
-                  code === 'UserNotConfirmedException' ||
-                  code === 'NotAuthorizedException' && msg && /not\s*confirmed|unconfirmed/i.test(msg) ||
-                  (msg && /not\s*confirmed|unconfirmed/i.test(msg))
-                ) {
-                  setError('Sign in failed.');
-                } else if (code === 'NotAuthorizedException') {
-                  setError('Invalid email or password.');
-                } else if (e instanceof Error && e.message) {
-                  setError('Sign in failed.');
-                  // Keep the underlying details in DevTools without exposing them to users.
-                  console.warn('Sign in failed (suppressed message):', { code, message: e.message });
-                } else {
-                  setError('Sign in failed.');
-                }
-              } finally {
-                setLoading(false);
-              }
-            }}
           >
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
@@ -150,7 +162,7 @@ export function SignInPage() {
               Create account
             </Link>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
