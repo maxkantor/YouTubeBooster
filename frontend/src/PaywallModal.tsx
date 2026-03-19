@@ -74,10 +74,16 @@ export function PaywallModal({
 
       // If we got a 401, the JWT we used for the request can be expired/invalid.
       // Retry once using a fresh Cognito session token so the user sees the Stripe redirect.
-      if (msg.includes('status 401')) {
+      const shouldRetry401 = msg.includes('401') || msg.toLowerCase().includes('unauthorized');
+      if (shouldRetry401) {
+        // Debug visibility: lets us confirm retry code runs.
+        // eslint-disable-next-line no-console
+        console.log('[PaywallModal] checkout 401; retrying with fresh Cognito session');
         try {
           const fresh = await cognitoGetSession();
           if (fresh?.idToken) {
+            // eslint-disable-next-line no-console
+            console.log('[PaywallModal] fresh idToken present; retry create-checkout-session');
             const retryChannel = channelInput?.trim() ? channelInput : 'account';
             const retrySession = await billingApi.createCheckoutSession(fresh.idToken, retryChannel, 'premium');
             window.location.href = retrySession.checkoutUrl;
