@@ -118,8 +118,18 @@ export function SignInPage() {
               const session = await signIn(emailTrimmed, passwordVal);
               await authApi.cognitoLogin(session.idToken);
               // Hard navigation to fully re-run route guards after backend sets cookies.
-              // This prevents the SPA race where `/dashboard` renders before `/api/auth/session` confirms.
-              window.location.replace(normalizedReturnTo);
+              // IMPORTANT: Avoid hard-refreshing deep SPA routes on Amplify (can 404 if rewrite rules miss).
+              // We hard-refresh to `/` and then let the app redirect client-side after sessions restore.
+              try {
+                if (normalizedReturnTo.startsWith('/#')) {
+                  window.location.replace(normalizedReturnTo);
+                  return;
+                }
+                window.sessionStorage.setItem('yb_post_auth_redirect', normalizedReturnTo);
+              } catch {
+                // ignore
+              }
+              window.location.replace('/');
             } catch (e) {
               const anyErr = e as any;
               const code = anyErr?.code ?? anyErr?.name;

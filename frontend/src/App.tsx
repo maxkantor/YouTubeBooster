@@ -698,6 +698,25 @@ function AppInner() {
     };
   }, []);
 
+  // Post-auth hard-refresh redirect:
+  // After login we hard-refresh to `/` to avoid Amplify deep-route 404s,
+  // then redirect client-side once cookie session is restored.
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (!userSession.authenticated) return;
+    let to = '';
+    try {
+      to = window.sessionStorage.getItem('yb_post_auth_redirect') ?? '';
+      if (to) window.sessionStorage.removeItem('yb_post_auth_redirect');
+    } catch {
+      to = '';
+    }
+    if (to && to !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, '', to);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }, [sessionLoading, userSession.authenticated]);
+
   // If Cognito is authenticated but our backend cookie session isn't established yet
   // (can happen after deploys/reloads), exchange Cognito JWT -> backend cookie.
   useEffect(() => {
@@ -719,6 +738,23 @@ function AppInner() {
       }
     })();
   }, [authSession?.idToken, refreshAuth, refreshUserSession, sessionLoading, userSession.authenticated]);
+
+  // Post-logout hard-refresh redirect
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (userSession.authenticated) return;
+    let to = '';
+    try {
+      to = window.sessionStorage.getItem('yb_post_logout_redirect') ?? '';
+      if (to) window.sessionStorage.removeItem('yb_post_logout_redirect');
+    } catch {
+      to = '';
+    }
+    if (to) {
+      window.history.replaceState(null, '', to);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }, [sessionLoading, userSession.authenticated]);
 
   const location = useLocation();
   const pathAdmin = location.pathname.startsWith('/admin');
@@ -754,8 +790,12 @@ function AppInner() {
   async function handleGlobalSignOut() {
     // Best-effort logout for both the frontend session cookie and Cognito.
     await authSignOut();
-    // Hard navigation so AuthProvider re-fetches backend cookie session state.
-    window.location.reload();
+    try {
+      window.sessionStorage.setItem('yb_post_logout_redirect', '/demo');
+    } catch {
+      // ignore
+    }
+    window.location.replace('/');
   }
 
   const seo = path === '/' ? { title: BRAND_DEFAULT_TITLE, canonical: '/' }
