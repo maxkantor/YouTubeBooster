@@ -130,12 +130,14 @@ function UserRoute({
   allowIncompleteOnboarding?: boolean;
   children: ReactNode;
 }) {
+  const location = useLocation();
   if (loading) {
     return <LoadingSurface title="Checking purchased access" detail="Restoring your session and purchase state." />;
   }
 
   if (!userSession.authenticated || !userSession.user) {
-    return <Navigate to="/checkout/success" replace />;
+    const returnTo = `${location.pathname}${location.search}`;
+    return <Navigate to={`/auth/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   if (!allowIncompleteOnboarding && !userSession.user.onboardingCompleted) {
@@ -259,6 +261,7 @@ function CheckoutSuccessPage({
   }, [authSession, navigate]);
 
   return (
+    authSession ? <Navigate to="/dashboard" replace /> : (
     <div className="page narrow-page">
       <div className="surface">
         <div className="locked-label">Checkout</div>
@@ -305,6 +308,7 @@ function CheckoutSuccessPage({
         {error && <p className="error-text" style={{ marginTop: 14 }}>{error}</p>}
       </div>
     </div>
+    )
   );
 }
 
