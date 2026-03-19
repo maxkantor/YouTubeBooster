@@ -28,10 +28,29 @@ function countTrue(obj: Record<string, boolean>): number {
 
 function useReturnTo() {
   const [sp] = useSearchParams();
-  const returnTo = sp.get('returnTo') || '/dashboard';
+  const rawReturnTo = sp.get('returnTo') || '/dashboard';
   const channel = sp.get('channel') || '';
   const plan = sp.get('plan') || 'premium';
-  return { returnTo, channel, plan };
+
+  // Aggressive UX guard:
+  // If we're being redirected back to checkout success without a session_id,
+  // it's usually the "wrong screen" loop (common in mock checkout / missing query).
+  // Send users to dashboard instead.
+  let effectiveReturnTo = rawReturnTo;
+  try {
+    const url = new URL(rawReturnTo, window.location.origin);
+    const isCheckoutSuccess = url.pathname === '/checkout/success';
+    const sessionId = url.searchParams.get('session_id')?.trim() ?? '';
+    if (isCheckoutSuccess && !sessionId) {
+      effectiveReturnTo = '/dashboard';
+    }
+  } catch {
+    // ignore parse errors
+  }
+
+  // Normalize trailing slashes to match client routes.
+  effectiveReturnTo = effectiveReturnTo.replace(/\/+(?=[?#]|$)/g, '');
+  return { returnTo: effectiveReturnTo, channel, plan };
 }
 
 export function SignInPage() {
@@ -373,7 +392,7 @@ export function SignUpPage() {
                     console.warn('cognitoLogin failed after verify (suppressed):', err);
                   }
                   await refresh();
-                  window.location.href = returnTo;
+                  nav(returnTo, { replace: true });
                 }
               } catch (e) {
                 const anyErr = e as any;

@@ -184,9 +184,11 @@ function CheckoutSuccessPage({
   const [status, setStatus] = useState<'idle' | 'checking' | 'active' | 'error'>('idle');
   const [error, setError] = useState('');
   const sessionId = searchParams.get('session_id');
-  const checkoutReturnPath = searchParams.toString()
-    ? `/checkout/success?${searchParams.toString()}`
-    : '/checkout/success';
+  const checkoutReturnPath = sessionId
+    ? searchParams.toString()
+      ? `/checkout/success?${searchParams.toString()}`
+      : '/checkout/success'
+    : '/dashboard';
 
   useEffect(() => {
     if (!authSession) return;
@@ -685,7 +687,16 @@ function AppInner() {
   const pathAdmin = location.pathname.startsWith('/admin');
   const showGlobalNav =
     !pathAdmin && location.pathname !== '/' && location.pathname !== '/platform';
-  const globalReturnTo = `${location.pathname}${location.search}`;
+  let globalReturnTo = `${location.pathname}${location.search}`;
+  // Avoid returning to checkout success without a session_id (common "wrong screen" loop).
+  try {
+    const u = new URL(globalReturnTo, window.location.origin);
+    if (u.pathname === '/checkout/success' && !u.searchParams.get('session_id')) {
+      globalReturnTo = '/dashboard';
+    }
+  } catch {
+    // ignore
+  }
 
   const path = location.pathname;
   const [navScrolled, setNavScrolled] = useState(false);
