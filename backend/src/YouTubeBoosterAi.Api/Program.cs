@@ -248,7 +248,16 @@ var meApi = app.MapGroup("/api/me").RequireAuthorization();
 meApi.MapGet("", async (HttpContext httpContext, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
 {
     var principal = httpContext.User;
-    var sub = principal.FindFirst("sub")?.Value;
+    // Cognito ID tokens should have `sub`, but claim type mapping can differ (or be remapped)
+    // depending on JWT contents and middleware settings. Use the same fallbacks as our
+    // `/api/auth/cognito/login` endpoint so downstream endpoints don't 401.
+    var sub =
+        principal.FindFirst("sub")?.Value
+        ?? principal.FindFirst("cognito:username")?.Value
+        ?? principal.FindFirst("preferred_username")?.Value
+        ?? principal.FindFirst("username")?.Value
+        ?? principal.FindFirst("email")?.Value
+        ?? principal.FindFirst("emailaddress")?.Value;
     var email = principal.FindFirst("email")?.Value
                 ?? principal.FindFirst("cognito:username")?.Value
                 ?? principal.FindFirst("preferred_username")?.Value
@@ -273,7 +282,13 @@ meApi.MapGet("", async (HttpContext httpContext, IAppDataStore appDataStore, Can
 
 meApi.MapGet("/entitlements", async (HttpContext httpContext, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
 {
-    var sub = httpContext.User.FindFirst("sub")?.Value;
+    var sub =
+        httpContext.User.FindFirst("sub")?.Value
+        ?? httpContext.User.FindFirst("cognito:username")?.Value
+        ?? httpContext.User.FindFirst("preferred_username")?.Value
+        ?? httpContext.User.FindFirst("username")?.Value
+        ?? httpContext.User.FindFirst("email")?.Value
+        ?? httpContext.User.FindFirst("emailaddress")?.Value;
     if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
     var user = await appDataStore.GetUserByCognitoSubAsync(sub, cancellationToken);
     if (user is null) return Results.NotFound();
@@ -297,7 +312,13 @@ meApi.MapGet("/entitlements", async (HttpContext httpContext, IAppDataStore appD
 
 meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
 {
-    var sub = httpContext.User.FindFirst("sub")?.Value;
+    var sub =
+        httpContext.User.FindFirst("sub")?.Value
+        ?? httpContext.User.FindFirst("cognito:username")?.Value
+        ?? httpContext.User.FindFirst("preferred_username")?.Value
+        ?? httpContext.User.FindFirst("username")?.Value
+        ?? httpContext.User.FindFirst("email")?.Value
+        ?? httpContext.User.FindFirst("emailaddress")?.Value;
     if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
     var user = await appDataStore.GetUserByCognitoSubAsync(sub, cancellationToken);
     if (user is null) return Results.NotFound();
@@ -309,7 +330,13 @@ meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore app
 var billingApi = app.MapGroup("/api/billing").RequireAuthorization();
 billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionRequest request, HttpContext httpContext, ICheckoutService service, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
 {
-    var sub = httpContext.User.FindFirst("sub")?.Value;
+    var sub =
+        httpContext.User.FindFirst("sub")?.Value
+        ?? httpContext.User.FindFirst("cognito:username")?.Value
+        ?? httpContext.User.FindFirst("preferred_username")?.Value
+        ?? httpContext.User.FindFirst("username")?.Value
+        ?? httpContext.User.FindFirst("email")?.Value
+        ?? httpContext.User.FindFirst("emailaddress")?.Value;
     var principal = httpContext.User;
     var email = principal.FindFirst("email")?.Value
                 ?? principal.FindFirst("cognito:username")?.Value
@@ -340,7 +367,13 @@ var premiumApi = app.MapGroup("/api/premium").RequireAuthorization();
 premiumApi.AddEndpointFilter(async (context, next) =>
 {
     var httpContext = context.HttpContext;
-    var sub = httpContext.User.FindFirst("sub")?.Value;
+    var sub =
+        httpContext.User.FindFirst("sub")?.Value
+        ?? httpContext.User.FindFirst("cognito:username")?.Value
+        ?? httpContext.User.FindFirst("preferred_username")?.Value
+        ?? httpContext.User.FindFirst("username")?.Value
+        ?? httpContext.User.FindFirst("email")?.Value
+        ?? httpContext.User.FindFirst("emailaddress")?.Value;
     if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
     var store = httpContext.RequestServices.GetRequiredService<IAppDataStore>();
     var user = await store.GetUserByCognitoSubAsync(sub, httpContext.RequestAborted);
