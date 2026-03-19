@@ -249,11 +249,21 @@ meApi.MapGet("", async (HttpContext httpContext, IAppDataStore appDataStore, Can
 {
     var principal = httpContext.User;
     var sub = principal.FindFirst("sub")?.Value;
-    var email = principal.FindFirst("email")?.Value ?? principal.FindFirst("cognito:username")?.Value;
+    var email = principal.FindFirst("email")?.Value
+                ?? principal.FindFirst("cognito:username")?.Value
+                ?? principal.FindFirst("preferred_username")?.Value
+                ?? principal.FindFirst("username")?.Value
+                ?? principal.FindFirst("emailaddress")?.Value
+                ?? string.Empty;
     var emailVerified = string.Equals(principal.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-    if (string.IsNullOrWhiteSpace(sub) || string.IsNullOrWhiteSpace(email))
+    if (string.IsNullOrWhiteSpace(sub))
     {
         return Results.Unauthorized();
+    }
+
+    if (string.IsNullOrWhiteSpace(email))
+    {
+        email = $"{sub}@cognito.local";
     }
 
     var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
@@ -300,9 +310,16 @@ var billingApi = app.MapGroup("/api/billing").RequireAuthorization();
 billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionRequest request, HttpContext httpContext, ICheckoutService service, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
 {
     var sub = httpContext.User.FindFirst("sub")?.Value;
-    var email = httpContext.User.FindFirst("email")?.Value ?? string.Empty;
+    var principal = httpContext.User;
+    var email = principal.FindFirst("email")?.Value
+                ?? principal.FindFirst("cognito:username")?.Value
+                ?? principal.FindFirst("preferred_username")?.Value
+                ?? principal.FindFirst("username")?.Value
+                ?? principal.FindFirst("emailaddress")?.Value
+                ?? string.Empty;
     var emailVerified = string.Equals(httpContext.User.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-    if (string.IsNullOrWhiteSpace(sub) || string.IsNullOrWhiteSpace(email)) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(email)) email = $"{sub}@cognito.local";
     var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
 
     // Do not trust client for identity; override request email with account email for metadata.
