@@ -67,6 +67,24 @@ public sealed class StripeCheckoutService : ICheckoutService
                 PurchasedAt: DateTimeOffset.UtcNow
             ), cancellationToken);
 
+            // When Stripe is unavailable (mock mode), also grant entitlements immediately.
+            // Otherwise `/api/me/access-status` never flips to premium, and the UI stays stuck
+            // on "Confirming your access".
+            var mockEntitlement = new EntitlementRecord(
+                EntitlementId: $"ent_{mockPurchaseId}",
+                UserId: mockUser.UserId,
+                AccessType: "premium",
+                Status: "active",
+                Source: "mock",
+                GrantedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: null,
+                PaymentId: mockPurchaseId,
+                Notes: "mock_checkout",
+                CreatedAt: DateTimeOffset.UtcNow,
+                UpdatedAt: DateTimeOffset.UtcNow
+            );
+            await _appDataStore.SaveEntitlementAsync(mockEntitlement, cancellationToken);
+
             await _appDataStore.TrackEventAsync("checkout_started", request.ChannelInput, new Dictionary<string, string?>
             {
                 ["email"] = request.Email,
