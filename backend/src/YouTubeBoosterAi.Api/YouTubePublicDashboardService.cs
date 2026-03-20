@@ -182,6 +182,7 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
     private async Task<string> NormalizeChannelInputAsync(string channelInput, CancellationToken cancellationToken)
     {
         var trimmed = (channelInput ?? string.Empty).Trim();
+        trimmed = DecodeChannelInput(trimmed);
         if (string.IsNullOrWhiteSpace(trimmed))
         {
             return "https://www.youtube.com/@maxkantorUSA";
@@ -219,6 +220,31 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
             : !string.IsNullOrWhiteSpace(authorName)
                 ? $"@{SanitizeHandle(authorName)}"
                 : trimmed;
+    }
+
+    private static string DecodeChannelInput(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return input;
+
+        var value = input.Trim();
+        // Some clients pass already-percent-encoded channel URLs (e.g. .../%40LandsharkOutdoors).
+        // Decode a couple of rounds so handle extraction sees '@landshark...'.
+        for (var i = 0; i < 2; i++)
+        {
+            if (!value.Contains('%', StringComparison.Ordinal)) break;
+            try
+            {
+                var decoded = Uri.UnescapeDataString(value);
+                if (string.Equals(decoded, value, StringComparison.Ordinal)) break;
+                value = decoded;
+            }
+            catch
+            {
+                break;
+            }
+        }
+
+        return value;
     }
 
     private async Task<ResolvedChannel> ResolveChannelOrFallbackAsync(string channelInput, CancellationToken cancellationToken)
