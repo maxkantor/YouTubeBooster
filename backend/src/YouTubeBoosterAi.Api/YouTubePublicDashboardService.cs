@@ -282,10 +282,43 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
         var handle = ExtractHandle(trimmed);
         if (!string.IsNullOrWhiteSpace(handle))
         {
-            return await SearchChannelAsync(client, apiKey, $"@{handle}", cancellationToken);
+            // First-party handle resolver is much more reliable than general search for @handles.
+            // Example: https://www.youtube.com/@LandsharkOutdoors
+            try
+            {
+                return await GetChannelByHandleAsync(client, apiKey, handle, cancellationToken);
+            }
+            catch
+            {
+                // Fallback to search-based lookup when forHandle isn't available for a key/project.
+                return await SearchChannelAsync(client, apiKey, $"@{handle}", cancellationToken);
+            }
         }
 
         return await SearchChannelAsync(client, apiKey, trimmed, cancellationToken);
+    }
+
+    private async Task<ResolvedChannel> GetChannelByHandleAsync(HttpClient client, string apiKey, string handle, CancellationToken cancellationToken)
+    {
+        var cleanHandle = handle.Trim().TrimStart('@');
+        if (string.IsNullOrWhiteSpace(cleanHandle))
+        {
+            throw new InvalidOperationException("Channel handle is empty.");
+        }
+
+        var url =
+            $"https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&forHandle={Uri.EscapeDataString(cleanHandle)}&key={Uri.EscapeDataString(apiKey)}";
+        using var response = await client.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var item = doc.RootElement.GetProperty("items").EnumerateArray().FirstOrDefault();
+        if (item.ValueKind == JsonValueKind.Undefined)
+        {
+            throw new InvalidOperationException($"Could not resolve a public YouTube channel for handle '{handle}'.");
+        }
+
+        return ResolvedChannel.Parse(item);
     }
 
     private async Task<ResolvedChannel> GetChannelByIdAsync(HttpClient client, string apiKey, string channelId, string originalInput, CancellationToken cancellationToken)
