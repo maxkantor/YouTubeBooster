@@ -258,22 +258,13 @@ meApi.MapGet("", async (HttpContext httpContext, IAppDataStore appDataStore, Can
         ?? principal.FindFirst("username")?.Value
         ?? principal.FindFirst("email")?.Value
         ?? principal.FindFirst("emailaddress")?.Value;
-    var email = principal.FindFirst("email")?.Value
-                ?? principal.FindFirst("cognito:username")?.Value
-                ?? principal.FindFirst("preferred_username")?.Value
-                ?? principal.FindFirst("username")?.Value
-                ?? principal.FindFirst("emailaddress")?.Value
-                ?? string.Empty;
-    var emailVerified = string.Equals(principal.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
     if (string.IsNullOrWhiteSpace(sub))
     {
         return Results.Unauthorized();
     }
 
-    if (string.IsNullOrWhiteSpace(email))
-    {
-        email = $"{sub}@cognito.local";
-    }
+    var email = EmailAddressHelpers.ResolveCognitoAccountEmail(principal, sub);
+    var emailVerified = string.Equals(principal.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
 
     var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
     await appDataStore.RecordUserLoginAsync(user.UserId, DateTimeOffset.UtcNow, cancellationToken);
@@ -338,21 +329,20 @@ billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionReque
         ?? httpContext.User.FindFirst("email")?.Value
         ?? httpContext.User.FindFirst("emailaddress")?.Value;
     var principal = httpContext.User;
-    var email = principal.FindFirst("email")?.Value
-                ?? principal.FindFirst("cognito:username")?.Value
-                ?? principal.FindFirst("preferred_username")?.Value
-                ?? principal.FindFirst("username")?.Value
-                ?? principal.FindFirst("emailaddress")?.Value
-                ?? string.Empty;
-    var emailVerified = string.Equals(httpContext.User.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
     if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
-    if (string.IsNullOrWhiteSpace(email)) email = $"{sub}@cognito.local";
+
+    var email = EmailAddressHelpers.ResolveCognitoAccountEmail(principal, sub);
+    var emailVerified = string.Equals(httpContext.User.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
     var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
 
     // Do not trust client for identity; override request email with account email for metadata.
+    // Stripe prefill: only real addresses — otherwise omit CustomerEmail and let Checkout collect it.
+    var stripePrefillEmail = EmailAddressHelpers.LooksLikeEmail(user.Email) && !user.Email.EndsWith("@users.id.ytbooster.internal", StringComparison.OrdinalIgnoreCase)
+        ? user.Email
+        : string.Empty;
     var safeReq = request with
     {
-        Email = user.Email,
+        Email = stripePrefillEmail,
         UserId = user.UserId,
         CognitoSub = user.CognitoSub ?? sub,
         AccountEmail = user.Email,
@@ -481,28 +471,15 @@ authApi.MapPost("/cognito/login", async (HttpContext httpContext, IAppDataStore 
         ?? principal.FindFirst("username")?.Value
         ?? principal.FindFirst("email")?.Value
         ?? principal.FindFirst("emailaddress")?.Value;
-    // Cognito ID tokens should always have `sub`, but `email` claims can be missing depending on client configuration.
-    // Use multiple fallbacks; if we still have no email, synthesize a unique placeholder based on `sub`.
-    var email = principal.FindFirst("email")?.Value
-                ?? principal.FindFirst("cognito:username")?.Value
-                ?? principal.FindFirst("preferred_username")?.Value
-                ?? principal.FindFirst("username")?.Value
-                ?? principal.FindFirst("emailaddress")?.Value
-                ?? string.Empty;
-    var emailVerifiedClaim = principal.FindFirst("email_verified")?.Value;
-    var emailVerified = string.Equals(emailVerifiedClaim, "true", StringComparison.OrdinalIgnoreCase);
-
     if (string.IsNullOrWhiteSpace(sub))
     {
         // If we can't derive a stable identifier, stop here.
         return Results.Json(new { error = "invalid_token_missing_sub" }, statusCode: StatusCodes.Status401Unauthorized);
     }
 
-    if (string.IsNullOrWhiteSpace(email))
-    {
-        // Ensure uniqueness to avoid mixing multiple users under the same empty email.
-        email = $"{sub}@cognito.local";
-    }
+    var email = EmailAddressHelpers.ResolveCognitoAccountEmail(principal, sub);
+    var emailVerifiedClaim = principal.FindFirst("email_verified")?.Value;
+    var emailVerified = string.Equals(emailVerifiedClaim, "true", StringComparison.OrdinalIgnoreCase);
 
     var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
     await appDataStore.RecordUserLoginAsync(user.UserId, DateTimeOffset.UtcNow, cancellationToken);

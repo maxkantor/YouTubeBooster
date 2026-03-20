@@ -103,12 +103,15 @@ public sealed class StripeCheckoutService : ICheckoutService
 
         var sessionService = new Stripe.Checkout.SessionService();
         var planCode = request.PlanCode ?? request.PriceKey ?? settings.StripePriceLookupKey;
+        // Stripe rejects UUIDs / non-emails here (e.g. when Cognito username was mistaken for email).
+        var customerEmail = EmailAddressHelpers.LooksLikeEmail(request.Email) ? request.Email.Trim() : null;
+
         var session = await sessionService.CreateAsync(new Stripe.Checkout.SessionCreateOptions
         {
             Mode = "payment",
             SuccessUrl = $"{request.SuccessUrl}?session_id={{CHECKOUT_SESSION_ID}}",
             CancelUrl = request.CancelUrl,
-            CustomerEmail = request.Email,
+            CustomerEmail = customerEmail,
             AllowPromotionCodes = true,
             Metadata = new Dictionary<string, string>
             {
