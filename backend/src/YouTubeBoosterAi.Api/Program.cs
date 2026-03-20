@@ -313,8 +313,22 @@ meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore app
     if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
     var user = await appDataStore.GetUserByCognitoSubAsync(sub, cancellationToken);
     if (user is null) return Results.NotFound();
-    var hasPremium = await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
-                     || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
+
+    // Primary signal: user profile flags written by SaveEntitlementAsync
+    // (Purchased + AccessStatus). This is more reliable than scanning entitlement
+    // items (which can be affected by historical data shape/migrations).
+    var hasPremium =
+        user.Purchased
+        || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
+
+    // Secondary signal: entitlement scan (kept as a fallback for extra safety).
+    if (!hasPremium)
+    {
+        hasPremium =
+            await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
+            || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
+    }
     return Results.Ok(new { userId = user.UserId, premium = hasPremium, accessStatus = hasPremium ? "active" : "free" });
 });
 
@@ -374,8 +388,18 @@ premiumApi.AddEndpointFilter(async (context, next) =>
     var store = httpContext.RequestServices.GetRequiredService<IAppDataStore>();
     var user = await store.GetUserByCognitoSubAsync(sub, httpContext.RequestAborted);
     if (user is null) return Results.Unauthorized();
-    var hasPremium = await store.UserHasActiveEntitlementAsync(user.UserId, "premium", httpContext.RequestAborted)
-                     || await store.UserHasActiveEntitlementAsync(user.UserId, "lifetime", httpContext.RequestAborted);
+
+    var hasPremium =
+        user.Purchased
+        || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
+
+    if (!hasPremium)
+    {
+        hasPremium =
+            await store.UserHasActiveEntitlementAsync(user.UserId, "premium", httpContext.RequestAborted)
+            || await store.UserHasActiveEntitlementAsync(user.UserId, "lifetime", httpContext.RequestAborted);
+    }
     if (!hasPremium) return Results.Forbid();
     httpContext.Items["authenticatedUser"] = user;
     return await next(context);

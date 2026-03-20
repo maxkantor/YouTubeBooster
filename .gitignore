@@ -27,6 +27,7 @@ wheels/
 
 # API Credentials - IMPORTANT: Never commit these!
 credentials.json
+youtubeboosterapikey.txt
 token.pickle
 client_secret*.json
 *.pem
@@ -68,6 +69,8 @@ frontend/.vite/
 
 # Backend publish folders + generated zips
 backend/publish*/
+backend/.lambda-publish/
+backend-publish/
 backend/backend-publish*/
 backend/backend-latest-*.zip
 # Legacy name — canonical zip is only backend/artifacts/youtubebooster-api.zip

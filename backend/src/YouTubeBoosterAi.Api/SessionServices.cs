@@ -54,7 +54,8 @@ public sealed class SessionCookieService
             UserId: user.UserId,
             Email: user.Email,
             AuthEpoch: epoch,
-            ExpiresAt: now.AddDays(14),
+            // Paid access should expire predictably (your requirement: every 12 hours).
+            ExpiresAt: now.AddHours(12),
             CreatedAt: now
         );
 
@@ -143,11 +144,16 @@ public sealed class SessionCookieService
 
     private static void AppendCookie(HttpResponse response, string name, string value, DateTimeOffset expiresAt, bool secure)
     {
+        // The frontend calls the backend from a different origin (Amplify domain != API domain).
+        // For cross-site requests via `fetch` with credentials, cookies must be `SameSite=None`
+        // (and Secure=true), otherwise the browser won't send them back.
+        var sameSite = secure ? SameSiteMode.None : SameSiteMode.Lax;
+
         response.Cookies.Append(name, value, new CookieOptions
         {
             HttpOnly = true,
             IsEssential = true,
-            SameSite = SameSiteMode.Lax,
+            SameSite = sameSite,
             Secure = secure,
             Path = "/",
             Expires = expiresAt
@@ -156,6 +162,8 @@ public sealed class SessionCookieService
 
     private static void ClearCookie(HttpResponse response, string name, bool secure)
     {
+        var sameSite = secure ? SameSiteMode.None : SameSiteMode.Lax;
+
         // Aggressively delete the cookie across common paths and secure modes.
         // Cookie `Path` defaults to the request path when not explicitly set,
         // so older cookies might exist under `/api/auth` instead of `/`.
@@ -170,7 +178,7 @@ public sealed class SessionCookieService
                 {
                     HttpOnly = true,
                     IsEssential = true,
-                    SameSite = SameSiteMode.Lax,
+                    SameSite = sameSite,
                     Secure = s,
                     Path = p,
                     Expires = DateTimeOffset.UnixEpoch
