@@ -34,6 +34,20 @@ Or at root next to `installed`:
 
 An older separate parameter **`/youtubebooster/youtube/api-key`** is **not** managed by Terraform anymore. If it still exists in AWS, the app can still read it as a **fallback** after credentials-json. Prefer credentials-json only.
 
+## One-command update: Google admin OAuth JSON → SSM
+
+Terraform **does not** push new values for existing SecureStrings (see below). To set **all** `/youtubebooster/admin/google/*` parameters from your desktop OAuth JSON (`installed` block):
+
+1. Save your credentials as a file **outside the repo** (e.g. `%USERPROFILE%\secrets\google-oauth.json`).
+2. Authenticate AWS: `aws sso login` (or ensure your profile works): `aws sts get-caller-identity --region us-east-1`
+3. Run:
+
+```powershell
+.\scripts\Update-GoogleAdminSsm.ps1 -CredentialsPath "$env:USERPROFILE\secrets\google-oauth.json" -Region us-east-1
+```
+
+This updates: `credentials-json`, `client-id`, `client-secret`, `project-id`, `auth-uri`, `token-uri`, `redirect-uri`.
+
 ## Terraform: SecureString parameters are not overwritten after first create
 
 `infra/terraform/main.tf` splits SSM into:
@@ -58,6 +72,10 @@ That only drops it from Terraform state; it does **not** delete the parameter in
 ### If `ssm_prefix` is not `/youtubebooster`
 
 The **`moved`** blocks use a fixed prefix. If you use a custom `var.ssm_prefix`, adjust the **`moved`** addresses or manage state migration manually.
+
+## Cognito (`cognito/*`) and sign-in
+
+Terraform writes **`cognito/region`**, **`cognito/user-pool-id`**, **`cognito/app-client-id`** from the managed User Pool. If you **recreated** the stack, you may have a **new** pool while users still exist in an **older** pool — sign-in then fails even when `VITE_API_BASE_URL` is correct. See **`docs/COGNITO-AMPLIFY-TROUBLESHOOTING.md`**.
 
 ## Parameters managed by Terraform (summary)
 

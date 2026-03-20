@@ -803,9 +803,18 @@ function AppInner() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/demo" element={<ChannelAnalyzeDashboard variant="marketing" />} />
-        <Route path="/auth/signin" element={<SignInPage />} />
-        <Route path="/auth/signup" element={<SignUpPage />} />
-        <Route path="/auth/forgot" element={<ForgotPasswordPage />} />
+        <Route
+          path="/auth/signin"
+          element={<SignInPage userSession={userSession} sessionLoading={sessionLoading} />}
+        />
+        <Route
+          path="/auth/signup"
+          element={<SignUpPage userSession={userSession} sessionLoading={sessionLoading} />}
+        />
+        <Route
+          path="/auth/forgot"
+          element={<ForgotPasswordPage userSession={userSession} sessionLoading={sessionLoading} />}
+        />
         <Route
           path="/dashboard"
           element={

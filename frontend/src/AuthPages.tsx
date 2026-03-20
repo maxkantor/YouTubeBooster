@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmSignUp, forgotPassword, signIn, signUp, confirmForgotPassword } from './lib/auth';
 import { useAuth } from './AuthContext';
 import { authApi } from './lib/api';
+import type { UserSessionStatus } from './types';
 
 function readCachedEmail(): string {
   try {
@@ -53,7 +54,13 @@ function useReturnTo() {
   return { returnTo: effectiveReturnTo, channel, plan };
 }
 
-export function SignInPage() {
+export function SignInPage({
+  userSession,
+  sessionLoading
+}: {
+  userSession: UserSessionStatus;
+  sessionLoading: boolean;
+}) {
   const nav = useNavigate();
   const { refresh } = useAuth();
   const { returnTo } = useReturnTo();
@@ -83,6 +90,25 @@ export function SignInPage() {
     // Defensive: if anything ever resets our controlled input to "", rehydrate from cache.
     if (!email.trim()) setEmail(readCachedEmail());
   };
+
+  // Backend cookie session already active — don't show password form while nav shows "signed in".
+  if (sessionLoading) {
+    return (
+      <div className="page narrow-page">
+        <div className="surface">
+          <div className="auth-header">
+            <div className="auth-badge">Premium Access</div>
+            <h1 className="auth-title">Sign in</h1>
+            <p className="muted">Checking your session…</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (userSession.authenticated && userSession.user) {
+    return <Navigate to={normalizedReturnTo} replace />;
+  }
 
   return (
     <div className="page narrow-page">
@@ -136,7 +162,9 @@ export function SignInPage() {
               const msg = anyErr?.message as string | undefined;
 
               // Avoid account-enumeration style messaging (e.g. "User is not confirmed" / "User exists").
-              if (
+              if (code === 'UserNotFoundException') {
+                setError('No account exists for this email. Sign up or try another email.');
+              } else if (
                 code === 'UserNotConfirmedException' ||
                 (code === 'NotAuthorizedException' && msg && /not\s*confirmed|unconfirmed/i.test(msg)) ||
                 (msg && /not\s*confirmed|unconfirmed/i.test(msg))
@@ -216,10 +244,20 @@ export function SignInPage() {
   );
 }
 
-export function SignUpPage() {
+export function SignUpPage({
+  userSession,
+  sessionLoading
+}: {
+  userSession: UserSessionStatus;
+  sessionLoading: boolean;
+}) {
   const nav = useNavigate();
   const { refresh } = useAuth();
   const { returnTo } = useReturnTo();
+  const normalizedReturnTo = useMemo(() => {
+    const raw = (returnTo || '/dashboard').trim();
+    return raw.replace(/\/+(?=[?#]|$)/g, '');
+  }, [returnTo]);
   const [step, setStep] = useState<'signup' | 'confirm'>('signup');
   const [email, setEmail] = useState(() => readCachedEmail());
   const [password, setPassword] = useState('');
@@ -280,6 +318,24 @@ export function SignUpPage() {
     if (step === 'confirm') return 'Check your email for the verification code.';
     return 'Create your account to unlock and save your report across devices.';
   }, [step]);
+
+  if (sessionLoading) {
+    return (
+      <div className="page narrow-page">
+        <div className="surface">
+          <div className="auth-header">
+            <div className="auth-badge">Create Account</div>
+            <h1 className="auth-title">Create account</h1>
+            <p className="muted">Checking your session…</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (userSession.authenticated && userSession.user) {
+    return <Navigate to={normalizedReturnTo} replace />;
+  }
 
   return (
     <div className="page narrow-page">
@@ -458,9 +514,19 @@ export function SignUpPage() {
   );
 }
 
-export function ForgotPasswordPage() {
+export function ForgotPasswordPage({
+  userSession,
+  sessionLoading
+}: {
+  userSession: UserSessionStatus;
+  sessionLoading: boolean;
+}) {
   const nav = useNavigate();
   const { returnTo } = useReturnTo();
+  const normalizedReturnTo = useMemo(() => {
+    const raw = (returnTo || '/dashboard').trim();
+    return raw.replace(/\/+(?=[?#]|$)/g, '');
+  }, [returnTo]);
   const [step, setStep] = useState<'request' | 'reset'>('request');
   const [email, setEmail] = useState(() => readCachedEmail());
   const [code, setCode] = useState('');
@@ -479,6 +545,21 @@ export function ForgotPasswordPage() {
   const onEmailFocus = () => {
     if (!email.trim()) setEmail(readCachedEmail());
   };
+
+  if (sessionLoading) {
+    return (
+      <div className="page narrow-page">
+        <div className="surface">
+          <h1>Reset password</h1>
+          <p className="muted">Checking your session…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (userSession.authenticated && userSession.user) {
+    return <Navigate to={normalizedReturnTo} replace />;
+  }
 
   return (
     <div className="page narrow-page">
