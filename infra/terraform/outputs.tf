@@ -14,6 +14,6 @@ output "amplify_default_domain" {
 }
 
 output "ssm_parameter_names" {
-  description = "SSM parameters created by Terraform."
-  value       = keys(local.ssm_parameters)
+  description = "SSM parameters managed by Terraform (YouTube Data API key lives in admin/google/credentials-json only)."
+  value       = sort(concat(keys(local.ssm_parameters_string), keys(local.ssm_parameters_secure)))
 }

@@ -22,15 +22,51 @@ public sealed class SsmSecretValueProvider : ISecretValueProvider
     }
 
     /// <summary>
-    /// Tries to get YouTube API key from admin credentials JSON (SSM admin/google/credentials-json).
-    /// The JSON may be standard Google OAuth credentials; if it also contains a top-level "youtube_api_key"
-    /// or "api_key" property, that value is used for public YouTube Data API v3 calls.
+    /// Read one parameter from SSM only (no env, no appsettings). Used so the YouTube key can be resolved
+    /// from <c>admin/google/credentials-json</c> in production without being overridden by local config.
+    /// </summary>
+    private async Task<string?> ReadSsmParameterDirectAsync(string relativeKey, bool secure, CancellationToken cancellationToken)
+    {
+        var basePath = _configuration["SSM:BasePath"] ?? _configuration["SSM__BASEPATH"];
+        if (string.IsNullOrWhiteSpace(basePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var response = await _ssm.GetParameterAsync(new GetParameterRequest
+            {
+                Name = $"{basePath.TrimEnd('/')}/{relativeKey}",
+                WithDecryption = secure
+            }, cancellationToken);
+
+            return response.Parameter?.Value;
+        }
+        catch (ParameterNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// YouTube Data API key: read from <c>admin/google/credentials-json</c> (SSM) — root or <c>installed</c>/<c>web</c>
+    /// fields <c>youtube_api_key</c> / <c>api_key</c>. Production uses SSM only (no <c>YOUTUBE_API_KEY</c> env).
     /// </summary>
     private async Task<string?> GetYouTubeApiKeyFromCredentialsJsonAsync(bool secure, CancellationToken cancellationToken)
     {
-        var credentialsJson = await GetValueAsync("admin/google/credentials-json", secure, cancellationToken);
+        // Prefer direct SSM read so we don't pick up mis-ordered appsettings in Lambda.
+        var credentialsJson = await ReadSsmParameterDirectAsync("admin/google/credentials-json", secure, cancellationToken);
         if (string.IsNullOrWhiteSpace(credentialsJson))
+        {
+            // Local dev: appsettings / user secrets
+            credentialsJson = await GetValueAsync("admin/google/credentials-json", secure, cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(credentialsJson))
+        {
             return null;
+        }
 
         try
         {
@@ -48,8 +84,8 @@ public sealed class SsmSecretValueProvider : ISecretValueProvider
     }
 
     /// <summary>
-    /// OAuth credentials.json is usually <c>{"installed":{...}}</c> or <c>{"web":{...}}</c> and does not include a Data API key.
-    /// We optionally support <c>youtube_api_key</c> at the root, under <c>installed</c>, or under <c>web</c> so one SSM blob can carry both.
+    /// OAuth credentials.json is usually <c>{"installed":{...}}</c> or <c>{"web":{...}}</c>.
+    /// We support <c>youtube_api_key</c> at the root, under <c>installed</c>, or under <c>web</c>.
     /// </summary>
     private static string? TryExtractYouTubeDataApiKeyFromCredentialsJson(JsonElement root)
     {
@@ -87,29 +123,23 @@ public sealed class SsmSecretValueProvider : ISecretValueProvider
             return cached;
         }
 
-        var configKey = relativeKey.Replace('/', ':');
-        var envValue = _configuration[configKey];
-        if (!string.IsNullOrWhiteSpace(envValue))
-        {
-            _cache[relativeKey] = envValue;
-            return envValue;
-        }
-
+        // Resolve YouTube Data API key from credentials-json first; optional legacy SSM param youtube/api-key after config.
         if (string.Equals(relativeKey, "youtube/api-key", StringComparison.OrdinalIgnoreCase))
         {
-            var youtubeKey = Environment.GetEnvironmentVariable("YOUTUBE_API_KEY");
-            if (!string.IsNullOrWhiteSpace(youtubeKey))
-            {
-                _cache[relativeKey] = youtubeKey;
-                return youtubeKey;
-            }
-
             var fromCredentials = await GetYouTubeApiKeyFromCredentialsJsonAsync(secure, cancellationToken);
             if (!string.IsNullOrWhiteSpace(fromCredentials))
             {
                 _cache[relativeKey] = fromCredentials;
                 return fromCredentials;
             }
+        }
+
+        var configKey = relativeKey.Replace('/', ':');
+        var envValue = _configuration[configKey];
+        if (!string.IsNullOrWhiteSpace(envValue))
+        {
+            _cache[relativeKey] = envValue;
+            return envValue;
         }
 
         var basePath = _configuration["SSM:BasePath"] ?? _configuration["SSM__BASEPATH"];

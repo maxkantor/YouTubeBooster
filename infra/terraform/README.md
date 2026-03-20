@@ -23,8 +23,7 @@ The stack creates placeholders for:
 - `/youtubebooster/stripe/openai-api-key`
 - `/youtubebooster/admin/email`
 - `/youtubebooster/admin/password`
-- `/youtubebooster/youtube/api-key`
-- `/youtubebooster/admin/google/credentials-json`
+- `/youtubebooster/admin/google/credentials-json` (include **`youtube_api_key`** in this JSON for YouTube Data API v3)
 - `/youtubebooster/admin/google/client-id`
 - `/youtubebooster/admin/google/client-secret`
 - `/youtubebooster/admin/google/project-id`
@@ -43,14 +42,13 @@ Update those values after the initial apply, or pass your `credentials.json` val
 terraform apply -var="admin_google_client_id=YOUR_CLIENT_ID" \
   -var="admin_google_client_secret=YOUR_CLIENT_SECRET" \
   -var="admin_google_project_id=youtubebooster-479002" \
-  -var="admin_google_redirect_uri=http://localhost" \
-  -var="youtube_api_key=AIzaSy_YOUR_KEY"
+  -var="admin_google_redirect_uri=http://localhost"
 
-# Option B: full credentials JSON in one variable (copy entire credentials.json string)
-terraform apply -var="admin_google_credentials_json={\"installed\":{\"client_id\":\"...\",...}}"
+# Option B: full credentials JSON in one variable — include youtube_api_key in the JSON string
+terraform apply -var="admin_google_credentials_json={\"installed\":{\"client_id\":\"...\",...},\"youtube_api_key\":\"AIza...\"}"
 ```
 
-Or copy `terraform.tfvars.example` to `terraform.tfvars`, fill in the optional admin Google and `youtube_api_key` variables, then run `terraform apply`. The app reads these from SSM at runtime (see Admin `credentials.json` in SSM below).
+Or copy `terraform.tfvars.example` to `terraform.tfvars`, fill in admin Google variables, then run `terraform apply`. **SecureString** parameters use `lifecycle { ignore_changes = [value] }` so later applies do not overwrite Console edits. See **`docs/SSM-PARAMETER-CHECKLIST.md`** and the one-time **`terraform state rm`** note for legacy `/youtubebooster/youtube/api-key`.
 
 ## Admin `credentials.json` in SSM
 
@@ -94,7 +92,7 @@ Preferred format for `/youtubebooster/admin/google/credentials-json`:
 }
 ```
 
-Create the API key in the same Google Cloud project (APIs & Services → Credentials → Create credentials → API key), enable **YouTube Data API v3**, then paste the key as `youtube_api_key`. Alternatively, store the key in a separate SSM parameter `/youtubebooster/youtube/api-key` or set env `YOUTUBE_API_KEY`.
+Create the API key in the same Google Cloud project (APIs & Services → Credentials → Create credentials → API key), enable **YouTube Data API v3**, then paste the key as `youtube_api_key` in **`credentials-json`** (preferred). A legacy optional SSM parameter `/youtubebooster/youtube/api-key` is still read by the app if present; Terraform no longer manages it.
 
 Buyer-provided Google/YouTube settings should not be created as shared SSM parameters. The app should collect those during onboarding and store them per user in app data, ideally encrypted before persistence.
 

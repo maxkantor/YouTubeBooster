@@ -61,4 +61,4 @@ Expected: `{"status":"ok","service":"youtube-booster-ai-api"}`.
 
 ## SSM / secrets (YouTube API key, Stripe, etc.)
 
-See **`docs/SSM-PARAMETER-CHECKLIST.md`**. The backend expects **`/youtubebooster/youtube/api-key`** (SecureString) unless you set `YOUTUBE_API_KEY` on the Lambda or embed `youtube_api_key` in `admin/google/credentials-json`.
+See **`docs/SSM-PARAMETER-CHECKLIST.md`**. The YouTube Data API key is read from **`/youtubebooster/admin/google/credentials-json`** (`youtube_api_key` in JSON). Terraform does not overwrite SecureString values after the first create.

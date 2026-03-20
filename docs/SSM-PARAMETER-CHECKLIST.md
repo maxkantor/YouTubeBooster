@@ -1,24 +1,25 @@
-# SSM Parameter Store checklist (`/youtubebooster`)
+# SSM Parameter Store (`/youtubebooster`)
 
-The API reads secrets via `SSM__BASEPATH=/youtubebooster` (see Lambda env). **Nothing in this repo deletes your AWS parameters** — only AWS/Terraform/Console actions in your account can change them.
+The API reads secrets with `SSM__BASEPATH=/youtubebooster` (Lambda env). Use **Parameter Store only** in production — the backend resolves the **YouTube Data API v3** key from **`/youtubebooster/admin/google/credentials-json`** (see below).
 
-## Why YouTube “works” for the built-in demo but not other channels
+## YouTube Data API key (required for live channel data)
 
-If `youtube/api-key` is missing or still `replace-me`, the demo service **does not call YouTube** for arbitrary channels. Only the built-in MaxKantor showcase uses **hardcoded marketing numbers** so `/demo` still looks good. Other channels show zeros and the “could not load live data” message.
+Store the key **inside** the SecureString parameter:
 
-## Required parameter for real YouTube Data API data
+**`/youtubebooster/admin/google/credentials-json`**
 
-| Parameter | Type | Used by |
-|-----------|------|--------|
-| `/youtubebooster/youtube/api-key` | **SecureString** | `GET /api/public/channel/*`, `POST /api/public/demo` |
+Add **`youtube_api_key`** (or **`api_key`**) at the **root** of the JSON, or under **`installed`** / **`web`**:
 
-Create or fix in **AWS Console → Systems Manager → Parameter Store** (or AWS CLI). Value = your **YouTube Data API v3** key (Google Cloud Console → APIs & Services → Credentials).
+```json
+{
+  "installed": {
+    "client_id": "...",
+    "youtube_api_key": "YOUR_YOUTUBE_DATA_API_KEY"
+  }
+}
+```
 
-**Restrictions:** For Lambda/server calls, do **not** restrict the key to **HTTP referrers only**. Use **IP restriction** or **none** for backend use.
-
-## Optional: embed key in `credentials-json` instead
-
-If you prefer one blob for `admin/google/credentials-json`, add a field (same project as OAuth is fine):
+Or at root next to `installed`:
 
 ```json
 {
@@ -27,41 +28,44 @@ If you prefer one blob for `admin/google/credentials-json`, add a field (same pr
 }
 ```
 
-The app also checks `installed.youtube_api_key` / `installed.api_key` (see `SecretProviders.cs`).
+**Restrictions (Google Cloud):** For Lambda, do **not** restrict the key to **HTTP referrers only**. Use **IP** or **none** for server-side calls.
 
-## Terraform and “lost” / overwritten values
+### Legacy (optional)
 
-`infra/terraform/main.tf` uses `overwrite = true` on placeholder parameters. A **`terraform apply`** that runs with **empty** sensitive variables (e.g. `youtube_api_key = ""`) can **write `replace-me` back** into SSM and overwrite what you fixed in the Console.
+An older separate parameter **`/youtubebooster/youtube/api-key`** is **not** managed by Terraform anymore. If it still exists in AWS, the app can still read it as a **fallback** after credentials-json. Prefer credentials-json only.
 
-**Mitigation:**
+## Terraform: SecureString parameters are not overwritten after first create
 
-- Pass real values via `terraform.tfvars` / `-var` for secrets, **or**
-- Set `create_placeholder_parameters = false` once placeholders exist and manage values only in AWS, **or**
-- After apply, re-apply real secrets in Console/CLI.
+`infra/terraform/main.tf` splits SSM into:
 
-We did **not** delete parameters from this repo — only applies in your AWS account change Parameter Store.
+- **`aws_ssm_parameter.defaults_string`** — non-secret strings; Terraform may update values (e.g. Cognito IDs).
+- **`aws_ssm_parameter.defaults_secure`** — SecureStrings with `lifecycle { ignore_changes = [value] }` so **`terraform apply` does not push** placeholder/template values over secrets you edited in the Console.
 
-## Full parameter list (from Terraform `local.ssm_parameters`)
+**Terraform ≥ 1.7** is required (see `terraform` block in `main.tf`).
 
-- `ses/from-email`, `ses/admin-email`
-- `stripe/secret-key`, `stripe/webhook-secret`, `stripe/publishable-key`, `stripe/price-lookup-key`, `stripe/openai-api-key`
-- `admin/email`, `admin/password`
-- **`youtube/api-key`** ← often missing if Console list doesn’t show it
-- `admin/google/credentials-json`, `admin/google/client-id`, `admin/google/client-secret`, `admin/google/project-id`, `admin/google/auth-uri`, `admin/google/token-uri`, `admin/google/redirect-uri`
-- `pricing/one-time-price`, `pricing/currency`
-- `features/enable-public-demo`, `features/demo-rate-limit-per-hour`
-- `cognito/region`, `cognito/user-pool-id`, `cognito/app-client-id`
+### One-time state migration
 
-## Lambda env (often set by Terraform)
+If you previously had **`aws_ssm_parameter.defaults`**, the config includes **`moved`** blocks to **`defaults_string`** / **`defaults_secure`**.
 
-- `SSM__BASEPATH=/youtubebooster` (must match your parameters’ prefix)
-
-## AWS CLI (example — replace `VALUE` locally, do not commit)
+If state still contains **`aws_ssm_parameter.defaults["/youtubebooster/youtube/api-key"]`** (legacy), remove it from state **before** apply so Terraform does not try to destroy the AWS parameter:
 
 ```bash
-aws ssm put-parameter --name "/youtubebooster/youtube/api-key" --type "SecureString" --value "VALUE" --overwrite --region us-east-1
+terraform state rm 'aws_ssm_parameter.defaults["/youtubebooster/youtube/api-key"]'
 ```
 
-## If you pasted secrets in chat
+That only drops it from Terraform state; it does **not** delete the parameter in AWS unless you run `terraform destroy` on a tracked resource.
 
-**Rotate them** in Google Cloud (new API key, regenerate OAuth client secret) — treat them as compromised.
+### If `ssm_prefix` is not `/youtubebooster`
+
+The **`moved`** blocks use a fixed prefix. If you use a custom `var.ssm_prefix`, adjust the **`moved`** addresses or manage state migration manually.
+
+## Parameters managed by Terraform (summary)
+
+Under your prefix (default `/youtubebooster`):
+
+- **Strings:** `ses/*`, `stripe/publishable-key`, `stripe/price-lookup-key`, `admin/email`, `admin/google/project-id`, `admin/google/auth-uri`, `admin/google/token-uri`, `admin/google/redirect-uri`, `pricing/*`, `features/*`, `cognito/*`
+- **SecureStrings (value frozen after first apply):** `stripe/secret-key`, `stripe/webhook-secret`, `stripe/openai-api-key`, `admin/password`, `admin/google/credentials-json`, `admin/google/client-id`, `admin/google/client-secret`
+
+## Lambda environment
+
+- `SSM__BASEPATH=/youtubebooster` (must match parameter prefix)

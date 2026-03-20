@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.7.0"
 
   required_providers {
     aws = {
@@ -68,11 +68,8 @@ locals {
       value       = "change-me"
       description = "Admin login password placeholder"
     }
-    "${var.ssm_prefix}/youtube/api-key" = {
-      type        = "SecureString"
-      value       = var.youtube_api_key != "" ? var.youtube_api_key : "replace-me"
-      description = "YouTube Data API key for public demo analysis"
-    }
+    # YouTube Data API key: store ONLY inside admin/google/credentials-json as youtube_api_key (or under installed.*).
+    # Do NOT manage a separate /youtube/api-key parameter here — Terraform overwrite=true was clobbering Console updates.
     "${var.ssm_prefix}/admin/google/credentials-json" = {
       type        = "SecureString"
       value       = var.admin_google_credentials_json != "" ? var.admin_google_credentials_json : jsonencode({
@@ -154,22 +151,143 @@ locals {
       description = "Cognito app client id for auth"
     }
   }
+
+  # Split so SecureString values can be frozen after first create (Console edits preserved).
+  ssm_parameters_string = {
+    for k, v in local.ssm_parameters : k => v if v.type == "String"
+  }
+  ssm_parameters_secure = {
+    for k, v in local.ssm_parameters : k => v if v.type == "SecureString"
+  }
 }
 
-resource "aws_ssm_parameter" "defaults" {
-  for_each = var.create_placeholder_parameters ? local.ssm_parameters : {}
+resource "aws_ssm_parameter" "defaults_string" {
+  for_each = var.create_placeholder_parameters ? local.ssm_parameters_string : {}
 
   name        = each.key
   description = each.value.description
   type        = each.value.type
   value       = each.value.value
-  # WARNING: `overwrite = true` means a later `terraform apply` can reset parameters to the
-  # placeholder values in this file (e.g. replace-me) if tfvars do not pass real secrets.
-  # Prefer setting sensitive values via AWS Console/CLI, or pass -var/youtube_api_key etc.
-  overwrite = true
+  overwrite   = true
 
   tags = local.common_tags
 }
+
+resource "aws_ssm_parameter" "defaults_secure" {
+  for_each = var.create_placeholder_parameters ? local.ssm_parameters_secure : {}
+
+  name        = each.key
+  description = each.value.description
+  type        = each.value.type
+  value       = each.value.value
+  overwrite   = true
+
+  tags = local.common_tags
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+# --- State migration: old single resource -> split string/secure (prefix must match var.ssm_prefix default) ---
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/ses/from-email"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/ses/from-email"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/ses/admin-email"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/ses/admin-email"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/stripe/publishable-key"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/stripe/publishable-key"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/stripe/price-lookup-key"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/stripe/price-lookup-key"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/email"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/admin/email"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/google/project-id"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/admin/google/project-id"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/google/auth-uri"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/admin/google/auth-uri"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/google/token-uri"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/admin/google/token-uri"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/google/redirect-uri"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/admin/google/redirect-uri"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/pricing/one-time-price"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/pricing/one-time-price"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/pricing/currency"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/pricing/currency"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/features/enable-public-demo"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/features/enable-public-demo"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/features/demo-rate-limit-per-hour"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/features/demo-rate-limit-per-hour"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/cognito/region"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/cognito/region"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/cognito/user-pool-id"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/cognito/user-pool-id"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/cognito/app-client-id"]
+  to   = aws_ssm_parameter.defaults_string["/youtubebooster/cognito/app-client-id"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/stripe/secret-key"]
+  to   = aws_ssm_parameter.defaults_secure["/youtubebooster/stripe/secret-key"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/stripe/webhook-secret"]
+  to   = aws_ssm_parameter.defaults_secure["/youtubebooster/stripe/webhook-secret"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/stripe/openai-api-key"]
+  to   = aws_ssm_parameter.defaults_secure["/youtubebooster/stripe/openai-api-key"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/password"]
+  to   = aws_ssm_parameter.defaults_secure["/youtubebooster/admin/password"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/google/credentials-json"]
+  to   = aws_ssm_parameter.defaults_secure["/youtubebooster/admin/google/credentials-json"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/google/client-id"]
+  to   = aws_ssm_parameter.defaults_secure["/youtubebooster/admin/google/client-id"]
+}
+moved {
+  from = aws_ssm_parameter.defaults["/youtubebooster/admin/google/client-secret"]
+  to   = aws_ssm_parameter.defaults_secure["/youtubebooster/admin/google/client-secret"]
+}
+
+# Legacy `/youtubebooster/youtube/api-key` may still exist in AWS + old state. Terraform no longer manages it.
+# Before first apply after this change, run (one-time) if state lists it:
+#   terraform state rm 'aws_ssm_parameter.defaults["/youtubebooster/youtube/api-key"]'
+# so Terraform does not try to destroy the parameter. The app reads the Data API key from
+# admin/google/credentials-json only (see SecretProviders.cs).
 
 resource "aws_dynamodb_table" "users" {
   name         = "ybai-users"

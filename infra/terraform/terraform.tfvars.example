@@ -26,4 +26,4 @@ currency       = "USD"
 # admin_google_credentials_json = "{\"installed\":{\"client_id\":\"...\",\"project_id\":\"...\",\"auth_uri\":\"...\",\"token_uri\":\"...\",\"auth_provider_x509_cert_url\":\"...\",\"client_secret\":\"...\",\"redirect_uris\":[\"http://localhost\"]}}"
 
 # YouTube Data API v3 key (create in same GCP project → APIs & Services → Credentials → API key, enable YouTube Data API v3)
-# youtube_api_key = "AIzaSy..."
+# Put youtube_api_key inside admin_google_credentials_json JSON (see docs/SSM-PARAMETER-CHECKLIST.md)

@@ -117,9 +117,5 @@ variable "admin_google_credentials_json" {
   sensitive   = true
 }
 
-variable "youtube_api_key" {
-  description = "YouTube Data API v3 key for public channel demo (create in same GCP project)."
-  type        = string
-  default     = ""
-  sensitive   = true
-}
+# YouTube Data API key: set `youtube_api_key` inside SSM `/youtubebooster/admin/google/credentials-json`
+# (root or installed.youtube_api_key). Do not use a separate /youtube/api-key parameter.
