@@ -88,7 +88,8 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
 
     private async Task<string> NormalizeChannelInputAsync(HttpClient client, string channelInput, CancellationToken cancellationToken)
     {
-        var trimmed = channelInput.Trim();
+        // Must match YouTubePublicDashboardService: encoded query params break @handle extraction.
+        var trimmed = YouTubeChannelInputHelpers.DecodeChannelInput(channelInput.Trim());
         if (string.IsNullOrWhiteSpace(trimmed))
         {
             return channelInput;
@@ -139,10 +140,41 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
         var handle = ExtractHandle(trimmed);
         if (!string.IsNullOrWhiteSpace(handle))
         {
-            return await SearchChannelAsync(client, apiKey, $"@{handle}", cancellationToken);
+            // Same as dashboard: forHandle is far more reliable than Search for @handles.
+            try
+            {
+                return await GetChannelByHandleAsync(client, apiKey, handle, cancellationToken);
+            }
+            catch
+            {
+                return await SearchChannelAsync(client, apiKey, $"@{handle}", cancellationToken);
+            }
         }
 
         return await SearchChannelAsync(client, apiKey, trimmed, cancellationToken);
+    }
+
+    private async Task<ResolvedChannel> GetChannelByHandleAsync(HttpClient client, string apiKey, string handle, CancellationToken cancellationToken)
+    {
+        var cleanHandle = handle.Trim().TrimStart('@');
+        if (string.IsNullOrWhiteSpace(cleanHandle))
+        {
+            throw new InvalidOperationException("Channel handle is empty.");
+        }
+
+        var url =
+            $"https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&forHandle={Uri.EscapeDataString(cleanHandle)}&key={Uri.EscapeDataString(apiKey)}";
+        using var response = await client.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var item = doc.RootElement.GetProperty("items").EnumerateArray().FirstOrDefault();
+        if (item.ValueKind == JsonValueKind.Undefined)
+        {
+            throw new InvalidOperationException($"Could not resolve a public YouTube channel for handle '{handle}'.");
+        }
+
+        return ParseChannel(item);
     }
 
     private async Task<ResolvedChannel> GetChannelByIdAsync(HttpClient client, string apiKey, string channelId, string originalInput, CancellationToken cancellationToken)
