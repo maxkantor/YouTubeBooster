@@ -300,7 +300,7 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
         );
     }
 
-    private static readonly IReadOnlyList<DemoTopVideoDto> FallbackTopVideos = new List<DemoTopVideoDto>
+    private static readonly IReadOnlyList<DemoTopVideoDto> ShowcaseFallbackTopVideos = new List<DemoTopVideoDto>
     {
         new("sample-1", "How to Make Pickled Eggplants with Mushrooms", 9600),
         new("sample-2", "Chicken Breast Pâté / Spread", 9600),
@@ -308,27 +308,76 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
         new("sample-4", "How to Make Belyashi (Fried Meat Buns)", 6200)
     };
 
+    /// <summary>
+    /// Only the built-in marketing showcase may use the fictional metrics + sample video list.
+    /// Any other channel must not receive those numbers when YouTube API is unavailable — it reads as "wrong channel".
+    /// </summary>
+    private static bool IsBuiltInShowcaseChannel(string channelInput)
+    {
+        if (string.IsNullOrWhiteSpace(channelInput)) return false;
+        var t = channelInput.Trim();
+        var handle = ExtractHandle(t);
+        if (!string.IsNullOrWhiteSpace(handle) && handle.Equals("maxkantorUSA", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return t.Contains("maxkantorUSA", StringComparison.OrdinalIgnoreCase)
+               || t.Contains("@maxkantorusa", StringComparison.OrdinalIgnoreCase);
+    }
+
     private DemoAnalysisResponse BuildFallbackResponse(string channelInput)
     {
+        if (IsBuiltInShowcaseChannel(channelInput))
+        {
+            return new DemoAnalysisResponse(
+                DemoId: $"demo_{Guid.NewGuid():N}",
+                ChannelInput: channelInput,
+                ChannelTitle: "YouTube Channel Preview",
+                ChannelHandle: channelInput,
+                HealthScore: 71,
+                Findings:
+                [
+                    "Titles exceed optimal length",
+                    "Missing search keywords",
+                    "Weak video packaging",
+                    "Irregular posting cadence"
+                ],
+                PreviewRecommendations:
+                [
+                    "Rewrite high-potential titles",
+                    "Optimize descriptions for search",
+                    "Focus on winning content patterns",
+                    "Improve CTR keywords"
+                ],
+                GatedInsights:
+                [
+                    "Full growth plan",
+                    "Premium title rewrites",
+                    "Traffic opportunity map",
+                    "Saved dashboard",
+                    "Downloadable report"
+                ],
+                PaywallMessage: "Unlock premium access to save reports, run deeper analysis, and turn channel data into an actionable growth plan.",
+                SubscriberCount: 5770,
+                TotalViews: 515218,
+                VideoCount: 188,
+                AvgEngagement: 3.42,
+                TopVideos: ShowcaseFallbackTopVideos
+            );
+        }
+
         return new DemoAnalysisResponse(
             DemoId: $"demo_{Guid.NewGuid():N}",
             ChannelInput: channelInput,
             ChannelTitle: "YouTube Channel Preview",
             ChannelHandle: channelInput,
-            HealthScore: 71,
+            HealthScore: 0,
             Findings:
             [
-                "Titles exceed optimal length",
-                "Missing search keywords",
-                "Weak video packaging",
-                "Irregular posting cadence"
+                "Live YouTube data could not be loaded (missing API key, quota limit, or channel could not be resolved). The numbers below are placeholders — they are not this channel’s real stats."
             ],
             PreviewRecommendations:
             [
-                "Rewrite high-potential titles",
-                "Optimize descriptions for search",
-                "Focus on winning content patterns",
-                "Improve CTR keywords"
+                "Confirm the YouTube Data API key is configured and has quota, then run the audit again."
             ],
             GatedInsights:
             [
@@ -339,11 +388,11 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
                 "Downloadable report"
             ],
             PaywallMessage: "Unlock premium access to save reports, run deeper analysis, and turn channel data into an actionable growth plan.",
-            SubscriberCount: 5770,
-            TotalViews: 515218,
-            VideoCount: 188,
-            AvgEngagement: 3.42,
-            TopVideos: FallbackTopVideos
+            SubscriberCount: 0,
+            TotalViews: 0,
+            VideoCount: 0,
+            AvgEngagement: 0,
+            TopVideos: Array.Empty<DemoTopVideoDto>()
         );
     }
 

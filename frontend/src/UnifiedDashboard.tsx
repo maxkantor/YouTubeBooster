@@ -876,6 +876,18 @@ export function UnifiedDashboard({
         {isDemo && demoError && (
           <p className="dashboard-demo-error">{demoError}</p>
         )}
+        {isDemo &&
+          !isEmbeddedProductDemo &&
+          demoData != null &&
+          !demoLoading &&
+          !demoError &&
+          Number(demoData.subscriberCount ?? 0) === 0 &&
+          Number(demoData.totalViews ?? 0) === 0 && (
+            <p className="dashboard-demo-error" role="status">
+              YouTube did not return live stats for this channel (API key, quota, or resolution). The zeros below are
+              placeholders — not your channel&apos;s real numbers. Fix the API configuration and refresh.
+            </p>
+          )}
         {isDemo && pyLoading && (
           <p className="dashboard-demo-loading">Analyzing your channel…</p>
         )}
