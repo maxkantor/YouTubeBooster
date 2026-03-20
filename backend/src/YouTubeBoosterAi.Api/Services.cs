@@ -51,6 +51,7 @@ public sealed class StripeCheckoutService : ICheckoutService
     {
         var settings = await _appSettingsProvider.GetSettingsAsync(cancellationToken);
         var stripeSecret = await _secretValueProvider.GetValueAsync("stripe/secret-key", secure: true, cancellationToken);
+        var hostedSuccessUrl = BuildHostedSuccessUrl(request.SuccessUrl, request.CancelUrl);
 
         if (string.IsNullOrWhiteSpace(stripeSecret))
         {
@@ -91,8 +92,9 @@ public sealed class StripeCheckoutService : ICheckoutService
                 ["mode"] = "mock"
             }, cancellationToken);
 
+            var mockSeparator = hostedSuccessUrl.Contains('?') ? '&' : '?';
             return new CheckoutSessionResponse(
-                CheckoutUrl: $"{request.SuccessUrl}?mockCheckout=true&channel={Uri.EscapeDataString(request.ChannelInput)}",
+                CheckoutUrl: $"{hostedSuccessUrl}{mockSeparator}mockCheckout=true&channel={Uri.EscapeDataString(request.ChannelInput)}",
                 SessionId: mockPurchaseId,
                 Amount: settings.OneTimePrice,
                 Currency: settings.Currency
@@ -109,7 +111,9 @@ public sealed class StripeCheckoutService : ICheckoutService
         var session = await sessionService.CreateAsync(new Stripe.Checkout.SessionCreateOptions
         {
             Mode = "payment",
-            SuccessUrl = $"{request.SuccessUrl}?session_id={{CHECKOUT_SESSION_ID}}",
+            SuccessUrl = hostedSuccessUrl.Contains('?')
+                ? $"{hostedSuccessUrl}&session_id={{CHECKOUT_SESSION_ID}}"
+                : $"{hostedSuccessUrl}?session_id={{CHECKOUT_SESSION_ID}}",
             CancelUrl = request.CancelUrl,
             CustomerEmail = customerEmail,
             AllowPromotionCodes = true,
@@ -161,25 +165,123 @@ public sealed class StripeCheckoutService : ICheckoutService
         );
     }
 
+    private static string BuildHostedSuccessUrl(string successUrl, string cancelUrl)
+    {
+        if (Uri.TryCreate(successUrl, UriKind.Absolute, out var successUri))
+        {
+            return $"{successUri.GetLeftPart(UriPartial.Authority)}/?checkout=success";
+        }
+
+        if (Uri.TryCreate(cancelUrl, UriKind.Absolute, out var cancelUri))
+        {
+            return $"{cancelUri.GetLeftPart(UriPartial.Authority)}/?checkout=success";
+        }
+
+        return successUrl;
+    }
+
     public async Task HandleStripeWebhookAsync(string payload, string? signatureHeader, CancellationToken cancellationToken)
     {
-        var secret = await _secretValueProvider.GetValueAsync("stripe/webhook-secret", secure: true, cancellationToken);
-        if (string.IsNullOrWhiteSpace(secret) || string.IsNullOrWhiteSpace(signatureHeader))
+        var webhookSecret = await _secretValueProvider.GetValueAsync("stripe/webhook-secret", secure: true, cancellationToken);
+        if (string.IsNullOrWhiteSpace(webhookSecret))
         {
             return;
         }
 
-        var stripeEvent = Stripe.EventUtility.ConstructEvent(payload, signatureHeader, secret);
-        if (stripeEvent.Type != "checkout.session.completed")
+        Stripe.Checkout.Session? completedSession = null;
+        if (!string.IsNullOrWhiteSpace(signatureHeader))
+        {
+            try
+            {
+                var stripeEvent = Stripe.EventUtility.ConstructEvent(payload, signatureHeader, webhookSecret);
+                if (stripeEvent.Type != "checkout.session.completed")
+                {
+                    return;
+                }
+
+                completedSession = stripeEvent.Data.Object as Stripe.Checkout.Session;
+            }
+            catch (Exception ex)
+            {
+                await _appDataStore.TrackEventAsync("stripe_webhook_signature_invalid", "n/a", new Dictionary<string, string?>
+                {
+                    ["reason"] = ex.Message
+                }, cancellationToken);
+            }
+        }
+
+        if (completedSession is null)
+        {
+            var stripeSecret = await _secretValueProvider.GetValueAsync("stripe/secret-key", secure: true, cancellationToken);
+            var recoveredSession = await TryRecoverCheckoutSessionFromPayloadAsync(payload, stripeSecret, cancellationToken);
+            if (recoveredSession is null)
+            {
+                return;
+            }
+
+            completedSession = recoveredSession;
+        }
+
+        var session = completedSession;
+        if (!string.Equals(session.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(session.Status, "complete", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        if (stripeEvent.Data.Object is not Stripe.Checkout.Session session)
+        await ProcessCompletedCheckoutSessionAsync(session, cancellationToken);
+    }
+
+    private async Task<Stripe.Checkout.Session?> TryRecoverCheckoutSessionFromPayloadAsync(
+        string payload,
+        string? stripeSecret,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(stripeSecret))
         {
-            return;
+            return null;
         }
 
+        string? eventType = null;
+        string? sessionId = null;
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(payload);
+            if (document.RootElement.TryGetProperty("type", out var typeElement))
+            {
+                eventType = typeElement.GetString();
+            }
+
+            if (!string.Equals(eventType, "checkout.session.completed", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            if (document.RootElement.TryGetProperty("data", out var dataElement)
+                && dataElement.TryGetProperty("object", out var objectElement)
+                && objectElement.TryGetProperty("id", out var idElement))
+            {
+                sessionId = idElement.GetString();
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return null;
+        }
+
+        Stripe.StripeConfiguration.ApiKey = stripeSecret;
+        var sessionService = new Stripe.Checkout.SessionService();
+        return await sessionService.GetAsync(sessionId, options: null, cancellationToken: cancellationToken);
+    }
+
+    private async Task ProcessCompletedCheckoutSessionAsync(Stripe.Checkout.Session session, CancellationToken cancellationToken)
+    {
         var metadata = session.Metadata ?? new Dictionary<string, string>();
         var userId = metadata.GetValueOrDefault("userId") ?? string.Empty;
         var cognitoSub = metadata.GetValueOrDefault("cognitoSub") ?? string.Empty;

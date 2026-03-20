@@ -156,6 +156,7 @@ function analyzeSeoLocally(title: string): LocalSeoResult {
 export function UnifiedDashboard({
   isDemo,
   isFullDemo = false,
+  premiumUnlocked = false,
   demoData,
   dashboardOverview,
   channelInput,
@@ -168,6 +169,8 @@ export function UnifiedDashboard({
   isDemo: boolean;
   /** When true, default channel demo: all tabs visible, no blur. When false (user channel), preview mode with blur. */
   isFullDemo?: boolean;
+  /** Paid user on a non-default channel — same unlock as full demo, different badge copy. */
+  premiumUnlocked?: boolean;
   demoData: DemoPreview | null;
   dashboardOverview: DashboardOverview | null;
   channelInput: string;
@@ -728,7 +731,9 @@ export function UnifiedDashboard({
         {isDemo && (
           <>
             {isFullDemo ? (
-              <p className="dashboard-badge demo-badge">Full demo — product showcase</p>
+              <p className="dashboard-badge demo-badge">
+                {premiumUnlocked ? 'Premium — full access' : 'Full demo — product showcase'}
+              </p>
             ) : (
               <>
                 <div className="dashboard-preview-banner">
@@ -746,6 +751,11 @@ export function UnifiedDashboard({
           </>
         )}
         {!isDemo && <p className="dashboard-subtitle">Channel: <strong>{channelTitle}</strong></p>}
+        {isDemo && premiumUnlocked && userEmail && (
+          <div className="pill-row dashboard-actions">
+            <span className="info-pill">Signed in as {userEmail}</span>
+          </div>
+        )}
         {!isDemo && userEmail && (
           <div className="pill-row dashboard-actions">
             <span className="info-pill">Signed in as {userEmail}</span>

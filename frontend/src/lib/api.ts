@@ -125,7 +125,7 @@ export const publicApi = {
       body: JSON.stringify({
         email,
         channelInput,
-        successUrl: `${window.location.origin}/checkout/success`,
+        successUrl: `${window.location.origin}/?checkout=success`,
         cancelUrl: `${window.location.origin}/dashboard`
       })
     });
@@ -159,7 +159,7 @@ export const billingApi = {
         channelInput,
         priceKey: planCode,
         planCode,
-        successUrl: `${window.location.origin}/checkout/success`,
+        successUrl: `${window.location.origin}/?checkout=success`,
         cancelUrl: `${window.location.origin}/#pricing`
       })
     });

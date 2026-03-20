@@ -36,10 +36,14 @@ function DemoDashboardView() {
   const defaultNormalized = normalizeChannelForComparison(DEFAULT_DEMO_CHANNEL);
   const inputHandle = normalizeChannelForComparison(getDisplayHandle(channelInput));
   const defaultHandle = normalizeChannelForComparison(getDisplayHandle(DEFAULT_DEMO_CHANNEL));
-  const isFullDemo =
+  /** Built-in showcase channel only — blur/preview for any other channel unless user has premium. */
+  const isDefaultChannelDemo =
     inputNormalized === defaultNormalized ||
     inputHandle === defaultHandle ||
     inputHandle === '@maxkantorusa';
+
+  const [hasPremium, setHasPremium] = useState(false);
+  const effectiveFullDemo = isDefaultChannelDemo || hasPremium;
 
   const [apiDemoData, setApiDemoData] = useState<DemoPreview | null>(null);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -48,6 +52,46 @@ function DemoDashboardView() {
   useEffect(() => {
     analytics.demoDashboardViewed();
   }, []);
+
+  const refreshPremium = useCallback(async () => {
+    if (!authSession?.idToken) {
+      setHasPremium(false);
+      return;
+    }
+    try {
+      const status = await meApi.getAccessStatus(authSession.idToken);
+      setHasPremium(!!status.premium);
+    } catch {
+      setHasPremium(false);
+    }
+  }, [authSession?.idToken]);
+
+  useEffect(() => {
+    void refreshPremium();
+  }, [refreshPremium]);
+
+  // After Stripe / webhook delay, pick up premium without a full reload.
+  useEffect(() => {
+    if (!authSession?.idToken) return;
+    const t1 = window.setTimeout(() => void refreshPremium(), 2500);
+    const t2 = window.setTimeout(() => void refreshPremium(), 8000);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [authSession?.idToken, refreshPremium]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshPremium();
+    };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refreshPremium]);
 
   useEffect(() => {
     const raw = (channelInput || '').trim();
@@ -84,10 +128,12 @@ function DemoDashboardView() {
   return (
     <UnifiedDashboard
       isDemo
-      isFullDemo={isFullDemo}
+      isFullDemo={effectiveFullDemo}
+      premiumUnlocked={hasPremium && !isDefaultChannelDemo}
       demoData={apiDemoData}
       dashboardOverview={null}
       channelInput={channelInput}
+      userEmail={authSession?.email ?? undefined}
       demoLoading={demoLoading}
       demoError={demoError}
       onCreateCheckout={async (ch, _email) => {
