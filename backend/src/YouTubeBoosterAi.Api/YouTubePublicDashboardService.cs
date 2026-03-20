@@ -242,6 +242,12 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
 
     private async Task<IReadOnlyList<VideoSnapshot>> LoadRecentVideosOrFallbackAsync(ResolvedChannel channel, int maxResults, CancellationToken cancellationToken)
     {
+        // Never attach the built-in recipe sample list to an arbitrary channel — that reads as "wrong channel".
+        if (string.Equals(channel.ChannelId, "UC_fallback", StringComparison.Ordinal))
+        {
+            return [];
+        }
+
         var apiKey = await _secretValueProvider.GetValueAsync("youtube/api-key", secure: true, cancellationToken);
         if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Trim().Equals("replace-me", StringComparison.OrdinalIgnoreCase))
         {
@@ -705,6 +711,18 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
         return string.IsNullOrWhiteSpace(cleaned) ? "channel" : cleaned;
     }
 
+    /// <summary>
+    /// When the YouTube API cannot be used, avoid branding the UI as the product demo channel.
+    /// </summary>
+    private static string PreviewTitleFromChannelInput(string? channelInput)
+    {
+        var trimmed = (channelInput ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return "Channel preview";
+        var match = HandleRegex.Match(trimmed);
+        if (match.Success) return $"Preview for @{match.Groups[1].Value}";
+        return "Channel preview";
+    }
+
     private sealed record ResolvedChannel(
         string ChannelId,
         string Title,
@@ -715,10 +733,10 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
     {
         public static ResolvedChannel Fallback(string channelInput) => new(
             ChannelId: "UC_fallback",
-            Title: "Max Kantor Cooking Recipes",
-            SubscriberCount: 5770,
-            ViewCount: 515218,
-            VideoCount: 188,
+            Title: YouTubePublicDashboardService.PreviewTitleFromChannelInput(channelInput),
+            SubscriberCount: 0,
+            ViewCount: 0,
+            VideoCount: 0,
             UploadsPlaylistId: string.Empty
         );
 

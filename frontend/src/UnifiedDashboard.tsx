@@ -230,8 +230,14 @@ export function UnifiedDashboard({
   /** Id of the last "Copy" button that succeeded, for showing "Copied!" (e.g. "link-abc123"). */
   const [copyFeedbackId, setCopyFeedbackId] = useState<string | null>(null);
 
+  /** GET /channel/analyze uses UC_fallback when YouTube API is unavailable; POST /demo may still have the real channel. */
+  const preferDemoSnapshotOverPy =
+    isDemo && pyOverview?.channel_info?.channel_id === 'UC_fallback' && demoData != null;
+
   const channelTitle = isDemo
-    ? (pyOverview?.channel_info?.title ?? demoData?.channelTitle ?? demoChannelData.channelTitle)
+    ? preferDemoSnapshotOverPy && demoData?.channelTitle
+      ? demoData.channelTitle
+      : (pyOverview?.channel_info?.title ?? demoData?.channelTitle ?? demoChannelData.channelTitle)
     : (dashboardOverview?.channelTitle ?? 'Channel');
   const displayHandle = isDemo ? getDisplayHandle(channelInput) : null;
   const previewFor = isDemo ? (displayHandle && displayHandle !== '@channel' ? displayHandle : (demoData?.channelHandle ?? demoChannelData.channelHandle)) : null;
@@ -312,20 +318,36 @@ export function UnifiedDashboard({
     demoData && (Number(demoData.subscriberCount) > 0 || Number(demoData.totalViews) > 0)
   );
   const subscribers = isDemo
-    ? (pyOverview?.channel_info?.subscriber_count ?? (hasMeaningfulMetrics && demoData?.subscriberCount != null ? Number(demoData.subscriberCount) : demoChannelData.subscribers))
+    ? preferDemoSnapshotOverPy && demoData?.subscriberCount != null
+      ? Number(demoData.subscriberCount)
+      : (pyOverview?.channel_info?.subscriber_count ??
+          (hasMeaningfulMetrics && demoData?.subscriberCount != null ? Number(demoData.subscriberCount) : demoChannelData.subscribers))
     : 0;
   const totalViews = isDemo
-    ? (pyOverview?.channel_info?.view_count ?? (hasMeaningfulMetrics && demoData?.totalViews != null ? Number(demoData.totalViews) : demoChannelData.totalViews))
+    ? preferDemoSnapshotOverPy && demoData?.totalViews != null
+      ? Number(demoData.totalViews)
+      : (pyOverview?.channel_info?.view_count ??
+          (hasMeaningfulMetrics && demoData?.totalViews != null ? Number(demoData.totalViews) : demoChannelData.totalViews))
     : 0;
   const videoCount = isDemo
-    ? (pyOverview?.channel_info?.video_count ?? (hasMeaningfulMetrics && demoData?.videoCount != null ? Number(demoData.videoCount) : demoChannelData.videos))
+    ? preferDemoSnapshotOverPy && demoData?.videoCount != null
+      ? Number(demoData.videoCount)
+      : (pyOverview?.channel_info?.video_count ??
+          (hasMeaningfulMetrics && demoData?.videoCount != null ? Number(demoData.videoCount) : demoChannelData.videos))
     : 0;
   const avgEngagement = isDemo
-    ? (pyOverview?.video_performance?.avg_engagement_rate ?? (hasMeaningfulMetrics && demoData?.avgEngagement != null ? Number(demoData.avgEngagement) : demoChannelData.avgEngagement))
+    ? preferDemoSnapshotOverPy && demoData?.avgEngagement != null
+      ? Number(demoData.avgEngagement)
+      : (pyOverview?.video_performance?.avg_engagement_rate ??
+          (hasMeaningfulMetrics && demoData?.avgEngagement != null ? Number(demoData.avgEngagement) : demoChannelData.avgEngagement))
     : 0;
   const topVideosPaid = hasMeaningfulMetrics && demoData?.topVideos?.length ? (demoData.topVideos ?? []) : (demoData?.topVideos ?? []);
   const recommendations = isDemo
-    ? [...(pyOverview?.recommendations ?? demoRecommendations)]
+    ? [
+        ...(preferDemoSnapshotOverPy
+          ? (demoData?.previewRecommendations ?? demoRecommendations)
+          : (pyOverview?.recommendations ?? demoRecommendations))
+      ]
     : [...(dashboardOverview?.topOpportunities ?? []), ...(dashboardOverview?.topIssues ?? [])];
 
   const paidMetrics = dashboardOverview?.metrics ?? [];
@@ -344,11 +366,18 @@ export function UnifiedDashboard({
 
   const previewSnapshotLoading =
     isPreviewMode && (demoLoading || pyLoading) && !pyOverview?.channel_info && demoData == null;
-  const pvSub = pyOverview?.channel_info?.subscriber_count ?? demoData?.subscriberCount;
-  const pvViews = pyOverview?.channel_info?.view_count ?? demoData?.totalViews;
-  const pvVideos = pyOverview?.channel_info?.video_count ?? demoData?.videoCount;
-  const pvEng =
-    pyOverview?.video_performance?.avg_engagement_rate ?? demoData?.avgEngagement;
+  const pvSub = preferDemoSnapshotOverPy
+    ? (demoData?.subscriberCount ?? pyOverview?.channel_info?.subscriber_count)
+    : (pyOverview?.channel_info?.subscriber_count ?? demoData?.subscriberCount);
+  const pvViews = preferDemoSnapshotOverPy
+    ? (demoData?.totalViews ?? pyOverview?.channel_info?.view_count)
+    : (pyOverview?.channel_info?.view_count ?? demoData?.totalViews);
+  const pvVideos = preferDemoSnapshotOverPy
+    ? (demoData?.videoCount ?? pyOverview?.channel_info?.video_count)
+    : (pyOverview?.channel_info?.video_count ?? demoData?.videoCount);
+  const pvEng = preferDemoSnapshotOverPy
+    ? (demoData?.avgEngagement ?? pyOverview?.video_performance?.avg_engagement_rate)
+    : (pyOverview?.video_performance?.avg_engagement_rate ?? demoData?.avgEngagement);
   function previewMetricDisplay(n: number | null | undefined): string {
     if (previewSnapshotLoading && (n == null || (typeof n === 'number' && Number.isNaN(n)))) return '…';
     if (n == null || (typeof n === 'number' && Number.isNaN(n))) return '—';

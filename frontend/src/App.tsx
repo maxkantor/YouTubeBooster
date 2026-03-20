@@ -31,7 +31,8 @@ function DemoDashboardView() {
   const channelFromState = (location.state as { channelInput?: string } | null)?.channelInput;
   const channelFromQuery = searchParams.get('channel');
   const channelFromStorage = getStoredDemoChannel();
-  const channelInput = channelFromState ?? channelFromQuery ?? channelFromStorage ?? DEFAULT_DEMO_CHANNEL;
+  // Prefer query string (survives refresh, shareable); state is easy to lose on some navigations.
+  const channelInput = channelFromQuery ?? channelFromState ?? channelFromStorage ?? DEFAULT_DEMO_CHANNEL;
   const inputNormalized = normalizeChannelForComparison(channelInput);
   const defaultNormalized = normalizeChannelForComparison(DEFAULT_DEMO_CHANNEL);
   const inputHandle = normalizeChannelForComparison(getDisplayHandle(channelInput));
