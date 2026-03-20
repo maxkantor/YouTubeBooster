@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 
 namespace YouTubeBoosterAi.Api;
 
@@ -18,36 +19,41 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ISecretValueProvider _secretValueProvider;
     private readonly IAppDataStore _appDataStore;
+    private readonly ILogger<YouTubePublicDemoAnalysisService> _logger;
 
     public YouTubePublicDemoAnalysisService(
         IHttpClientFactory httpClientFactory,
         ISecretValueProvider secretValueProvider,
-        IAppDataStore appDataStore)
+        IAppDataStore appDataStore,
+        ILogger<YouTubePublicDemoAnalysisService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _secretValueProvider = secretValueProvider;
         _appDataStore = appDataStore;
+        _logger = logger;
     }
 
     public async Task<DemoAnalysisResponse> RunDemoAsync(DemoAnalysisRequest request, CancellationToken cancellationToken)
     {
         var apiKey = await _secretValueProvider.GetValueAsync("youtube/api-key", secure: true, cancellationToken);
-        var resolvedInput = request.ChannelInput;
+        var resolvedInput = request.ChannelInput ?? string.Empty;
         var client = _httpClientFactory.CreateClient();
 
         try
         {
             resolvedInput = await NormalizeChannelInputAsync(client, resolvedInput, cancellationToken);
         }
-        catch
+        catch (Exception ex)
         {
-            resolvedInput = request.ChannelInput;
+            _logger.LogWarning(ex, "YouTube public demo: normalize channel input failed");
+            resolvedInput = request.ChannelInput ?? string.Empty;
         }
 
         DemoAnalysisResponse response;
 
         if (!HasUsableYouTubeApiKey(apiKey))
         {
+            _logger.LogWarning("YouTube public demo: no usable API key (missing, placeholder, or too short).");
             response = await BuildFallbackResponseAsync(client, resolvedInput, cancellationToken);
         }
         else
@@ -55,13 +61,32 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
             try
             {
                 var channel = await ResolveChannelAsync(client, apiKey!, resolvedInput, cancellationToken);
-                var videos = await LoadRecentVideosAsync(client, apiKey!, channel.UploadsPlaylistId, cancellationToken);
+
+                // IMPORTANT: do not tie channel resolution + video list into one try/catch.
+                // Playlist/video calls can fail (quota, permissions) even when channels.list succeeded.
+                // Previously any playlist failure discarded resolved channel stats and showed full placeholder zeros.
+                IReadOnlyList<VideoSnapshot> videos = [];
+                if (!string.IsNullOrWhiteSpace(channel.UploadsPlaylistId))
+                {
+                    try
+                    {
+                        videos = await LoadRecentVideosAsync(client, apiKey!, channel.UploadsPlaylistId, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "YouTube public demo: load recent videos failed; returning channel stats only.");
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("YouTube public demo: missing uploads playlist id for channel {ChannelId}", channel.ChannelId);
+                }
+
                 response = BuildResponseFromChannelData(resolvedInput, channel, videos);
             }
-            catch
+            catch (Exception ex)
             {
-                // If the YouTube API key is missing/invalid/over-quota or the channel can't be resolved,
-                // fall back to the demo dataset instead of returning a 500.
+                _logger.LogWarning(ex, "YouTube public demo: resolve channel failed for input {Input}", resolvedInput);
                 response = await BuildFallbackResponseAsync(client, resolvedInput, cancellationToken);
             }
         }
@@ -89,10 +114,10 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
     private async Task<string> NormalizeChannelInputAsync(HttpClient client, string channelInput, CancellationToken cancellationToken)
     {
         // Must match YouTubePublicDashboardService: encoded query params break @handle extraction.
-        var trimmed = YouTubeChannelInputHelpers.DecodeChannelInput(channelInput.Trim());
+        var trimmed = YouTubeChannelInputHelpers.DecodeChannelInput((channelInput ?? string.Empty).Trim());
         if (string.IsNullOrWhiteSpace(trimmed))
         {
-            return channelInput;
+            return channelInput ?? string.Empty;
         }
 
         if (ExtractChannelId(trimmed) is not null || ExtractHandle(trimmed) is not null)
@@ -216,6 +241,11 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
 
     private async Task<IReadOnlyList<VideoSnapshot>> LoadRecentVideosAsync(HttpClient client, string apiKey, string uploadsPlaylistId, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(uploadsPlaylistId))
+        {
+            return [];
+        }
+
         var playlistUrl = $"https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId={Uri.EscapeDataString(uploadsPlaylistId)}&maxResults=20&key={Uri.EscapeDataString(apiKey)}";
         using var playlistResponse = await client.GetAsync(playlistUrl, cancellationToken);
         playlistResponse.EnsureSuccessStatusCode();
@@ -540,8 +570,6 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
     private static ResolvedChannel ParseChannel(JsonElement item)
     {
         var snippet = item.GetProperty("snippet");
-        var statistics = item.GetProperty("statistics");
-        var contentDetails = item.GetProperty("contentDetails").GetProperty("relatedPlaylists");
         var title = snippet.GetProperty("title").GetString() ?? "YouTube Channel";
         var handle = $"@{SanitizeHandle(title)}";
         if (snippet.TryGetProperty("customUrl", out var customUrlEl))
@@ -550,14 +578,35 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
             if (!string.IsNullOrWhiteSpace(customUrl))
                 handle = customUrl.StartsWith("@", StringComparison.Ordinal) ? customUrl : $"@{customUrl}";
         }
+
+        var uploadsPlaylistId = string.Empty;
+        if (item.TryGetProperty("contentDetails", out var contentDetailsRoot))
+        {
+            if (contentDetailsRoot.TryGetProperty("relatedPlaylists", out var playlists))
+            {
+                if (playlists.TryGetProperty("uploads", out var uploadsEl))
+                    uploadsPlaylistId = uploadsEl.GetString() ?? string.Empty;
+            }
+        }
+
+        long subscriberCount = 0;
+        long viewCount = 0;
+        long videoCount = 0;
+        if (item.TryGetProperty("statistics", out var statistics))
+        {
+            subscriberCount = GetInt64(statistics, "subscriberCount");
+            viewCount = GetInt64(statistics, "viewCount");
+            videoCount = GetInt64(statistics, "videoCount");
+        }
+
         return new ResolvedChannel(
             ChannelId: item.GetProperty("id").GetString() ?? string.Empty,
             Title: title,
             Handle: handle,
-            UploadsPlaylistId: contentDetails.GetProperty("uploads").GetString() ?? string.Empty,
-            SubscriberCount: GetInt64(statistics, "subscriberCount"),
-            ViewCount: GetInt64(statistics, "viewCount"),
-            VideoCount: GetInt64(statistics, "videoCount")
+            UploadsPlaylistId: uploadsPlaylistId,
+            SubscriberCount: subscriberCount,
+            ViewCount: viewCount,
+            VideoCount: videoCount
         );
     }
 

@@ -1,6 +1,9 @@
 using Amazon.DynamoDBv2;
 using Amazon.SimpleEmail;
 using Amazon.SimpleSystemsManagement;
+using System;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 
 namespace YouTubeBoosterAi.Api;
 
@@ -8,10 +11,24 @@ public static class Infrastructure
 {
     public static IServiceCollection AddApplicationInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDataProtection();
-        services.AddHttpClient();
+        // Persist ASP.NET Data Protection keys so backend session cookies remain decryptable
+        // across Lambda cold starts / container recycling.
+        //
+        // Without this, DataProtection falls back to EphemeralXmlRepository and users can be
+        // abruptly logged out (which breaks premium unlock visibility).
+        var appName = "YouTubeBoosterAi.Api";
+        var dynamoClient = new AmazonDynamoDBClient();
+        services.AddDataProtection()
+            .SetApplicationName(appName)
+            .AddKeyManagementOptions(options => options.XmlRepository = new DynamoXmlRepository(dynamoClient, configuration, appName));
 
-        services.AddSingleton<IAmazonDynamoDB>(_ => new AmazonDynamoDBClient());
+        // Google APIs can reject requests with no User-Agent; Lambda HttpClient defaults are minimal.
+        services.AddHttpClient(string.Empty, client =>
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("YouTubeBoosterAi/1.0 (+https://youtubebooster.com)");
+        });
+
+        services.AddSingleton<IAmazonDynamoDB>(_ => dynamoClient);
         services.AddSingleton<IAmazonSimpleEmailService>(_ => new AmazonSimpleEmailServiceClient());
         services.AddSingleton<IAmazonSimpleSystemsManagement>(_ => new AmazonSimpleSystemsManagementClient());
 
@@ -21,7 +38,13 @@ public static class Infrastructure
         services.AddScoped<SessionCookieService>();
         services.AddScoped<IMagicLinkNotificationService, SesMagicLinkNotificationService>();
 
-        var storageProvider = configuration["Storage:Provider"] ?? configuration["Storage__Provider"] ?? "InMemory";
+        // If running in Lambda and Storage__Provider isn't explicitly configured,
+        // default to DynamoDb (so cookie-backed sessions don't vanish between invocations).
+        var isRunningInLambda = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
+        var storageProvider = configuration["Storage:Provider"]
+                              ?? configuration["Storage__Provider"]
+                              ?? (isRunningInLambda ? "DynamoDb" : "InMemory");
+        Console.WriteLine($"[startup] Storage provider resolved to '{storageProvider}' (isRunningInLambda={isRunningInLambda}).");
         if (string.Equals(storageProvider, "DynamoDb", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<IAppDataStore, DynamoDbAppDataStore>();
