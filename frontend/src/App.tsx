@@ -817,7 +817,7 @@ function AppInner() {
         <Route
           path="/dashboard/channel"
           element={
-            <UserRoute userSession={userSession} loading={sessionLoading}>
+            <UserRoute userSession={userSession} loading={sessionLoading} allowIncompleteOnboarding>
               <ChannelAnalyzeDashboard variant="paid" />
             </UserRoute>
           }
