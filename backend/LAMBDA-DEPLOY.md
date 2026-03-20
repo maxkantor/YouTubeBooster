@@ -58,3 +58,7 @@ Expected: `{"status":"ok","service":"youtube-booster-ai-api"}`.
 ## Deploy via AWS CLI / Terraform
 
 - Terraform: set `backend_package_path` to the full path to `backend/youtubebooster-api.zip` and run `terraform apply`.
+
+## SSM / secrets (YouTube API key, Stripe, etc.)
+
+See **`docs/SSM-PARAMETER-CHECKLIST.md`**. The backend expects **`/youtubebooster/youtube/api-key`** (SecureString) unless you set `YOUTUBE_API_KEY` on the Lambda or embed `youtube_api_key` in `admin/google/credentials-json`.

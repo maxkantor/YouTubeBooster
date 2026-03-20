@@ -163,7 +163,10 @@ resource "aws_ssm_parameter" "defaults" {
   description = each.value.description
   type        = each.value.type
   value       = each.value.value
-  overwrite   = true
+  # WARNING: `overwrite = true` means a later `terraform apply` can reset parameters to the
+  # placeholder values in this file (e.g. replace-me) if tfvars do not pass real secrets.
+  # Prefer setting sensitive values via AWS Console/CLI, or pass -var/youtube_api_key etc.
+  overwrite = true
 
   tags = local.common_tags
 }

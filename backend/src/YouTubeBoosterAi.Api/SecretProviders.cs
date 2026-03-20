@@ -36,20 +36,45 @@ public sealed class SsmSecretValueProvider : ISecretValueProvider
         {
             using var doc = JsonDocument.Parse(credentialsJson);
             var root = doc.RootElement;
-            if (root.TryGetProperty("youtube_api_key", out var ytKey) && ytKey.ValueKind == JsonValueKind.String)
-            {
-                var v = ytKey.GetString();
-                if (!string.IsNullOrWhiteSpace(v)) return v;
-            }
-            if (root.TryGetProperty("api_key", out var apiKey) && apiKey.ValueKind == JsonValueKind.String)
-            {
-                var v = apiKey.GetString();
-                if (!string.IsNullOrWhiteSpace(v)) return v;
-            }
+            var key = TryExtractYouTubeDataApiKeyFromCredentialsJson(root);
+            if (!string.IsNullOrWhiteSpace(key)) return key;
         }
         catch
         {
             /* ignore parse errors */
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// OAuth credentials.json is usually <c>{"installed":{...}}</c> or <c>{"web":{...}}</c> and does not include a Data API key.
+    /// We optionally support <c>youtube_api_key</c> at the root, under <c>installed</c>, or under <c>web</c> so one SSM blob can carry both.
+    /// </summary>
+    private static string? TryExtractYouTubeDataApiKeyFromCredentialsJson(JsonElement root)
+    {
+        foreach (var prop in new[] { "youtube_api_key", "api_key" })
+        {
+            if (root.TryGetProperty(prop, out var el) && el.ValueKind == JsonValueKind.String)
+            {
+                var v = el.GetString();
+                if (!string.IsNullOrWhiteSpace(v)) return v!.Trim();
+            }
+        }
+
+        foreach (var section in new[] { "installed", "web" })
+        {
+            if (!root.TryGetProperty(section, out var nested) || nested.ValueKind != JsonValueKind.Object)
+                continue;
+
+            foreach (var prop in new[] { "youtube_api_key", "api_key" })
+            {
+                if (nested.TryGetProperty(prop, out var el) && el.ValueKind == JsonValueKind.String)
+                {
+                    var v = el.GetString();
+                    if (!string.IsNullOrWhiteSpace(v)) return v!.Trim();
+                }
+            }
         }
 
         return null;
