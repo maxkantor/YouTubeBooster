@@ -12,7 +12,22 @@ import {
   demoTrafficTools,
   demoVideos
 } from './demoData';
-import { getDisplayHandle } from './lib/demo';
+import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, normalizeChannelForComparison } from './lib/demo';
+
+/** Only the marketing default URL/handle may use the embedded Max Kantor demo dataset. */
+function isBuiltInShowcaseChannel(channelInput: string): boolean {
+  const trimmed = channelInput.trim();
+  if (!trimmed) return false;
+  const inputNorm = normalizeChannelForComparison(trimmed);
+  const defaultNorm = normalizeChannelForComparison(DEFAULT_DEMO_CHANNEL);
+  const handleNorm = normalizeChannelForComparison(getDisplayHandle(trimmed));
+  const defaultHandleNorm = normalizeChannelForComparison(getDisplayHandle(DEFAULT_DEMO_CHANNEL));
+  return (
+    inputNorm === defaultNorm ||
+    handleNorm === defaultHandleNorm ||
+    handleNorm === '@maxkantorusa'
+  );
+}
 import { publicApi } from './lib/api';
 import { PaywallModal } from './PaywallModal';
 import type { CheckoutSession } from './types';
@@ -234,19 +249,50 @@ export function UnifiedDashboard({
   const preferDemoSnapshotOverPy =
     isDemo && pyOverview?.channel_info?.channel_id === 'UC_fallback' && demoData != null;
 
+  /** True only for https://www.youtube.com/@maxkantorUSA — never for user-entered channels. */
+  const isEmbeddedProductDemo = isDemo && isBuiltInShowcaseChannel(channelInput || '');
+
+  const demoTitleFallback = (): string => {
+    const h = getDisplayHandle(channelInput);
+    return h && h !== '@channel' ? `Preview — ${h}` : 'Channel preview';
+  };
+
   const channelTitle = isDemo
     ? preferDemoSnapshotOverPy && demoData?.channelTitle
       ? demoData.channelTitle
-      : (pyOverview?.channel_info?.title ?? demoData?.channelTitle ?? demoChannelData.channelTitle)
+      : (pyOverview?.channel_info?.title ??
+          demoData?.channelTitle ??
+          (isEmbeddedProductDemo ? demoChannelData.channelTitle : undefined)) || demoTitleFallback()
     : (dashboardOverview?.channelTitle ?? 'Channel');
   const displayHandle = isDemo ? getDisplayHandle(channelInput) : null;
-  const previewFor = isDemo ? (displayHandle && displayHandle !== '@channel' ? displayHandle : (demoData?.channelHandle ?? demoChannelData.channelHandle)) : null;
+  const previewFor = isDemo
+    ? displayHandle && displayHandle !== '@channel'
+      ? displayHandle
+      : demoData?.channelHandle ??
+        (isEmbeddedProductDemo ? demoChannelData.channelHandle : getDisplayHandle(channelInput))
+    : null;
 
   const growthScore = isDemo
-    ? (demoData?.healthScore ?? demoChannelData.growthScore)
+    ? (demoData?.healthScore ?? (isEmbeddedProductDemo ? demoChannelData.growthScore : 0))
     : (dashboardOverview?.healthScore ?? 0);
-  const growthScoreLabel = isDemo ? demoChannelData.growthScoreLabel : (growthScore >= 70 ? 'GOOD' : growthScore >= 50 ? 'FAIR' : 'NEEDS WORK');
+  const growthScoreLabel = isDemo
+    ? isEmbeddedProductDemo
+      ? demoChannelData.growthScoreLabel
+      : growthScore >= 70
+        ? 'GOOD'
+        : growthScore >= 50
+          ? 'FAIR'
+          : 'NEEDS WORK'
+    : growthScore >= 70
+      ? 'GOOD'
+      : growthScore >= 50
+        ? 'FAIR'
+        : 'NEEDS WORK';
   const scoreAnimated = !isDemo || displayScore >= growthScore;
+
+  useEffect(() => {
+    setDisplayScore(0);
+  }, [channelInput]);
 
   useEffect(() => {
     if (!isDemo || growthScore <= 0) return;
@@ -313,7 +359,11 @@ export function UnifiedDashboard({
     }
   }
 
-  const scoreExplanation = isDemo ? demoChannelData.scoreExplanation : null;
+  const scoreExplanation = isDemo
+    ? isEmbeddedProductDemo
+      ? demoChannelData.scoreExplanation
+      : demoData?.findings?.[0] ?? null
+    : null;
   const hasMeaningfulMetrics = Boolean(
     demoData && (Number(demoData.subscriberCount) > 0 || Number(demoData.totalViews) > 0)
   );
@@ -321,34 +371,61 @@ export function UnifiedDashboard({
     ? preferDemoSnapshotOverPy && demoData?.subscriberCount != null
       ? Number(demoData.subscriberCount)
       : (pyOverview?.channel_info?.subscriber_count ??
-          (hasMeaningfulMetrics && demoData?.subscriberCount != null ? Number(demoData.subscriberCount) : demoChannelData.subscribers))
+          (hasMeaningfulMetrics && demoData?.subscriberCount != null
+            ? Number(demoData.subscriberCount)
+            : isEmbeddedProductDemo
+              ? demoChannelData.subscribers
+              : 0))
     : 0;
   const totalViews = isDemo
     ? preferDemoSnapshotOverPy && demoData?.totalViews != null
       ? Number(demoData.totalViews)
       : (pyOverview?.channel_info?.view_count ??
-          (hasMeaningfulMetrics && demoData?.totalViews != null ? Number(demoData.totalViews) : demoChannelData.totalViews))
+          (hasMeaningfulMetrics && demoData?.totalViews != null
+            ? Number(demoData.totalViews)
+            : isEmbeddedProductDemo
+              ? demoChannelData.totalViews
+              : 0))
     : 0;
   const videoCount = isDemo
     ? preferDemoSnapshotOverPy && demoData?.videoCount != null
       ? Number(demoData.videoCount)
       : (pyOverview?.channel_info?.video_count ??
-          (hasMeaningfulMetrics && demoData?.videoCount != null ? Number(demoData.videoCount) : demoChannelData.videos))
+          (hasMeaningfulMetrics && demoData?.videoCount != null
+            ? Number(demoData.videoCount)
+            : isEmbeddedProductDemo
+              ? demoChannelData.videos
+              : 0))
     : 0;
   const avgEngagement = isDemo
     ? preferDemoSnapshotOverPy && demoData?.avgEngagement != null
       ? Number(demoData.avgEngagement)
       : (pyOverview?.video_performance?.avg_engagement_rate ??
-          (hasMeaningfulMetrics && demoData?.avgEngagement != null ? Number(demoData.avgEngagement) : demoChannelData.avgEngagement))
+          (hasMeaningfulMetrics && demoData?.avgEngagement != null
+            ? Number(demoData.avgEngagement)
+            : isEmbeddedProductDemo
+              ? demoChannelData.avgEngagement
+              : 0))
     : 0;
   const topVideosPaid = hasMeaningfulMetrics && demoData?.topVideos?.length ? (demoData.topVideos ?? []) : (demoData?.topVideos ?? []);
   const recommendations = isDemo
     ? [
         ...(preferDemoSnapshotOverPy
-          ? (demoData?.previewRecommendations ?? demoRecommendations)
-          : (pyOverview?.recommendations ?? demoRecommendations))
+          ? (demoData?.previewRecommendations ?? (isEmbeddedProductDemo ? demoRecommendations : []))
+          : (pyOverview?.recommendations ?? (isEmbeddedProductDemo ? demoRecommendations : [])))
       ]
     : [...(dashboardOverview?.topOpportunities ?? []), ...(dashboardOverview?.topIssues ?? [])];
+
+  const whyProblemsList = isEmbeddedProductDemo
+    ? [...demoDetectedProblems]
+    : demoData?.findings?.length
+      ? [...demoData.findings]
+      : ['Channel analysis is loading…'];
+  const whyOpportunitiesList = isEmbeddedProductDemo
+    ? [...demoOpportunities]
+    : demoData?.previewRecommendations?.length
+      ? [...demoData.previewRecommendations]
+      : ['Growth opportunities will appear after analysis completes.'];
 
   const paidMetrics = dashboardOverview?.metrics ?? [];
   const statCards = isDemo
@@ -735,7 +812,7 @@ export function UnifiedDashboard({
         void handleAnalyzeVideoSeoById(maybeId);
         return;
       }
-      const match = demoVideos.find((v) => v.id === maybeId);
+      const match = isEmbeddedProductDemo ? demoVideos.find((v) => v.id === maybeId) : undefined;
       setSeoResult(analyzeSeoLocally(match?.title ?? raw));
       setPySeo(null);
       return;
@@ -852,7 +929,7 @@ export function UnifiedDashboard({
                   {displayScore} <span className="growth-score-max">/ 100</span>
                 </div>
                 <span className="growth-score-label">{growthScoreLabel}</span>
-                {isDemo && demoChannelData.scoreFactors && (
+                {isDemo && isEmbeddedProductDemo && demoChannelData.scoreFactors && (
                   <div className="growth-score-factors">
                     {demoChannelData.scoreFactors.map((f) => (
                       <span key={f.label} className="growth-score-factor">
@@ -879,7 +956,7 @@ export function UnifiedDashboard({
                 {isDemo ? displayScore : growthScore} <span className="growth-score-max">/ 100</span>
               </div>
               <span className="growth-score-label">{growthScoreLabel}</span>
-              {isDemo && demoChannelData.scoreFactors && (
+              {isDemo && isEmbeddedProductDemo && demoChannelData.scoreFactors && (
                 <div className="growth-score-factors">
                   {demoChannelData.scoreFactors.map((f) => (
                     <span key={f.label} className="growth-score-factor">
@@ -912,10 +989,10 @@ export function UnifiedDashboard({
           {showLockedUI ? (
             <div className="video-list preview-blur-wrap">
               <div className="video-list-inner">
-                {demoTopVideos.slice(0, 5).map((v) => (
+                {(isEmbeddedProductDemo ? demoTopVideos.slice(0, 5) : [{ key: 'ph', title: 'Your channel’s top videos', viewCount: 0, tag: '' as const }]).map((v) => (
                   <div key={v.key} className="video-card">
                     <div className="video-card-title">{v.title}</div>
-                    <div className="video-card-meta">{formatNumber(v.viewCount)} views</div>
+                    <div className="video-card-meta">{isEmbeddedProductDemo ? `${formatNumber(v.viewCount)} views` : 'Shown after analysis'}</div>
                   </div>
                 ))}
               </div>
@@ -945,7 +1022,7 @@ export function UnifiedDashboard({
               ) : (
                 <p className="muted">No videos in this view.</p>
               )
-            ) : isDemo ? (
+            ) : isDemo && isEmbeddedProductDemo ? (
               demoTopVideos.map((v) => (
                 <div key={v.key} className="video-card">
                   <div className="video-card-title">{v.title}</div>
@@ -955,6 +1032,14 @@ export function UnifiedDashboard({
                   </div>
                 </div>
               ))
+            ) : isDemo ? (
+              <p className="muted">
+                {demoLoading || pyLoading
+                  ? 'Loading videos for this channel…'
+                  : demoError || pyError
+                    ? 'Could not load video list. Check the URL and try again.'
+                    : 'No preview videos yet. Open the Videos tab and click Refresh, or wait for analysis to finish.'}
+              </p>
             ) : topVideosPaid.length > 0 ? (
               topVideosPaid.map((v) => (
                 <div key={v.videoId} className="video-card">
@@ -980,7 +1065,7 @@ export function UnifiedDashboard({
                       <div className="ai-insights-column">
                         <h3 className="dashboard-section-h3">Detected problems</h3>
                         <ul className="feature-list">
-                          {demoDetectedProblems.map((item, i) => (
+                          {whyProblemsList.map((item, i) => (
                             <li key={i}>{item}</li>
                           ))}
                         </ul>
@@ -988,7 +1073,7 @@ export function UnifiedDashboard({
                       <div className="ai-insights-column">
                         <h3 className="dashboard-section-h3">Top opportunities</h3>
                         <ul className="feature-list">
-                          {demoOpportunities.map((item, i) => (
+                          {whyOpportunitiesList.map((item, i) => (
                             <li key={i}>{item}</li>
                           ))}
                         </ul>
@@ -1010,7 +1095,7 @@ export function UnifiedDashboard({
                   <div className="ai-insights-column">
                     <h3 className="dashboard-section-h3">Detected problems</h3>
                     <ul className="feature-list">
-                      {demoDetectedProblems.map((item, i) => (
+                      {whyProblemsList.map((item, i) => (
                         <li key={i}>{item}</li>
                       ))}
                     </ul>
@@ -1018,7 +1103,7 @@ export function UnifiedDashboard({
                   <div className="ai-insights-column">
                     <h3 className="dashboard-section-h3">Top opportunities</h3>
                     <ul className="feature-list">
-                      {demoOpportunities.map((item, i) => (
+                      {whyOpportunitiesList.map((item, i) => (
                         <li key={i}>{item}</li>
                       ))}
                     </ul>
@@ -1047,7 +1132,7 @@ export function UnifiedDashboard({
           {isPreviewMode ? (
             <div className="preview-blur-wrap preview-recommendations-blur">
               <ul className="feature-list preview-growth-blur-inner">
-                {demoRecommendations.map((item, i) => (
+                {(isEmbeddedProductDemo ? demoRecommendations : ['Recommendations for your channel unlock after purchase.']).map((item, i) => (
                   <li key={i}>{item}</li>
                 ))}
               </ul>
@@ -1097,13 +1182,19 @@ export function UnifiedDashboard({
           {isPreviewMode ? (
             <div className="preview-blur-wrap preview-tab-panel-blur">
               <div className="video-list locked-content-blur">
-                {demoVideos.slice(0, 8).map((v) => (
+                {(isEmbeddedProductDemo ? demoVideos.slice(0, 8) : [{ id: 'ph', title: 'Your videos load here after unlock', views: 0, likes: 0, comments: 0, publishDate: '—' }]).map((v) => (
                   <div key={v.id} className="video-card video-card-with-action">
                     <div className="video-card-main">
                       <div className="video-card-title">{v.title}</div>
                       <div className="video-card-meta">
-                        {v.views} views · {v.likes} likes · {v.comments} comment{v.comments !== 1 ? 's' : ''} · Published{' '}
-                        {v.publishDate}
+                        {isEmbeddedProductDemo ? (
+                          <>
+                            {v.views} views · {v.likes} likes · {v.comments} comment{v.comments !== 1 ? 's' : ''} · Published{' '}
+                            {v.publishDate}
+                          </>
+                        ) : (
+                          'Preview placeholder — not the product demo channel'
+                        )}
                       </div>
                     </div>
                     <button type="button" className="btn btn-secondary btn-sm video-card-action" disabled>
@@ -1143,7 +1234,7 @@ export function UnifiedDashboard({
                     </button>
                   </div>
                 ))
-              ) : isDemo ? (
+              ) : isDemo && isEmbeddedProductDemo ? (
                 demoVideos.map((v) => (
                   <div key={v.id} className="video-card video-card-with-action">
                     <div className="video-card-main">
@@ -1162,6 +1253,8 @@ export function UnifiedDashboard({
                     </button>
                   </div>
                 ))
+              ) : isDemo ? (
+                <p className="muted">Click “Refresh Videos” to load this channel’s library from YouTube.</p>
               ) : topVideosPaid.length > 0 ? (
                 topVideosPaid.map((v) => (
                   <div key={v.videoId} className="video-card">
@@ -1189,7 +1282,7 @@ export function UnifiedDashboard({
               <div className="locked-content-blur">
                 <h3 className="dashboard-section-h3">Ideas based on your catalog</h3>
                 <ul className="feature-list">
-                  {demoSuggestions.map((s, i) => (
+                  {(isEmbeddedProductDemo ? demoSuggestions : ['Ideas tailored to your catalog unlock after purchase.']).map((s, i) => (
                     <li key={i}>{s}</li>
                   ))}
                 </ul>
@@ -1241,16 +1334,26 @@ export function UnifiedDashboard({
                       </div>
                     </div>
                   ))}
-                  {!pySuggestions?.top_performers?.length && demoTopVideos.slice(0, 10).map((v) => (
+                  {!pySuggestions?.top_performers?.length &&
+                    isEmbeddedProductDemo &&
+                    demoTopVideos.slice(0, 10).map((v) => (
                     <div key={v.key} className="video-card">
                       <div className="video-card-title">{v.title}</div>
                       <div className="video-card-meta">{formatNumber(v.viewCount)} views</div>
                     </div>
                   ))}
+                  {!pySuggestions?.top_performers?.length && !isEmbeddedProductDemo && (
+                    <p className="muted">No suggestions yet — check that the channel URL is correct.</p>
+                  )}
                 </div>
                 <h3 className="dashboard-section-h3" style={{ marginTop: 18 }}>Content ideas</h3>
                 <ul className="feature-list">
-                  {(pySuggestions?.content_suggestions?.length ? pySuggestions.content_suggestions : demoSuggestions).map((s, i) => (
+                  {(pySuggestions?.content_suggestions?.length
+                    ? pySuggestions.content_suggestions
+                    : isEmbeddedProductDemo
+                      ? demoSuggestions
+                      : []
+                  ).map((s, i) => (
                     <li key={`${s}-${i}`}>{s}</li>
                   ))}
                 </ul>
@@ -1277,22 +1380,28 @@ export function UnifiedDashboard({
             </p>
             <div className="preview-blur-wrap preview-tab-panel-blur">
               <div className="locked-content-blur">
-                <p className="video-card-title">{demoSeoAnalysis.title}</p>
-                <p className="seo-score">
-                  SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}
-                </p>
-                <h3 className="dashboard-section-h3">Issues</h3>
-                <ul className="feature-list">
-                  {demoSeoAnalysis.issues.map((issue, i) => (
-                    <li key={i}>{issue}</li>
-                  ))}
-                </ul>
-                <h3 className="dashboard-section-h3">Recommendations</h3>
-                <ul className="feature-list">
-                  {demoSeoAnalysis.recommendations.map((rec, i) => (
-                    <li key={i}>{rec}</li>
-                  ))}
-                </ul>
+                {isEmbeddedProductDemo ? (
+                  <>
+                    <p className="video-card-title">{demoSeoAnalysis.title}</p>
+                    <p className="seo-score">
+                      SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}
+                    </p>
+                    <h3 className="dashboard-section-h3">Issues</h3>
+                    <ul className="feature-list">
+                      {demoSeoAnalysis.issues.map((issue, i) => (
+                        <li key={i}>{issue}</li>
+                      ))}
+                    </ul>
+                    <h3 className="dashboard-section-h3">Recommendations</h3>
+                    <ul className="feature-list">
+                      {demoSeoAnalysis.recommendations.map((rec, i) => (
+                        <li key={i}>{rec}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="muted">SEO analysis for your pasted channel unlocks here after purchase.</p>
+                )}
               </div>
               <div
                 className="preview-blur-overlay"
@@ -1404,12 +1513,18 @@ export function UnifiedDashboard({
               </>
             ) : (
               <>
-                <p className="muted">Try analyzing one of the demo videos, or paste a YouTube URL.</p>
-                <div className="status-card" style={{ marginTop: 12 }}>
-                  <strong>Example analysis</strong>
-                  <p className="video-card-title">{demoSeoAnalysis.title}</p>
-                  <p className="seo-score">SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}</p>
-                </div>
+                <p className="muted">
+                  {isEmbeddedProductDemo
+                    ? 'Try analyzing one of the demo videos, or paste a YouTube URL.'
+                    : 'Paste a video URL or ID from the channel you are analyzing.'}
+                </p>
+                {isEmbeddedProductDemo && (
+                  <div className="status-card" style={{ marginTop: 12 }}>
+                    <strong>Example analysis</strong>
+                    <p className="video-card-title">{demoSeoAnalysis.title}</p>
+                    <p className="seo-score">SEO Score: {demoSeoAnalysis.score} / {demoSeoAnalysis.maxScore}</p>
+                  </div>
+                )}
               </>
             )}
           </section>
@@ -1432,16 +1547,22 @@ export function UnifiedDashboard({
             <div className="preview-blur-wrap preview-tab-panel-blur">
               <div className="locked-content-blur">
                 <div className="traffic-demo-cards">
-                  <div className="traffic-demo-card">
-                    <h3 className="dashboard-section-h3">Best video to promote</h3>
-                    <p className="video-card-title">{demoTrafficTools.bestVideoToPromote}</p>
-                    <p className="traffic-engagement">Engagement: {demoTrafficTools.engagement}%</p>
-                  </div>
-                  <div className="traffic-demo-card">
-                    <h3 className="dashboard-section-h3">Proven video to reshare</h3>
-                    <p className="video-card-title">{demoTrafficTools.provenVideoToReshare.title}</p>
-                    <p className="traffic-engagement">{formatNumber(demoTrafficTools.provenVideoToReshare.views)} views</p>
-                  </div>
+                  {isEmbeddedProductDemo ? (
+                    <>
+                      <div className="traffic-demo-card">
+                        <h3 className="dashboard-section-h3">Best video to promote</h3>
+                        <p className="video-card-title">{demoTrafficTools.bestVideoToPromote}</p>
+                        <p className="traffic-engagement">Engagement: {demoTrafficTools.engagement}%</p>
+                      </div>
+                      <div className="traffic-demo-card">
+                        <h3 className="dashboard-section-h3">Proven video to reshare</h3>
+                        <p className="video-card-title">{demoTrafficTools.provenVideoToReshare.title}</p>
+                        <p className="traffic-engagement">{formatNumber(demoTrafficTools.provenVideoToReshare.views)} views</p>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="muted">Promotion picks for your channel appear here after unlock.</p>
+                  )}
                 </div>
               </div>
               <div
@@ -1565,7 +1686,7 @@ export function UnifiedDashboard({
                   <div className="surface">
                     <h3 className="dashboard-section-h3">Follow-up Content Ideas</h3>
                     <ul className="feature-list">
-                      {(pyTraffic?.content_suggestions ?? demoSuggestions).slice(0, 10).map((idea) => (
+                      {(pyTraffic?.content_suggestions ?? (isEmbeddedProductDemo ? demoSuggestions : [])).slice(0, 10).map((idea) => (
                         <li key={idea}>{idea}</li>
                       ))}
                     </ul>
