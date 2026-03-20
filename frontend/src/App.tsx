@@ -2,8 +2,7 @@ import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useSta
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
 import { analytics } from './lib/analytics';
-import { adminApi, authApi, billingApi, meApi, premiumApi, publicApi, userApi } from './lib/api';
-import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
+import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
 import { SeoHead } from './SeoHead';
 import { AuthProvider } from './AuthContext';
 import { ForgotPasswordPage, SignInPage, SignUpPage } from './AuthPages';
@@ -11,7 +10,6 @@ import { useAuth } from './AuthContext';
 import type {
   AdminSessionStatus,
   DashboardOverview,
-  DemoPreview,
   MagicLinkLoginResponse,
   UserOnboardingState,
   UserSessionStatus
@@ -20,134 +18,10 @@ import type {
 const LandingPage = React.lazy(() => import('./LandingPage').then((m) => ({ default: m.LandingPage })));
 const PlatformPage = React.lazy(() => import('./PlatformPage').then((m) => ({ default: m.PlatformPage })));
 const UnifiedDashboard = React.lazy(() => import('./UnifiedDashboard').then((m) => ({ default: m.UnifiedDashboard })));
+const ChannelAnalyzeDashboard = React.lazy(() =>
+  import('./ChannelAnalyzeDashboard').then((m) => ({ default: m.ChannelAnalyzeDashboard }))
+);
 const AdminCrmApp = React.lazy(() => import('./admin/AdminCrmApp'));
-
-/** Demo dashboard at /demo — full demo (default channel) vs preview (user channel with blur). */
-function DemoDashboardView() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { session: authSession } = useAuth();
-  const searchParams = new URLSearchParams(location.search);
-  const channelFromState = (location.state as { channelInput?: string } | null)?.channelInput;
-  const channelFromQuery = searchParams.get('channel');
-  const channelFromStorage = getStoredDemoChannel();
-  // Prefer query string (survives refresh, shareable); state is easy to lose on some navigations.
-  const channelInput = channelFromQuery ?? channelFromState ?? channelFromStorage ?? DEFAULT_DEMO_CHANNEL;
-  const inputNormalized = normalizeChannelForComparison(channelInput);
-  const defaultNormalized = normalizeChannelForComparison(DEFAULT_DEMO_CHANNEL);
-  const inputHandle = normalizeChannelForComparison(getDisplayHandle(channelInput));
-  const defaultHandle = normalizeChannelForComparison(getDisplayHandle(DEFAULT_DEMO_CHANNEL));
-  /** Built-in showcase channel only — blur/preview for any other channel unless user has premium. */
-  const isDefaultChannelDemo =
-    inputNormalized === defaultNormalized ||
-    inputHandle === defaultHandle ||
-    inputHandle === '@maxkantorusa';
-
-  const [hasPremium, setHasPremium] = useState(false);
-  const effectiveFullDemo = isDefaultChannelDemo || hasPremium;
-
-  const [apiDemoData, setApiDemoData] = useState<DemoPreview | null>(null);
-  const [demoLoading, setDemoLoading] = useState(false);
-  const [demoError, setDemoError] = useState<string | null>(null);
-
-  useEffect(() => {
-    analytics.demoDashboardViewed();
-  }, []);
-
-  const refreshPremium = useCallback(async () => {
-    if (!authSession?.idToken) {
-      setHasPremium(false);
-      return;
-    }
-    try {
-      const status = await meApi.getAccessStatus(authSession.idToken);
-      setHasPremium(!!status.premium);
-    } catch {
-      setHasPremium(false);
-    }
-  }, [authSession?.idToken]);
-
-  useEffect(() => {
-    void refreshPremium();
-  }, [refreshPremium]);
-
-  // After Stripe / webhook delay, pick up premium without a full reload.
-  useEffect(() => {
-    if (!authSession?.idToken) return;
-    const t1 = window.setTimeout(() => void refreshPremium(), 2500);
-    const t2 = window.setTimeout(() => void refreshPremium(), 8000);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [authSession?.idToken, refreshPremium]);
-
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void refreshPremium();
-    };
-    window.addEventListener('focus', onVisible);
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      window.removeEventListener('focus', onVisible);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [refreshPremium]);
-
-  useEffect(() => {
-    const raw = (channelInput || '').trim();
-    if (!raw) {
-      setApiDemoData(null);
-      setDemoError(null);
-      return;
-    }
-    let cancelled = false;
-    setDemoLoading(true);
-    setDemoError(null);
-    publicApi
-      .runDemo(raw)
-      .then((data: DemoPreview) => {
-        if (!cancelled) {
-          setApiDemoData(data);
-          setDemoError(null);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setApiDemoData(null);
-          setDemoError(err instanceof Error ? err.message : 'Could not load channel preview.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDemoLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [channelInput]);
-
-  return (
-    <UnifiedDashboard
-      isDemo
-      isFullDemo={effectiveFullDemo}
-      premiumUnlocked={hasPremium && !isDefaultChannelDemo}
-      demoData={apiDemoData}
-      dashboardOverview={null}
-      channelInput={channelInput}
-      userEmail={authSession?.email ?? undefined}
-      demoLoading={demoLoading}
-      demoError={demoError}
-      onCreateCheckout={async (ch, _email) => {
-        const channel = ch || channelInput;
-        if (!authSession) {
-          navigate(`/auth/signup?returnTo=${encodeURIComponent(`/demo?channel=${encodeURIComponent(channel)}`)}&channel=${encodeURIComponent(channel)}&plan=premium`);
-          return { checkoutUrl: '/auth/signup', sessionId: 'auth_required', amount: 0, currency: 'USD' };
-        }
-        return billingApi.createCheckoutSession(authSession.idToken, channel, 'premium');
-      }}
-    />
-  );
-}
 
 /** Redirect from /app to /dashboard or /app/onboarding based on onboarding state. */
 function AppEntryRedirect({ userSession }: { userSession: UserSessionStatus }) {
@@ -847,6 +721,7 @@ function AppInner() {
 
   const seo = path === '/' ? { title: BRAND_DEFAULT_TITLE, canonical: '/' }
     : path === '/demo' ? { title: `Demo – ${BRAND.name}`, canonical: '/demo' }
+    : path === '/dashboard/channel' ? { title: `Channel analysis – ${BRAND.name}`, canonical: '/dashboard/channel' }
     : path === '/dashboard' ? { title: `Dashboard – ${BRAND.name}`, canonical: '/dashboard' }
     : path === '/platform' ? { title: `MK Platform – ${BRAND.name}`, canonical: '/platform' }
     : path.startsWith('/admin') ? { title: 'Admin', noindex: true as const }
@@ -927,7 +802,7 @@ function AppInner() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/platform" element={<PlatformPage />} />
-        <Route path="/demo" element={<DemoDashboardView />} />
+        <Route path="/demo" element={<ChannelAnalyzeDashboard variant="marketing" />} />
         <Route path="/auth/signin" element={<SignInPage />} />
         <Route path="/auth/signup" element={<SignUpPage />} />
         <Route path="/auth/forgot" element={<ForgotPasswordPage />} />
@@ -936,6 +811,14 @@ function AppInner() {
           element={
             <UserRoute userSession={userSession} loading={sessionLoading}>
               <DashboardPage userSession={userSession} refreshUserSession={refreshUserSession} />
+            </UserRoute>
+          }
+        />
+        <Route
+          path="/dashboard/channel"
+          element={
+            <UserRoute userSession={userSession} loading={sessionLoading}>
+              <ChannelAnalyzeDashboard variant="paid" />
             </UserRoute>
           }
         />

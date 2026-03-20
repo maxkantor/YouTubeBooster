@@ -1,16 +1,16 @@
-# Build Lambda deployment zip — output is ONLY under backend/artifacts/
+# Publish .NET Lambda package to backend/youtubebooster-api.zip (see LAMBDA-DEPLOY.md).
 $ErrorActionPreference = "Stop"
-$BackendDir = $PSScriptRoot
-$RepoRoot = Split-Path $BackendDir -Parent
-$PublishOut = Join-Path $BackendDir "artifacts\publish"
-$ZipOut = Join-Path $BackendDir "artifacts\youtubebooster-api.zip"
-
-if (Test-Path $PublishOut) { Remove-Item -Recurse -Force $PublishOut }
-dotnet publish (Join-Path $RepoRoot "backend\src\YouTubeBoosterAi.Api\YouTubeBoosterAi.Api.csproj") `
-  -c Release -r linux-x64 --self-contained false -o $PublishOut
-
-if (Test-Path $ZipOut) { Remove-Item -Force $ZipOut }
-Compress-Archive -Path (Join-Path $PublishOut "*") -DestinationPath $ZipOut -Force
-
-Write-Host "Lambda zip: $ZipOut"
-Get-Item $ZipOut | Format-List FullName, Length
+$Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$OutDir = Join-Path $Here ".lambda-publish\out"
+$Zip = Join-Path $Here "youtubebooster-api.zip"
+$Csproj = Join-Path $Here "src\YouTubeBoosterAi.Api\YouTubeBoosterAi.Api.csproj"
+if (Test-Path (Join-Path $Here ".lambda-publish")) { Remove-Item -Recurse -Force (Join-Path $Here ".lambda-publish") }
+New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
+dotnet publish $Csproj -c Release -r linux-x64 --self-contained false -o $OutDir
+Push-Location $OutDir
+try {
+  Compress-Archive -Path * -DestinationPath $Zip -Force
+} finally {
+  Pop-Location
+}
+Write-Host "Wrote $Zip"

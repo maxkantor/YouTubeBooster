@@ -127,7 +127,14 @@ export function LandingPage() {
     }
     analytics.channelAuditStarted(channel);
     setStoredDemoChannel(channel);
-    navigate(`/demo?channel=${encodeURIComponent(channel)}`, { replace: true, state: { channelInput: channel } });
+    if (hasPremium) {
+      navigate(`/dashboard/channel?channel=${encodeURIComponent(channel)}`, {
+        replace: true,
+        state: { channelInput: channel }
+      });
+    } else {
+      navigate(`/demo?channel=${encodeURIComponent(channel)}`, { replace: true, state: { channelInput: channel } });
+    }
   }
 
   async function handleUnlockReport() {

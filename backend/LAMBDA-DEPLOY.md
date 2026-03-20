@@ -1,12 +1,15 @@
 # Lambda deploy (YouTube Booster API)
 
-## Build zip (always under `backend/artifacts/`)
+**Full local pipeline** (frontend build + backend compile + zip): from repo root run `./scripts/full-release.sh`.
+
+## Build zip
 
 From **repo root**:
 
 **macOS / Linux**
 
 ```bash
+chmod +x backend/publish-lambda.sh
 ./backend/publish-lambda.sh
 ```
 
@@ -16,13 +19,13 @@ From **repo root**:
 .\backend\publish-lambda.ps1
 ```
 
-**Output (only path):** `backend/artifacts/youtubebooster-api.zip`
+**Output:** `backend/youtubebooster-api.zip` (in the `backend` folder — nothing under `artifacts/`).
 
-Use that file in the steps below.
+Upload that file to Lambda.
 
 ## AWS Console
 
-1. **Lambda** → function **youtubebooster-ai-api** → **Code** → **Upload from** → **.zip file** → choose the zip above.
+1. **Lambda** → function **youtubebooster-ai-api** → **Code** → **Upload from** → **.zip file** → choose `backend/youtubebooster-api.zip`.
 2. **Runtime settings** (Code tab, right) → **Edit**:
    - **Runtime:** .NET 8 (C#/F#/PowerShell)
    - **Handler:** `YouTubeBoosterAi.Api`
@@ -54,4 +57,4 @@ Expected: `{"status":"ok","service":"youtube-booster-ai-api"}`.
 
 ## Deploy via AWS CLI / Terraform
 
-- Terraform: set `backend_package_path` to the zip path and run `terraform apply` so the function code and env (e.g. `LambdaEventSource=HttpApi`) stay in sync.
+- Terraform: set `backend_package_path` to the full path to `backend/youtubebooster-api.zip` and run `terraform apply`.

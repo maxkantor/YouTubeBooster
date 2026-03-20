@@ -172,6 +172,7 @@ export function UnifiedDashboard({
   isDemo,
   isFullDemo = false,
   premiumUnlocked = false,
+  paidChannelAudit = false,
   demoData,
   dashboardOverview,
   channelInput,
@@ -186,6 +187,8 @@ export function UnifiedDashboard({
   isFullDemo?: boolean;
   /** Paid user on a non-default channel — same unlock as full demo, different badge copy. */
   premiumUnlocked?: boolean;
+  /** Logged-in premium user on `/dashboard/channel` — full UI without harsh public-demo API warnings. */
+  paidChannelAudit?: boolean;
   demoData: DemoPreview | null;
   dashboardOverview: DashboardOverview | null;
   channelInput: string;
@@ -877,6 +880,7 @@ export function UnifiedDashboard({
           <p className="dashboard-demo-error">{demoError}</p>
         )}
         {isDemo &&
+          !paidChannelAudit &&
           !isEmbeddedProductDemo &&
           demoData != null &&
           !demoLoading &&
