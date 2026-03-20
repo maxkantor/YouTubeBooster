@@ -70,10 +70,13 @@ frontend/.vite/
 backend/publish*/
 backend/backend-publish*/
 backend/backend-latest-*.zip
+# Legacy name — canonical zip is only backend/artifacts/youtubebooster-api.zip
+backend/youtube-booster-backend-lambda.zip
 
-# Lambda zip (regenerate with backend publish script)
+# Lambda zip + publish staging (regenerate: backend/publish-lambda.sh)
 artifacts/*.zip
 artifacts/publish/
+backend/artifacts/publish/
 backend/artifacts/*.zip
 
 # Elastic Beanstalk Files

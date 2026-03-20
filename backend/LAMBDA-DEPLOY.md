@@ -1,15 +1,24 @@
 # Lambda deploy (YouTube Booster API)
 
-## One-time: build zip
+## Build zip (always under `backend/artifacts/`)
 
-From repo root:
+From **repo root**:
 
-```powershell
-dotnet publish backend/src/YouTubeBoosterAi.Api/YouTubeBoosterAi.Api.csproj -c Release -r linux-x64 --self-contained false -o backend-publish
-Compress-Archive -Path .\backend-publish\* -DestinationPath .\backend\youtube-booster-backend-lambda.zip -Force
+**macOS / Linux**
+
+```bash
+./backend/publish-lambda.sh
 ```
 
-Use **`backend/youtube-booster-backend-lambda.zip`** in the steps below.
+**Windows (PowerShell)**
+
+```powershell
+.\backend\publish-lambda.ps1
+```
+
+**Output (only path):** `backend/artifacts/youtubebooster-api.zip`
+
+Use that file in the steps below.
 
 ## AWS Console
 

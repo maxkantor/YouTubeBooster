@@ -1,3 +1,7 @@
-# Build artifacts (root)
+# Root `artifacts/` folder
 
-Lambda zip is produced here by the build script; a copy is also placed in `backend/artifacts/` for manual upload. See `backend/artifacts/README.md`.
+**Lambda deployment zip is not stored here.** Build output for the API is **only** under:
+
+- `backend/artifacts/youtubebooster-api.zip`
+
+Use `./backend/publish-lambda.sh` (or `backend/publish-lambda.ps1`) from the repo root. See `backend/artifacts/README.md`.
