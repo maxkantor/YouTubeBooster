@@ -318,22 +318,28 @@ meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore app
     return Results.Ok(new { userId = user.UserId, premium = hasPremium, accessStatus = hasPremium ? "active" : "free" });
 });
 
-var billingApi = app.MapGroup("/api/billing").RequireAuthorization();
-billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionRequest request, HttpContext httpContext, ICheckoutService service, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+var billingApi = app.MapGroup("/api/billing");
+billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionRequest request, HttpContext httpContext, ICheckoutService service, IAppDataStore appDataStore, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>
 {
-    var sub =
-        httpContext.User.FindFirst("sub")?.Value
-        ?? httpContext.User.FindFirst("cognito:username")?.Value
-        ?? httpContext.User.FindFirst("preferred_username")?.Value
-        ?? httpContext.User.FindFirst("username")?.Value
-        ?? httpContext.User.FindFirst("email")?.Value
-        ?? httpContext.User.FindFirst("emailaddress")?.Value;
-    var principal = httpContext.User;
-    if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
+    // Primary auth path: backend cookie session.
+    var user = await sessionCookieService.GetAuthenticatedUserAsync(httpContext, cancellationToken);
+    if (user is null)
+    {
+        // Fallback for clients that only send Cognito JWT (legacy behavior).
+        var principal = httpContext.User;
+        var sub =
+            principal.FindFirst("sub")?.Value
+            ?? principal.FindFirst("cognito:username")?.Value
+            ?? principal.FindFirst("preferred_username")?.Value
+            ?? principal.FindFirst("username")?.Value
+            ?? principal.FindFirst("email")?.Value
+            ?? principal.FindFirst("emailaddress")?.Value;
+        if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
 
-    var email = EmailAddressHelpers.ResolveCognitoAccountEmail(principal, sub);
-    var emailVerified = string.Equals(httpContext.User.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-    var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
+        var email = EmailAddressHelpers.ResolveCognitoAccountEmail(principal, sub);
+        var emailVerified = string.Equals(principal.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
+    }
 
     // Do not trust client for identity; override request email with account email for metadata.
     // Stripe prefill: only real addresses — otherwise omit CustomerEmail and let Checkout collect it.
@@ -344,7 +350,7 @@ billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionReque
     {
         Email = stripePrefillEmail,
         UserId = user.UserId,
-        CognitoSub = user.CognitoSub ?? sub,
+        CognitoSub = user.CognitoSub,
         AccountEmail = user.Email,
         PlanCode = request.PlanCode ?? request.PriceKey ?? "premium",
         Referrer = request.Referrer ?? httpContext.Request.Headers.Referer.ToString()
