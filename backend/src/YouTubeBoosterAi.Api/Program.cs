@@ -647,21 +647,28 @@ adminApi.MapPost("/login", async (AdminLoginRequest request, HttpContext httpCon
 
     if (!emailOk || !passwordOk)
     {
-        await appDataStore.TrackEventAsync("admin_login_failed", request.Email, new Dictionary<string, string?>
+        await appDataStore.TrackEventAsync("admin_login_failed", request.Email ?? string.Empty, new Dictionary<string, string?>
         {
             ["scope"] = "admin",
             ["reason"] = "invalid_credentials"
         }, cancellationToken);
-        return Results.Unauthorized();
+        return Results.Json(
+            new
+            {
+                error = "invalid_admin_credentials",
+                detail =
+                    "Email or password does not match Parameter Store. Under your Lambda SSM__BASEPATH (e.g. /youtubebooster), set admin/email (String) and admin/password (SecureString). Optional admin/password-format: plain (default) or bcrypt (stored value must be a bcrypt hash)."
+            },
+            statusCode: StatusCodes.Status401Unauthorized);
     }
 
-    await sessionCookieService.SignInAdminAsync(httpContext, request.Email, cancellationToken);
+    await sessionCookieService.SignInAdminAsync(httpContext, adminEmail.Trim(), cancellationToken);
     await appDataStore.TrackEventAsync("admin_login_succeeded", request.Email, new Dictionary<string, string?>
     {
         ["scope"] = "admin"
     }, cancellationToken);
 
-    return Results.Ok(new AdminSessionStatusResponse(true, request.Email.Trim().ToLowerInvariant()));
+    return Results.Ok(new AdminSessionStatusResponse(true, adminEmail.Trim().ToLowerInvariant()));
 }).RequireRateLimiting("admin-login");
 
 adminApi.MapGet("/session", async (HttpContext httpContext, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>

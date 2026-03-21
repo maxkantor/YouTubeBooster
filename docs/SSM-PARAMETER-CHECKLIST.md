@@ -85,6 +85,20 @@ Under your prefix (default `/youtubebooster`):
 - **`pricing/one-time-price` and `pricing/currency`:** Managed as dedicated `aws_ssm_parameter` resources with `lifecycle { ignore_changes = [value] }` so **Console edits are never overwritten** by `terraform apply`. The API and Stripe checkout read these values (no separate Stripe price object required for the amount).
 - **SecureStrings (value frozen after first apply):** `stripe/secret-key`, `stripe/webhook-secret`, `stripe/openai-api-key`, `admin/password`, `admin/google/credentials-json`, `admin/google/client-id`, `admin/google/client-secret`
 
+## Admin CRM login (`/admin/login` on the site)
+
+The API checks credentials against **Parameter Store** (not Cognito):
+
+| Parameter | Type | Notes |
+|-----------|------|--------|
+| `{prefix}/admin/email` | String | Must match the email you type (comparison is case-insensitive). |
+| `{prefix}/admin/password` | SecureString | Must match the password you type. |
+| `{prefix}/admin/password-format` | String (optional) | Omit or `plain` for literal password. Use `bcrypt` only if the stored value is a **bcrypt hash** (then you type the raw password and the API verifies with BCrypt). Unknown values reject login. |
+
+If email/password params are **missing**, the API returns **500** (“not configured”). **401** means they **exist** but **do not match** what you entered, or `password-format` does not match how the password was stored.
+
+Terraform often creates a **placeholder** `admin/password`; update it in the **AWS Console** (Terraform ignores value changes on that SecureString).
+
 ## Lambda environment
 
 - `SSM__BASEPATH=/youtubebooster` (must match parameter prefix)

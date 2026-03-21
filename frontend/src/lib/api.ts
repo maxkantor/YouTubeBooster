@@ -52,7 +52,11 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    throw new Error(data.error || `Request failed with status ${response.status}`);
+    const msg =
+      (typeof data.detail === 'string' && data.detail.trim()) ||
+      (typeof data.error === 'string' && data.error.trim()) ||
+      `Request failed with status ${response.status}`;
+    throw new Error(msg);
   }
 
   return data as T;
