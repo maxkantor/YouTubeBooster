@@ -332,12 +332,10 @@ function AdminLoginPage({
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
-  useEffect(() => {
-    if (!sessionLoading && adminSession.authenticated) {
-      navigate('/admin', { replace: true });
-    }
-  }, [adminSession.authenticated, navigate, sessionLoading]);
+  // Do not auto-redirect to /admin — users opening /admin/login directly were confused when sent away
+  // while still holding a valid admin cookie. Offer explicit Continue / Sign out instead.
 
   async function handleLogin() {
     if (!email || !password) {
@@ -365,37 +363,77 @@ function AdminLoginPage({
     >
       <div className="surface">
         <h1>Admin CRM Login</h1>
-        <p className="admin-login-lead">
-          Sign in with the same <strong>admin email</strong> and <strong>password</strong> the API reads from AWS Systems Manager (e.g.{' '}
-          <code className="admin-login-code">…/admin/email</code> and <code className="admin-login-code">…/admin/password</code>). Values are
-          not loaded in the browser—enter them here to create an admin session cookie.
-        </p>
-        <div className="input-stack">
-          <label className="field-label">
-            <span>Admin email</span>
-            <input
-              name="admin-email"
-              autoComplete="username"
-              placeholder="Email stored in SSM (admin/email)"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          <label className="field-label">
-            <span>Password</span>
-            <input
-              name="admin-password"
-              autoComplete="current-password"
-              placeholder="Password stored in SSM (admin/password)"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          <button type="button" className="btn btn-primary" onClick={handleLogin} disabled={submitting}>
-            {submitting ? 'Signing in...' : 'Sign in'}
-          </button>
-        </div>
+        {sessionLoading ? (
+          <p className="admin-login-lead">Checking admin session…</p>
+        ) : adminSession.authenticated ? (
+          <div className="admin-login-signed-in">
+            <p className="success-text" style={{ margin: '0 0 16px' }}>
+              You already have an admin session as <strong>{adminSession.email ?? 'admin'}</strong>.
+            </p>
+            <div className="admin-login-signed-in-actions">
+              <button type="button" className="btn btn-primary" onClick={() => navigate('/admin')}>
+                Continue to CRM
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={signingOut}
+                onClick={async () => {
+                  setSigningOut(true);
+                  setError('');
+                  try {
+                    await adminApi.logout();
+                    await refreshAdminSession();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Sign out failed.');
+                  } finally {
+                    setSigningOut(false);
+                  }
+                }}
+              >
+                {signingOut ? 'Signing out…' : 'Sign out'}
+              </button>
+            </div>
+            <p className="admin-login-lead" style={{ marginTop: 20, marginBottom: 0 }}>
+              If you were sent here when trying to open <code className="admin-login-code">/admin/login</code>, it was because a previous admin
+              cookie is still valid. Use <strong>Sign out</strong> to sign in with different credentials.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="admin-login-lead">
+              Sign in with the same <strong>admin email</strong> and <strong>password</strong> the API reads from AWS Systems Manager (e.g.{' '}
+              <code className="admin-login-code">…/admin/email</code> and <code className="admin-login-code">…/admin/password</code>). Values are
+              not loaded in the browser—enter them here to create an admin session cookie.
+            </p>
+            <div className="input-stack">
+              <label className="field-label">
+                <span>Admin email</span>
+                <input
+                  name="admin-email"
+                  autoComplete="username"
+                  placeholder="Email stored in SSM (admin/email)"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </label>
+              <label className="field-label">
+                <span>Password</span>
+                <input
+                  name="admin-password"
+                  autoComplete="current-password"
+                  placeholder="Password stored in SSM (admin/password)"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </label>
+              <button type="button" className="btn btn-primary" onClick={handleLogin} disabled={submitting}>
+                {submitting ? 'Signing in...' : 'Sign in'}
+              </button>
+            </div>
+          </>
+        )}
         {error && <p className="error-text">{error}</p>}
       </div>
     </div>

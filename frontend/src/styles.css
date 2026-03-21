@@ -375,6 +375,13 @@ a {
   color: #e2e8f0;
 }
 
+.admin-login-signed-in-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
 .success-text {
   color: #86efac;
   margin-top: 12px;
