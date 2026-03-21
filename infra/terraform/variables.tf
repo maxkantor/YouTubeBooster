@@ -83,6 +83,12 @@ variable "currency" {
   default     = "USD"
 }
 
+variable "admin_login_email" {
+  description = "Initial value for SSM admin/email (Admin CRM login). After first apply, Terraform ignores value changes — edit in Parameter Store without being overwritten."
+  type        = string
+  default     = "mykantor@bellsouth.net"
+}
+
 # Admin Google OAuth (credentials.json) — set these to populate SSM with your values
 variable "admin_google_client_id" {
   description = "Google OAuth client_id from credentials.json (installed or web)."

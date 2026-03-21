@@ -17,6 +17,9 @@ amplify_branch_name    = "main"
 one_time_price = "19.99"
 currency       = "USD"
 
+# Admin CRM login email (SSM …/admin/email). After first apply, value is ignored by Terraform — change in AWS Console anytime.
+# admin_login_email = "mykantor@bellsouth.net"
+
 # Optional: set to populate SSM with your credentials.json values (run: terraform apply -var-file=terraform.tfvars)
 # Copy from your Google Cloud credentials.json (installed or web).
 # admin_google_client_id     = "123456789-xxx.apps.googleusercontent.com"

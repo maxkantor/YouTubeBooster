@@ -48,7 +48,7 @@ terraform apply -var="admin_google_client_id=YOUR_CLIENT_ID" \
 terraform apply -var="admin_google_credentials_json={\"installed\":{\"client_id\":\"...\",...},\"youtube_api_key\":\"AIza...\"}"
 ```
 
-Or copy `terraform.tfvars.example` to `terraform.tfvars`, fill in admin Google variables, then run `terraform apply`. **SecureString** parameters use `lifecycle { ignore_changes = [value] }` so later applies do not overwrite Console edits. See **`docs/SSM-PARAMETER-CHECKLIST.md`** and the one-time **`terraform state rm`** note for legacy `/youtubebooster/youtube/api-key`.
+Or copy `terraform.tfvars.example` to `terraform.tfvars`, fill in admin Google variables, then run `terraform apply`. **SecureString** parameters use `lifecycle { ignore_changes = [value] }` so later applies do not overwrite Console edits. **`admin/email`** is a dedicated `aws_ssm_parameter.admin_email` resource with the same pattern (initial value from `admin_login_email`, default `mykantor@bellsouth.net`). See **`docs/SSM-PARAMETER-CHECKLIST.md`** and the one-time **`terraform state rm`** note for legacy `/youtubebooster/youtube/api-key`.
 
 ## Admin `credentials.json` in SSM
 
@@ -155,5 +155,6 @@ Amplify uses the build config from the repo root `amplify.yml`.
 ## Notes
 
 - `admin/password` is a placeholder. In a production iteration, replace direct password storage with a hash or admin auth secret strategy.
+- `admin/email` is not overwritten by `terraform apply` after the first create; edit the parameter in AWS or change `admin_login_email` only before the resource exists (or use `terraform apply -replace=...` intentionally).
 - `stripe/openai-api-key` uses the exact sample path requested, even though it is semantically better under an `openai/` namespace.
 - The legacy `infra/template.yaml` remains in the repo, but Terraform should be treated as the primary forward path.

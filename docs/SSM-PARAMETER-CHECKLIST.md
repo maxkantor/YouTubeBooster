@@ -81,7 +81,8 @@ Terraform writes **`cognito/region`**, **`cognito/user-pool-id`**, **`cognito/ap
 
 Under your prefix (default `/youtubebooster`):
 
-- **Strings:** `ses/*`, `stripe/publishable-key`, `stripe/price-lookup-key`, `admin/email`, `admin/google/project-id`, `admin/google/auth-uri`, `admin/google/token-uri`, `admin/google/redirect-uri`, `features/*`, `cognito/*`
+- **Strings:** `ses/*`, `stripe/publishable-key`, `stripe/price-lookup-key`, `admin/google/project-id`, `admin/google/auth-uri`, `admin/google/token-uri`, `admin/google/redirect-uri`, `features/*`, `cognito/*`
+- **`admin/email`:** dedicated Terraform resource `aws_ssm_parameter.admin_email` (value frozen after create, like pricing params).
 - **`pricing/one-time-price` and `pricing/currency`:** Managed as dedicated `aws_ssm_parameter` resources with `lifecycle { ignore_changes = [value] }` so **Console edits are never overwritten** by `terraform apply`. The API and Stripe checkout read these values (no separate Stripe price object required for the amount).
 - **SecureStrings (value frozen after first apply):** `stripe/secret-key`, `stripe/webhook-secret`, `stripe/openai-api-key`, `admin/password`, `admin/google/credentials-json`, `admin/google/client-id`, `admin/google/client-secret`
 
@@ -91,7 +92,7 @@ The API checks credentials against **Parameter Store** (not Cognito):
 
 | Parameter | Type | Notes |
 |-----------|------|--------|
-| `{prefix}/admin/email` | String | Must match the email you type (comparison is case-insensitive). |
+| `{prefix}/admin/email` | String | Must match the email you type (comparison is case-insensitive). Managed as **`aws_ssm_parameter.admin_email`** in Terraform with `lifecycle { ignore_changes = [value] }` so **`terraform apply` does not overwrite** Console edits. Initial value: variable `admin_login_email` (default `mykantor@bellsouth.net`). |
 | `{prefix}/admin/password` | SecureString | Must match the password you type. |
 | `{prefix}/admin/password-format` | String (optional) | Omit or `plain` for literal password. Use `bcrypt` only if the stored value is a **bcrypt hash** (then you type the raw password and the API verifies with BCrypt). Unknown values reject login. |
 

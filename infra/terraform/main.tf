@@ -58,11 +58,6 @@ locals {
       value       = "replace-me"
       description = "OpenAI API key placeholder using requested sample path"
     }
-    "${var.ssm_prefix}/admin/email" = {
-      type        = "String"
-      value       = "admin@example.com"
-      description = "Admin login email"
-    }
     "${var.ssm_prefix}/admin/password" = {
       type        = "SecureString"
       value       = "change-me"
@@ -71,8 +66,8 @@ locals {
     # YouTube Data API key: store ONLY inside admin/google/credentials-json as youtube_api_key (or under installed.*).
     # Do NOT manage a separate /youtube/api-key parameter here — Terraform overwrite=true was clobbering Console updates.
     "${var.ssm_prefix}/admin/google/credentials-json" = {
-      type        = "SecureString"
-      value       = var.admin_google_credentials_json != "" ? var.admin_google_credentials_json : jsonencode({
+      type = "SecureString"
+      value = var.admin_google_credentials_json != "" ? var.admin_google_credentials_json : jsonencode({
         installed = {
           client_id                   = var.admin_google_client_id != "" ? var.admin_google_client_id : "replace-me"
           project_id                  = var.admin_google_project_id != "" ? var.admin_google_project_id : "replace-me"
@@ -210,6 +205,22 @@ resource "aws_ssm_parameter" "pricing_currency" {
   }
 }
 
+# Admin CRM login email: not in defaults_string (that map uses overwrite without ignore_changes and would clobber Console edits).
+resource "aws_ssm_parameter" "admin_email" {
+  count = var.create_placeholder_parameters ? 1 : 0
+
+  name        = "${var.ssm_prefix}/admin/email"
+  description = "Admin CRM login email (SSM is source of truth; apply ignores value after create)"
+  type        = "String"
+  value       = var.admin_login_email
+  overwrite   = true
+  tags        = local.common_tags
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 # --- State migration: old single resource -> split string/secure (prefix must match var.ssm_prefix default) ---
 moved {
   from = aws_ssm_parameter.defaults["/youtubebooster/ses/from-email"]
@@ -230,6 +241,12 @@ moved {
 moved {
   from = aws_ssm_parameter.defaults["/youtubebooster/admin/email"]
   to   = aws_ssm_parameter.defaults_string["/youtubebooster/admin/email"]
+}
+
+# Admin email: migrate from shared defaults_string to dedicated resource (ignore_changes on value).
+moved {
+  from = aws_ssm_parameter.defaults_string["/youtubebooster/admin/email"]
+  to   = aws_ssm_parameter.admin_email[0]
 }
 moved {
   from = aws_ssm_parameter.defaults["/youtubebooster/admin/google/project-id"]
@@ -650,10 +667,10 @@ resource "aws_lambda_permission" "api_gateway" {
 resource "aws_amplify_app" "frontend" {
   count = var.enable_amplify_app ? 1 : 0
 
-  name                = "${var.project_name}-web"
-  repository          = var.amplify_repository_url
-  access_token        = var.amplify_access_token
-  build_spec = file("${path.module}/../../amplify.yml")
+  name                        = "${var.project_name}-web"
+  repository                  = var.amplify_repository_url
+  access_token                = var.amplify_access_token
+  build_spec                  = file("${path.module}/../../amplify.yml")
   enable_auto_branch_creation = false
 
   # SPA: ensure Hosting always has a rewrite even if build-spec parsing misses customRules.
@@ -665,8 +682,8 @@ resource "aws_amplify_app" "frontend" {
   }
 
   environment_variables = {
-    AMPLIFY_MONOREPO_APP_ROOT   = "frontend"
-    VITE_API_BASE_URL           = var.deploy_backend_lambda ? aws_apigatewayv2_api.http_api[0].api_endpoint : "https://api.example.com"
+    AMPLIFY_MONOREPO_APP_ROOT = "frontend"
+    VITE_API_BASE_URL         = var.deploy_backend_lambda ? aws_apigatewayv2_api.http_api[0].api_endpoint : "https://api.example.com"
   }
 
   tags = local.common_tags
