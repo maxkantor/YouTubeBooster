@@ -465,6 +465,8 @@ function AppInner() {
   useEffect(() => {
     if (sessionLoading) return;
     if (!userSession.authenticated) return;
+    // Never steal navigation away from admin CRM login (replaceState + popstate can leave RR with no match → blank).
+    if (window.location.pathname.startsWith('/admin')) return;
     let to = '';
     try {
       to = window.sessionStorage.getItem('yb_post_auth_redirect') ?? '';
@@ -504,6 +506,7 @@ function AppInner() {
   useEffect(() => {
     if (sessionLoading) return;
     if (userSession.authenticated) return;
+    if (window.location.pathname.startsWith('/admin')) return;
     let to = '';
     try {
       to = window.sessionStorage.getItem('yb_post_logout_redirect') ?? '';
@@ -560,7 +563,21 @@ function AppInner() {
   }
 
   const pathForSeo = (path.replace(/\/$/, '') || '/') as string;
-  const seoResolved = resolveSeoForPath(pathForSeo);
+  let seoResolved;
+  try {
+    seoResolved = resolveSeoForPath(pathForSeo);
+  } catch {
+    seoResolved = {
+      title: BRAND.name,
+      description: 'YouTube Booster',
+      canonicalPath: pathForSeo,
+      noindex: true,
+      jsonLd: [] as Record<string, unknown>[]
+    };
+  }
+
+  /** Render outside lazy-route Suspense so /admin/login never waits on unrelated chunks. */
+  const isAdminLoginPath = /^\/admin\/login\/?$/i.test(location.pathname);
 
   return (
     <>
@@ -635,24 +652,19 @@ function AppInner() {
           </div>
         </nav>
       )}
+      {isAdminLoginPath ? (
+        <AdminLoginPage
+          adminSession={adminSession}
+          sessionLoading={sessionLoading}
+          refreshAdminSession={refreshAdminSession}
+        />
+      ) : (
       <Suspense fallback={
         <div className="page narrow-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '40vh' }}>
           <p style={{ opacity: 0.8 }}>Loading…</p>
         </div>
       }>
       <Routes>
-        {/* Admin: no nested /admin + Outlet — RR matches parent /admin + splat * for /admin/login, mounts AdminCrmApp which has no /admin/login route → blank. Use static /admin/login + /admin/* only. */}
-        <Route path="/admin/login/" element={<Navigate to="/admin/login" replace />} />
-        <Route
-          path="/admin/login"
-          element={
-            <AdminLoginPage
-              adminSession={adminSession}
-              sessionLoading={sessionLoading}
-              refreshAdminSession={refreshAdminSession}
-            />
-          }
-        />
         <Route
           path="/admin/*"
           element={
@@ -731,6 +743,7 @@ function AppInner() {
         />
       </Routes>
       </Suspense>
+      )}
       {showGlobalNav && (
         <footer className="global-footer">
           <div className="global-footer-content">
