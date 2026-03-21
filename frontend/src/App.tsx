@@ -1,5 +1,5 @@
 import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useState } from 'react';
-import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
@@ -359,7 +359,10 @@ function AdminLoginPage({
   }
 
   return (
-    <div className="page narrow-page admin-login-page">
+    <div
+      className="page narrow-page admin-login-page"
+      style={{ minHeight: '100vh', color: '#e5e7eb', position: 'relative', zIndex: 2 }}
+    >
       <div className="surface">
         <h1>Admin CRM Login</h1>
         <p className="admin-login-lead">
@@ -638,6 +641,28 @@ function AppInner() {
         </div>
       }>
       <Routes>
+        {/* Admin: no nested /admin + Outlet — RR matches parent /admin + splat * for /admin/login, mounts AdminCrmApp which has no /admin/login route → blank. Use static /admin/login + /admin/* only. */}
+        <Route path="/admin/login/" element={<Navigate to="/admin/login" replace />} />
+        <Route
+          path="/admin/login"
+          element={
+            <AdminLoginPage
+              adminSession={adminSession}
+              sessionLoading={sessionLoading}
+              refreshAdminSession={refreshAdminSession}
+            />
+          }
+        />
+        <Route
+          path="/admin/*"
+          element={
+            <AdminRoute adminSession={adminSession} loading={sessionLoading}>
+              <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
+                <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
+              </React.Suspense>
+            </AdminRoute>
+          }
+        />
         <Route path="/" element={<LandingPage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/audit" element={<AuditHubPage />} />
@@ -704,41 +729,6 @@ function AppInner() {
             </UserRoute>
           }
         />
-        {/* /admin/login MUST be a top-level route (before /admin + splat). If it only existed as a nested "login" child, RR6 can match path="*" first → AdminCrmApp with no /admin/login route → blank screen. */}
-        <Route path="/admin/login/" element={<Navigate to="/admin/login" replace />} />
-        <Route
-          path="/admin/login"
-          element={
-            <AdminLoginPage
-              adminSession={adminSession}
-              sessionLoading={sessionLoading}
-              refreshAdminSession={refreshAdminSession}
-            />
-          }
-        />
-        <Route path="/admin/" element={<Navigate to="/admin" replace />} />
-        <Route path="/admin" element={<Outlet />}>
-          <Route
-            index
-            element={
-              <AdminRoute adminSession={adminSession} loading={sessionLoading}>
-                <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
-                  <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
-                </React.Suspense>
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="*"
-            element={
-              <AdminRoute adminSession={adminSession} loading={sessionLoading}>
-                <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
-                  <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
-                </React.Suspense>
-              </AdminRoute>
-            }
-          />
-        </Route>
       </Routes>
       </Suspense>
       {showGlobalNav && (
