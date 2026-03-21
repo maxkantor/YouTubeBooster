@@ -1,5 +1,5 @@
 import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useState } from 'react';
-import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
@@ -342,14 +342,37 @@ function AdminLoginPage({
   }
 
   return (
-    <div className="page narrow-page">
+    <div className="page narrow-page admin-login-page">
       <div className="surface">
         <h1>Admin CRM Login</h1>
-        <p>Protected admin access backed by credentials stored in AWS SSM Parameter Store.</p>
+        <p className="admin-login-lead">
+          Sign in with the same <strong>admin email</strong> and <strong>password</strong> the API reads from AWS Systems Manager (e.g.{' '}
+          <code className="admin-login-code">…/admin/email</code> and <code className="admin-login-code">…/admin/password</code>). Values are
+          not loaded in the browser—enter them here to create an admin session cookie.
+        </p>
         <div className="input-stack">
-          <input placeholder="Admin email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input placeholder="Password or one-time admin secret" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button className="btn btn-primary" onClick={handleLogin} disabled={submitting}>
+          <label className="field-label">
+            <span>Admin email</span>
+            <input
+              name="admin-email"
+              autoComplete="username"
+              placeholder="Email stored in SSM (admin/email)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            <span>Password</span>
+            <input
+              name="admin-password"
+              autoComplete="current-password"
+              placeholder="Password stored in SSM (admin/password)"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <button type="button" className="btn btn-primary" onClick={handleLogin} disabled={submitting}>
             {submitting ? 'Signing in...' : 'Sign in'}
           </button>
         </div>
@@ -654,29 +677,41 @@ function AppInner() {
             </UserRoute>
           }
         />
-        {/* Trailing-slash URLs must not fall through to /admin/* (CRM has no /admin/login route → blank page). */}
+        {/* Nested under /admin so /admin/login never matches the CRM splat (otherwise AdminCrmApp mounts with no inner route → blank screen). */}
         <Route path="/admin/login/" element={<Navigate to="/admin/login" replace />} />
         <Route path="/admin/" element={<Navigate to="/admin" replace />} />
-        <Route
-          path="/admin/login"
-          element={
-            <AdminLoginPage
-              adminSession={adminSession}
-              sessionLoading={sessionLoading}
-              refreshAdminSession={refreshAdminSession}
-            />
-          }
-        />
-        <Route
-          path="/admin/*"
-          element={
-            <AdminRoute adminSession={adminSession} loading={sessionLoading}>
-              <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
-                <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
-              </React.Suspense>
-            </AdminRoute>
-          }
-        />
+        <Route path="/admin" element={<Outlet />}>
+          <Route
+            path="login"
+            element={
+              <AdminLoginPage
+                adminSession={adminSession}
+                sessionLoading={sessionLoading}
+                refreshAdminSession={refreshAdminSession}
+              />
+            }
+          />
+          <Route
+            index
+            element={
+              <AdminRoute adminSession={adminSession} loading={sessionLoading}>
+                <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
+                  <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
+                </React.Suspense>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <AdminRoute adminSession={adminSession} loading={sessionLoading}>
+                <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
+                  <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
+                </React.Suspense>
+              </AdminRoute>
+            }
+          />
+        </Route>
       </Routes>
       </Suspense>
       {showGlobalNav && (
