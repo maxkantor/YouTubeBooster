@@ -6,7 +6,7 @@ If deep links return **404** from `*.amplifyapp.com`, the hosting layer is servi
 
 Root **`amplify.yml`** includes SPA rewrites under **`frontend.customRules`**: an explicit **`/admin/<*>`** rule plus the [AWS SPA regex](https://docs.aws.amazon.com/amplify/latest/userguide/redirect-rewrite-examples.html) so static assets are not rewritten to HTML.
 
-After changing `amplify.yml`, **redeploy** the branch. If **`AMPLIFY_DIFF_DEPLOY`** is on, a change only at the repo root might **not trigger a deploy** — see below.
+After changing `amplify.yml`, push as usual; a new build runs if your app **builds on every push** (typical). Wait for the job to finish before retesting deep links.
 
 ## Fix immediately in AWS Console
 
@@ -38,15 +38,10 @@ After changing `amplify.yml`, **redeploy** the branch. If **`AMPLIFY_DIFF_DEPLOY
 - **Build artifact:** `baseDirectory` = `frontend/dist` (via `dist` under `appRoot` in the spec).
 - **`frontend/public/_redirects`:** Netlify-style fallback is copied into `dist/`; Amplify may also honor it, but YAML/console rules are the reliable fix.
 
-## Diff-based deploy can skip hosting updates
+## Optional: diff-based deploy (`AMPLIFY_DIFF_DEPLOY`)
 
-If **`AMPLIFY_DIFF_DEPLOY`** is enabled, Amplify may **skip the deploy step** when it sees no changes under the diff root (often `appRoot` / `frontend`). A change **only** to **repo-root** `amplify.yml` might **not** redeploy hosting, so **rewrites never update**.
+If **every push already triggers a full build**, you can ignore this.
 
-**Fix one of:**
-
-1. **Redeploy manually:** Amplify → your branch → **Redeploy this version** (forces a new deploy).
-2. **Disable diff deploy:** set `AMPLIFY_DIFF_DEPLOY` = `false` for the branch (Hosting → Environment variables).
-3. **Widen diff root:** set **`AMPLIFY_DIFF_DEPLOY_ROOT`** to the repository root (e.g. `.`) so edits to root `amplify.yml` count as changes — see [diff-based frontend builds](https://docs.aws.amazon.com/amplify/latest/userguide/edit-build-settings.html#configuring-diff-based-frontend-build-and-deploy).
-4. **Trivial commit:** change any file under `frontend/` and push so a full deploy runs.
+Only when **`AMPLIFY_DIFF_DEPLOY`** is set to **`true`** can Amplify **skip** the frontend build/deploy when it detects no diff under the configured root—then a change **only** to repo-root `amplify.yml` might not refresh hosting. Fixes: **Redeploy this version**, set **`AMPLIFY_DIFF_DEPLOY=false`**, set **`AMPLIFY_DIFF_DEPLOY_ROOT`**, or see [diff-based frontend builds](https://docs.aws.amazon.com/amplify/latest/userguide/edit-build-settings.html#configuring-diff-based-frontend-build-and-deploy).
 
 The browser console message *“Unsafe attempt to load URL … from frame … chrome-error://chromewebdata”* is a side effect of the **404 error page**, not the root cause.

@@ -12,6 +12,6 @@ When the user asks to **deploy**, **release**, **ship**, **push**, or run a **fu
 3. **Zip** = `backend/youtubebooster-api.zip` produced by `backend/publish-lambda.sh` (file is gitignored; upload to Lambda manually per `backend/LAMBDA-DEPLOY.md`).
 4. **Push** = `git push` to the branch Amplify watches (e.g. `main`) so the **frontend** deploys on Amplify. Commit source changes only—never commit `bin/`, `obj/`, `node_modules/`, or the zip.
 
-If `*.amplifyapp.com` paths like `/admin/login/` return **404**, see **`docs/AMPLIFY-SPA-ROUTING.md`** (SPA rewrites, **diff-based deploy** skipping, console JSON).
+If `*.amplifyapp.com` paths like `/admin/login/` return **404**, see **`docs/AMPLIFY-SPA-ROUTING.md`** (SPA rewrites in `amplify.yml`, optional console rules).
 
 If the user only changed frontend, Lambda upload is optional.
