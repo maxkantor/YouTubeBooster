@@ -11,7 +11,6 @@ import type {
   AdminSessionStatus,
   DashboardOverview,
   MagicLinkLoginResponse,
-  UserOnboardingState,
   UserSessionStatus
 } from './types';
 
@@ -23,10 +22,9 @@ const ChannelAnalyzeDashboard = React.lazy(() =>
 );
 const AdminCrmApp = React.lazy(() => import('./admin/AdminCrmApp'));
 
-/** Redirect from /app to /dashboard or /app/onboarding based on onboarding state. */
-function AppEntryRedirect({ userSession }: { userSession: UserSessionStatus }) {
-  const completed = userSession.user?.onboardingCompleted ?? false;
-  return <Navigate to={completed ? '/dashboard' : '/app/onboarding'} replace />;
+/** Redirect from /app to the main dashboard (onboarding wizard removed). */
+function AppEntryRedirect() {
+  return <Navigate to="/dashboard" replace />;
 }
 
 function LoadingSurface({ title, detail }: { title: string; detail?: string }) {
@@ -43,12 +41,10 @@ function LoadingSurface({ title, detail }: { title: string; detail?: string }) {
 function UserRoute({
   userSession,
   loading,
-  allowIncompleteOnboarding,
   children
 }: {
   userSession: UserSessionStatus;
   loading: boolean;
-  allowIncompleteOnboarding?: boolean;
   children: ReactNode;
 }) {
   const location = useLocation();
@@ -59,14 +55,6 @@ function UserRoute({
   if (!userSession.authenticated || !userSession.user) {
     const returnTo = `${location.pathname}${location.search}`;
     return <Navigate to={`/auth/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
-  }
-
-  if (!allowIncompleteOnboarding && !userSession.user.onboardingCompleted) {
-    return <Navigate to="/app/onboarding" replace />;
-  }
-
-  if (allowIncompleteOnboarding && userSession.user.onboardingCompleted) {
-    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -310,197 +298,6 @@ function DashboardPage({
       }}
       onSignOut={handleSignOut}
     />
-  );
-}
-
-function OnboardingPage({
-  refreshUserSession
-}: {
-  refreshUserSession: () => Promise<UserSessionStatus>;
-}) {
-  const navigate = useNavigate();
-  const [state, setState] = useState<UserOnboardingState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const [channelUrl, setChannelUrl] = useState('');
-  const [growthGoal, setGrowthGoal] = useState('');
-  const [credentialsJson, setCredentialsJson] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [projectId, setProjectId] = useState('');
-  const [authUri, setAuthUri] = useState('');
-  const [tokenUri, setTokenUri] = useState('');
-  const [redirectUri, setRedirectUri] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadOnboarding() {
-      try {
-        const onboarding = await userApi.loadOnboarding();
-        if (!cancelled) {
-          setState(onboarding);
-          setChannelUrl(onboarding.channelUrl || '');
-          setGrowthGoal(onboarding.growthGoal || '');
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load onboarding.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadOnboarding();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function saveProgress(): Promise<boolean> {
-    setSaving(true);
-    setError('');
-    setMessage('');
-    try {
-      const onboarding = await userApi.saveOnboarding(channelUrl, growthGoal);
-      setState(onboarding);
-
-      const hasGoogleInput = [
-        credentialsJson,
-        clientId,
-        clientSecret,
-        projectId,
-        authUri,
-        tokenUri,
-        redirectUri
-      ].some((value) => value.trim().length > 0);
-
-      if (hasGoogleInput) {
-        const settings = await userApi.saveYouTubeSettings({
-          channelUrl,
-          credentialsJson,
-          clientId,
-          clientSecret,
-          projectId,
-          authUri,
-          tokenUri,
-          redirectUri
-        });
-
-        setState((previous) => previous ? { ...previous, youTubeSettings: settings } : previous);
-      }
-
-      setMessage('Your onboarding progress has been saved.');
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save onboarding.');
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function completeSetup() {
-    const saved = await saveProgress();
-    if (!saved) {
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await userApi.completeOnboarding();
-      const session = await refreshUserSession();
-      if (session.authenticated) {
-        navigate('/dashboard', { replace: true });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not complete onboarding.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="page narrow-page">
-      <div className="surface">
-        <h1>Post-purchase setup wizard</h1>
-        <p>Configure the channel and buyer-owned Google settings tied to your purchased access.</p>
-        {loading && <p>Loading your onboarding state...</p>}
-        {error && <p className="error-text">{error}</p>}
-        {message && <p className="success-text">{message}</p>}
-        {state && (
-          <>
-            <div className="pill-row">
-              <span className="info-pill">Purchase email: {state.email}</span>
-              <span className="info-pill">Status: {state.onboardingCompleted ? 'Complete' : 'In progress'}</span>
-              {state.youTubeSettings && (
-                <span className="info-pill">
-                  Google settings saved: {state.youTubeSettings.hasCredentialsJson || state.youTubeSettings.hasClientId ? 'Yes' : 'No'}
-                </span>
-              )}
-            </div>
-            <div className="input-stack">
-              <label className="field-label">
-                Primary channel URL or handle
-                <input value={channelUrl} onChange={(e) => setChannelUrl(e.target.value)} placeholder="https://www.youtube.com/@yourchannel" />
-              </label>
-              <label className="field-label">
-                Growth goal
-                <input value={growthGoal} onChange={(e) => setGrowthGoal(e.target.value)} placeholder="Increase CTR and publish with more consistency" />
-              </label>
-            </div>
-            <div className="surface nested-surface">
-              <h2>Your Google/YouTube settings</h2>
-              <p>
-                These settings are stored per user and encrypted before persistence. You can paste a full credentials JSON payload or enter the granular fields manually.
-              </p>
-              <div className="input-stack">
-                <label className="field-label">
-                  Full credentials JSON
-                  <textarea value={credentialsJson} onChange={(e) => setCredentialsJson(e.target.value)} placeholder='{"web": {"client_id": "...", "client_secret": "..."}}' rows={6} />
-                </label>
-                <label className="field-label">
-                  Client ID
-                  <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Google OAuth client id" />
-                </label>
-                <label className="field-label">
-                  Client secret
-                  <input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Google OAuth client secret" />
-                </label>
-                <label className="field-label">
-                  Project ID
-                  <input value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Optional project id" />
-                </label>
-                <label className="field-label">
-                  Auth URI
-                  <input value={authUri} onChange={(e) => setAuthUri(e.target.value)} placeholder="https://accounts.google.com/o/oauth2/auth" />
-                </label>
-                <label className="field-label">
-                  Token URI
-                  <input value={tokenUri} onChange={(e) => setTokenUri(e.target.value)} placeholder="https://oauth2.googleapis.com/token" />
-                </label>
-                <label className="field-label">
-                  Redirect URI
-                  <input value={redirectUri} onChange={(e) => setRedirectUri(e.target.value)} placeholder="https://your-domain.com/oauth2/callback" />
-                </label>
-              </div>
-            </div>
-            <div className="hero-actions">
-              <button className="btn btn-secondary" onClick={saveProgress} disabled={saving}>
-                {saving ? 'Saving...' : 'Save Progress'}
-              </button>
-              <button className="btn btn-primary" onClick={completeSetup} disabled={saving}>
-                {saving ? 'Completing...' : 'Complete Setup'}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -826,7 +623,7 @@ function AppInner() {
         <Route
           path="/dashboard/channel"
           element={
-            <UserRoute userSession={userSession} loading={sessionLoading} allowIncompleteOnboarding>
+            <UserRoute userSession={userSession} loading={sessionLoading}>
               <ChannelAnalyzeDashboard variant="paid" />
             </UserRoute>
           }
@@ -844,16 +641,16 @@ function AppInner() {
         <Route
           path="/app"
           element={
-            <UserRoute userSession={userSession} loading={sessionLoading} allowIncompleteOnboarding>
-              <AppEntryRedirect userSession={userSession} />
+            <UserRoute userSession={userSession} loading={sessionLoading}>
+              <AppEntryRedirect />
             </UserRoute>
           }
         />
         <Route
           path="/app/onboarding"
           element={
-            <UserRoute userSession={userSession} loading={sessionLoading} allowIncompleteOnboarding>
-              <OnboardingPage refreshUserSession={refreshUserSession} />
+            <UserRoute userSession={userSession} loading={sessionLoading}>
+              <Navigate to="/dashboard" replace />
             </UserRoute>
           }
         />

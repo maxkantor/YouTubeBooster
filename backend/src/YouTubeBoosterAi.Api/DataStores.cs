@@ -990,7 +990,7 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             Token: token,
             UserId: response.Item.GetValueOrDefault("userId")?.S ?? string.Empty,
             Email: response.Item.GetValueOrDefault("email")?.S ?? string.Empty,
-            RedirectPath: response.Item.GetValueOrDefault("redirectPath")?.S ?? "/app/onboarding",
+            RedirectPath: response.Item.GetValueOrDefault("redirectPath")?.S ?? "/dashboard",
             ExpiresAt: ParseDate(response.Item.GetValueOrDefault("expiresAt")?.S),
             CreatedAt: ParseDate(response.Item.GetValueOrDefault("createdAt")?.S)
         );
