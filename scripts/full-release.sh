@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Full local release pipeline: frontend build, backend compile, Lambda zip.
-# Amplify deploy: push to the connected branch (e.g. main). Lambda: upload backend/artifacts/youtubebooster-api.zip in AWS console or Terraform.
+# Amplify deploy: push to the connected branch (e.g. main). Lambda: upload backend/youtubebooster-api.zip in AWS console or Terraform.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "==> Frontend: install + production build"
