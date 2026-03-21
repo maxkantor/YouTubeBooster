@@ -1,9 +1,11 @@
 import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
+import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
+import { StructuredData } from './components/StructuredData';
 import { SeoHead } from './SeoHead';
+import { resolveSeoForPath } from './seo/resolveSeo';
 import { AuthProvider } from './AuthContext';
 import { ForgotPasswordPage, SignInPage, SignUpPage } from './AuthPages';
 import { useAuth } from './AuthContext';
@@ -21,6 +23,21 @@ const ChannelAnalyzeDashboard = React.lazy(() =>
   import('./ChannelAnalyzeDashboard').then((m) => ({ default: m.ChannelAnalyzeDashboard }))
 );
 const AdminCrmApp = React.lazy(() => import('./admin/AdminCrmApp'));
+const AuditHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.AuditHubPage })));
+const SolutionsHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.SolutionsHubPage })));
+const GuidesHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.GuidesHubPage })));
+const AuditArticleRoute = React.lazy(() =>
+  import('./pages/seo/SeoProgrammaticRoutes').then((m) => ({ default: m.AuditArticleRoute }))
+);
+const SolutionArticleRoute = React.lazy(() =>
+  import('./pages/seo/SeoProgrammaticRoutes').then((m) => ({ default: m.SolutionArticleRoute }))
+);
+const GuideArticleRoute = React.lazy(() =>
+  import('./pages/seo/SeoProgrammaticRoutes').then((m) => ({ default: m.GuideArticleRoute }))
+);
+const BlogIndexPage = React.lazy(() => import('./pages/seo/BlogIndexPage').then((m) => ({ default: m.BlogIndexPage })));
+const BlogPostPage = React.lazy(() => import('./pages/seo/BlogPostPage').then((m) => ({ default: m.BlogPostPage })));
+const HtmlSitemapPage = React.lazy(() => import('./pages/seo/HtmlSitemapPage').then((m) => ({ default: m.HtmlSitemapPage })));
 
 /** Redirect from /app to the main dashboard (onboarding wizard removed). */
 function AppEntryRedirect() {
@@ -539,21 +556,22 @@ function AppInner() {
     window.location.replace('/');
   }
 
-  const seo = path === '/' ? { title: BRAND_DEFAULT_TITLE, canonical: '/' }
-    : path === '/demo' ? { title: `Demo – ${BRAND.name}`, canonical: '/demo' }
-    : path === '/dashboard/channel' ? { title: `Channel analysis – ${BRAND.name}`, canonical: '/dashboard/channel' }
-    : path === '/dashboard' ? { title: `Dashboard – ${BRAND.name}`, canonical: '/dashboard' }
-    : path === '/platform' ? { title: `MK Platform – ${BRAND.name}`, canonical: '/platform' }
-    : path.startsWith('/admin') ? { title: 'Admin', noindex: true as const }
-    : {};
+  const pathForSeo = (path.replace(/\/$/, '') || '/') as string;
+  const seoResolved = resolveSeoForPath(pathForSeo);
 
   return (
     <>
       <SeoHead
-        title={'title' in seo ? seo.title : undefined}
-        canonical={'canonical' in seo ? seo.canonical : undefined}
-        noindex={'noindex' in seo ? seo.noindex : undefined}
+        title={seoResolved.title}
+        description={seoResolved.description}
+        canonicalPath={seoResolved.canonicalPath}
+        noindex={seoResolved.noindex}
+        keywords={seoResolved.keywords}
+        ogType={seoResolved.ogType ?? 'website'}
+        articlePublishedTime={seoResolved.articlePublishedTime}
+        articleModifiedTime={seoResolved.articleModifiedTime}
       />
+      <StructuredData graph={seoResolved.jsonLd ?? []} />
       {showGlobalNav && (
         <nav className={`top-nav landing-top-nav ${navScrolled ? 'top-nav-scrolled' : ''}`}>
           <div className="container nav-shell">
@@ -622,6 +640,15 @@ function AppInner() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/platform" element={<PlatformPage />} />
+        <Route path="/audit" element={<AuditHubPage />} />
+        <Route path="/audit/:slug" element={<AuditArticleRoute />} />
+        <Route path="/solutions" element={<SolutionsHubPage />} />
+        <Route path="/solutions/:slug" element={<SolutionArticleRoute />} />
+        <Route path="/guides" element={<GuidesHubPage />} />
+        <Route path="/guides/:slug" element={<GuideArticleRoute />} />
+        <Route path="/blog" element={<BlogIndexPage />} />
+        <Route path="/blog/:slug" element={<BlogPostPage />} />
+        <Route path="/site-map" element={<HtmlSitemapPage />} />
         <Route path="/demo" element={<ChannelAnalyzeDashboard variant="marketing" />} />
         <Route
           path="/auth/signin"
@@ -720,6 +747,12 @@ function AppInner() {
             <p className="global-footer-line">Engineered by MK AI &amp; Performance Systems</p>
             <p className="global-footer-line">
               <Link to="/platform">Platform</Link>
+              {' · '}
+              <Link to="/blog">Blog</Link>
+              {' · '}
+              <Link to="/audit">Audits</Link>
+              {' · '}
+              <Link to="/site-map">Site map</Link>
             </p>
             <p className="global-footer-copy">© 2026 YouTube Booster. All rights reserved.</p>
           </div>

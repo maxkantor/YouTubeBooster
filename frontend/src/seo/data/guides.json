@@ -1,0 +1,49 @@
+[
+  {
+    "slug": "youtube-keyword-research",
+    "intent": "informational",
+    "keywords": ["youtube keyword research", "find video topics youtube"],
+    "title": "YouTube Keyword Research Guide (2026) | YouTube Booster",
+    "description": "Step-by-step keyword research for YouTube: intent, competition, clusters, and how to map topics to playlists.",
+    "h1": "YouTube keyword research guide",
+    "intro": "Keyword research on YouTube blends Search and Suggested traffic—you want clusters you can own with consistent uploads.",
+    "sections": [
+      {
+        "h2": "Start from problems, not keywords",
+        "body": "List questions your audience asks; then map each to a search phrase and a suggested-feed angle."
+      },
+      {
+        "h2": "Build topic clusters",
+        "body": "One pillar video supported by shorter videos strengthens topical authority and internal discovery."
+      }
+    ],
+    "howTo": {
+      "name": "Basic YouTube keyword research",
+      "description": "Outline steps to pick a viable topic cluster.",
+      "steps": [
+        { "name": "List audience problems", "text": "Write 20 problems your viewer faces related to your niche." },
+        { "name": "Validate demand", "text": "Check Search and Suggested signals in Studio and third-party tools." },
+        { "name": "Map to playlists", "text": "Group videos into playlists that reinforce the same entity and intent." }
+      ]
+    },
+    "faq": [],
+    "related": ["/audit/youtube-seo-audit", "/guides/content-calendar-youtube"]
+  },
+  {
+    "slug": "content-calendar-youtube",
+    "intent": "informational",
+    "keywords": ["youtube content calendar", "upload schedule youtube"],
+    "title": "YouTube Content Calendar — Consistency Without Burnout | YouTube Booster",
+    "description": "Build a sustainable upload cadence: batching, hooks bank, and seasonal spikes aligned with your keyword clusters.",
+    "h1": "YouTube content calendar that scales",
+    "intro": "Consistency beats intensity when the algorithm values predictable audience return.",
+    "sections": [
+      {
+        "h2": "Batch recording",
+        "body": "Record in blocks to protect focus days and reduce context switching."
+      }
+    ],
+    "faq": [],
+    "related": ["/guides/youtube-keyword-research"]
+  }
+]

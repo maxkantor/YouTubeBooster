@@ -1,0 +1,45 @@
+[
+  {
+    "slug": "low-ctr-titles",
+    "intent": "informational",
+    "keywords": ["low ctr youtube titles", "improve youtube click through rate"],
+    "title": "Fix Low CTR YouTube Titles — Solutions | YouTube Booster",
+    "description": "Practical ways to fix low CTR on YouTube: title formulas, A/B testing mindset, thumbnails alignment, and AI-assisted rewrites.",
+    "h1": "Solutions for low CTR YouTube titles",
+    "intro": "Low CTR often means a mismatch between promise, thumbnail, and first 30 seconds—or you are competing in queries where your video is not the best answer.",
+    "sections": [
+      {
+        "h2": "Align title with search and browse intent",
+        "body": "Browse traffic rewards curiosity within a niche; search traffic rewards explicit intent. Your title should signal the payoff clearly in the first 50 characters."
+      },
+      {
+        "h2": "Rewrite loop without burning out",
+        "body": "Batch rewrites, test one variable at a time, and keep a swipe file of winning patterns from your own channel first."
+      }
+    ],
+    "faq": [
+      {
+        "question": "Should I change titles on old videos?",
+        "answer": "Yes, selectively—prioritize videos with impressions but weak CTR, and avoid changing titles that already perform well."
+      }
+    ],
+    "related": ["/audit/youtube-seo-audit", "/guides/youtube-keyword-research"]
+  },
+  {
+    "slug": "traffic-not-converting",
+    "intent": "informational",
+    "keywords": ["youtube views not subscribing", "traffic leak youtube"],
+    "title": "Traffic Not Converting to Subscribers — Fix Leaks | YouTube Booster",
+    "description": "Diagnose traffic leaks: hooks, pacing, CTA placement, and playlist strategy so viewers who click actually subscribe.",
+    "h1": "When traffic does not convert to subscribers",
+    "intro": "High views with flat subs often point to weak hooks or unclear channel promise—not just bad luck.",
+    "sections": [
+      {
+        "h2": "Hook and promise in the first 30 seconds",
+        "body": "Deliver the payoff you implied in the title quickly; viewers decide fast whether to stay."
+      }
+    ],
+    "faq": [],
+    "related": ["/solutions/low-ctr-titles", "/guides/content-calendar-youtube"]
+  }
+]

@@ -1,0 +1,58 @@
+[
+  {
+    "slug": "youtube-seo-checklist-2026",
+    "title": "YouTube SEO Checklist for 2026 (Technical + Content)",
+    "description": "A practical checklist: titles, descriptions, chapters, chapters, playlists, and measurement—built for creators who want rankings without gimmicks.",
+    "datePublished": "2026-02-01",
+    "dateModified": "2026-03-15",
+    "keywords": ["youtube seo checklist", "youtube metadata", "video seo"],
+    "sections": [
+      {
+        "h2": "Metadata that still moves the needle",
+        "body": "Titles and thumbnails drive CTR; the first lines of the description reinforce intent for Search. Use chapters when retention data shows confusion drops."
+      },
+      {
+        "h2": "Playlists as internal linking",
+        "body": "Treat playlists as topic pillars. Name them for clarity and link between related videos in the end screen and description."
+      },
+      {
+        "h2": "Measure what matters",
+        "body": "CTR by impression source, average view duration by traffic source, and subscription rate from new viewers tell you where to iterate."
+      }
+    ],
+    "faq": [
+      {
+        "question": "Do tags still matter for YouTube SEO?",
+        "answer": "Tags are a minor signal compared to title, description, and viewer behavior. Use them for disambiguation, not stuffing."
+      },
+      {
+        "question": "How often should I update old videos?",
+        "answer": "Prioritize high-impression, low-CTR assets first; update titles, thumbnails, and intros before touching long-tail winners."
+      }
+    ]
+  },
+  {
+    "slug": "ai-channel-audit-explained",
+    "title": "What an AI YouTube Channel Audit Actually Does",
+    "description": "How AI-assisted audits summarize patterns, surface gaps, and prioritize fixes—without replacing your creative judgment.",
+    "datePublished": "2026-03-01",
+    "dateModified": "2026-03-10",
+    "keywords": ["ai youtube audit", "channel analysis ai"],
+    "sections": [
+      {
+        "h2": "Pattern recognition at scale",
+        "body": "Models excel at comparing many titles and topics to find weak CTR language and missing keyword angles."
+      },
+      {
+        "h2": "Where humans still win",
+        "body": "Brand voice, storytelling, and community trust remain creator-led—AI should shorten analysis cycles, not replace taste."
+      }
+    ],
+    "faq": [
+      {
+        "question": "Will AI audits replace consultants?",
+        "answer": "They replace repetitive analysis, not strategy workshops or brand positioning."
+      }
+    ]
+  }
+]

@@ -1,5 +1,9 @@
 # Frontend (Vite + React)
 
+## SEO system
+
+See **[`docs/SEO-SYSTEM.md`](../docs/SEO-SYSTEM.md)** for sitemaps, `robots.txt`, env vars (`VITE_SITE_URL`, `SEO_SITE_URL`), structured data, and GSC/GA4 notes.
+
 ## Social / Open Graph image
 
 Share previews (Facebook, Telegram, WhatsApp, X, LinkedIn) use **`/og-image.jpg`** (1200×630 canvas, **JPEG** for small file size).
@@ -15,4 +19,4 @@ This overwrites **`public/og-image.jpg`** and **`public/og-image.png`** with 120
 
 - **`npm run build`** does **not** run this automatically; run **`optimize-og`** after changing the source PNG.
 
-Meta tags live in **`index.html`** (canonical domain `youtubebooster.com`) and **`SeoHead.tsx`** (updates on navigation using `window.location.origin`).
+Meta tags live in **`index.html`** (defaults for `/`) and **`SeoHead.tsx`** + **`StructuredData`** (updates on SPA navigation; use **`VITE_SITE_URL`** for consistent canonicals in production).

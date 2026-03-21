@@ -54,6 +54,8 @@ Thumbs.db
 !tsconfig.json
 !**/tsconfig*.json
 !requirements.txt
+# SEO programmatic content (otherwise ignored by *.json above)
+!frontend/src/seo/data/*.json
 results/
 output/
 runner_data/

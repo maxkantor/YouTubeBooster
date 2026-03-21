@@ -1,0 +1,54 @@
+[
+  {
+    "slug": "youtube-seo-audit",
+    "intent": "transactional",
+    "keywords": ["youtube seo audit", "channel seo analysis", "youtube growth audit"],
+    "title": "YouTube SEO Audit — Find CTR & Ranking Gaps | YouTube Booster",
+    "description": "Run an AI-powered YouTube SEO audit: title CTR issues, keyword gaps, traffic leaks, and prioritized fixes for your channel.",
+    "h1": "YouTube SEO audit powered by AI",
+    "intro": "A structured audit looks at how your titles perform in search and browse, whether you are missing high-intent keywords, and where viewers drop off before subscribing.",
+    "sections": [
+      {
+        "h2": "What a YouTube SEO audit covers",
+        "body": "We analyze title patterns, keyword alignment with search intent, and opportunities to improve click-through rate without clickbait. The goal is sustainable growth, not short-term spikes."
+      },
+      {
+        "h2": "Why CTR and intent matter",
+        "body": "YouTube surfaces videos to viewers who are likely to watch. Titles that match intent and deliver on the promise tend to win impressions over time. We surface weak spots and rewrites you can test."
+      }
+    ],
+    "faq": [
+      {
+        "question": "How long does a YouTube SEO audit take?",
+        "answer": "With YouTube Booster you get an instant AI-assisted report; deeper manual review can follow your own workflow."
+      },
+      {
+        "question": "Do I need to connect YouTube Analytics?",
+        "answer": "You can start with a public channel URL. For paid features, sign in so we can align recommendations with your account."
+      }
+    ],
+    "related": ["/solutions/low-ctr-titles", "/guides/youtube-keyword-research"]
+  },
+  {
+    "slug": "channel-growth-audit",
+    "intent": "transactional",
+    "keywords": ["youtube channel audit", "growth opportunities youtube"],
+    "title": "YouTube Channel Growth Audit | AI Analysis | YouTube Booster",
+    "description": "Discover growth opportunities: content patterns, publishing cadence, title weaknesses, and subscriber conversion leaks.",
+    "h1": "YouTube channel growth audit",
+    "intro": "Growth audits connect audience behavior with content strategy—so you invest effort where it compounds.",
+    "sections": [
+      {
+        "h2": "Patterns in your best-performing videos",
+        "body": "We look for recurring themes in titles, length, and topics that correlate with retention so you can double down deliberately."
+      }
+    ],
+    "faq": [
+      {
+        "question": "Is this a replacement for YouTube Studio?",
+        "answer": "No—it complements Studio with AI summaries and prioritized recommendations."
+      }
+    ],
+    "related": ["/audit/youtube-seo-audit", "/guides/content-calendar-youtube"]
+  }
+]

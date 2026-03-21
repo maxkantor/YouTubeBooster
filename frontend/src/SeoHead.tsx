@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
 
 import { BRAND_DEFAULT_TITLE } from './config/brand';
+import { absoluteUrl, getSiteUrl } from './config/site';
 
 const DEFAULT_TITLE = BRAND_DEFAULT_TITLE;
 const DEFAULT_DESC = `Analyze any YouTube channel with AI and discover SEO gaps, weak titles, traffic leaks, and hidden growth opportunities.`;
 
-function getSiteUrl(): string {
+function getOrigin(): string {
   if (typeof window === 'undefined') return '';
   return window.location.origin;
 }
@@ -13,9 +14,14 @@ function getSiteUrl(): string {
 export type SeoProps = {
   title?: string;
   description?: string;
-  canonical?: string;
+  /** Path only, e.g. /audit/foo — canonical becomes siteUrl + path */
+  canonicalPath?: string;
   ogImage?: string;
   noindex?: boolean;
+  keywords?: string[];
+  ogType?: 'website' | 'article';
+  articlePublishedTime?: string;
+  articleModifiedTime?: string;
 };
 
 function setMeta(nameOrProperty: string, content: string, isProperty = false) {
@@ -29,25 +35,40 @@ function setMeta(nameOrProperty: string, content: string, isProperty = false) {
   el.setAttribute('content', content);
 }
 
+function removeMeta(nameOrProperty: string, isProperty = false) {
+  const attr = isProperty ? 'property' : 'name';
+  const el = document.querySelector(`meta[${attr}="${nameOrProperty}"]`);
+  el?.remove();
+}
+
 export function SeoHead({
   title = DEFAULT_TITLE,
   description = DEFAULT_DESC,
-  canonical,
+  canonicalPath,
   ogImage = '/og-image.jpg',
-  noindex
+  noindex,
+  keywords,
+  ogType = 'website',
+  articlePublishedTime,
+  articleModifiedTime
 }: SeoProps) {
   useEffect(() => {
     document.title = title;
     setMeta('description', description);
-    const url = getSiteUrl();
-    const canonicalHref = canonical ? (canonical.startsWith('http') ? canonical : `${url}${canonical}`) : url + '/';
-    const imageUrl = ogImage.startsWith('http') ? ogImage : `${url}${ogImage}`;
+
+    const site = getSiteUrl();
+    const origin = getOrigin() || site;
+    const path = canonicalPath ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
+    const normalized = path === '' ? '/' : path.startsWith('/') ? path : `/${path}`;
+    const canonicalHref = `${site}${normalized === '/' ? '' : normalized}` || `${site}/`;
+
+    const imageUrl = ogImage.startsWith('http') ? ogImage : `${origin}${ogImage.startsWith('/') ? ogImage : `/${ogImage}`}`;
     const isDefaultOgJpeg =
       ogImage === '/og-image.jpg' || ogImage.endsWith('/og-image.jpg') || imageUrl.endsWith('/og-image.jpg');
 
     setMeta('og:title', title, true);
     setMeta('og:description', description, true);
-    setMeta('og:type', 'website', true);
+    setMeta('og:type', ogType, true);
     setMeta('og:url', canonicalHref, true);
     setMeta('og:image', imageUrl, true);
     if (isDefaultOgJpeg) {
@@ -60,18 +81,50 @@ export function SeoHead({
     setMeta('twitter:title', title);
     setMeta('twitter:description', description);
 
-    let link = document.querySelector('link[rel="canonical"]');
-    if (canonical || !link) {
-      if (!link) {
-        link = document.createElement('link');
-        link.setAttribute('rel', 'canonical');
-        document.head.appendChild(link);
-      }
-      link.setAttribute('href', canonicalHref);
+    if (articlePublishedTime) setMeta('article:published_time', articlePublishedTime, true);
+    else removeMeta('article:published_time', true);
+    if (articleModifiedTime) setMeta('article:modified_time', articleModifiedTime, true);
+    else removeMeta('article:modified_time', true);
+
+    if (keywords?.length) setMeta('keywords', keywords.join(', '));
+    else {
+      const k = document.querySelector('meta[name="keywords"]');
+      k?.remove();
     }
 
-    if (noindex) setMeta('robots', 'noindex,nofollow');
-  }, [title, description, canonical, ogImage, noindex]);
+    const verification = import.meta.env.VITE_GOOGLE_SITE_VERIFICATION as string | undefined;
+    if (verification) setMeta('google-site-verification', verification);
+
+    let link = document.querySelector('link[rel="canonical"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.setAttribute('rel', 'canonical');
+      document.head.appendChild(link);
+    }
+    link.setAttribute('href', canonicalHref);
+
+    const robots = noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
+    setMeta('robots', robots);
+
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = 'en';
+    }
+  }, [
+    title,
+    description,
+    canonicalPath,
+    ogImage,
+    noindex,
+    keywords,
+    ogType,
+    articlePublishedTime,
+    articleModifiedTime
+  ]);
 
   return null;
+}
+
+/** Absolute URL for OG image in static HTML (build-time). */
+export function defaultOgImageAbsolute(): string {
+  return absoluteUrl('/og-image.jpg');
 }
