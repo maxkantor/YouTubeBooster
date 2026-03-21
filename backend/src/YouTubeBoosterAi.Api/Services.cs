@@ -431,19 +431,22 @@ public sealed class SampleUserDashboardService : IUserDashboardService
 public sealed class AdminDashboardService : IAdminDashboardService
 {
     private readonly IAppDataStore _appDataStore;
+    private readonly IAppSettingsProvider _appSettingsProvider;
 
-    public AdminDashboardService(IAppDataStore appDataStore)
+    public AdminDashboardService(IAppDataStore appDataStore, IAppSettingsProvider appSettingsProvider)
     {
         _appDataStore = appDataStore;
+        _appSettingsProvider = appSettingsProvider;
     }
 
     public async Task<AdminDashboardSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken)
     {
+        var settings = await _appSettingsProvider.GetSettingsAsync(cancellationToken);
         var snapshot = await _appDataStore.GetAdminSnapshotAsync(cancellationToken);
         var conversionRate = snapshot.TotalDemos == 0
             ? "0%"
             : $"{(snapshot.TotalPurchases / (double)snapshot.TotalDemos * 100):F1}%";
-        var revenue = snapshot.TotalPurchases * 49.99m;
+        var revenue = snapshot.TotalPurchases * settings.OneTimePrice;
 
         return new AdminDashboardSummaryResponse(
             snapshot.TotalUsers,

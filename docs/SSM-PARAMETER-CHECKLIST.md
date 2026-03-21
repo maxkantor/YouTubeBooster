@@ -81,7 +81,8 @@ Terraform writes **`cognito/region`**, **`cognito/user-pool-id`**, **`cognito/ap
 
 Under your prefix (default `/youtubebooster`):
 
-- **Strings:** `ses/*`, `stripe/publishable-key`, `stripe/price-lookup-key`, `admin/email`, `admin/google/project-id`, `admin/google/auth-uri`, `admin/google/token-uri`, `admin/google/redirect-uri`, `pricing/*`, `features/*`, `cognito/*`
+- **Strings:** `ses/*`, `stripe/publishable-key`, `stripe/price-lookup-key`, `admin/email`, `admin/google/project-id`, `admin/google/auth-uri`, `admin/google/token-uri`, `admin/google/redirect-uri`, `features/*`, `cognito/*`
+- **`pricing/one-time-price` and `pricing/currency`:** Managed as dedicated `aws_ssm_parameter` resources with `lifecycle { ignore_changes = [value] }` so **Console edits are never overwritten** by `terraform apply`. The API and Stripe checkout read these values (no separate Stripe price object required for the amount).
 - **SecureStrings (value frozen after first apply):** `stripe/secret-key`, `stripe/webhook-secret`, `stripe/openai-api-key`, `admin/password`, `admin/google/credentials-json`, `admin/google/client-id`, `admin/google/client-secret`
 
 ## Lambda environment

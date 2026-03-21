@@ -5,14 +5,14 @@ import { useAuth } from './AuthContext';
 import { billingApi, meApi } from './lib/api';
 import { getSession as cognitoGetSession } from './lib/auth';
 import type { CheckoutSession } from './types';
+import { usePricing } from './PricingContext';
 
 const BENEFITS = [
-  'Full AI channel audit',
-  'SEO title rewrite engine',
-  'Traffic opportunity analysis',
-  'Content strategy recommendations',
-  'Continuous optimization tools',
-  'Future platform improvements'
+  'Find what’s killing your views',
+  'Fix your titles for higher CTR',
+  'Discover missed traffic opportunities',
+  'Get simple steps to grow fast',
+  'Save your report & track progress'
 ];
 
 export function PaywallModal({
@@ -30,6 +30,7 @@ export function PaywallModal({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { oneTimePriceLabel } = usePricing();
   const { session: authSession } = useAuth();
   const [error, setError] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
@@ -102,20 +103,23 @@ export function PaywallModal({
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal-content paywall-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Unlock full AI channel analysis</h2>
+          <h2>See why your channel isn’t growing</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
         <p className="paywall-subtitle">
-          Unlock the full AI growth report for your channel. One payment. Lifetime access.
+          Fix it in minutes — full report, your channel, one payment. No subscription.
         </p>
         <ul className="feature-list paywall-list">
           {BENEFITS.map((item) => (
             <li key={item}>{item}</li>
           ))}
         </ul>
-        <p className="paywall-price">$49.99 one-time</p>
+        <p className="paywall-price">
+          <span className="paywall-price-amount">{oneTimePriceLabel}</span>{' '}
+          <span className="paywall-price-note">one-time</span>
+        </p>
         <div className="input-stack">
           <p className="muted" style={{ margin: 0 }}>
             Your purchase unlocks the account you’re signed into (works across all devices).
@@ -128,7 +132,7 @@ export function PaywallModal({
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>
           Continue Demo
         </button>
-        <p className="paywall-reassurance">One payment. Lifetime access.</p>
+        <p className="paywall-reassurance">One-time payment. No subscription. Instant access.</p>
       </div>
     </div>
   );

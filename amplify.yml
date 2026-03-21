@@ -24,9 +24,9 @@ applications:
           headers:
             - key: Cache-Control
               value: no-cache
-      # SPA fallback so deep links (/demo, /admin/login, /dashboard, …) serve index.html.
-      # If Amplify shows 404 for a route, confirm this build spec is applied (monorepo app root = frontend).
+      # SPA: rewrite non-asset paths to index.html (AWS-recommended regex so /admin/login/ works).
+      # See https://docs.aws.amazon.com/amplify/latest/userguide/redirect-rewrite-examples.html
       customRules:
-        - source: '/<*>'
+        - source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>'
           target: '/index.html'
           status: 200

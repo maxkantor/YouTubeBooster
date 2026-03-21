@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { BRAND } from './config/brand';
+import { usePricing } from './PricingContext';
 import {
   demoChannelData,
   demoDetectedProblems,
@@ -198,6 +199,7 @@ export function UnifiedDashboard({
   onCreateCheckout: (channelInput: string, email: string) => Promise<CheckoutSession>;
   onSignOut?: () => void;
 }) {
+  const { oneTimePriceLabel } = usePricing();
   const isPreviewMode = isDemo && !isFullDemo;
   const showLockedUI = isDemo && !isFullDemo;
   const [activeTab, setActiveTab] = useState<TabId>('overview');
@@ -1129,11 +1131,13 @@ export function UnifiedDashboard({
             </section>
             {isPreviewMode && (
               <section className="dashboard-section conversion-bar">
-                <h2 className="conversion-bar-title">Unlock the full AI report for your channel</h2>
-                <p className="conversion-bar-sub">Get live stats, deeper recommendations, SEO tools, and traffic insights.</p>
+                <h2 className="conversion-bar-title">See why your channel isn’t growing</h2>
+                <p className="conversion-bar-sub">
+                  Full fix for your channel — live stats, titles, SEO, traffic. One-time payment.
+                </p>
                 <div className="conversion-bar-actions">
                   <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Overview')}>
-                    Unlock for $49.99
+                    Get My Growth Fix — {oneTimePriceLabel}
                   </button>
                   <button type="button" className="btn btn-secondary" onClick={() => setActiveTab('videos')}>
                     Keep Exploring Demo

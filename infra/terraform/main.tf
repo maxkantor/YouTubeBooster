@@ -115,16 +115,6 @@ locals {
       value       = var.admin_google_redirect_uri != "" ? var.admin_google_redirect_uri : "http://localhost"
       description = "Admin Google OAuth redirect URI (first redirect_uris entry)"
     }
-    "${var.ssm_prefix}/pricing/one-time-price" = {
-      type        = "String"
-      value       = var.one_time_price
-      description = "Default one-time purchase price"
-    }
-    "${var.ssm_prefix}/pricing/currency" = {
-      type        = "String"
-      value       = var.currency
-      description = "Default pricing currency"
-    }
     "${var.ssm_prefix}/features/enable-public-demo" = {
       type        = "String"
       value       = "true"
@@ -189,6 +179,37 @@ resource "aws_ssm_parameter" "defaults_secure" {
   }
 }
 
+# Pricing: edit values in SSM/Console; Terraform will not overwrite after first create (same pattern as SecureStrings).
+resource "aws_ssm_parameter" "pricing_one_time_price" {
+  count = var.create_placeholder_parameters ? 1 : 0
+
+  name        = "${var.ssm_prefix}/pricing/one-time-price"
+  description = "One-time purchase price (SSM is source of truth; apply ignores value)"
+  type        = "String"
+  value       = var.one_time_price
+  overwrite   = true
+  tags        = local.common_tags
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+resource "aws_ssm_parameter" "pricing_currency" {
+  count = var.create_placeholder_parameters ? 1 : 0
+
+  name        = "${var.ssm_prefix}/pricing/currency"
+  description = "Pricing currency (SSM is source of truth; apply ignores value)"
+  type        = "String"
+  value       = var.currency
+  overwrite   = true
+  tags        = local.common_tags
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 # --- State migration: old single resource -> split string/secure (prefix must match var.ssm_prefix default) ---
 moved {
   from = aws_ssm_parameter.defaults["/youtubebooster/ses/from-email"]
@@ -227,12 +248,12 @@ moved {
   to   = aws_ssm_parameter.defaults_string["/youtubebooster/admin/google/redirect-uri"]
 }
 moved {
-  from = aws_ssm_parameter.defaults["/youtubebooster/pricing/one-time-price"]
-  to   = aws_ssm_parameter.defaults_string["/youtubebooster/pricing/one-time-price"]
+  from = aws_ssm_parameter.defaults_string["/youtubebooster/pricing/one-time-price"]
+  to   = aws_ssm_parameter.pricing_one_time_price[0]
 }
 moved {
-  from = aws_ssm_parameter.defaults["/youtubebooster/pricing/currency"]
-  to   = aws_ssm_parameter.defaults_string["/youtubebooster/pricing/currency"]
+  from = aws_ssm_parameter.defaults_string["/youtubebooster/pricing/currency"]
+  to   = aws_ssm_parameter.pricing_currency[0]
 }
 moved {
   from = aws_ssm_parameter.defaults["/youtubebooster/features/enable-public-demo"]
@@ -541,8 +562,6 @@ resource "aws_lambda_function" "backend" {
       Storage__SupportTable          = aws_dynamodb_table.support.name
       Storage__PurchasesTable        = aws_dynamodb_table.purchases.name
       Storage__ActivityTable         = aws_dynamodb_table.activity.name
-      Pricing__OneTimePrice          = var.one_time_price
-      Pricing__Currency              = var.currency
       Stripe__PriceLookupKey         = "ytboosterai_default"
       Features__EnablePublicDemo     = "true"
       Features__DemoRateLimitPerHour = "10"

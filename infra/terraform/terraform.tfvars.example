@@ -13,7 +13,7 @@ amplify_repository_url = "https://github.com/your-org/your-repo"
 amplify_access_token   = "replace-me"
 amplify_branch_name    = "main"
 
-one_time_price = "49.99"
+one_time_price = "19.99"
 currency       = "USD"
 
 # Optional: set to populate SSM with your credentials.json values (run: terraform apply -var-file=terraform.tfvars)

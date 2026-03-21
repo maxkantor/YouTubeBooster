@@ -132,6 +132,10 @@ export const publicApi = {
   },
   async getCognitoConfig(): Promise<{ region: string; userPoolId: string; appClientId: string }> {
     return fetchJson<{ region: string; userPoolId: string; appClientId: string }>('/api/public/cognito/config');
+  },
+  /** Mirrors SSM /pricing/one-time-price + /pricing/currency */
+  async getPricing(): Promise<{ oneTimePrice: string; currency: string }> {
+    return fetchJson<{ oneTimePrice: string; currency: string }>('/api/public/pricing');
   }
 };
 

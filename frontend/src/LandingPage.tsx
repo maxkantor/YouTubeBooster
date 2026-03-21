@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
@@ -6,6 +6,7 @@ import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
 import { billingApi, meApi, publicApi } from './lib/api';
 import { useAuth } from './AuthContext';
+import { usePricing } from './PricingContext';
 
 const DEMO_STORAGE_KEY = 'ybai_demo';
 
@@ -32,27 +33,29 @@ const BLURRED_INSIGHTS = [
   'Traffic growth insights'
 ];
 
-const FAQ_ITEMS = [
-  { q: 'Is this a subscription?', a: 'No. This is a one-time purchase.' },
-  { q: 'Do I need technical setup?', a: 'No. Just paste your channel URL.' },
-  { q: 'Can I analyze any channel?', a: 'Yes. Any public YouTube channel.' },
-  { q: 'What happens after purchase?', a: 'You unlock the full AI dashboard.' },
-  { q: 'Is this source code?', a: 'No. This is a hosted analytics platform.' }
-];
-
 const UNLOCK_FEATURES = [
-  'Full AI growth audit',
-  'SEO title rewrites',
-  'Traffic opportunity insights',
-  'Content strategy recommendations',
-  'Saved dashboard access',
-  'Future dashboard improvements'
+  'Find what’s killing your views',
+  'Fix your titles for higher CTR',
+  'Discover missed traffic opportunities',
+  'Get simple steps to grow fast',
+  'Save your report & track progress'
 ];
 
 const PLATFORM_URL = 'https://mk-ai-performance.com';
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const { oneTimePriceLabel } = usePricing();
+  const faqItems = useMemo(
+    () => [
+      { q: 'Is this a subscription?', a: `No — ${oneTimePriceLabel} once. No recurring charges.` },
+      { q: 'Do I need technical setup?', a: 'No. Just paste your channel URL.' },
+      { q: 'Can I analyze any channel?', a: 'Yes. Any public YouTube channel.' },
+      { q: 'What happens after purchase?', a: 'You unlock the full AI dashboard.' },
+      { q: 'Is this source code?', a: 'No. This is a hosted analytics platform.' }
+    ],
+    [oneTimePriceLabel]
+  );
   const { session: authSession, signOut: authSignOut } = useAuth();
   const [demoInput, setDemoInput] = useState('');
   const [demoError, setDemoError] = useState('');
@@ -540,7 +543,7 @@ export function LandingPage() {
             </div>
             <div className="landing-audit-blur-block">
               <span className="landing-unlock-icon">🔒</span>
-              Unlock Full AI Growth Report
+              See your full report &amp; fix list
             </div>
           </div>
         </div>
@@ -570,10 +573,22 @@ export function LandingPage() {
       {/* 9. Pricing */}
       <section className="landing-section landing-pricing-section" id="pricing">
         <div className="container landing-container">
-          <span className="landing-section-eyebrow">One-time unlock</span>
-          <h2 className="landing-section-title">Unlock the Full AI Growth Report</h2>
+          <span className="landing-section-eyebrow">One-time · no subscription</span>
+          <h2 className="landing-section-title landing-pricing-headline">
+            See Why Your Channel Isn’t Growing (Fix It in Minutes)
+          </h2>
+          <p className="landing-pricing-lead">
+            Start with a free preview using the demo channel — upgrade only if you want the full fix.
+          </p>
           <div className="landing-pricing-card">
-            <div className="landing-pricing-price">49.99 USD <span className="landing-pricing-period">one-time</span></div>
+            <p className="landing-pricing-compare">Similar audits cost $100+ — get yours for {oneTimePriceLabel}</p>
+            <p className="landing-pricing-badge" role="note">
+              🔥 Most channels under 1K subs make these mistakes
+            </p>
+            <div className="landing-pricing-price-row" aria-label="Price">
+              <span className="landing-pricing-amount">{oneTimePriceLabel}</span>
+              <span className="landing-pricing-period">one-time</span>
+            </div>
             <ul className="landing-pricing-features">
               {UNLOCK_FEATURES.map((f, i) => (
                 <li key={i}>{f}</li>
@@ -582,7 +597,7 @@ export function LandingPage() {
             <div className="landing-pricing-form">
               {!authSession && (
                 <p className="muted" style={{ margin: 0 }}>
-                  Sign up to unlock. We’ll take you back to pricing after authentication.
+                  Sign up to check out. We’ll bring you back here to pay.
                 </p>
               )}
               {pricingError && <p className="landing-pricing-error">{pricingError}</p>}
@@ -592,8 +607,13 @@ export function LandingPage() {
                 onClick={handleUnlockReport}
                 disabled={pricingLoading || hasPremium}
               >
-                {hasPremium ? 'Already unlocked' : (pricingLoading ? 'Starting checkout…' : 'Unlock Full Report')}
+                {hasPremium
+                  ? 'Already unlocked'
+                  : pricingLoading
+                    ? 'Starting checkout…'
+                    : `Get My Growth Fix — ${oneTimePriceLabel}`}
               </button>
+              <p className="landing-pricing-microcopy">One-time payment. No subscription. Instant access.</p>
             </div>
           </div>
         </div>
@@ -604,7 +624,7 @@ export function LandingPage() {
         <div className="container landing-container landing-faq-container">
           <h2 className="landing-section-title">FAQ</h2>
           <div className="landing-faq-list">
-            {FAQ_ITEMS.map((item, i) => (
+            {faqItems.map((item, i) => (
               <div
                 key={i}
                 className={`landing-faq-item ${openFaq === i ? 'open' : ''}`}

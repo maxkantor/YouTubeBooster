@@ -1374,9 +1374,20 @@ textarea {
 
 .paywall-price {
   margin: 0 0 20px;
-  font-size: 1.75rem;
-  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.paywall-price-amount {
+  font-size: 2rem;
+  font-weight: 800;
   color: #f8fafc;
+}
+
+.paywall-price-note {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #94a3b8;
 }
 
 .paywall-continue {
@@ -2919,44 +2930,101 @@ textarea {
   padding: var(--section-pad-y) var(--app-gutter);
 }
 
+.landing-pricing-headline {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.landing-pricing-lead {
+  max-width: 640px;
+  margin: 12px auto 0;
+  text-align: center;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+
 .landing-pricing-card {
-  max-width: 480px;
-  margin: 32px auto 0;
-  padding: 40px;
+  max-width: 520px;
+  margin: 28px auto 0;
+  padding: 40px 44px;
   border-radius: 24px;
   background: var(--glass-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--card-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(106, 92, 255, 0.08);
   transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
 .landing-pricing-card:hover {
-  box-shadow: var(--card-hover-shadow);
-  transform: translateY(-1px);
+  box-shadow: var(--card-hover-shadow), 0 0 48px rgba(106, 92, 255, 0.12);
+  transform: translateY(-2px);
 }
 
-.landing-pricing-price {
-  font-size: 2.5rem;
-  font-weight: 700;
+.landing-pricing-compare {
+  margin: 0 0 14px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #cbd5e1;
+  text-align: center;
+}
+
+.landing-pricing-badge {
+  margin: 0 0 20px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  text-align: center;
+}
+
+.landing-pricing-price-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px 14px;
+  margin-bottom: 22px;
+}
+
+.landing-pricing-amount {
+  font-size: clamp(2.5rem, 6vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
   color: #f8fafc;
-  margin-bottom: 8px;
+  line-height: 1;
 }
 
 .landing-pricing-period {
-  font-size: 1.25rem;
+  font-size: 0.95rem;
   font-weight: 500;
   color: #94a3b8;
+  text-transform: lowercase;
 }
 
 .landing-pricing-features {
   list-style: none;
-  margin: 0 0 28px;
+  margin: 0 0 30px;
   padding: 0;
   font-size: 0.98rem;
   color: #cbd5e1;
-  line-height: 2.2;
+  line-height: 1.65;
+}
+
+.landing-pricing-features li {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-pricing-features li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .landing-pricing-features li::before {
@@ -2968,6 +3036,14 @@ textarea {
 .landing-pricing-form {
   display: grid;
   gap: 12px;
+}
+
+.landing-pricing-microcopy {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #94a3b8;
+  text-align: center;
 }
 
 .landing-pricing-email,
@@ -2989,7 +3065,19 @@ textarea {
 }
 
 .landing-pricing-cta {
-  margin-top: 8px;
+  margin-top: 4px;
+  position: relative;
+  box-shadow: 0 4px 24px rgba(106, 92, 255, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-pricing-cta:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 8px 32px rgba(106, 92, 255, 0.45), 0 0 48px rgba(106, 92, 255, 0.2);
+}
+
+.landing-pricing-cta:active:not(:disabled) {
+  transform: scale(0.99);
 }
 
 /* FAQ */

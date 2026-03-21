@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using Amazon.SimpleEmail;
@@ -141,6 +142,12 @@ publicApi.MapGet("/cognito/config", () =>
         userPoolId = cognitoUserPoolId,
         appClientId = cognitoAppClientId
     });
+});
+publicApi.MapGet("/pricing", async (IAppSettingsProvider appSettingsProvider, CancellationToken cancellationToken) =>
+{
+    var s = await appSettingsProvider.GetSettingsAsync(cancellationToken);
+    var amount = s.OneTimePrice.ToString("F2", CultureInfo.InvariantCulture);
+    return Results.Ok(new { oneTimePrice = amount, currency = s.Currency });
 });
 publicApi.MapPost("/demo", async (DemoAnalysisRequest request, IDemoAnalysisService service, CancellationToken cancellationToken) =>
 {
