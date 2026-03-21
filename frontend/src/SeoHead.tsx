@@ -33,7 +33,7 @@ export function SeoHead({
   title = DEFAULT_TITLE,
   description = DEFAULT_DESC,
   canonical,
-  ogImage = '/og-default.svg',
+  ogImage = '/og-image.jpg',
   noindex
 }: SeoProps) {
   useEffect(() => {
@@ -42,13 +42,21 @@ export function SeoHead({
     const url = getSiteUrl();
     const canonicalHref = canonical ? (canonical.startsWith('http') ? canonical : `${url}${canonical}`) : url + '/';
     const imageUrl = ogImage.startsWith('http') ? ogImage : `${url}${ogImage}`;
+    const isDefaultOgJpeg =
+      ogImage === '/og-image.jpg' || ogImage.endsWith('/og-image.jpg') || imageUrl.endsWith('/og-image.jpg');
 
     setMeta('og:title', title, true);
     setMeta('og:description', description, true);
     setMeta('og:type', 'website', true);
     setMeta('og:url', canonicalHref, true);
     setMeta('og:image', imageUrl, true);
+    if (isDefaultOgJpeg) {
+      setMeta('og:image:width', '1200', true);
+      setMeta('og:image:height', '630', true);
+      setMeta('og:image:type', 'image/jpeg', true);
+    }
     setMeta('twitter:card', 'summary_large_image');
+    setMeta('twitter:image', imageUrl);
     setMeta('twitter:title', title);
     setMeta('twitter:description', description);
 
