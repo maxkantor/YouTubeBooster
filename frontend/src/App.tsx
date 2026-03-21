@@ -654,6 +654,9 @@ function AppInner() {
             </UserRoute>
           }
         />
+        {/* Trailing-slash URLs must not fall through to /admin/* (CRM has no /admin/login route → blank page). */}
+        <Route path="/admin/login/" element={<Navigate to="/admin/login" replace />} />
+        <Route path="/admin/" element={<Navigate to="/admin" replace />} />
         <Route
           path="/admin/login"
           element={

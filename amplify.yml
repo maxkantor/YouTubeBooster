@@ -24,8 +24,8 @@ applications:
           headers:
             - key: Cache-Control
               value: no-cache
-      # SPA fallback so refreshing deep links like `/demo?channel=...` serves `index.html`.
-      # This prevents 404/blank pages after reload.
+      # SPA fallback so deep links (/demo, /admin/login, /dashboard, …) serve index.html.
+      # If Amplify shows 404 for a route, confirm this build spec is applied (monorepo app root = frontend).
       customRules:
         - source: '/<*>'
           target: '/index.html'

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
+import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
 import { billingApi, meApi, publicApi } from './lib/api';
 import { useAuth } from './AuthContext';
 
@@ -125,15 +126,21 @@ export function LandingPage() {
       setDemoError('Enter a channel URL or @handle.');
       return;
     }
-    analytics.channelAuditStarted(channel);
-    setStoredDemoChannel(channel);
+    const validated = validateYouTubeChannelInput(channel);
+    if (!validated.ok) {
+      setDemoError(validated.message);
+      return;
+    }
+    const normalized = validated.normalized;
+    analytics.channelAuditStarted(normalized);
+    setStoredDemoChannel(normalized);
     if (hasPremium) {
-      navigate(`/dashboard/channel?channel=${encodeURIComponent(channel)}`, {
+      navigate(`/dashboard/channel?channel=${encodeURIComponent(normalized)}`, {
         replace: true,
-        state: { channelInput: channel }
+        state: { channelInput: normalized }
       });
     } else {
-      navigate(`/demo?channel=${encodeURIComponent(channel)}`, { replace: true, state: { channelInput: channel } });
+      navigate(`/demo?channel=${encodeURIComponent(normalized)}`, { replace: true, state: { channelInput: normalized } });
     }
   }
 
@@ -371,8 +378,13 @@ export function LandingPage() {
                   className="landing-demo-input"
                   placeholder="Paste a YouTube channel URL or @handle"
                   value={demoInput}
-                  onChange={(e) => setDemoInput(e.target.value)}
+                  onChange={(e) => {
+                    setDemoInput(e.target.value);
+                    setDemoError('');
+                  }}
                   onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeUserChannel()}
+                  aria-invalid={!!demoError}
+                  aria-describedby={demoError ? 'audit-channel-error' : undefined}
                 />
               </div>
               <button
@@ -382,7 +394,11 @@ export function LandingPage() {
               >
                 Analyze Your Channel
               </button>
-              {demoError && <p className="landing-demo-error">{demoError}</p>}
+              {demoError && (
+                <p id="audit-channel-error" className="landing-demo-error" role="alert">
+                  {demoError}
+                </p>
+              )}
               <p className="landing-audit-option-hint">
                 Examples: https://youtube.com/@channelname or @channelname
               </p>
