@@ -1,28 +1,28 @@
 # Amplify SPA routing (`/admin/login/`, `/dashboard`, …)
 
-If deep links return **404** from `*.amplifyapp.com`, the hosting layer is serving the path as a static file instead of `index.html`.
+**Lambda/API logs are unrelated.** A 404 on `https://…amplifyapp.com/admin/...` is returned by **Amplify Hosting** before your React bundle runs. The browser “unsafe frame / chrome-error” message is a side effect of that 404 page.
 
-## Fix in repo
+## What the repo does
 
-Root **`amplify.yml`** includes SPA rewrites under **`frontend.customRules`**: an explicit **`/admin/<*>`** rule plus the [AWS SPA regex](https://docs.aws.amazon.com/amplify/latest/userguide/redirect-rewrite-examples.html) so static assets are not rewritten to HTML.
+1. **Root `amplify.yml` (monorepo)** — `customRules` sit next to `appRoot` (same pattern as [monorepo custom headers](https://docs.aws.amazon.com/amplify/latest/userguide/custom-header-YAML-format.html)), with a single catch‑all rewrite:
+   - **`/<*>`** → **`/index.html`** — **`200`** (rewrite)
+2. **`frontend/public/_redirects`** — Netlify-style `/* → /index.html 200` (copied to `dist/`). No `#` comment lines (safer for parsers).
+3. **Terraform** (`enable_amplify_app`) — `aws_amplify_app` includes the same **`custom_rule`** so the rule exists in AWS even if Hosting ever ignores the YAML block.
 
-After changing `amplify.yml`, push as usual; a new build runs if your app **builds on every push** (typical). Wait for the job to finish before retesting deep links.
+After push, wait for the Amplify build + deploy to finish, then hard‑refresh or try an incognito window.
 
-## Fix immediately in AWS Console
+## If it still 404s — check the Amplify app (most common)
 
-1. Amplify → your app → **Hosting** → **Rewrites and redirects** → **Open text editor** (or manage rules).
-2. Ensure these rules exist **in order** (admin rule first is fine):
+### 1. Rewrites must exist in the console
+
+1. AWS Console → **Amplify** → your app → **Hosting** → **Rewrites and redirects**.
+2. You should see at least **one** rule: source **`/<*>`**, target **`/index.html`**, type **Rewrite (200)**.
+3. If the list is **empty** or wrong, the build spec from Git is not driving redirects (or an old console spec is overriding it). **Add this rule manually** (open JSON/text editor):
 
 ```json
 [
   {
-    "source": "/admin/<*>",
-    "status": "200",
-    "target": "/index.html",
-    "condition": null
-  },
-  {
-    "source": "</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>",
+    "source": "/<*>",
     "status": "200",
     "target": "/index.html",
     "condition": null
@@ -30,18 +30,20 @@ After changing `amplify.yml`, push as usual; a new build runs if your app **buil
 ]
 ```
 
-3. Save, then **redeploy** if the console asks.
+Save, then **Redeploy** the branch once.
 
-## Checklist
+### 2. Build specification must come from the repo
 
-- **Environment variable:** `AMPLIFY_MONOREPO_APP_ROOT` = `frontend` (must match `appRoot` in `amplify.yml`).
-- **Build artifact:** `baseDirectory` = `frontend/dist` (via `dist` under `appRoot` in the spec).
-- **`frontend/public/_redirects`:** Netlify-style fallback is copied into `dist/`; Amplify may also honor it, but YAML/console rules are the reliable fix.
+**Hosting** → **Build settings**: the app should use **`amplify.yml` from the repository**. If the console shows a **different** build spec with **no** `customRules`, either paste the repo file or remove the override so Git is the source of truth.
 
-## Optional: diff-based deploy (`AMPLIFY_DIFF_DEPLOY`)
+### 3. Monorepo env
 
-If **every push already triggers a full build**, you can ignore this.
+**App settings** → **Environment variables**: **`AMPLIFY_MONOREPO_APP_ROOT`** = **`frontend`** (must match `appRoot` in `amplify.yml`).
 
-Only when **`AMPLIFY_DIFF_DEPLOY`** is set to **`true`** can Amplify **skip** the frontend build/deploy when it detects no diff under the configured root—then a change **only** to repo-root `amplify.yml` might not refresh hosting. Fixes: **Redeploy this version**, set **`AMPLIFY_DIFF_DEPLOY=false`**, set **`AMPLIFY_DIFF_DEPLOY_ROOT`**, or see [diff-based frontend builds](https://docs.aws.amazon.com/amplify/latest/userguide/edit-build-settings.html#configuring-diff-based-frontend-build-and-deploy).
+### 4. Terraform-managed Amplify
 
-The browser console message *“Unsafe attempt to load URL … from frame … chrome-error://chromewebdata”* is a side effect of the **404 error page**, not the root cause.
+If this app is created via **`enable_amplify_app`** in `infra/terraform`, run **`terraform apply`** after pulling so `custom_rule` on `aws_amplify_app` is applied.
+
+## Optional: `AMPLIFY_DIFF_DEPLOY`
+
+Only relevant if **`AMPLIFY_DIFF_DEPLOY=true`**. If every push already runs a full build, you can ignore it. Otherwise see [diff-based frontend builds](https://docs.aws.amazon.com/amplify/latest/userguide/edit-build-settings.html#configuring-diff-based-frontend-build-and-deploy).

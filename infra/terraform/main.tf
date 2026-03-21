@@ -656,6 +656,14 @@ resource "aws_amplify_app" "frontend" {
   build_spec = file("${path.module}/../../amplify.yml")
   enable_auto_branch_creation = false
 
+  # SPA: ensure Hosting always has a rewrite even if build-spec parsing misses customRules.
+  # Same rule as root amplify.yml (catch-all to index.html).
+  custom_rule {
+    source = "/<*>"
+    status = "200"
+    target = "/index.html"
+  }
+
   environment_variables = {
     AMPLIFY_MONOREPO_APP_ROOT   = "frontend"
     VITE_API_BASE_URL           = var.deploy_backend_lambda ? aws_apigatewayv2_api.http_api[0].api_endpoint : "https://api.example.com"

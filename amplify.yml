@@ -1,8 +1,17 @@
-# Amplify build spec — app lives in frontend/ (set AMPLIFY_MONOREPO_APP_ROOT=frontend in app env).
-# If /admin/login/ 404s: see docs/AMPLIFY-SPA-ROUTING.md (diff-based deploy + console rules).
+# Amplify monorepo: appRoot must match env AMPLIFY_MONOREPO_APP_ROOT=frontend
+# Rewrites at application scope (same pattern as customHeaders in AWS monorepo docs).
 version: 1
 applications:
   - appRoot: frontend
+    customRules:
+      - source: '/<*>'
+        target: '/index.html'
+        status: '200'
+    customHeaders:
+      - pattern: '**/*'
+        headers:
+          - key: Cache-Control
+            value: no-cache
     frontend:
       phases:
         preBuild:
@@ -20,15 +29,3 @@ applications:
       cache:
         paths:
           - node_modules/**/*
-      customHeaders:
-        - pattern: '**/*'
-          headers:
-            - key: Cache-Control
-              value: no-cache
-      customRules:
-        - source: '/admin/<*>'
-          target: '/index.html'
-          status: 200
-        - source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>'
-          target: '/index.html'
-          status: 200
