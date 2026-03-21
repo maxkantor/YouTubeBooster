@@ -5,7 +5,8 @@ create_placeholder_parameters = true
 
 # Set to true once you have built and zipped the .NET Lambda artifact.
 deploy_backend_lambda = false
-backend_package_path  = "../artifacts/youtubebooster-api.zip"
+# Path is relative to infra/terraform/ — zip from: .\backend\publish-lambda.ps1
+backend_package_path  = "../../backend/artifacts/youtubebooster-api.zip"
 
 # Set to true once the repo is hosted and you want Amplify managed by Terraform.
 enable_amplify_app    = false

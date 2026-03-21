@@ -19,13 +19,13 @@ chmod +x backend/publish-lambda.sh
 .\backend\publish-lambda.ps1
 ```
 
-**Output:** `backend/youtubebooster-api.zip` (in the `backend` folder — nothing under `artifacts/`).
+**Output:** `backend/artifacts/youtubebooster-api.zip` (gitignored — run the script to generate it).
 
 Upload that file to Lambda.
 
 ## AWS Console
 
-1. **Lambda** → function **youtubebooster-ai-api** → **Code** → **Upload from** → **.zip file** → choose `backend/youtubebooster-api.zip`.
+1. **Lambda** → function **youtubebooster-ai-api** → **Code** → **Upload from** → **.zip file** → choose `backend/artifacts/youtubebooster-api.zip`.
 2. **Runtime settings** (Code tab, right) → **Edit**:
    - **Runtime:** .NET 8 (C#/F#/PowerShell)
    - **Handler:** `YouTubeBoosterAi.Api`
@@ -57,7 +57,7 @@ Expected: `{"status":"ok","service":"youtube-booster-ai-api"}`.
 
 ## Deploy via AWS CLI / Terraform
 
-- Terraform: set `backend_package_path` to the full path to `backend/youtubebooster-api.zip` and run `terraform apply`.
+- Terraform: set `backend_package_path` to the full path to `backend/artifacts/youtubebooster-api.zip` and run `terraform apply`.
 
 ## SSM / secrets (YouTube API key, Stripe, etc.)
 

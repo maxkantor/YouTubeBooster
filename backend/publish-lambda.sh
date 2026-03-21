@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Publish .NET Lambda package to backend/youtubebooster-api.zip (see LAMBDA-DEPLOY.md).
+# Publish .NET Lambda package to backend/artifacts/youtubebooster-api.zip (see LAMBDA-DEPLOY.md).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT_DIR="$HERE/.lambda-publish/out"
-ZIP="$HERE/youtubebooster-api.zip"
+ARTIFACTS="$HERE/artifacts"
+ZIP="$ARTIFACTS/youtubebooster-api.zip"
 rm -rf "$HERE/.lambda-publish"
-mkdir -p "$OUT_DIR"
+mkdir -p "$ARTIFACTS" "$OUT_DIR"
 dotnet publish "$HERE/src/YouTubeBoosterAi.Api/YouTubeBoosterAi.Api.csproj" \
   -c Release \
   -r linux-x64 \

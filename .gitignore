@@ -73,7 +73,7 @@ backend/.lambda-publish/
 backend-publish/
 backend/backend-publish*/
 backend/backend-latest-*.zip
-# Legacy name — canonical zip is only backend/artifacts/youtubebooster-api.zip
+# Legacy name — also gitignored if present
 backend/youtube-booster-backend-lambda.zip
 backend/youtubebooster-api.zip
 
