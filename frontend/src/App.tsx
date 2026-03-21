@@ -704,20 +704,20 @@ function AppInner() {
             </UserRoute>
           }
         />
-        {/* Nested under /admin so /admin/login never matches the CRM splat (otherwise AdminCrmApp mounts with no inner route → blank screen). */}
+        {/* /admin/login MUST be a top-level route (before /admin + splat). If it only existed as a nested "login" child, RR6 can match path="*" first → AdminCrmApp with no /admin/login route → blank screen. */}
         <Route path="/admin/login/" element={<Navigate to="/admin/login" replace />} />
+        <Route
+          path="/admin/login"
+          element={
+            <AdminLoginPage
+              adminSession={adminSession}
+              sessionLoading={sessionLoading}
+              refreshAdminSession={refreshAdminSession}
+            />
+          }
+        />
         <Route path="/admin/" element={<Navigate to="/admin" replace />} />
         <Route path="/admin" element={<Outlet />}>
-          <Route
-            path="login"
-            element={
-              <AdminLoginPage
-                adminSession={adminSession}
-                sessionLoading={sessionLoading}
-                refreshAdminSession={refreshAdminSession}
-              />
-            }
-          />
           <Route
             index
             element={
