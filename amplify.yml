@@ -1,4 +1,5 @@
-# Amplify build spec — app lives in frontend/ (set AMPLIFY_MONOREPO_APP_ROOT=frontend in app env)
+# Amplify build spec — app lives in frontend/ (set AMPLIFY_MONOREPO_APP_ROOT=frontend in app env).
+# If /admin/login/ 404s: see docs/AMPLIFY-SPA-ROUTING.md (diff-based deploy + console rules).
 version: 1
 applications:
   - appRoot: frontend
@@ -24,9 +25,10 @@ applications:
           headers:
             - key: Cache-Control
               value: no-cache
-      # SPA: rewrite non-asset paths to index.html (AWS-recommended regex so /admin/login/ works).
-      # See https://docs.aws.amazon.com/amplify/latest/userguide/redirect-rewrite-examples.html
       customRules:
+        - source: '/admin/<*>'
+          target: '/index.html'
+          status: 200
         - source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>'
           target: '/index.html'
           status: 200
