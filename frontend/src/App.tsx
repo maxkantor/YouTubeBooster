@@ -579,6 +579,15 @@ function AppInner() {
   /** Render outside lazy-route Suspense so /admin/login never waits on unrelated chunks. */
   const isAdminLoginPath = /^\/admin\/login\/?$/i.test(location.pathname);
 
+  /** Must cover both `/admin` and `/admin/*` — some RR builds do not match bare `/admin` to `path="/admin/*"` only, → no route → black screen. */
+  const adminCrmShell = (
+    <AdminRoute adminSession={adminSession} loading={sessionLoading}>
+      <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
+        <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
+      </React.Suspense>
+    </AdminRoute>
+  );
+
   return (
     <>
       <SeoHead
@@ -665,16 +674,9 @@ function AppInner() {
         </div>
       }>
       <Routes>
-        <Route
-          path="/admin/*"
-          element={
-            <AdminRoute adminSession={adminSession} loading={sessionLoading}>
-              <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
-                <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
-              </React.Suspense>
-            </AdminRoute>
-          }
-        />
+        <Route path="/admin/" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin" element={adminCrmShell} />
+        <Route path="/admin/*" element={adminCrmShell} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/audit" element={<AuditHubPage />} />
