@@ -55,6 +55,10 @@ const GuideArticleRoute = React.lazy(() =>
 const BlogIndexPage = React.lazy(() => import('./pages/seo/BlogIndexPage').then((m) => ({ default: m.BlogIndexPage })));
 const BlogPostPage = React.lazy(() => import('./pages/seo/BlogPostPage').then((m) => ({ default: m.BlogPostPage })));
 const HtmlSitemapPage = React.lazy(() => import('./pages/seo/HtmlSitemapPage').then((m) => ({ default: m.HtmlSitemapPage })));
+const AboutPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.AboutPage })));
+const ContactPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.ContactPage })));
+const PrivacyPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.PrivacyPage })));
+const DisclaimerPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.DisclaimerPage })));
 
 /** Redirect from /app to the main dashboard (onboarding wizard removed). */
 function AppEntryRedirect() {
@@ -723,6 +727,10 @@ function AppInner() {
           <Route path="system-logs" element={<SystemLogsPage />} />
         </Route>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/disclaimer" element={<DisclaimerPage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/audit" element={<AuditHubPage />} />
         <Route path="/audit/:slug" element={<AuditArticleRoute />} />

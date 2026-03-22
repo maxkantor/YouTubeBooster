@@ -12,7 +12,10 @@ export const BRAND = {
   /** Default meta / SEO tagline */
   tagline: 'AI YouTube Channel Growth Analyzer',
   /** Default page title (home) */
-  defaultTitle: 'YouTube Booster – AI YouTube Channel Growth Analyzer',
+  defaultTitle: 'YouTube Booster — AI YouTube Channel Audit to Grow Views, CTR & SEO',
+  /** Home page meta description (SEO + OG) */
+  seoHomeDescription:
+    'Analyze any YouTube channel in seconds. Find what is killing your views, fix titles and thumbnails, and uncover growth opportunities with AI-powered channel audits.',
   /** Base URL for canonical/OG (no trailing slash) */
   siteUrl: 'https://youtubebooster.com',
 } as const;

@@ -4,7 +4,7 @@ import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
-import { billingApi, meApi, publicApi } from './lib/api';
+import { billingApi, meApi } from './lib/api';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
 
@@ -40,8 +40,6 @@ const UNLOCK_FEATURES = [
   'Get simple steps to grow fast',
   'Save your report & track progress'
 ];
-
-const PLATFORM_URL = 'https://mk-ai-performance.com';
 
 export function LandingPage() {
   const navigate = useNavigate();
@@ -192,7 +190,7 @@ export function LandingPage() {
   }
 
   return (
-    <div className="landing">
+    <div className="landing landing-layout">
       {/* 1. Header */}
       <header className={`landing-header ${navScrolled ? 'landing-header-scrolled' : ''}`}>
         <div className="container landing-header-inner nav-shell">
@@ -206,7 +204,7 @@ export function LandingPage() {
             <span className="landing-logo-yt">{BRAND.namePart1}</span>
             <span className="landing-logo-boost">{BRAND.namePart2}</span>
           </Link>
-          <nav className="landing-nav landing-nav-center" aria-label="Page">
+          <nav className="landing-nav landing-nav-center" aria-label="Primary">
             <a href="#product" className="landing-nav-link">
               Product
             </a>
@@ -252,8 +250,9 @@ export function LandingPage() {
       </header>
       <div className="landing-header-rule" aria-hidden />
 
+      <main id="main-content" className="landing-main">
       {/* 2. Hero */}
-      <section className="landing-hero">
+      <section className="landing-hero" aria-labelledby="hero-heading">
         <div className="landing-hero-bg" aria-hidden>
           <div className="landing-hero-bg-vignette" />
           <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-1" />
@@ -274,18 +273,18 @@ export function LandingPage() {
         </div>
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
-            <h1 className="landing-hero-title">
-              <span className="landing-hero-title-line">Get More Views Without Guessing</span>
+            <h1 className="landing-hero-title" id="hero-heading">
+              <span className="landing-hero-title-line landing-heading-display">Get More Views Without Guessing</span>
             </h1>
             <p className="landing-hero-sub">
               See exactly what’s stopping your growth—and fix it to increase views, subscribers, and watch time in minutes.
             </p>
             <div className="landing-hero-buttons">
               <a href="#audit" className="btn btn-lg landing-hero-cta-primary landing-cta-premium">
-                Analyze Your Channel
+                Analyze your channel
               </a>
               <a href="#audit" className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium">
-                Analyze Default Channel
+                Analyze default channel
               </a>
             </div>
             <p className="landing-hero-micro">Free • 60 seconds • No signup</p>
@@ -571,11 +570,11 @@ export function LandingPage() {
       </section>
 
       {/* 9. Pricing */}
-      <section className="landing-section landing-pricing-section" id="pricing">
-        <div className="container landing-container">
+      <section className="landing-section landing-pricing-section" id="pricing" aria-labelledby="pricing-heading">
+        <div className="container landing-container landing-pricing-inner">
           <span className="landing-section-eyebrow">One-time · no subscription</span>
-          <h2 className="landing-section-title landing-pricing-headline">
-            See Why Your Channel Isn’t Growing (Fix It in Minutes)
+          <h2 className="landing-section-title landing-pricing-headline landing-heading-display" id="pricing-heading">
+            See Why Your Channel Isn’t Growing — Fix It in Minutes
           </h2>
           <p className="landing-pricing-lead">
             Start with a free preview using the demo channel — upgrade only if you want the full fix.
@@ -620,20 +619,31 @@ export function LandingPage() {
       </section>
 
       {/* 10. FAQ */}
-      <section className="landing-section landing-section-alt" id="faq">
+      <section className="landing-section landing-section-alt" id="faq" aria-labelledby="faq-heading">
         <div className="container landing-container landing-faq-container">
-          <h2 className="landing-section-title">FAQ</h2>
-          <div className="landing-faq-list">
+          <h2 className="landing-section-title" id="faq-heading">
+            FAQ
+          </h2>
+          <div className="landing-faq-list" role="list">
             {faqItems.map((item, i) => (
-              <div
-                key={i}
-                className={`landing-faq-item ${openFaq === i ? 'open' : ''}`}
-                onClick={() => setOpenFaq(openFaq === i ? null : i)}
-              >
-                <button type="button" className="landing-faq-question">
+              <div key={i} className={`landing-faq-item ${openFaq === i ? 'open' : ''}`} role="listitem">
+                <button
+                  type="button"
+                  className="landing-faq-question"
+                  aria-expanded={openFaq === i}
+                  aria-controls={`faq-panel-${i}`}
+                  id={`faq-q-${i}`}
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                >
                   {item.q}
                 </button>
-                <div className="landing-faq-answer">
+                <div
+                  id={`faq-panel-${i}`}
+                  className="landing-faq-answer"
+                  role="region"
+                  aria-labelledby={`faq-q-${i}`}
+                  aria-hidden={openFaq !== i}
+                >
                   <p>{item.a}</p>
                 </div>
               </div>
@@ -643,24 +653,67 @@ export function LandingPage() {
       </section>
 
       {/* 11. Final CTA */}
-      <section className="landing-section landing-cta-section">
-        <div className="container landing-container">
-          <h2 className="landing-cta-title">Stop guessing what the algorithm wants.</h2>
+      <section className="landing-section landing-cta-section" aria-labelledby="cta-heading">
+        <div className="container landing-container landing-cta-inner">
+          <h2 className="landing-cta-title landing-heading-display" id="cta-heading">
+            Stop guessing what the algorithm wants.
+          </h2>
           <p className="landing-cta-sub">Run your AI channel audit now.</p>
           <a href="#audit" className="btn btn-primary btn-lg landing-cta-btn">
-            Analyze Your Channel
+            Analyze your channel
           </a>
         </div>
       </section>
+      </main>
 
       {/* 12. Footer */}
-      <footer className="landing-footer global-footer">
-        <div className="global-footer-content">
-          <p className="global-footer-line">Engineered by MK AI &amp; Performance Systems</p>
-          <p className="global-footer-line">
-            <a href={PLATFORM_URL} target="_blank" rel="noopener noreferrer">Platform</a>
-          </p>
-          <p className="global-footer-copy">© 2026 YouTube Booster. All rights reserved.</p>
+      <footer className="landing-site-footer">
+        <div className="landing-site-footer-divider" aria-hidden />
+        <div className="container landing-site-footer-inner">
+          <div className="landing-site-footer-brand">
+            <Link
+              to="/"
+              className="landing-site-footer-logo brand-link brand-with-play"
+              aria-label={`${BRAND.name} home`}
+            >
+              <span className="brand-play-icon" aria-hidden />
+              <span className="landing-logo-yt">{BRAND.namePart1}</span>
+              <span className="landing-logo-boost">{BRAND.namePart2}</span>
+            </Link>
+            <p className="landing-site-footer-tagline">
+              AI-powered YouTube growth audits for creators who want more views.
+            </p>
+          </div>
+          <nav className="landing-site-footer-nav" aria-label="Footer">
+            <div className="landing-site-footer-col">
+              <h3 className="landing-site-footer-col-title">Company</h3>
+              <ul className="landing-site-footer-links">
+                <li>
+                  <Link to="/about">About Us</Link>
+                </li>
+                <li>
+                  <Link to="/contact">Contact</Link>
+                </li>
+                <li>
+                  <Link to="/platform">Platform</Link>
+                </li>
+              </ul>
+            </div>
+            <div className="landing-site-footer-col">
+              <h3 className="landing-site-footer-col-title">Legal</h3>
+              <ul className="landing-site-footer-links">
+                <li>
+                  <Link to="/privacy">Privacy Policy</Link>
+                </li>
+                <li>
+                  <Link to="/disclaimer">Disclaimer</Link>
+                </li>
+              </ul>
+            </div>
+          </nav>
+        </div>
+        <div className="landing-site-footer-bottom">
+          <p className="landing-site-footer-copy">© {new Date().getFullYear()} {BRAND.name}. All rights reserved.</p>
         </div>
       </footer>
     </div>

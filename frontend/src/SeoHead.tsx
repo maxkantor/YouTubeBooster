@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 
-import { BRAND_DEFAULT_TITLE } from './config/brand';
+import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
 import { absoluteUrl, getSiteUrl } from './config/site';
 
 const DEFAULT_TITLE = BRAND_DEFAULT_TITLE;
-const DEFAULT_DESC = `Analyze any YouTube channel with AI and discover SEO gaps, weak titles, traffic leaks, and hidden growth opportunities.`;
+const DEFAULT_DESC = BRAND.seoHomeDescription;
 
 function getOrigin(): string {
   if (typeof window === 'undefined') return '';

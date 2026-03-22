@@ -11,7 +11,7 @@ export function organizationSchema(): Record<string, unknown> {
     name: BRAND.name,
     url: getSiteUrl(),
     logo: absoluteUrl('/og-image.jpg'),
-    description: BRAND.tagline,
+    description: BRAND.seoHomeDescription,
     sameAs: [] as string[]
   };
 }
@@ -22,7 +22,7 @@ export function webSiteSchema(): Record<string, unknown> {
     '@type': 'WebSite',
     name: BRAND.name,
     url: getSiteUrl(),
-    description: `Analyze any YouTube channel with AI — ${BRAND.tagline}`,
+    description: BRAND.seoHomeDescription,
     potentialAction: {
       '@type': 'SearchAction',
       target: {
@@ -47,8 +47,7 @@ export function softwareApplicationSchema(): Record<string, unknown> {
       priceCurrency: 'USD',
       availability: 'https://schema.org/InStock'
     },
-    description:
-      'AI-powered YouTube channel audit: SEO gaps, title CTR, traffic leaks, and growth opportunities.',
+    description: BRAND.seoHomeDescription,
     image: absoluteUrl('/og-image.jpg'),
     url: getSiteUrl()
   };

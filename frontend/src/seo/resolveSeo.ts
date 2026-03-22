@@ -20,8 +20,7 @@ type SolutionEntry = (typeof solutions)[number];
 type GuideEntry = (typeof guides)[number];
 type BlogEntry = (typeof blogPosts)[number];
 
-const DEFAULT_DESC =
-  'Analyze any YouTube channel with AI and discover SEO gaps, weak titles, traffic leaks, and hidden growth opportunities.';
+const DEFAULT_DESC = BRAND.seoHomeDescription;
 
 function baseGraph(): Record<string, unknown>[] {
   return [
@@ -71,10 +70,57 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
   if (path === '/') {
     return {
       title: BRAND_DEFAULT_TITLE,
-      description: DEFAULT_DESC,
+      description: BRAND.seoHomeDescription,
       canonicalPath: '/',
-      keywords: ['youtube analytics', 'youtube seo', 'channel growth', 'youtube ai'],
+      keywords: [
+        'youtube channel audit',
+        'youtube analytics',
+        'youtube seo',
+        'grow youtube views',
+        'youtube ctr',
+        'channel growth'
+      ],
       ogType: 'website',
+      jsonLd: baseGraph()
+    };
+  }
+
+  if (path === '/about') {
+    return {
+      title: `About Us – ${BRAND.name}`,
+      description: `Learn about ${BRAND.name}: AI-powered YouTube channel audits built for creators who want more views and clearer growth plans.`,
+      canonicalPath: '/about',
+      keywords: ['about youtube booster', 'youtube audit company'],
+      jsonLd: baseGraph()
+    };
+  }
+
+  if (path === '/contact') {
+    return {
+      title: `Contact – ${BRAND.name}`,
+      description: `Contact ${BRAND.name} for product questions, billing help, or partnership inquiries.`,
+      canonicalPath: '/contact',
+      keywords: ['contact youtube booster'],
+      jsonLd: baseGraph()
+    };
+  }
+
+  if (path === '/privacy') {
+    return {
+      title: `Privacy Policy – ${BRAND.name}`,
+      description: `Privacy policy for ${BRAND.name}: how we handle account data, analytics, and cookies.`,
+      canonicalPath: '/privacy',
+      keywords: ['privacy policy'],
+      jsonLd: baseGraph()
+    };
+  }
+
+  if (path === '/disclaimer') {
+    return {
+      title: `Disclaimer – ${BRAND.name}`,
+      description: `Disclaimer for ${BRAND.name} audits and analytics: limitations, third-party data, and no guarantees.`,
+      canonicalPath: '/disclaimer',
+      keywords: ['disclaimer'],
       jsonLd: baseGraph()
     };
   }

@@ -1480,6 +1480,18 @@ textarea {
   z-index: 1;
 }
 
+.landing-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: transparent;
+}
+
+.landing-main {
+  flex: 1 0 auto;
+  width: 100%;
+}
+
 .landing-header {
   position: sticky;
   top: 0;
@@ -1880,8 +1892,15 @@ textarea {
   align-items: center;
 }
 
+@media (min-width: 1280px) {
+  .landing-hero-grid {
+    gap: clamp(40px, 4vw, 56px);
+    grid-template-columns: minmax(0, 1.05fr) minmax(420px, 500px);
+  }
+}
+
 .landing-hero-content {
-  max-width: 600px;
+  max-width: min(720px, 100%);
   position: relative;
 }
 
@@ -1906,15 +1925,19 @@ textarea {
   z-index: 1;
 }
 
+.landing-heading-display {
+  text-wrap: balance;
+}
+
 .landing-hero-title-line {
   display: block;
-  font-size: clamp(2.625rem, 5vw, 4.5rem);
+  font-size: clamp(2.5rem, 2.85vw + 1.35rem, 3.85rem);
   font-weight: 900;
-  line-height: 1.02;
-  letter-spacing: -0.04em;
+  line-height: 1.06;
+  letter-spacing: -0.032em;
   color: #fafafa;
   white-space: normal;
-  max-width: 18ch;
+  max-width: min(52rem, 100%);
 }
 
 .landing-hero-title-line:first-child {
@@ -1930,11 +1953,11 @@ textarea {
 
 .landing-hero-sub {
   margin: 0 0 20px;
-  font-size: clamp(1rem, 1.1vw, 1.08rem);
-  line-height: 1.5;
+  font-size: clamp(1.02rem, 0.35vw + 0.95rem, 1.12rem);
+  line-height: 1.55;
   font-weight: 400;
-  color: #94a3b8;
-  max-width: 32rem;
+  color: #a8b8cc;
+  max-width: 38rem;
   letter-spacing: 0.01em;
   position: relative;
   z-index: 1;
@@ -2397,16 +2420,19 @@ textarea {
 
 .landing-section-title {
   margin: 0 0 12px;
-  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-size: clamp(1.75rem, 2.4vw + 0.85rem, 2.2rem);
   font-weight: 700;
   color: #f8fafc;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.022em;
+  line-height: 1.1;
+  text-wrap: balance;
+  max-width: 52rem;
 }
 
 .landing-section-sub {
   margin: 0 0 28px;
   font-size: 1.05rem;
-  color: #94a3b8;
+  color: #a1b4c9;
   line-height: 1.6;
 }
 
@@ -2954,27 +2980,37 @@ textarea {
 
 /* Pricing */
 .landing-pricing-section {
-  padding: var(--section-pad-y) var(--app-gutter);
+  padding: 44px var(--app-gutter) 48px;
+}
+
+.landing-pricing-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.landing-pricing-inner .landing-section-eyebrow {
+  margin-bottom: 8px;
 }
 
 .landing-pricing-headline {
-  max-width: 720px;
+  max-width: 56rem;
   margin-left: auto;
   margin-right: auto;
 }
 
 .landing-pricing-lead {
-  max-width: 640px;
-  margin: 12px auto 0;
+  max-width: 38rem;
+  margin: 10px auto 0;
   text-align: center;
-  font-size: 1.05rem;
-  line-height: 1.55;
-  color: #94a3b8;
+  font-size: 1.02rem;
+  line-height: 1.5;
+  color: #a1b4c9;
 }
 
 .landing-pricing-card {
   max-width: 520px;
-  margin: 28px auto 0;
+  margin: 20px auto 0;
   padding: 40px 44px;
   border-radius: 24px;
   background: var(--glass-bg);
@@ -3144,6 +3180,12 @@ textarea {
   color: #f8fafc;
 }
 
+.landing-faq-question:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.85);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
 .landing-faq-item.open .landing-faq-question::after {
   content: "−";
   font-size: 1.25rem;
@@ -3176,24 +3218,44 @@ textarea {
 
 /* Final CTA */
 .landing-cta-section {
-  padding: 100px 24px;
-  background: linear-gradient(180deg, rgba(79, 70, 229, 0.15) 0%, rgba(20, 27, 52, 0.5) 100%);
+  position: relative;
+  padding: 48px 24px 44px;
+  background: linear-gradient(180deg, rgba(79, 70, 229, 0.12) 0%, rgba(12, 14, 24, 0.92) 100%);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   text-align: center;
 }
 
+.landing-cta-section::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(5, 6, 12, 0.85));
+}
+
+.landing-cta-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 44rem;
+  margin: 0 auto;
+}
+
 .landing-cta-title {
-  margin: 0 0 16px;
-  font-size: clamp(2rem, 4vw, 2.75rem);
+  margin: 0 0 12px;
+  font-size: clamp(1.85rem, 2.5vw + 1rem, 2.65rem);
   font-weight: 700;
   color: #f8fafc;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.028em;
+  line-height: 1.08;
 }
 
 .landing-cta-sub {
-  margin: 0 0 32px;
-  font-size: 1.2rem;
-  color: #94a3b8;
+  margin: 0 0 22px;
+  font-size: 1.08rem;
+  color: #a1b4c9;
 }
 
 .landing-cta-btn {
@@ -3282,6 +3344,189 @@ textarea {
   margin-top: 8px;
   font-size: 0.75rem;
   opacity: 0.8;
+}
+
+/* Landing site footer — full marketing footer */
+.landing-site-footer {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding: 0 0 max(28px, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(8, 10, 18, 0.4) 0%, rgba(5, 6, 12, 0.98) 40%, #05060c 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-site-footer-divider {
+  height: 1px;
+  max-width: min(1200px, calc(100% - 48px));
+  margin: 0 auto;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.35), rgba(59, 130, 246, 0.2), transparent);
+  opacity: 0.9;
+}
+
+.landing-site-footer-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 56px);
+  align-items: start;
+  padding: 40px 24px 28px;
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+}
+
+.landing-site-footer-brand {
+  min-width: 0;
+}
+
+.landing-site-footer-logo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.12em;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-decoration: none !important;
+  white-space: nowrap;
+}
+
+.landing-site-footer-tagline {
+  margin: 12px 0 0;
+  max-width: 22rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+
+.landing-site-footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(28px, 6vw, 64px);
+  justify-content: flex-end;
+}
+
+.landing-site-footer-col-title {
+  margin: 0 0 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.landing-site-footer-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.landing-site-footer-links a {
+  color: #cbd5e1;
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 6px;
+  outline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.landing-site-footer-links a:hover {
+  color: #f8fafc;
+}
+
+.landing-site-footer-links a:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.8);
+}
+
+.landing-site-footer-bottom {
+  padding: 0 24px 8px;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+}
+
+.landing-site-footer-copy {
+  margin: 0;
+  padding: 18px 0 0;
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 0.65);
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .landing-site-footer-inner {
+    grid-template-columns: 1fr;
+    padding-top: 32px;
+  }
+
+  .landing-site-footer-nav {
+    justify-content: flex-start;
+  }
+}
+
+/* Marketing legal / static pages */
+.marketing-static {
+  padding-bottom: 48px;
+}
+
+.marketing-static-surface h1 {
+  margin: 0 0 12px;
+  font-size: clamp(1.65rem, 2.5vw, 2.1rem);
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.02em;
+}
+
+.marketing-static-lead {
+  font-size: 1.02rem;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  color: #a1b4c9;
+}
+
+.marketing-static-body {
+  line-height: 1.7;
+  color: #cbd5e1;
+}
+.marketing-static-body p {
+  margin: 0 0 1rem;
+}
+.marketing-static-body a {
+  color: #a5b4fc;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.marketing-static-body a:hover {
+  color: #c4b5fd;
+}
+
+.marketing-static-h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.75rem;
+  color: #e2e8f0;
+}
+
+.marketing-static-eyebrow {
+  margin: 0 0 1rem;
+}
+
+.marketing-static-back {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 6px;
+  outline-offset: 3px;
+}
+
+.marketing-static-back:hover {
+  color: #e2e8f0;
+}
+
+.marketing-static-back:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.8);
 }
 
 .landing-command-input {
