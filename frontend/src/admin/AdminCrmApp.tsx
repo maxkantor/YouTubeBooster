@@ -1,15 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { adminApi } from '../lib/api';
-import type {
-  AdminDemoAuditRow,
-  AdminPurchaseRow,
-  AdminSummary,
-  AdminSupportTicketRow,
-  AdminUserRow,
-  AdminSessionStatus
-} from '../types';
-import './admin-crm.css';
+import type { AdminDemoAuditRow, AdminPurchaseRow, AdminSummary, AdminSupportTicketRow, AdminUserRow } from '../types';
+import { useAdminCrm } from './useAdminCrm';
 
 const NAV: { to: string; end?: boolean; label: string }[] = [
   { to: '', end: true, label: 'Dashboard' },
@@ -33,17 +26,8 @@ function formatDt(iso: string) {
   }
 }
 
-function AdminShell({
-  title,
-  adminSession,
-  onSignOut,
-  children
-}: {
-  title: string;
-  adminSession: AdminSessionStatus;
-  onSignOut: () => void;
-  children: React.ReactNode;
-}) {
+function AdminShell({ title, children }: { title: string; children: React.ReactNode }) {
+  const { adminSession, onSignOut } = useAdminCrm();
   return (
     <div className="admin-crm-root">
       <aside className="admin-crm-sidebar">
@@ -77,19 +61,9 @@ function AdminShell({
   );
 }
 
-function PlaceholderPage({
-  title,
-  body,
-  adminSession,
-  onSignOut
-}: {
-  title: string;
-  body: string;
-  adminSession: AdminSessionStatus;
-  onSignOut: () => void;
-}) {
+function PlaceholderPage({ title, body }: { title: string; body: string }) {
   return (
-    <AdminShell title={title} adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title={title}>
       <div className="admin-crm-panel">
         <h2>{title}</h2>
         <p style={{ color: '#94a3b8', lineHeight: 1.6, margin: 0 }}>{body}</p>
@@ -98,7 +72,7 @@ function PlaceholderPage({
   );
 }
 
-function AdminHomePage({ adminSession, onSignOut }: { adminSession: AdminSessionStatus; onSignOut: () => void }) {
+export function AdminHomePage() {
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [error, setError] = useState('');
 
@@ -118,7 +92,7 @@ function AdminHomePage({ adminSession, onSignOut }: { adminSession: AdminSession
   }, []);
 
   return (
-    <AdminShell title="Dashboard" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="Dashboard">
       {error && <p className="admin-crm-error">{error}</p>}
       {summary && (
         <>
@@ -181,7 +155,7 @@ function AdminHomePage({ adminSession, onSignOut }: { adminSession: AdminSession
   );
 }
 
-function UsersPage({ adminSession, onSignOut }: { adminSession: AdminSessionStatus; onSignOut: () => void }) {
+export function UsersPage() {
   const [items, setItems] = useState<AdminUserRow[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -222,7 +196,7 @@ function UsersPage({ adminSession, onSignOut }: { adminSession: AdminSessionStat
   }, []);
 
   return (
-    <AdminShell title="Users" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="Users">
       {error && <p className="admin-crm-error">{error}</p>}
       {loading ? (
         <p style={{ color: '#64748b' }}>Loading users…</p>
@@ -283,7 +257,7 @@ function UsersPage({ adminSession, onSignOut }: { adminSession: AdminSessionStat
   );
 }
 
-function UserDetailPage({ adminSession, onSignOut }: { adminSession: AdminSessionStatus; onSignOut: () => void }) {
+export function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<Awaited<ReturnType<typeof adminApi.crmUser>> | null>(null);
@@ -311,7 +285,7 @@ function UserDetailPage({ adminSession, onSignOut }: { adminSession: AdminSessio
   }, [id]);
 
   return (
-    <AdminShell title="User detail" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="User detail">
       <button type="button" className="admin-crm-btn" style={{ marginBottom: 16 }} onClick={() => navigate('/admin/users')}>
         ← Users
       </button>
@@ -381,7 +355,7 @@ function UserDetailPage({ adminSession, onSignOut }: { adminSession: AdminSessio
   );
 }
 
-function PaymentsPage({ adminSession, onSignOut }: { adminSession: AdminSessionStatus; onSignOut: () => void }) {
+export function PaymentsPage() {
   const [items, setItems] = useState<AdminPurchaseRow[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -422,7 +396,7 @@ function PaymentsPage({ adminSession, onSignOut }: { adminSession: AdminSessionS
   }, []);
 
   return (
-    <AdminShell title="Payments" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="Payments">
       {error && <p className="admin-crm-error">{error}</p>}
       {loading ? (
         <p style={{ color: '#64748b' }}>Loading…</p>
@@ -479,7 +453,7 @@ function PaymentsPage({ adminSession, onSignOut }: { adminSession: AdminSessionS
   );
 }
 
-function AuditsPage({ adminSession, onSignOut }: { adminSession: AdminSessionStatus; onSignOut: () => void }) {
+export function AuditsPage() {
   const [items, setItems] = useState<AdminDemoAuditRow[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -520,7 +494,7 @@ function AuditsPage({ adminSession, onSignOut }: { adminSession: AdminSessionSta
   }, []);
 
   return (
-    <AdminShell title="Demo audits" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="Demo audits">
       {error && <p className="admin-crm-error">{error}</p>}
       {loading ? (
         <p style={{ color: '#64748b' }}>Loading…</p>
@@ -573,7 +547,7 @@ function AuditsPage({ adminSession, onSignOut }: { adminSession: AdminSessionSta
   );
 }
 
-function ContactListPage({ adminSession, onSignOut }: { adminSession: AdminSessionStatus; onSignOut: () => void }) {
+export function ContactListPage() {
   const [items, setItems] = useState<AdminSupportTicketRow[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -614,7 +588,7 @@ function ContactListPage({ adminSession, onSignOut }: { adminSession: AdminSessi
   }, []);
 
   return (
-    <AdminShell title="Support inbox" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="Support inbox">
       {error && <p className="admin-crm-error">{error}</p>}
       {loading ? (
         <p style={{ color: '#64748b' }}>Loading…</p>
@@ -669,7 +643,7 @@ function ContactListPage({ adminSession, onSignOut }: { adminSession: AdminSessi
   );
 }
 
-function ContactTicketPage({ adminSession, onSignOut }: { adminSession: AdminSessionStatus; onSignOut: () => void }) {
+export function ContactTicketPage() {
   const { ticketId } = useParams<{ ticketId: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<Awaited<ReturnType<typeof adminApi.crmSupportTicket>> | null>(null);
@@ -720,7 +694,7 @@ function ContactTicketPage({ adminSession, onSignOut }: { adminSession: AdminSes
   }
 
   return (
-    <AdminShell title="Ticket" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="Ticket">
       <button type="button" className="admin-crm-btn" style={{ marginBottom: 16 }} onClick={() => navigate('/admin/contact')}>
         ← Inbox
       </button>
@@ -766,13 +740,7 @@ function ContactTicketPage({ adminSession, onSignOut }: { adminSession: AdminSes
   );
 }
 
-function SystemLogsPage({
-  adminSession,
-  onSignOut
-}: {
-  adminSession: AdminSessionStatus;
-  onSignOut: () => void;
-}) {
+export function SystemLogsPage() {
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -791,7 +759,7 @@ function SystemLogsPage({
   }, []);
 
   return (
-    <AdminShell title="System logs" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="System logs">
       {error && <p className="admin-crm-error">{error}</p>}
       <p style={{ color: '#94a3b8', marginBottom: 16 }}>
         Recent activity from the admin summary feed. Dedicated audit log API can be added later.
@@ -809,7 +777,7 @@ function SystemLogsPage({
   );
 }
 
-function AnalyticsPage({ adminSession, onSignOut }: { adminSession: AdminSessionStatus; onSignOut: () => void }) {
+export function AnalyticsPage() {
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   useEffect(() => {
     let c = false;
@@ -822,7 +790,7 @@ function AnalyticsPage({ adminSession, onSignOut }: { adminSession: AdminSession
   }, []);
 
   return (
-    <AdminShell title="Analytics" adminSession={adminSession} onSignOut={onSignOut}>
+    <AdminShell title="Analytics">
       <p style={{ color: '#94a3b8', marginBottom: 20 }}>High-level funnel metrics from the same source as the dashboard.</p>
       {summary && (
         <div className="admin-crm-metric-grid">
@@ -848,76 +816,38 @@ function AnalyticsPage({ adminSession, onSignOut }: { adminSession: AdminSession
   );
 }
 
-export default function AdminCrmApp({
-  adminSession,
-  refreshAdminSession
-}: {
-  adminSession: AdminSessionStatus;
-  refreshAdminSession: () => Promise<AdminSessionStatus>;
-}) {
-  const navigate = useNavigate();
-
-  async function onSignOut() {
-    await adminApi.logout();
-    await refreshAdminSession();
-    navigate('/admin/login', { replace: true });
-  }
-
+export function PlaceholderSubscriptionsPage() {
   return (
-    <Routes>
-      <Route path="/admin/users" element={<UsersPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route path="/admin/user/:id" element={<UserDetailPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route path="/admin/payments" element={<PaymentsPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route
-        path="/admin/subscriptions"
-        element={
-          <PlaceholderPage
-            title="Subscriptions"
-            body="One-time Stripe purchases appear under Payments. Recurring subscription listing can be wired when billing supports it."
-            adminSession={adminSession}
-            onSignOut={onSignOut}
-          />
-        }
-      />
-      <Route path="/admin/audits" element={<AuditsPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route
-        path="/admin/demo-unlocks"
-        element={
-          <PlaceholderPage
-            title="Demo unlocks"
-            body="Demo runs and gated unlocks are listed under Audits. Grant/revoke APIs can be exposed here next."
-            adminSession={adminSession}
-            onSignOut={onSignOut}
-          />
-        }
-      />
-      <Route path="/admin/contact/:ticketId" element={<ContactTicketPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route path="/admin/contact" element={<ContactListPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route
-        path="/admin/email"
-        element={
-          <PlaceholderPage
-            title="Email (SES)"
-            body="Outbound support replies are sent from the ticket thread via Amazon SES. Configure ses/from-email and admin credentials in SSM."
-            adminSession={adminSession}
-            onSignOut={onSignOut}
-          />
-        }
-      />
-      <Route path="/admin/analytics" element={<AnalyticsPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route
-        path="/admin/settings"
-        element={
-          <PlaceholderPage
-            title="Settings"
-            body="SSM-backed secrets are not shown here. Use AWS Console / Terraform for admin/email, password format, and SES from-address."
-            adminSession={adminSession}
-            onSignOut={onSignOut}
-          />
-        }
-      />
-      <Route path="/admin/system-logs" element={<SystemLogsPage adminSession={adminSession} onSignOut={onSignOut} />} />
-      <Route path="/admin" element={<AdminHomePage adminSession={adminSession} onSignOut={onSignOut} />} />
-    </Routes>
+    <PlaceholderPage
+      title="Subscriptions"
+      body="One-time Stripe purchases appear under Payments. Recurring subscription listing can be wired when billing supports it."
+    />
+  );
+}
+
+export function PlaceholderDemoUnlocksPage() {
+  return (
+    <PlaceholderPage
+      title="Demo unlocks"
+      body="Demo runs and gated unlocks are listed under Audits. Grant/revoke APIs can be exposed here next."
+    />
+  );
+}
+
+export function PlaceholderEmailPage() {
+  return (
+    <PlaceholderPage
+      title="Email (SES)"
+      body="Outbound support replies are sent from the ticket thread via Amazon SES. Configure ses/from-email and admin credentials in SSM."
+    />
+  );
+}
+
+export function PlaceholderSettingsPage() {
+  return (
+    <PlaceholderPage
+      title="Settings"
+      body="SSM-backed secrets are not shown here. Use AWS Console / Terraform for admin/email, password format, and SES from-address."
+    />
   );
 }

@@ -23,7 +23,23 @@ const UnifiedDashboard = React.lazy(() => import('./UnifiedDashboard').then((m) 
 const ChannelAnalyzeDashboard = React.lazy(() =>
   import('./ChannelAnalyzeDashboard').then((m) => ({ default: m.ChannelAnalyzeDashboard }))
 );
-const AdminCrmApp = React.lazy(() => import('./admin/AdminCrmApp'));
+import { AdminSessionProvider } from './admin/AdminSessionContext';
+import { AdminCrmGate } from './admin/AdminCrmGate';
+import {
+  AdminHomePage,
+  UsersPage,
+  UserDetailPage,
+  PaymentsPage,
+  PlaceholderSubscriptionsPage,
+  PlaceholderDemoUnlocksPage,
+  AuditsPage,
+  ContactTicketPage,
+  ContactListPage,
+  PlaceholderEmailPage,
+  AnalyticsPage,
+  PlaceholderSettingsPage,
+  SystemLogsPage
+} from './admin/crmPages.lazy';
 const AuditHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.AuditHubPage })));
 const SolutionsHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.SolutionsHubPage })));
 const GuidesHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.GuidesHubPage })));
@@ -73,26 +89,6 @@ function UserRoute({
   if (!userSession.authenticated || !userSession.user) {
     const returnTo = `${location.pathname}${location.search}`;
     return <Navigate to={`/auth/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
-  }
-
-  return <>{children}</>;
-}
-
-function AdminRoute({
-  adminSession,
-  loading,
-  children
-}: {
-  adminSession: AdminSessionStatus;
-  loading: boolean;
-  children: ReactNode;
-}) {
-  if (loading) {
-    return <LoadingSurface title="Checking admin session" detail="Loading protected CRM access." />;
-  }
-
-  if (!adminSession.authenticated) {
-    return <Navigate to="/admin/login" replace />;
   }
 
   return <>{children}</>;
@@ -620,24 +616,8 @@ function AppInner() {
     };
   }
 
-  /** Render outside lazy-route Suspense so /admin/login never waits on unrelated chunks. */
-  const isAdminLoginPath = /^\/admin\/login\/?$/i.test(location.pathname);
-
-  /** Must cover both `/admin` and `/admin/*` — some RR builds do not match bare `/admin` to `path="/admin/*"` only, → no route → black screen. */
-  const adminCrmKey = adminSession.authenticated ? `crm:${adminSession.email ?? 'ok'}` : 'crm:guest';
-  const adminCrmShell = (
-    <AdminRoute adminSession={adminSession} loading={sessionLoading}>
-      <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
-        <AdminCrmApp
-          key={adminCrmKey}
-          adminSession={adminSession}
-          refreshAdminSession={refreshAdminSession}
-        />
-      </React.Suspense>
-    </AdminRoute>
-  );
-
   return (
+    <AdminSessionProvider value={{ adminSession, refreshAdminSession, sessionLoading }}>
     <>
       <SeoHead
         title={seoResolved.title}
@@ -710,22 +690,38 @@ function AppInner() {
           </div>
         </nav>
       )}
-      {isAdminLoginPath ? (
-        <AdminLoginPage
-          adminSession={adminSession}
-          sessionLoading={sessionLoading}
-          refreshAdminSession={refreshAdminSession}
-        />
-      ) : (
       <Suspense fallback={
         <div className="page narrow-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '40vh' }}>
           <p style={{ opacity: 0.8 }}>Loading…</p>
         </div>
       }>
       <Routes>
+        <Route
+          path="/admin/login"
+          element={
+            <AdminLoginPage
+              adminSession={adminSession}
+              sessionLoading={sessionLoading}
+              refreshAdminSession={refreshAdminSession}
+            />
+          }
+        />
         <Route path="/admin/" element={<Navigate to="/admin" replace />} />
-        <Route path="/admin" element={adminCrmShell} />
-        <Route path="/admin/*" element={adminCrmShell} />
+        <Route path="/admin" element={<AdminCrmGate />}>
+          <Route index element={<AdminHomePage />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="user/:id" element={<UserDetailPage />} />
+          <Route path="payments" element={<PaymentsPage />} />
+          <Route path="subscriptions" element={<PlaceholderSubscriptionsPage />} />
+          <Route path="audits" element={<AuditsPage />} />
+          <Route path="demo-unlocks" element={<PlaceholderDemoUnlocksPage />} />
+          <Route path="contact/:ticketId" element={<ContactTicketPage />} />
+          <Route path="contact" element={<ContactListPage />} />
+          <Route path="email" element={<PlaceholderEmailPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="settings" element={<PlaceholderSettingsPage />} />
+          <Route path="system-logs" element={<SystemLogsPage />} />
+        </Route>
         <Route path="/" element={<LandingPage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/audit" element={<AuditHubPage />} />
@@ -794,7 +790,6 @@ function AppInner() {
         />
       </Routes>
       </Suspense>
-      )}
       {showGlobalNav && (
         <footer className="global-footer">
           <div className="global-footer-content">
@@ -813,6 +808,7 @@ function AppInner() {
         </footer>
       )}
     </>
+    </AdminSessionProvider>
   );
 }
 
