@@ -1,4 +1,5 @@
 import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
@@ -461,11 +462,16 @@ function AppInner() {
   const refreshAdminSession = useCallback(async () => {
     try {
       const session = await adminApi.getSession();
-      setAdminSession(session);
+      // Ensure parent re-renders with new admin cookie before navigate('/admin') runs (otherwise AdminRoute still sees authenticated:false → blank or bounce).
+      flushSync(() => {
+        setAdminSession(session);
+      });
       return session;
     } catch {
       const fallback = { authenticated: false, email: null };
-      setAdminSession(fallback);
+      flushSync(() => {
+        setAdminSession(fallback);
+      });
       return fallback;
     }
   }, []);
@@ -618,10 +624,15 @@ function AppInner() {
   const isAdminLoginPath = /^\/admin\/login\/?$/i.test(location.pathname);
 
   /** Must cover both `/admin` and `/admin/*` — some RR builds do not match bare `/admin` to `path="/admin/*"` only, → no route → black screen. */
+  const adminCrmKey = adminSession.authenticated ? `crm:${adminSession.email ?? 'ok'}` : 'crm:guest';
   const adminCrmShell = (
     <AdminRoute adminSession={adminSession} loading={sessionLoading}>
       <React.Suspense fallback={<LoadingSurface title="Loading admin" detail="Opening CRM…" />}>
-        <AdminCrmApp adminSession={adminSession} refreshAdminSession={refreshAdminSession} />
+        <AdminCrmApp
+          key={adminCrmKey}
+          adminSession={adminSession}
+          refreshAdminSession={refreshAdminSession}
+        />
       </React.Suspense>
     </AdminRoute>
   );
