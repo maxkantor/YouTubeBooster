@@ -82,7 +82,10 @@ public sealed class StripeCheckoutService : ICheckoutService
                 PaymentId: mockPurchaseId,
                 Notes: "mock_checkout",
                 CreatedAt: DateTimeOffset.UtcNow,
-                UpdatedAt: DateTimeOffset.UtcNow
+                UpdatedAt: DateTimeOffset.UtcNow,
+                GrantedBy: null,
+                GrantedReason: null,
+                RevokedAt: null
             );
             await _appDataStore.SaveEntitlementAsync(mockEntitlement, cancellationToken);
 
@@ -352,7 +355,9 @@ public sealed class StripeCheckoutService : ICheckoutService
                 BillingName: session.CustomerDetails?.Name,
                 ReceiptUrl: null,
                 CreatedAt: DateTimeOffset.UtcNow,
-                UpdatedAt: DateTimeOffset.UtcNow
+                UpdatedAt: DateTimeOffset.UtcNow,
+                Mode: session.Livemode ? "live" : "test",
+                PaidAt: DateTimeOffset.UtcNow
             );
             await _appDataStore.SavePaymentAsync(payment, cancellationToken);
         }
@@ -381,7 +386,10 @@ public sealed class StripeCheckoutService : ICheckoutService
             PaymentId: session.Id,
             Notes: stripeEmail,
             CreatedAt: DateTimeOffset.UtcNow,
-            UpdatedAt: DateTimeOffset.UtcNow
+            UpdatedAt: DateTimeOffset.UtcNow,
+            GrantedBy: null,
+            GrantedReason: null,
+            RevokedAt: null
         );
         await _appDataStore.SaveEntitlementAsync(entitlement, cancellationToken);
     }

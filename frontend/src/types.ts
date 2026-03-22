@@ -170,6 +170,12 @@ export type AdminUserRow = {
   accessStatus: string;
   createdAt: string;
   updatedAt: string;
+  emailVerified: boolean;
+  userStatus: string;
+  lastLoginAt: string | null;
+  tags: string | null;
+  entitlementsSummary: string;
+  adminNotes: string | null;
 };
 
 export type AdminOnboardingDetail = {
@@ -201,11 +207,54 @@ export type AdminPurchaseRow = {
   purchasedAt: string;
 };
 
+export type AdminPaymentRecord = {
+  paymentId: string;
+  userId: string;
+  accountEmail: string;
+  stripeCustomerId: string | null;
+  stripeCheckoutSessionId: string;
+  stripePaymentIntentId: string | null;
+  stripeSubscriptionId: string | null;
+  stripeEmail: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  planCode: string;
+  paymentMethodBrand: string | null;
+  paymentMethodLast4: string | null;
+  billingCountry: string | null;
+  billingName: string | null;
+  receiptUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  mode: string;
+  paidAt: string | null;
+};
+
+export type AdminEntitlementRecord = {
+  entitlementId: string;
+  userId: string;
+  accessType: string;
+  status: string;
+  source: string;
+  grantedAt: string;
+  expiresAt: string | null;
+  paymentId: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  grantedBy: string | null;
+  grantedReason: string | null;
+  revokedAt: string | null;
+};
+
 export type AdminUserDetailResponse = {
   user: AdminUserRow;
   onboarding: AdminOnboardingDetail | null;
   youTubeSettings: AdminOnboardingDetail['youTubeSettings'];
   purchases: AdminPurchaseRow[];
+  stripePayments: AdminPaymentRecord[];
+  entitlements: AdminEntitlementRecord[];
   recentEvents: ActivityFeedItem[];
 };
 
@@ -218,6 +267,8 @@ export type AdminSupportTicketRow = {
   channelUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  priority: string | null;
+  linkedUserId: string | null;
 };
 
 export type AdminSupportMessage = {
@@ -243,6 +294,62 @@ export type AdminDemoAuditRow = {
   healthScore: number;
   email: string | null;
   createdAt: string;
+  auditType: string;
+  status: string;
+  visibility: string;
+  linkedUserId: string | null;
+};
+
+export type AdminOperationalKpis = {
+  totalUsers: number;
+  activeEntitledUsers: number;
+  totalDemos: number;
+  paidLiveOrders: number;
+  revenueLiveUsd: number;
+  demoToPaidConversionPct: number;
+  failedOrUnpaidCheckouts: number;
+  openSupportTickets: number;
+  unmatchedPayments: number;
+};
+
+export type AdminOrderRow = {
+  paymentId: string;
+  stripeCheckoutSessionId: string;
+  userId: string | null;
+  accountEmail: string;
+  stripeEmail: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  mode: string;
+  planCode: string;
+  classification: string;
+  createdAt: string;
+  paidAt: string | null;
+};
+
+export type AdminAttentionItem = {
+  code: string;
+  message: string;
+  relatedId: string | null;
+};
+
+export type AdminOperationalDashboard = {
+  range: string;
+  kpis: AdminOperationalKpis;
+  recentActivity: ActivityFeedItem[];
+  ordersNeedingAttention: AdminOrderRow[];
+  supportQueue: AdminSupportTicketRow[];
+  recentlyEntitledUsers: AdminUserRow[];
+  recentAuditIssues: AdminDemoAuditRow[];
+  attentionRequired: AdminAttentionItem[];
+};
+
+export type AdminActivityEventRow = {
+  eventName: string;
+  scope: string;
+  createdAt: string;
+  metadata: Record<string, string | null | undefined>;
 };
 
 export type CheckoutSession = {

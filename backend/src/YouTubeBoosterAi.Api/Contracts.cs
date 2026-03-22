@@ -156,7 +156,13 @@ public sealed record AdminUserDto(
     bool OnboardingCompleted,
     string AccessStatus,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    bool EmailVerified,
+    string UserStatus,
+    DateTimeOffset? LastLoginAt,
+    string? Tags,
+    string EntitlementsSummary,
+    string? AdminNotes
 );
 
 public sealed record AdminUserDetailResponse(
@@ -164,6 +170,8 @@ public sealed record AdminUserDetailResponse(
     UserOnboardingStateResponse? Onboarding,
     UserYouTubeSettingsResponse? YouTubeSettings,
     IReadOnlyList<PurchaseRecord> Purchases,
+    IReadOnlyList<PaymentRecord> StripePayments,
+    IReadOnlyList<EntitlementRecord> Entitlements,
     IReadOnlyList<ActivityFeedItem> RecentEvents
 );
 
@@ -175,7 +183,9 @@ public sealed record AdminSupportTicketDto(
     string ProductArea,
     string? ChannelUrl,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    string? Priority,
+    string? LinkedUserId
 );
 
 public sealed record AdminSupportTicketDetailResponse(
@@ -202,8 +212,81 @@ public sealed record AdminDemoAuditDto(
     string ChannelHandle,
     int HealthScore,
     string? Email,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    string AuditType,
+    string Status,
+    string Visibility,
+    string? LinkedUserId
 );
+
+public sealed record AdminOperationalDashboardResponse(
+    string Range,
+    AdminOperationalKpis Kpis,
+    IReadOnlyList<ActivityFeedItem> RecentActivity,
+    IReadOnlyList<AdminOrderRowDto> OrdersNeedingAttention,
+    IReadOnlyList<AdminSupportTicketDto> SupportQueue,
+    IReadOnlyList<AdminUserDto> RecentlyEntitledUsers,
+    IReadOnlyList<AdminDemoAuditDto> RecentAuditIssues,
+    IReadOnlyList<AdminAttentionItemDto> AttentionRequired
+);
+
+public sealed record AdminOperationalKpis(
+    int TotalUsers,
+    int ActiveEntitledUsers,
+    int TotalDemos,
+    int PaidLiveOrders,
+    decimal RevenueLiveUsd,
+    double DemoToPaidConversionPct,
+    int FailedOrUnpaidCheckouts,
+    int OpenSupportTickets,
+    int UnmatchedPayments
+);
+
+public sealed record AdminOrderRowDto(
+    string PaymentId,
+    string StripeCheckoutSessionId,
+    string? UserId,
+    string AccountEmail,
+    string? StripeEmail,
+    decimal Amount,
+    string Currency,
+    string Status,
+    string Mode,
+    string PlanCode,
+    string Classification,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? PaidAt
+);
+
+public sealed record AdminAttentionItemDto(string Code, string Message, string? RelatedId);
+
+public sealed record AdminActivityEventDto(
+    string EventName,
+    string Scope,
+    DateTimeOffset CreatedAt,
+    Dictionary<string, string?> Metadata
+);
+
+public sealed record AdminUserPatchRequest(
+    string? UserStatus,
+    string? AdminNotes,
+    string? Tags
+);
+
+public sealed record AdminGrantEntitlementRequest(
+    string AccessType,
+    string? Reason,
+    DateTimeOffset? ExpiresAt
+);
+
+public sealed record AdminSupportTicketPatchRequest(
+    string? Status,
+    string? Priority
+);
+
+public sealed record RevokeEntitlementBody(string? Reason);
+
+public sealed record LinkOrderBody(string StripeCheckoutSessionId, string UserId);
 
 public sealed record OgImageRequest(string Title, string Subtitle, string Theme, string? ShareId);
 

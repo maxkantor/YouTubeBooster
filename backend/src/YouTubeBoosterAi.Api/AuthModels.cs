@@ -12,7 +12,11 @@ public sealed record UserAccount(
     string? GrowthGoal,
     DateTimeOffset? LastLoginAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    string UserStatus = "active",
+    string? AdminNotes = null,
+    string? Tags = null,
+    DateTimeOffset? LastSeenAt = null
 );
 
 public sealed record EntitlementRecord(
@@ -26,7 +30,10 @@ public sealed record EntitlementRecord(
     string? PaymentId,
     string? Notes,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    string? GrantedBy = null,
+    string? GrantedReason = null,
+    DateTimeOffset? RevokedAt = null
 );
 
 public sealed record PaymentRecord(
@@ -48,7 +55,9 @@ public sealed record PaymentRecord(
     string? BillingName,
     string? ReceiptUrl,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    string Mode = "live",
+    DateTimeOffset? PaidAt = null
 );
 
 public sealed record MagicLinkTokenRecord(

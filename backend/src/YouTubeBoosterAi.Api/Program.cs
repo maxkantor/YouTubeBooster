@@ -798,6 +798,89 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
     return Results.Ok(new { ok = true });
 });
 
+adminProtectedApi.MapGet("/crm/dashboard", async (string? range, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.GetOperationalDashboardAsync(string.IsNullOrWhiteSpace(range) ? "30d" : range!, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapGet("/crm/orders", async (int? limit, string? cursor, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.ListPaymentOrdersAsync(limit ?? 50, cursor, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapGet("/crm/activity", async (int? limit, string? cursor, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.ListActivityEventsAsync(limit ?? 100, cursor, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapPatch("/crm/users/{userId}", async (
+    string userId,
+    AdminUserPatchRequest request,
+    HttpContext httpContext,
+    IAppDataStore appDataStore,
+    CancellationToken cancellationToken) =>
+{
+    var admin = httpContext.Items["authenticatedAdmin"] as AdminSessionRecord
+                ?? throw new InvalidOperationException("admin");
+    await appDataStore.UpdateUserAdminAsync(userId, request, admin.Email, cancellationToken);
+    return Results.Ok(new { ok = true });
+});
+
+adminProtectedApi.MapPost("/crm/users/{userId}/entitlements", async (
+    string userId,
+    AdminGrantEntitlementRequest request,
+    HttpContext httpContext,
+    IAppDataStore appDataStore,
+    CancellationToken cancellationToken) =>
+{
+    var admin = httpContext.Items["authenticatedAdmin"] as AdminSessionRecord
+                ?? throw new InvalidOperationException("admin");
+    await appDataStore.GrantEntitlementAdminAsync(userId, request, admin.Email, cancellationToken);
+    return Results.Ok(new { ok = true });
+});
+
+adminProtectedApi.MapPost("/crm/users/{userId}/entitlements/{entitlementId}/revoke", async (
+    string userId,
+    string entitlementId,
+    HttpContext httpContext,
+    IAppDataStore appDataStore,
+    CancellationToken cancellationToken,
+    RevokeEntitlementBody? body) =>
+{
+    var admin = httpContext.Items["authenticatedAdmin"] as AdminSessionRecord
+                ?? throw new InvalidOperationException("admin");
+    await appDataStore.RevokeEntitlementAdminAsync(userId, entitlementId, body?.Reason ?? "revoked", admin.Email, cancellationToken);
+    return Results.Ok(new { ok = true });
+});
+
+adminProtectedApi.MapPost("/crm/orders/link", async (
+    HttpContext httpContext,
+    IAppDataStore appDataStore,
+    CancellationToken cancellationToken,
+    LinkOrderBody body) =>
+{
+    var admin = httpContext.Items["authenticatedAdmin"] as AdminSessionRecord
+                ?? throw new InvalidOperationException("admin");
+    await appDataStore.LinkPaymentToUserAsync(body.StripeCheckoutSessionId, body.UserId, admin.Email, cancellationToken);
+    return Results.Ok(new { ok = true });
+});
+
+adminProtectedApi.MapPatch("/crm/support/tickets/{ticketId}", async (
+    string ticketId,
+    AdminSupportTicketPatchRequest request,
+    HttpContext httpContext,
+    IAppDataStore appDataStore,
+    CancellationToken cancellationToken) =>
+{
+    var admin = httpContext.Items["authenticatedAdmin"] as AdminSessionRecord
+                ?? throw new InvalidOperationException("admin");
+    await appDataStore.UpdateSupportTicketStatusAsync(ticketId, request, admin.Email, cancellationToken);
+    return Results.Ok(new { ok = true });
+});
+
 var ogApi = app.MapGroup("/api/og");
 ogApi.MapPost("/render", (OgImageRequest request) =>
 {

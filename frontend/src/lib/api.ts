@@ -1,6 +1,9 @@
 import type {
+  AdminActivityEventRow,
   AdminDemoAuditRow,
   AdminListResponse,
+  AdminOperationalDashboard,
+  AdminOrderRow,
   AdminPurchaseRow,
   AdminSessionStatus,
   AdminSummary,
@@ -288,6 +291,59 @@ export const adminApi = {
     return fetchJson(`/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}/reply`, {
       method: 'POST',
       body: JSON.stringify({ subject, body })
+    });
+  },
+  async crmDashboard(range = '30d'): Promise<AdminOperationalDashboard> {
+    const q = new URLSearchParams({ range });
+    return fetchJson<AdminOperationalDashboard>(`/api/admin/crm/dashboard?${q}`);
+  },
+  async crmOrders(limit = 50, cursor?: string | null): Promise<AdminListResponse<AdminOrderRow>> {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (cursor) q.set('cursor', cursor);
+    return fetchJson<AdminListResponse<AdminOrderRow>>(`/api/admin/crm/orders?${q}`);
+  },
+  async crmActivity(limit = 100, cursor?: string | null): Promise<AdminListResponse<AdminActivityEventRow>> {
+    const q = new URLSearchParams({ limit: String(limit) });
+    if (cursor) q.set('cursor', cursor);
+    return fetchJson<AdminListResponse<AdminActivityEventRow>>(`/api/admin/crm/activity?${q}`);
+  },
+  async crmPatchUser(
+    userId: string,
+    body: { userStatus?: string; adminNotes?: string; tags?: string }
+  ): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/admin/crm/users/${encodeURIComponent(userId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    });
+  },
+  async crmGrantEntitlement(
+    userId: string,
+    body: { accessType: string; reason?: string | null; expiresAt?: string | null }
+  ): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/admin/crm/users/${encodeURIComponent(userId)}/entitlements`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  },
+  async crmRevokeEntitlement(userId: string, entitlementId: string, reason?: string): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/admin/crm/users/${encodeURIComponent(userId)}/entitlements/${encodeURIComponent(entitlementId)}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason ?? null })
+    });
+  },
+  async crmLinkOrder(stripeCheckoutSessionId: string, userId: string): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/admin/crm/orders/link`, {
+      method: 'POST',
+      body: JSON.stringify({ stripeCheckoutSessionId, userId })
+    });
+  },
+  async crmPatchSupportTicket(
+    ticketId: string,
+    body: { status?: string; priority?: string }
+  ): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
     });
   }
 };

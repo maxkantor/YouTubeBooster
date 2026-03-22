@@ -55,6 +55,24 @@ public interface IAppDataStore
     Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken);
     Task SaveSupportReplyAsync(string ticketId, string subject, string body, CancellationToken cancellationToken);
     Task<AdminListResponse<AdminDemoAuditDto>> ListDemoAuditsAsync(int limit, string? cursor, CancellationToken cancellationToken);
+
+    Task<AdminOperationalDashboardResponse> GetOperationalDashboardAsync(string range, CancellationToken cancellationToken);
+
+    Task<AdminListResponse<AdminOrderRowDto>> ListPaymentOrdersAsync(int limit, string? cursor, CancellationToken cancellationToken);
+
+    Task<AdminListResponse<AdminActivityEventDto>> ListActivityEventsAsync(int limit, string? cursor, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ActivityFeedItem>> ListActivityForScopeAsync(string scope, int limit, CancellationToken cancellationToken);
+
+    Task UpdateUserAdminAsync(string userId, AdminUserPatchRequest request, string adminEmail, CancellationToken cancellationToken);
+
+    Task GrantEntitlementAdminAsync(string userId, AdminGrantEntitlementRequest request, string adminEmail, CancellationToken cancellationToken);
+
+    Task RevokeEntitlementAdminAsync(string userId, string entitlementId, string reason, string adminEmail, CancellationToken cancellationToken);
+
+    Task LinkPaymentToUserAsync(string stripeCheckoutSessionId, string userId, string adminEmail, CancellationToken cancellationToken);
+
+    Task UpdateSupportTicketStatusAsync(string ticketId, AdminSupportTicketPatchRequest request, string adminEmail, CancellationToken cancellationToken);
 }
 
 public sealed record AdminDataSnapshot(
@@ -77,7 +95,7 @@ internal sealed record StoredProtectedYouTubeSettings(
     string StorageModel
 );
 
-public sealed class InMemoryAppDataStore : IAppDataStore
+public sealed partial class InMemoryAppDataStore : IAppDataStore
 {
     private readonly List<DemoAnalysisResponse> _demos = [];
     private readonly List<PurchaseRecord> _purchases = [];
@@ -505,7 +523,21 @@ public sealed class InMemoryAppDataStore : IAppDataStore
     {
         var items = _usersById.Values
             .OrderByDescending(u => u.CreatedAt)
-            .Select(u => new AdminUserDto(u.UserId, u.Email, u.ChannelUrl, u.Purchased, u.OnboardingCompleted, u.AccessStatus, u.CreatedAt, u.UpdatedAt))
+            .Select(u => new AdminUserDto(
+                u.UserId,
+                u.Email,
+                u.ChannelUrl,
+                u.Purchased,
+                u.OnboardingCompleted,
+                u.AccessStatus,
+                u.CreatedAt,
+                u.UpdatedAt,
+                u.EmailVerified,
+                string.IsNullOrWhiteSpace(u.UserStatus) ? "active" : u.UserStatus,
+                u.LastLoginAt,
+                u.Tags,
+                u.Purchased ? "premium" : "none",
+                u.AdminNotes))
             .Take(Math.Max(1, limit))
             .ToArray();
         return Task.FromResult(new AdminListResponse<AdminUserDto>(items, null));
@@ -516,12 +548,28 @@ public sealed class InMemoryAppDataStore : IAppDataStore
         if (!_usersById.TryGetValue(userId, out var user))
             return null;
 
-        var dto = new AdminUserDto(user.UserId, user.Email, user.ChannelUrl, user.Purchased, user.OnboardingCompleted, user.AccessStatus, user.CreatedAt, user.UpdatedAt);
+        var dto = new AdminUserDto(
+            user.UserId,
+            user.Email,
+            user.ChannelUrl,
+            user.Purchased,
+            user.OnboardingCompleted,
+            user.AccessStatus,
+            user.CreatedAt,
+            user.UpdatedAt,
+            user.EmailVerified,
+            string.IsNullOrWhiteSpace(user.UserStatus) ? "active" : user.UserStatus,
+            user.LastLoginAt,
+            user.Tags,
+            user.Purchased ? "premium" : "none",
+            user.AdminNotes);
         var onboarding = await GetUserOnboardingStateAsync(userId, cancellationToken);
         var yt = await GetUserYouTubeSettingsAsync(userId, cancellationToken);
         var purchases = _purchases.Where(p => string.Equals(p.UserId, userId, StringComparison.OrdinalIgnoreCase)).OrderByDescending(p => p.PurchasedAt).Take(25).ToArray();
-        var events = _activity.Take(50).ToArray();
-        return new AdminUserDetailResponse(dto, onboarding, yt, purchases, events);
+        var stripePayments = _payments.Where(p => string.Equals(p.UserId, userId, StringComparison.OrdinalIgnoreCase)).OrderByDescending(p => p.CreatedAt).Take(50).ToArray();
+        var entitlements = await ListEntitlementsByUserAsync(userId, cancellationToken);
+        var events = _activity.Where(a => a.Detail == userId || a.Title.Contains(userId, StringComparison.OrdinalIgnoreCase)).Take(80).ToArray();
+        return new AdminUserDetailResponse(dto, onboarding, yt, purchases, stripePayments, entitlements, events);
     }
 
     public Task<AdminListResponse<PurchaseRecord>> ListPurchasesAsync(int limit, string? cursor, CancellationToken cancellationToken)
@@ -542,7 +590,9 @@ public sealed class InMemoryAppDataStore : IAppDataStore
                 ProductArea: x.Req.ProductArea,
                 ChannelUrl: x.Req.ChannelUrl,
                 CreatedAt: DateTimeOffset.UtcNow,
-                UpdatedAt: DateTimeOffset.UtcNow
+                UpdatedAt: DateTimeOffset.UtcNow,
+                Priority: null,
+                LinkedUserId: null
             ))
             .Take(Math.Max(1, limit))
             .ToArray();
@@ -553,7 +603,7 @@ public sealed class InMemoryAppDataStore : IAppDataStore
     {
         if (!_supportTicketsById.TryGetValue(ticketId, out var req))
             return Task.FromResult<AdminSupportTicketDetailResponse?>(null);
-        var ticket = new AdminSupportTicketDto(ticketId, req.Email, req.Subject, "new", req.ProductArea, req.ChannelUrl, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        var ticket = new AdminSupportTicketDto(ticketId, req.Email, req.Subject, "new", req.ProductArea, req.ChannelUrl, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null);
         var thread = _supportThreads.TryGetValue(ticketId, out var list) ? list.ToArray() : Array.Empty<AdminSupportMessageDto>();
         return Task.FromResult<AdminSupportTicketDetailResponse?>(new AdminSupportTicketDetailResponse(ticket, req.Name, req.Message, thread));
     }
@@ -575,7 +625,7 @@ public sealed class InMemoryAppDataStore : IAppDataStore
         var items = _demos
             .OrderByDescending(d => d.DemoId)
             .Take(Math.Max(1, limit))
-            .Select(d => new AdminDemoAuditDto(d.DemoId, d.ChannelInput, d.ChannelTitle, d.ChannelHandle, d.HealthScore, null, DateTimeOffset.UtcNow))
+            .Select(d => new AdminDemoAuditDto(d.DemoId, d.ChannelInput, d.ChannelTitle, d.ChannelHandle, d.HealthScore, null, DateTimeOffset.UtcNow, "demo", "completed", "preview", null))
             .ToArray();
         return Task.FromResult(new AdminListResponse<AdminDemoAuditDto>(items, null));
     }
@@ -585,7 +635,7 @@ public sealed class InMemoryAppDataStore : IAppDataStore
     private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 }
 
-public sealed class DynamoDbAppDataStore : IAppDataStore
+public sealed partial class DynamoDbAppDataStore : IAppDataStore
 {
     private readonly IAmazonDynamoDB _dynamoDb;
     private readonly IConfiguration _configuration;
@@ -838,7 +888,9 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             ["billingName"] = StringValue(payment.BillingName ?? string.Empty),
             ["receiptUrl"] = StringValue(payment.ReceiptUrl ?? string.Empty),
             ["createdAt"] = StringValue(payment.CreatedAt.ToString("O")),
-            ["updatedAt"] = StringValue(payment.UpdatedAt.ToString("O"))
+            ["updatedAt"] = StringValue(payment.UpdatedAt.ToString("O")),
+            ["mode"] = StringValue(string.IsNullOrWhiteSpace(payment.Mode) ? "live" : payment.Mode),
+            ["paidAt"] = StringValue(payment.PaidAt?.ToString("O") ?? string.Empty)
         };
 
         await PutItemAsync(tableName, item, cancellationToken);
@@ -900,17 +952,14 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             ["paymentId"] = StringValue(entitlement.PaymentId ?? string.Empty),
             ["notes"] = StringValue(entitlement.Notes ?? string.Empty),
             ["createdAt"] = StringValue(entitlement.CreatedAt.ToString("O")),
-            ["updatedAt"] = StringValue(entitlement.UpdatedAt.ToString("O"))
+            ["updatedAt"] = StringValue(entitlement.UpdatedAt.ToString("O")),
+            ["grantedBy"] = StringValue(entitlement.GrantedBy ?? string.Empty),
+            ["grantedReason"] = StringValue(entitlement.GrantedReason ?? string.Empty),
+            ["revokedAt"] = StringValue(entitlement.RevokedAt?.ToString("O") ?? string.Empty)
         };
 
         await PutItemAsync(GetUsersTableName(), item, cancellationToken);
-
-        // Also update the user profile purchased/accessStatus for quick access checks.
-        var user = await GetUserByIdAsync(entitlement.UserId, cancellationToken);
-        if (user is not null && string.Equals(entitlement.Status, "active", StringComparison.OrdinalIgnoreCase))
-        {
-            await SaveUserProfileAsync(user with { Purchased = true, AccessStatus = "entitled", UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken);
-        }
+        await RecomputeUserAccessFromEntitlementsAsync(entitlement.UserId, cancellationToken);
 
         await TrackEventAsync("entitlement_saved", entitlement.UserId, new Dictionary<string, string?>
         {
@@ -1343,7 +1392,21 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
 
         var items = response.Items
             .Select(ReadUserAccount)
-            .Select(u => new AdminUserDto(u.UserId, u.Email, u.ChannelUrl, u.Purchased, u.OnboardingCompleted, u.AccessStatus, u.CreatedAt, u.UpdatedAt))
+            .Select(u => new AdminUserDto(
+                u.UserId,
+                u.Email,
+                u.ChannelUrl,
+                u.Purchased,
+                u.OnboardingCompleted,
+                u.AccessStatus,
+                u.CreatedAt,
+                u.UpdatedAt,
+                u.EmailVerified,
+                string.IsNullOrWhiteSpace(u.UserStatus) ? "active" : u.UserStatus,
+                u.LastLoginAt,
+                u.Tags,
+                u.Purchased ? "premium" : "none",
+                u.AdminNotes))
             .OrderByDescending(u => u.CreatedAt)
             .ToArray();
 
@@ -1355,12 +1418,28 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
         var user = await GetUserByIdAsync(userId, cancellationToken);
         if (user is null) return null;
 
-        var dto = new AdminUserDto(user.UserId, user.Email, user.ChannelUrl, user.Purchased, user.OnboardingCompleted, user.AccessStatus, user.CreatedAt, user.UpdatedAt);
+        var dto = new AdminUserDto(
+            user.UserId,
+            user.Email,
+            user.ChannelUrl,
+            user.Purchased,
+            user.OnboardingCompleted,
+            user.AccessStatus,
+            user.CreatedAt,
+            user.UpdatedAt,
+            user.EmailVerified,
+            string.IsNullOrWhiteSpace(user.UserStatus) ? "active" : user.UserStatus,
+            user.LastLoginAt,
+            user.Tags,
+            user.Purchased ? "premium" : "none",
+            user.AdminNotes);
         var onboarding = await GetUserOnboardingStateAsync(userId, cancellationToken);
         var yt = await GetUserYouTubeSettingsAsync(userId, cancellationToken);
         var purchases = await ListPurchasesByUserAsync(userId, cancellationToken);
-        var events = await GetRecentActivityAsync(cancellationToken);
-        return new AdminUserDetailResponse(dto, onboarding, yt, purchases, events);
+        var stripePayments = await ListPaymentsByUserAsync(userId, cancellationToken);
+        var entitlements = await ListEntitlementsByUserAsync(userId, cancellationToken);
+        var events = await ListActivityForScopeAsync(userId, 80, cancellationToken);
+        return new AdminUserDetailResponse(dto, onboarding, yt, purchases, stripePayments, entitlements, events);
     }
 
     public async Task<AdminListResponse<PurchaseRecord>> ListPurchasesAsync(int limit, string? cursor, CancellationToken cancellationToken)
@@ -1491,7 +1570,9 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             ProductArea: item.GetValueOrDefault("productArea")?.S ?? "general",
             ChannelUrl: EmptyToNull(item.GetValueOrDefault("channelUrl")?.S),
             CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
-            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S)
+            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S),
+            Priority: EmptyToNull(item.GetValueOrDefault("priority")?.S),
+            LinkedUserId: EmptyToNull(item.GetValueOrDefault("linkedUserId")?.S)
         );
     }
 
@@ -1506,7 +1587,11 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             ChannelHandle: item.GetValueOrDefault("channelHandle")?.S ?? string.Empty,
             HealthScore: int.TryParse(item.GetValueOrDefault("healthScore")?.S, out var score) ? score : 0,
             Email: EmptyToNull(item.GetValueOrDefault("email")?.S),
-            CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S)
+            CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
+            AuditType: item.GetValueOrDefault("auditType")?.S ?? "demo",
+            Status: item.GetValueOrDefault("auditStatus")?.S ?? "completed",
+            Visibility: item.GetValueOrDefault("visibility")?.S ?? "preview",
+            LinkedUserId: EmptyToNull(item.GetValueOrDefault("linkedUserId")?.S)
         );
     }
 
@@ -1577,7 +1662,11 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             ["growthGoal"] = StringValue(user.GrowthGoal ?? string.Empty),
             ["lastLoginAt"] = StringValue(user.LastLoginAt?.ToString("O") ?? string.Empty),
             ["createdAt"] = StringValue(user.CreatedAt.ToString("O")),
-            ["updatedAt"] = StringValue(user.UpdatedAt.ToString("O"))
+            ["updatedAt"] = StringValue(user.UpdatedAt.ToString("O")),
+            ["userStatus"] = StringValue(string.IsNullOrWhiteSpace(user.UserStatus) ? "active" : user.UserStatus),
+            ["adminNotes"] = StringValue(user.AdminNotes ?? string.Empty),
+            ["tags"] = StringValue(user.Tags ?? string.Empty),
+            ["lastSeenAt"] = StringValue(user.LastSeenAt?.ToString("O") ?? string.Empty)
         }, cancellationToken);
     }
 
@@ -1596,7 +1685,11 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             GrowthGoal: EmptyToNull(item.GetValueOrDefault("growthGoal")?.S),
             LastLoginAt: ParseNullableDate(item.GetValueOrDefault("lastLoginAt")?.S),
             CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
-            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S)
+            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S),
+            UserStatus: string.IsNullOrWhiteSpace(item.GetValueOrDefault("userStatus")?.S) ? "active" : item.GetValueOrDefault("userStatus")!.S,
+            AdminNotes: EmptyToNull(item.GetValueOrDefault("adminNotes")?.S),
+            Tags: EmptyToNull(item.GetValueOrDefault("tags")?.S),
+            LastSeenAt: ParseNullableDate(item.GetValueOrDefault("lastSeenAt")?.S)
         );
     }
 
@@ -1629,7 +1722,9 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             BillingName: EmptyToNull(item.GetValueOrDefault("billingName")?.S),
             ReceiptUrl: EmptyToNull(item.GetValueOrDefault("receiptUrl")?.S),
             CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
-            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S)
+            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S),
+            Mode: string.IsNullOrWhiteSpace(item.GetValueOrDefault("mode")?.S) ? "live" : item.GetValueOrDefault("mode")!.S,
+            PaidAt: ParseNullableDate(item.GetValueOrDefault("paidAt")?.S)
         );
     }
 
@@ -1651,7 +1746,10 @@ public sealed class DynamoDbAppDataStore : IAppDataStore
             PaymentId: EmptyToNull(item.GetValueOrDefault("paymentId")?.S),
             Notes: EmptyToNull(item.GetValueOrDefault("notes")?.S),
             CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
-            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S)
+            UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S),
+            GrantedBy: EmptyToNull(item.GetValueOrDefault("grantedBy")?.S),
+            GrantedReason: EmptyToNull(item.GetValueOrDefault("grantedReason")?.S),
+            RevokedAt: ParseNullableDate(item.GetValueOrDefault("revokedAt")?.S)
         );
     }
 

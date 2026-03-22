@@ -1,6 +1,6 @@
 import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Link, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
@@ -29,17 +29,18 @@ import {
   AdminHomePage,
   UsersPage,
   UserDetailPage,
-  PaymentsPage,
-  PlaceholderSubscriptionsPage,
-  PlaceholderDemoUnlocksPage,
+  OrdersPage,
   AuditsPage,
   ContactTicketPage,
   ContactListPage,
-  PlaceholderEmailPage,
-  AnalyticsPage,
-  PlaceholderSettingsPage,
-  SystemLogsPage
+  ActivityLogsPage
 } from './admin/crmPages.lazy';
+
+function AdminContactToSupportTicketRedirect() {
+  const { ticketId } = useParams<{ ticketId: string }>();
+  return <Navigate to={`/admin/support/${encodeURIComponent(ticketId ?? '')}`} replace />;
+}
+
 const AuditHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.AuditHubPage })));
 const SolutionsHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.SolutionsHubPage })));
 const GuidesHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.GuidesHubPage })));
@@ -715,16 +716,15 @@ function AppInner() {
           <Route index element={<AdminHomePage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="user/:id" element={<UserDetailPage />} />
-          <Route path="payments" element={<PaymentsPage />} />
-          <Route path="subscriptions" element={<PlaceholderSubscriptionsPage />} />
+          <Route path="orders" element={<OrdersPage />} />
+          <Route path="payments" element={<Navigate to="/admin/orders" replace />} />
           <Route path="audits" element={<AuditsPage />} />
-          <Route path="demo-unlocks" element={<PlaceholderDemoUnlocksPage />} />
-          <Route path="contact/:ticketId" element={<ContactTicketPage />} />
-          <Route path="contact" element={<ContactListPage />} />
-          <Route path="email" element={<PlaceholderEmailPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="settings" element={<PlaceholderSettingsPage />} />
-          <Route path="system-logs" element={<SystemLogsPage />} />
+          <Route path="support/:ticketId" element={<ContactTicketPage />} />
+          <Route path="support" element={<ContactListPage />} />
+          <Route path="contact" element={<Navigate to="/admin/support" replace />} />
+          <Route path="contact/:ticketId" element={<AdminContactToSupportTicketRedirect />} />
+          <Route path="activity" element={<ActivityLogsPage />} />
+          <Route path="system-logs" element={<Navigate to="/admin/activity" replace />} />
         </Route>
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
