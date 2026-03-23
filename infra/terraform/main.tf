@@ -64,7 +64,7 @@ locals {
       description = "Admin login password placeholder"
     }
     # YouTube Data API key: store ONLY inside admin/google/credentials-json as youtube_api_key (or under installed.*).
-    # Do NOT manage a separate /youtube/api-key parameter here — Terraform overwrite=true was clobbering Console updates.
+    # Do NOT manage /youtubebooster/youtube/api-key or /youtubebooster/admin/youtube-api-key here — keep them manual in SSM.
     "${var.ssm_prefix}/admin/google/credentials-json" = {
       type = "SecureString"
       value = var.admin_google_credentials_json != "" ? var.admin_google_credentials_json : jsonencode({

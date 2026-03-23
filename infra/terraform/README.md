@@ -92,7 +92,7 @@ Preferred format for `/youtubebooster/admin/google/credentials-json`:
 }
 ```
 
-Create the API key in the same Google Cloud project (APIs & Services → Credentials → Create credentials → API key), enable **YouTube Data API v3**, then paste the key as `youtube_api_key` in **`credentials-json`** (preferred). A legacy optional SSM parameter `/youtubebooster/youtube/api-key` is still read by the app if present; Terraform no longer manages it.
+Create the API key in the same Google Cloud project (APIs & Services → Credentials → Create credentials → API key), enable **YouTube Data API v3**, then paste the key as `youtube_api_key` in **`credentials-json`** (preferred). Optional SSM parameters `/youtubebooster/youtube/api-key` and `/youtubebooster/admin/youtube-api-key` are still read by the app if present; Terraform does not manage them.
 
 Buyer-provided Google/YouTube settings should not be created as shared SSM parameters. The app should collect those during onboarding and store them per user in app data, ideally encrypted before persistence.
 

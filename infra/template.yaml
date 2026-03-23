@@ -26,7 +26,8 @@ Resources:
       Cors:
         AllowMethods: "'GET,POST,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization,Stripe-Signature'"
-        AllowOrigin: "'*'"
+        AllowOrigin: "'https://youtubeboosterai.com,https://www.youtubeboosterai.com'"
+        AllowCredentials: true
 
   BackendFunction:
     Type: AWS::Serverless::Function
