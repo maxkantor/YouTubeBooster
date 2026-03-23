@@ -20,7 +20,6 @@ import {
   filterSupport,
   OrderFilterBar,
   SectionCard,
-  SupportFilterBar,
   UserRowActions,
   userStatusBadge
 } from './AdminCrmComponents';
@@ -30,7 +29,7 @@ const NAV: { to: string; end?: boolean; label: string }[] = [
   { to: 'users', label: 'Users' },
   { to: 'orders', label: 'Orders' },
   { to: 'audits', label: 'Audits' },
-  { to: 'support', label: 'Support' },
+  { to: 'contacts', label: 'Contacts' },
   { to: 'activity', label: 'Activity logs' }
 ];
 
@@ -66,12 +65,22 @@ function orderClassificationMeta(c: string) {
   return { kind: 'neutral' as const, label: c };
 }
 
+function contactsStatusBadge(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'open') return <Badge kind="ok">open</Badge>;
+  if (s === 'pending') return <Badge kind="warn">pending</Badge>;
+  if (s === 'resolved') return <Badge kind="info">resolved</Badge>;
+  if (s === 'closed') return <Badge kind="bad">closed</Badge>;
+  if (!s) return <Badge kind="neutral">unknown</Badge>;
+  return <Badge kind="neutral">{status}</Badge>;
+}
+
 function AdminShell({ title, children }: { title: string; children: React.ReactNode }) {
   const { adminSession, onSignOut } = useAdminCrm();
   return (
     <div className="admin-crm-root">
       <aside className="admin-crm-sidebar">
-        <div className="admin-crm-brand">YouTubeBooster · Ops</div>
+        <div className="admin-crm-brand">YouTubeBooster AI · Ops</div>
         <nav className="admin-crm-nav">
           {NAV.map(({ to, label, end }) => (
             <NavLink
@@ -167,7 +176,7 @@ export function AdminHomePage() {
               <strong>{dash.kpis.failedOrUnpaidCheckouts}</strong>
             </div>
             <div className="admin-crm-metric">
-              <span>Open support</span>
+              <span>Open contacts</span>
               <strong>{dash.kpis.openSupportTickets}</strong>
             </div>
             <div className="admin-crm-metric">
@@ -233,7 +242,7 @@ export function AdminHomePage() {
               )}
             </div>
             <div className="admin-crm-panel">
-              <h2>Support queue</h2>
+              <h2>Contacts queue</h2>
               {dash.supportQueue.length === 0 ? (
                 <p className="admin-crm-muted">Queue clear.</p>
               ) : (
@@ -354,10 +363,10 @@ function MiniSupportTable({ rows }: { rows: AdminSupportTicketRow[] }) {
           {rows.map((t) => (
             <tr key={t.ticketId}>
               <td>
-                <Link to={`/admin/support/${encodeURIComponent(t.ticketId)}`}>{t.subject}</Link>
+                <Link to={`/admin/contacts/${encodeURIComponent(t.ticketId)}`}>{t.subject}</Link>
               </td>
               <td>
-                <Badge kind="warn">{t.status}</Badge>
+                {contactsStatusBadge(t.status)}
               </td>
             </tr>
           ))}
@@ -1171,9 +1180,10 @@ export function ContactListPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const [supportFilter, setSupportFilter] = useState('all');
+  const [draftStatus, setDraftStatus] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  const filteredSupport = useMemo(() => filterSupport(items, supportFilter), [items, supportFilter]);
+  const filteredSupport = useMemo(() => filterSupport(items, statusFilter), [items, statusFilter]);
 
   const fetchPage = async (cursor: string | null, append: boolean) => {
     try {
@@ -1208,75 +1218,57 @@ export function ContactListPage() {
     };
   }, []);
 
-  async function setTicketStatus(ticketId: string, status: string) {
-    try {
-      await adminApi.crmPatchSupportTicket(ticketId, { status });
-      await fetchPage(null, false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
-    }
-  }
-
   return (
-    <AdminShell title="Support">
+    <AdminShell title="Contacts">
       {error && <p className="admin-crm-error">{error}</p>}
       {loading ? (
         <p style={{ color: '#64748b' }}>Loading…</p>
       ) : items.length === 0 ? (
-        <div className="admin-crm-panel admin-crm-empty">No support tickets.</div>
+        <div className="admin-crm-panel admin-crm-empty">No contacts.</div>
       ) : (
         <>
           <div style={{ marginBottom: 12 }}>
-            <SupportFilterBar value={supportFilter} onChange={setSupportFilter} />
+            <div className="admin-crm-toolbar" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <select className="admin-crm-select" value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)}>
+                <option value="all">All status</option>
+                <option value="open">Open</option>
+                <option value="pending">Pending</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+              <button
+                type="button"
+                className="admin-crm-btn admin-crm-btn-primary"
+                onClick={() => setStatusFilter(draftStatus)}
+              >
+                Filter
+              </button>
+            </div>
           </div>
           {filteredSupport.length === 0 ? (
-            <div className="admin-crm-panel admin-crm-empty">No tickets match this filter.</div>
+            <div className="admin-crm-panel admin-crm-empty">No contacts match this filter.</div>
           ) : (
             <div className="admin-crm-table-wrap">
               <table className="admin-crm-table admin-crm-table-sticky">
                 <thead>
                   <tr>
-                    <th>Subject</th>
+                    <th>Name</th>
                     <th>Email</th>
-                    <th>User</th>
+                    <th>Subject</th>
                     <th>Status</th>
-                    <th>Priority</th>
-                    <th>Area</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
+                    <th>Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredSupport.map((t) => (
                     <tr key={t.ticketId}>
-                      <td>
-                        <Link to={`/admin/support/${encodeURIComponent(t.ticketId)}`}>{t.subject}</Link>
-                      </td>
+                      <td>{t.name ?? '—'}</td>
                       <td>{t.email}</td>
                       <td>
-                        {t.linkedUserId ? (
-                          <Link to={`/admin/user/${encodeURIComponent(t.linkedUserId)}`}>profile</Link>
-                        ) : (
-                          '—'
-                        )}
+                        <Link to={`/admin/contacts/${encodeURIComponent(t.ticketId)}`}>{t.subject}</Link>
                       </td>
-                      <td>{t.status}</td>
-                      <td>{t.priority ?? '—'}</td>
-                      <td>{t.productArea}</td>
-                      <td className="admin-crm-nowrap">{formatDt(t.updatedAt)}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'pending')}>
-                            Pending
-                          </button>
-                          <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'resolved')}>
-                            Resolve
-                          </button>
-                          <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'closed')}>
-                            Close
-                          </button>
-                        </div>
-                      </td>
+                      <td>{contactsStatusBadge(t.status)}</td>
+                      <td className="admin-crm-nowrap">{formatDt(t.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1355,8 +1347,8 @@ export function ContactTicketPage() {
   }
 
   return (
-    <AdminShell title="Support thread">
-      <button type="button" className="admin-crm-btn" style={{ marginBottom: 16 }} onClick={() => navigate('/admin/support')}>
+    <AdminShell title="Contact thread">
+      <button type="button" className="admin-crm-btn" style={{ marginBottom: 16 }} onClick={() => navigate('/admin/contacts')}>
         ← Inbox
       </button>
       {loading && <p style={{ color: '#64748b' }}>Loading…</p>}

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pub = path.join(__dirname, '..', 'public');
-const siteUrl = process.env.SEO_SITE_URL || 'https://youtubebooster.com';
+const siteUrl = process.env.SEO_SITE_URL || 'https://youtubeboosterai.com';
 const base = siteUrl.replace(/\/$/, '');
 
 const staticPaths = [

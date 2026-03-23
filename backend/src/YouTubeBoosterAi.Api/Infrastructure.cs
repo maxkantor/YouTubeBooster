@@ -25,7 +25,7 @@ public static class Infrastructure
         // Google APIs can reject requests with no User-Agent; Lambda HttpClient defaults are minimal.
         services.AddHttpClient(string.Empty, client =>
         {
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("YouTubeBoosterAi/1.0 (+https://youtubebooster.com)");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("YouTubeBoosterAi/1.0 (+https://youtubeboosterai.com)");
         });
 
         services.AddSingleton<IAmazonDynamoDB>(_ => dynamoClient);

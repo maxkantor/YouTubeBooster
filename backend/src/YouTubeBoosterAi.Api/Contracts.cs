@@ -180,6 +180,7 @@ public sealed record AdminUserDetailResponse(
 public sealed record AdminSupportTicketDto(
     string TicketId,
     string Email,
+    string? Name,
     string Subject,
     string Status,
     string ProductArea,

@@ -63,7 +63,7 @@ public sealed class SesPaymentAdminNotificationService : IPaymentAdminNotificati
 
         var baseUrl = _configuration["App:PublicSiteUrl"]
                        ?? _configuration["PUBLIC_SITE_URL"]
-                       ?? "https://youtubebooster.com";
+                       ?? "https://youtubeboosterai.com";
         baseUrl = baseUrl.TrimEnd('/');
 
         var subject = $"[YouTubeBooster] New payment received — {payment.Amount:F2} {payment.Currency} ({payment.Mode})";

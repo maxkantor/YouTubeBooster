@@ -38,7 +38,7 @@ import {
 
 function AdminContactToSupportTicketRedirect() {
   const { ticketId } = useParams<{ ticketId: string }>();
-  return <Navigate to={`/admin/support/${encodeURIComponent(ticketId ?? '')}`} replace />;
+  return <Navigate to={`/admin/contacts/${encodeURIComponent(ticketId ?? '')}`} replace />;
 }
 
 const AuditHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.AuditHubPage })));
@@ -614,7 +614,7 @@ function AppInner() {
   } catch {
     seoResolved = {
       title: BRAND.name,
-      description: 'YouTube Booster',
+      description: BRAND.tagline,
       canonicalPath: pathForSeo,
       noindex: true,
       jsonLd: [] as Record<string, unknown>[]
@@ -719,9 +719,11 @@ function AppInner() {
           <Route path="orders" element={<OrdersPage />} />
           <Route path="payments" element={<Navigate to="/admin/orders" replace />} />
           <Route path="audits" element={<AuditsPage />} />
+        <Route path="contacts/:ticketId" element={<ContactTicketPage />} />
           <Route path="support/:ticketId" element={<ContactTicketPage />} />
+        <Route path="contacts" element={<ContactListPage />} />
           <Route path="support" element={<ContactListPage />} />
-          <Route path="contact" element={<Navigate to="/admin/support" replace />} />
+        <Route path="contact" element={<Navigate to="/admin/contacts" replace />} />
           <Route path="contact/:ticketId" element={<AdminContactToSupportTicketRedirect />} />
           <Route path="activity" element={<ActivityLogsPage />} />
           <Route path="system-logs" element={<Navigate to="/admin/activity" replace />} />
@@ -811,7 +813,7 @@ function AppInner() {
               {' · '}
               <Link to="/site-map">Site map</Link>
             </p>
-            <p className="global-footer-copy">© 2026 YouTube Booster. All rights reserved.</p>
+            <p className="global-footer-copy">© 2026 {BRAND.name}. All rights reserved.</p>
           </div>
         </footer>
       )}

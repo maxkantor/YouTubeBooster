@@ -19,7 +19,7 @@ variable "ssm_prefix" {
 variable "public_site_url" {
   description = "Public site base URL for CRM links in admin emails (not a secret)."
   type        = string
-  default     = "https://youtubebooster.com"
+  default     = "https://youtubeboosterai.com"
 }
 
 variable "create_placeholder_parameters" {
@@ -74,7 +74,12 @@ variable "amplify_branch_name" {
 variable "cors_allowed_origins" {
   description = "CORS allowed origins (required when frontend uses credentials). Include your Amplify URLs, e.g. https://main.APPID.amplifyapp.com and https://APPID.amplifyapp.com."
   type        = list(string)
-  default     = ["http://localhost:5173", "https://main.d2s1ju1o5ef9dw.amplifyapp.com", "https://d2s1ju1o5ef9dw.amplifyapp.com"]
+  default     = [
+    "https://youtubeboosterai.com",
+    "https://www.youtubeboosterai.com",
+    "https://main.d2s1ju1o5ef9dw.amplifyapp.com",
+    "https://d2s1ju1o5ef9dw.amplifyapp.com"
+  ]
 }
 
 variable "one_time_price" {
@@ -119,7 +124,7 @@ variable "admin_google_project_id" {
 variable "admin_google_redirect_uri" {
   description = "OAuth redirect_uri (first entry from redirect_uris in credentials.json)."
   type        = string
-  default     = "http://localhost"
+  default     = "https://youtubeboosterai.com/oauth2/callback"
 }
 
 variable "admin_google_credentials_json" {

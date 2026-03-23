@@ -47,7 +47,7 @@ $clientSecret = [string]$i.client_secret
 $projectId = [string]$i.project_id
 $authUri = $i.auth_uri -as [string]; if (-not $authUri) { $authUri = "https://accounts.google.com/o/oauth2/auth" }
 $tokenUri = $i.token_uri -as [string]; if (-not $tokenUri) { $tokenUri = "https://oauth2.googleapis.com/token" }
-$redirectUri = "http://localhost"
+$redirectUri = "https://youtubeboosterai.com/oauth2/callback"
 if ($i.redirect_uris -and $i.redirect_uris.Count -gt 0) {
     $redirectUri = [string]$i.redirect_uris[0]
 }

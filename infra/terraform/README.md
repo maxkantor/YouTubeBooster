@@ -42,7 +42,7 @@ Update those values after the initial apply, or pass your `credentials.json` val
 terraform apply -var="admin_google_client_id=YOUR_CLIENT_ID" \
   -var="admin_google_client_secret=YOUR_CLIENT_SECRET" \
   -var="admin_google_project_id=youtubebooster-479002" \
-  -var="admin_google_redirect_uri=http://localhost"
+  -var="admin_google_redirect_uri=https://youtubeboosterai.com/oauth2/callback"
 
 # Option B: full credentials JSON in one variable — include youtube_api_key in the JSON string
 terraform apply -var="admin_google_credentials_json={\"installed\":{\"client_id\":\"...\",...},\"youtube_api_key\":\"AIza...\"}"

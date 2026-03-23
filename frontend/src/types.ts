@@ -260,6 +260,7 @@ export type AdminUserDetailResponse = {
 
 export type AdminSupportTicketRow = {
   ticketId: string;
+  name: string | null;
   email: string;
   subject: string;
   status: string;

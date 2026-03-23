@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import { BRAND } from '../../config/brand';
 import { MarketingStaticPage } from './MarketingStaticPage';
+import { useAuth } from '../../AuthContext';
+import { publicApi } from '../../lib/api';
 
 export function AboutPage() {
   return (
@@ -21,18 +24,193 @@ export function AboutPage() {
 }
 
 export function ContactPage() {
+  const { session: authSession, loading: authLoading } = useAuth();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+  const [orderReference, setOrderReference] = useState('');
+  const [channelUrl, setChannelUrl] = useState('');
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [error, setError] = useState('');
+  const [ticketId, setTicketId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (authSession?.email) {
+      setEmail((prev) => (prev.trim() ? prev : authSession.email!));
+    }
+  }, [authSession?.email]);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus('submitting');
+    setError('');
+    try {
+      const res = await publicApi.submitContact({
+        name: name.trim() || null,
+        email: email.trim(),
+        subject: subject.trim(),
+        message: message.trim(),
+        channelUrl: channelUrl.trim() || null,
+        orderReference: orderReference.trim() || null,
+        accountEmail: accountEmail.trim() || null,
+        productArea: 'general'
+      });
+      setTicketId(res.ticketId);
+      setStatus('success');
+    } catch (err) {
+      setStatus('error');
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    }
+  }
+
   return (
     <MarketingStaticPage
       title="Contact"
-      description="Questions about the product, your account, or partnerships—we read every message."
+      description="Billing, access, product questions, or partnerships — we read every message."
     >
-      <p>
-        Signed in users should use the same email as their account for billing and access questions. Include your order
-        reference when writing about a purchase.
-      </p>
-      <p className="muted">
-        We do not offer phone support. Typical reply time is a few business days.
-      </p>
+      {authLoading ? (
+        <p className="muted">Loading…</p>
+      ) : authSession?.email ? (
+        <p className="contact-signed-in-note" role="status">
+          Signed in as <strong>{authSession.email}</strong>. Use this form for billing, access, support, or partnership
+          questions.
+        </p>
+      ) : null}
+
+      {status === 'success' ? (
+        <div className="contact-success" role="status">
+          <h2 className="contact-success-title">Thanks — your message was sent.</h2>
+          <p className="contact-success-body">
+            We&apos;ll review it and reply by email.
+            {ticketId && (
+              <>
+                {' '}
+                Reference: <code className="contact-ref">{ticketId}</code>
+              </>
+            )}
+          </p>
+          <button type="button" className="btn btn-secondary contact-reset" onClick={() => {
+            setStatus('idle');
+            setMessage('');
+            setSubject('');
+            setTicketId(null);
+          }}>
+            Send another message
+          </button>
+        </div>
+      ) : (
+        <form className="contact-form" onSubmit={onSubmit} noValidate>
+          {status === 'error' && (
+            <div className="contact-banner contact-banner-error" role="alert">
+              {error}
+            </div>
+          )}
+
+          <label className="contact-label" htmlFor="contact-name">
+            Full name <span className="contact-req">*</span>
+          </label>
+          <input
+            id="contact-name"
+            className="contact-input"
+            autoComplete="name"
+            required
+            maxLength={120}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-required="true"
+          />
+
+          <label className="contact-label" htmlFor="contact-email">
+            Email <span className="contact-req">*</span>
+          </label>
+          <input
+            id="contact-email"
+            type="email"
+            className="contact-input"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            aria-required="true"
+          />
+
+          <label className="contact-label" htmlFor="contact-account-email">
+            Account email <span className="contact-opt">(optional)</span>
+          </label>
+          <p className="contact-hint">If different from the email above (e.g. you purchased under another address).</p>
+          <input
+            id="contact-account-email"
+            type="email"
+            className="contact-input"
+            autoComplete="off"
+            value={accountEmail}
+            onChange={(e) => setAccountEmail(e.target.value)}
+          />
+
+          <label className="contact-label" htmlFor="contact-subject">
+            Subject <span className="contact-req">*</span>
+          </label>
+          <input
+            id="contact-subject"
+            className="contact-input"
+            required
+            maxLength={200}
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            aria-required="true"
+          />
+
+          <label className="contact-label" htmlFor="contact-message">
+            Message <span className="contact-req">*</span>
+          </label>
+          <p className="contact-hint">At least 10 characters. Be specific so we can help quickly.</p>
+          <textarea
+            id="contact-message"
+            className="contact-textarea"
+            required
+            minLength={10}
+            maxLength={12000}
+            rows={7}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            aria-required="true"
+          />
+
+          <label className="contact-label" htmlFor="contact-order">
+            Order reference <span className="contact-opt">(optional)</span>
+          </label>
+          <input
+            id="contact-order"
+            className="contact-input"
+            value={orderReference}
+            onChange={(e) => setOrderReference(e.target.value)}
+            placeholder="Stripe session or internal ref"
+          />
+
+          <label className="contact-label" htmlFor="contact-channel">
+            YouTube channel URL <span className="contact-opt">(optional)</span>
+          </label>
+          <input
+            id="contact-channel"
+            type="url"
+            className="contact-input"
+            placeholder="https://www.youtube.com/@channel"
+            value={channelUrl}
+            onChange={(e) => setChannelUrl(e.target.value)}
+          />
+
+          <div className="contact-actions">
+            <button type="submit" className="btn btn-primary" disabled={status === 'submitting'}>
+              {status === 'submitting' ? 'Sending…' : 'Send message'}
+            </button>
+          </div>
+          <p className="muted contact-footnote">
+            We do not offer phone support. Typical reply time is a few business days.
+          </p>
+        </form>
+      )}
     </MarketingStaticPage>
   );
 }

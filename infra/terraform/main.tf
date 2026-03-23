@@ -75,7 +75,7 @@ locals {
           token_uri                   = "https://oauth2.googleapis.com/token"
           auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
           client_secret               = var.admin_google_client_secret != "" ? var.admin_google_client_secret : "replace-me"
-          redirect_uris               = [var.admin_google_redirect_uri != "" ? var.admin_google_redirect_uri : "http://localhost"]
+          redirect_uris               = [var.admin_google_redirect_uri != "" ? var.admin_google_redirect_uri : "https://youtubeboosterai.com/oauth2/callback"]
         }
       })
       description = "Admin Google OAuth credentials (full JSON or built from granular params)"
@@ -107,7 +107,7 @@ locals {
     }
     "${var.ssm_prefix}/admin/google/redirect-uri" = {
       type        = "String"
-      value       = var.admin_google_redirect_uri != "" ? var.admin_google_redirect_uri : "http://localhost"
+      value       = var.admin_google_redirect_uri != "" ? var.admin_google_redirect_uri : "https://youtubeboosterai.com/oauth2/callback"
       description = "Admin Google OAuth redirect URI (first redirect_uris entry)"
     }
     "${var.ssm_prefix}/features/enable-public-demo" = {

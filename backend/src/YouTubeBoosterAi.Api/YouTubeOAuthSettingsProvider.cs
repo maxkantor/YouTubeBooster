@@ -32,7 +32,7 @@ public sealed class AdminYouTubeOAuthSettingsProvider : IAdminYouTubeOAuthSettin
         var tokenUri = await _secretValueProvider.GetValueAsync("admin/google/token-uri", secure: false, cancellationToken)
             ?? "https://oauth2.googleapis.com/token";
         var redirectUri = await _secretValueProvider.GetValueAsync("admin/google/redirect-uri", secure: false, cancellationToken)
-            ?? "https://localhost/oauth2/callback";
+            ?? "https://youtubeboosterai.com/oauth2/callback";
 
         if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
         {

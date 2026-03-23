@@ -88,11 +88,10 @@ builder.Services.AddCors(options =>
 
                 if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
 
-                // Local dev + common production hosts
-                if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)) return true;
+                // Common production hosts
                 if (uri.Host.EndsWith(".amplifyapp.com", StringComparison.OrdinalIgnoreCase)) return true;
-                if (uri.Host.Equals("youtubebooster.com", StringComparison.OrdinalIgnoreCase)) return true;
-                if (uri.Host.Equals("www.youtubebooster.com", StringComparison.OrdinalIgnoreCase)) return true;
+                if (uri.Host.Equals("youtubeboosterai.com", StringComparison.OrdinalIgnoreCase)) return true;
+                if (uri.Host.Equals("www.youtubeboosterai.com", StringComparison.OrdinalIgnoreCase)) return true;
 
                 // Optional explicit allow-list via config/env: "https://foo.com,https://bar.com"
                 var configured = builder.Configuration["CORS_ALLOWED_ORIGINS"];

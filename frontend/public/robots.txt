@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://youtubebooster.com/sitemap.xml
+Sitemap: https://youtubeboosterai.com/sitemap.xml

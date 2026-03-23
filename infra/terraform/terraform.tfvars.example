@@ -25,9 +25,9 @@ currency       = "USD"
 # admin_google_client_id     = "123456789-xxx.apps.googleusercontent.com"
 # admin_google_client_secret = "GOCSPX-xxx"
 # admin_google_project_id   = "youtubebooster-479002"
-# admin_google_redirect_uri = "http://localhost"
+# admin_google_redirect_uri = "https://youtubeboosterai.com/oauth2/callback"
 # Or pass the full JSON as one variable (overrides granular above):
-# admin_google_credentials_json = "{\"installed\":{\"client_id\":\"...\",\"project_id\":\"...\",\"auth_uri\":\"...\",\"token_uri\":\"...\",\"auth_provider_x509_cert_url\":\"...\",\"client_secret\":\"...\",\"redirect_uris\":[\"http://localhost\"]}}"
+# admin_google_credentials_json = "{\"installed\":{\"client_id\":\"...\",\"project_id\":\"...\",\"auth_uri\":\"...\",\"token_uri\":\"...\",\"auth_provider_x509_cert_url\":\"...\",\"client_secret\":\"...\",\"redirect_uris\":[\"https://youtubeboosterai.com/oauth2/callback\"]}}"
 
 # YouTube Data API v3 key (create in same GCP project → APIs & Services → Credentials → API key, enable YouTube Data API v3)
 # Put youtube_api_key inside admin_google_credentials_json JSON (see docs/SSM-PARAMETER-CHECKLIST.md)

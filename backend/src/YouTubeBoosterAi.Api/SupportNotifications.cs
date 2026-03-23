@@ -47,7 +47,7 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
 
         var baseUrl = _configuration["App:PublicSiteUrl"]
                       ?? _configuration["PUBLIC_SITE_URL"]
-                      ?? "https://youtubebooster.com";
+                      ?? "https://youtubeboosterai.com";
         baseUrl = baseUrl.TrimEnd('/');
 
         var subject = $"[YouTubeBooster] New contact form submission — {request.Subject}";
@@ -55,7 +55,7 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
             New contact / support thread
 
             Ticket ID: {ticketId}
-            CRM: {baseUrl}/admin/support/{Uri.EscapeDataString(ticketId)}
+            CRM: {baseUrl}/admin/contacts/{Uri.EscapeDataString(ticketId)}
 
             Contact name: {request.Name ?? "(not provided)"}
             Contact email: {request.Email}

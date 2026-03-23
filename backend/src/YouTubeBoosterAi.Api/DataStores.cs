@@ -592,6 +592,7 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
             .Select(x => new AdminSupportTicketDto(
                 TicketId: x.TicketId,
                 Email: x.Req.Email,
+                Name: x.Req.Name,
                 Subject: x.Req.Subject,
                 Status: "open",
                 ProductArea: x.Req.ProductArea,
@@ -613,6 +614,7 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
         var ticket = new AdminSupportTicketDto(
             ticketId,
             req.Email,
+            req.Name,
             req.Subject,
             "open",
             req.ProductArea,
@@ -1632,10 +1634,12 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         var ticketId = pk.Replace("TICKET#", string.Empty, StringComparison.OrdinalIgnoreCase);
         var rawStatus = item.GetValueOrDefault("status")?.S ?? "open";
         var statusNorm = string.Equals(rawStatus, "new", StringComparison.OrdinalIgnoreCase) ? "open" : rawStatus;
+        var name = EmptyToNull(item.GetValueOrDefault("name")?.S);
 
         return new AdminSupportTicketDto(
             TicketId: ticketId,
             Email: item.GetValueOrDefault("email")?.S ?? string.Empty,
+            Name: name,
             Subject: item.GetValueOrDefault("subject")?.S ?? string.Empty,
             Status: statusNorm,
             ProductArea: item.GetValueOrDefault("productArea")?.S ?? "general",
