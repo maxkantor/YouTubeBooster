@@ -50,6 +50,8 @@ public sealed record MagicLinkLoginResponse(
 
 public sealed record MagicLinkVerifyRequest(string Token);
 
+public sealed record CognitoEnsureRequest(string Email, string Password);
+
 public sealed record AdminLoginRequest(string Email, string Password);
 
 public sealed record SessionUserDto(

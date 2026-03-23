@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using Amazon;
+using Amazon.CognitoIdentityProvider;
+using Amazon.CognitoIdentityProvider.Model;
 using Amazon.SimpleEmail;
 using Amazon.SimpleSystemsManagement;
 using Amazon.SimpleSystemsManagement.Model;
@@ -500,6 +503,78 @@ authApi.MapPost("/magic-link/verify", async (MagicLinkVerifyRequest request, Htt
     }, cancellationToken);
 
     return Results.Ok(new UserSessionStatusResponse(true, ToSessionUserDto(user)));
+});
+
+authApi.MapPost("/cognito/ensure", async (
+    CognitoEnsureRequest request,
+    IAppDataStore appDataStore,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+    {
+        return Results.BadRequest(new { error = "Email and password are required." });
+    }
+
+    var user = await appDataStore.GetUserByEmailAsync(request.Email.Trim(), cancellationToken);
+    if (user is null)
+    {
+        return Results.NotFound(new { error = "No account was found for that email." });
+    }
+
+    if (!user.EmailVerified && !user.Purchased)
+    {
+        return Results.Forbid();
+    }
+
+    var cognitoConfig = await LoadCognitoConfigAsync(configuration);
+    if (string.IsNullOrWhiteSpace(cognitoConfig.UserPoolId) || string.IsNullOrWhiteSpace(cognitoConfig.Region))
+    {
+        return Results.Problem("Cognito is not configured.");
+    }
+
+    var provider = new AmazonCognitoIdentityProviderClient(RegionEndpoint.GetBySystemName(cognitoConfig.Region));
+    try
+    {
+        await provider.AdminGetUserAsync(new AdminGetUserRequest
+        {
+            UserPoolId = cognitoConfig.UserPoolId,
+            Username = request.Email.Trim()
+        }, cancellationToken);
+
+        return Results.Ok(new { ok = true, created = false });
+    }
+    catch (UserNotFoundException)
+    {
+        // continue to create
+    }
+
+    await provider.AdminCreateUserAsync(new AdminCreateUserRequest
+    {
+        UserPoolId = cognitoConfig.UserPoolId,
+        Username = request.Email.Trim(),
+        MessageAction = MessageActionType.SUPPRESS,
+        UserAttributes = new List<AttributeType>
+        {
+            new() { Name = "email", Value = request.Email.Trim().ToLowerInvariant() },
+            new() { Name = "email_verified", Value = user.EmailVerified ? "true" : "false" }
+        }
+    }, cancellationToken);
+
+    await provider.AdminSetUserPasswordAsync(new AdminSetUserPasswordRequest
+    {
+        UserPoolId = cognitoConfig.UserPoolId,
+        Username = request.Email.Trim(),
+        Password = request.Password,
+        Permanent = true
+    }, cancellationToken);
+
+    await appDataStore.TrackEventAsync("cognito_user_provisioned", user.UserId, new Dictionary<string, string?>
+    {
+        ["email"] = user.Email
+    }, cancellationToken);
+
+    return Results.Ok(new { ok = true, created = true });
 });
 
 // Cognito JWT -> backend cookie session exchange

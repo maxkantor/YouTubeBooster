@@ -235,6 +235,12 @@ export const authApi = {
       method: 'POST',
       headers: { Authorization: `Bearer ${idToken}` }
     });
+  },
+  async cognitoEnsureUser(email: string, password: string): Promise<{ ok: boolean; created: boolean }> {
+    return fetchJson<{ ok: boolean; created: boolean }>('/api/auth/cognito/ensure', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
   }
 };
 

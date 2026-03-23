@@ -159,7 +159,21 @@ export function SignInPage({
 
               // Avoid account-enumeration style messaging (e.g. "User is not confirmed" / "User exists").
               if (code === 'UserNotFoundException') {
-                setError('No account exists for this email. Sign up or try another email.');
+                try {
+                  await authApi.cognitoEnsureUser(emailTrimmed, passwordVal);
+                  const session = await signIn(emailTrimmed, passwordVal);
+                  await authApi.cognitoLogin(session.idToken);
+                  try {
+                    window.sessionStorage.setItem('yb_post_auth_redirect', normalizedReturnTo);
+                  } catch {
+                    // ignore
+                  }
+                  window.location.replace('/');
+                  return;
+                } catch (ensureErr) {
+                  setError('No account exists for this email. Sign up or try another email.');
+                  console.warn('Cognito ensure failed:', ensureErr);
+                }
               } else if (
                 code === 'UserNotConfirmedException' ||
                 (code === 'NotAuthorizedException' && msg && /not\s*confirmed|unconfirmed/i.test(msg)) ||
