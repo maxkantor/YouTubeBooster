@@ -449,9 +449,9 @@ authApi.MapPost("/magic-link", async (MagicLinkLoginRequest request, HttpContext
     }
 
     var user = await appDataStore.GetUserByEmailAsync(request.Email, cancellationToken);
-    if (user is null || !user.Purchased)
+    if (user is null)
     {
-        return Results.BadRequest(new { error = "No purchased access was found for that email." });
+        return Results.BadRequest(new { error = "No account was found for that email." });
     }
 
     var tokenRecord = new MagicLinkTokenRecord(
