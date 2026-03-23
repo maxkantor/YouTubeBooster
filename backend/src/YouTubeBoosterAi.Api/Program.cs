@@ -786,6 +786,7 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
     IAppDataStore appDataStore,
     IAmazonSimpleEmailService ses,
     ISecretValueProvider secretValueProvider,
+    IConfiguration configuration,
     CancellationToken cancellationToken) =>
 {
     var ticket = await appDataStore.GetSupportTicketAsync(ticketId, cancellationToken);
@@ -794,14 +795,21 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
     var fromAddress = await secretValueProvider.GetValueAsync("ses/from-email", secure: true, cancellationToken);
     if (string.IsNullOrWhiteSpace(fromAddress)) return Results.Problem("SES sender identity is not configured.");
 
+    var fromName = configuration["App:SupportFromName"]
+                   ?? configuration["SUPPORT_FROM_NAME"]
+                   ?? "YouTubeBooster Support";
+    var fromSource = $"{fromName} <{fromAddress}>";
+
     var subject = string.IsNullOrWhiteSpace(request.Subject) ? $"Re: {ticket.Ticket.Subject}" : request.Subject.Trim();
     string? sesMessageId = null;
     try
     {
         var sendResponse = await ses.SendEmailAsync(new Amazon.SimpleEmail.Model.SendEmailRequest
         {
-            Source = fromAddress,
+            Source = fromSource,
             Destination = new Amazon.SimpleEmail.Model.Destination { ToAddresses = [ticket.Ticket.Email] },
+            ReplyToAddresses = [fromAddress],
+            ReturnPath = fromAddress,
             Message = new Amazon.SimpleEmail.Model.Message
             {
                 Subject = new Amazon.SimpleEmail.Model.Content(subject),

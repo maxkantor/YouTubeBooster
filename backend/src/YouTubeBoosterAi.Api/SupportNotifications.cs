@@ -50,6 +50,10 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
                       ?? "https://youtubeboosterai.com";
         baseUrl = baseUrl.TrimEnd('/');
 
+        var fromName = _configuration["App:SupportFromName"]
+                       ?? _configuration["SUPPORT_FROM_NAME"]
+                       ?? "YouTubeBooster Support";
+        var fromSource = $"{fromName} <{fromAddress}>";
         var subject = $"[YouTubeBooster] New contact form submission — {request.Subject}";
         var body = $"""
             New contact / support thread
@@ -75,16 +79,20 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
 
         try
         {
-            await _ses.SendEmailAsync(new SendEmailRequest
+            var sendRequest = new SendEmailRequest
             {
-                Source = fromAddress,
+                Source = fromSource,
                 Destination = new Destination { ToAddresses = [adminEmail] },
+                ReplyToAddresses = string.IsNullOrWhiteSpace(request.Email) ? null : [request.Email],
+                ReturnPath = fromAddress,
                 Message = new Message
                 {
                     Subject = new Content(subject),
                     Body = new Body { Text = new Content(body) }
                 }
-            }, cancellationToken);
+            };
+
+            await _ses.SendEmailAsync(sendRequest, cancellationToken);
 
             await _appDataStore.TrackEventAsync("contact_notification_sent", ticketId, new Dictionary<string, string?>
             {
