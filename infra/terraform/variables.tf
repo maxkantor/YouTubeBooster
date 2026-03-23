@@ -16,6 +16,12 @@ variable "ssm_prefix" {
   default     = "/youtubebooster"
 }
 
+variable "public_site_url" {
+  description = "Public site base URL for CRM links in admin emails (not a secret)."
+  type        = string
+  default     = "https://youtubebooster.com"
+}
+
 variable "create_placeholder_parameters" {
   description = "Whether to create placeholder SSM parameters."
   type        = bool

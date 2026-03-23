@@ -82,7 +82,9 @@ public sealed record SupportTicketRequest(
     string Subject,
     string Message,
     string ProductArea,
-    string? ChannelUrl
+    string? ChannelUrl,
+    string? OrderReference = null,
+    string? AccountEmail = null
 );
 
 public sealed record SupportTicketResponse(string TicketId, string Status);
@@ -200,7 +202,9 @@ public sealed record AdminSupportMessageDto(
     string Direction,
     string Subject,
     string Body,
-    DateTimeOffset SentAt
+    DateTimeOffset SentAt,
+    string? SesMessageId,
+    string? DeliveryStatus
 );
 
 public sealed record AdminSupportReplyRequest(string Subject, string Body);

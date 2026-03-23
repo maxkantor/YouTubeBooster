@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace YouTubeBoosterAi.Api;
 
 public interface IDemoAnalysisService
@@ -23,7 +25,7 @@ public interface IAdminDashboardService
 
 public interface ISupportService
 {
-    Task<SupportTicketResponse> CreateTicketAsync(SupportTicketRequest request, CancellationToken cancellationToken);
+    Task<SupportTicketResponse> CreateTicketAsync(SupportTicketRequest request, string? linkedUserIdFromAuth, CancellationToken cancellationToken);
 }
 
 public interface IAppSettingsProvider
@@ -36,15 +38,18 @@ public sealed class StripeCheckoutService : ICheckoutService
     private readonly IAppSettingsProvider _appSettingsProvider;
     private readonly ISecretValueProvider _secretValueProvider;
     private readonly IAppDataStore _appDataStore;
+    private readonly IPaymentAdminNotificationService _paymentAdminNotifier;
 
     public StripeCheckoutService(
         IAppSettingsProvider appSettingsProvider,
         ISecretValueProvider secretValueProvider,
-        IAppDataStore appDataStore)
+        IAppDataStore appDataStore,
+        IPaymentAdminNotificationService paymentAdminNotifier)
     {
         _appSettingsProvider = appSettingsProvider;
         _secretValueProvider = secretValueProvider;
         _appDataStore = appDataStore;
+        _paymentAdminNotifier = paymentAdminNotifier;
     }
 
     public async Task<CheckoutSessionResponse> CreateSessionAsync(CreateCheckoutSessionRequest request, CancellationToken cancellationToken)
@@ -285,6 +290,17 @@ public sealed class StripeCheckoutService : ICheckoutService
 
     private async Task ProcessCompletedCheckoutSessionAsync(Stripe.Checkout.Session session, CancellationToken cancellationToken)
     {
+        var amountDollars = (session.AmountTotal ?? 0) / 100m;
+        if (amountDollars <= 0m)
+        {
+            await _appDataStore.TrackEventAsync("payment_checkout_zero_amount", session.Id, new Dictionary<string, string?>
+            {
+                ["paymentStatus"] = session.PaymentStatus ?? string.Empty,
+                ["status"] = session.Status ?? string.Empty
+            }, cancellationToken);
+            return;
+        }
+
         var metadata = session.Metadata ?? new Dictionary<string, string>();
         var userId = metadata.GetValueOrDefault("userId") ?? string.Empty;
         var cognitoSub = metadata.GetValueOrDefault("cognitoSub") ?? string.Empty;
@@ -360,6 +376,29 @@ public sealed class StripeCheckoutService : ICheckoutService
                 PaidAt: DateTimeOffset.UtcNow
             );
             await _appDataStore.SavePaymentAsync(payment, cancellationToken);
+
+            try
+            {
+                await _paymentAdminNotifier.NotifySuccessfulPaymentAsync(
+                    payment,
+                    user,
+                    session.Id,
+                    session.PaymentIntentId,
+                    metadata.GetValueOrDefault("planCode") ?? "premium",
+                    cancellationToken);
+                await _appDataStore.TrackEventAsync("payment_admin_notification_sent", session.Id, new Dictionary<string, string?>
+                {
+                    ["userId"] = user.UserId,
+                    ["amount"] = payment.Amount.ToString("F2", CultureInfo.InvariantCulture)
+                }, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await _appDataStore.TrackEventAsync("payment_admin_notification_failed", session.Id, new Dictionary<string, string?>
+                {
+                    ["error"] = ex.Message
+                }, cancellationToken);
+            }
         }
 
         var record = new PurchaseRecord(
@@ -478,10 +517,31 @@ public sealed class SupportService : ISupportService
         _supportNotificationService = supportNotificationService;
     }
 
-    public async Task<SupportTicketResponse> CreateTicketAsync(SupportTicketRequest request, CancellationToken cancellationToken)
+    public async Task<SupportTicketResponse> CreateTicketAsync(SupportTicketRequest request, string? linkedUserIdFromAuth, CancellationToken cancellationToken)
     {
-        var ticketId = await _appDataStore.SaveSupportTicketAsync(request, cancellationToken);
+        var err = ContactSubmissionValidator.Validate(request);
+        if (err is not null)
+        {
+            throw new InvalidOperationException(err);
+        }
+
+        string? linked = linkedUserIdFromAuth;
+        if (linked is null)
+        {
+            var byContact = await _appDataStore.GetUserByEmailAsync(NormalizeEmail(request.Email), cancellationToken);
+            linked = byContact?.UserId;
+        }
+
+        if (linked is null && !string.IsNullOrWhiteSpace(request.AccountEmail))
+        {
+            var byAccount = await _appDataStore.GetUserByEmailAsync(NormalizeEmail(request.AccountEmail!), cancellationToken);
+            linked = byAccount?.UserId;
+        }
+
+        var ticketId = await _appDataStore.SaveSupportTicketAsync(request, linked, cancellationToken);
         await _supportNotificationService.NotifyNewTicketAsync(ticketId, request, cancellationToken);
-        return new SupportTicketResponse(ticketId, "new");
+        return new SupportTicketResponse(ticketId, "open");
     }
+
+    private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 }

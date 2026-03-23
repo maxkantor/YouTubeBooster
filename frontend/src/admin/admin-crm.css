@@ -457,3 +457,75 @@
   word-break: break-word;
   max-width: 360px;
 }
+
+/* Section cards (user detail, shared layout) */
+.admin-crm-section {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.admin-crm-section-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.admin-crm-section-body > .admin-crm-textarea {
+  margin-bottom: 12px;
+}
+
+/* Filter chips (orders / audits / support) */
+.admin-crm-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-crm-filter-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.admin-crm-filter-chip:hover {
+  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.admin-crm-filter-chip-active {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: #6366f1;
+  color: #c7d2fe;
+}
+
+/* Row actions (users table) */
+.admin-crm-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 112px;
+}
+
+.admin-crm-select-compact {
+  max-width: 120px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.admin-crm-row-click {
+  cursor: default;
+}
+
+.admin-crm-badge-muted {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+}

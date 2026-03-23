@@ -61,6 +61,7 @@ public static class Infrastructure
         services.AddScoped<IAdminDashboardService, AdminDashboardService>();
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<ISupportNotificationService, SesSupportNotificationService>();
+        services.AddSingleton<IPaymentAdminNotificationService, SesPaymentAdminNotificationService>();
 
         return services;
     }
@@ -91,7 +92,8 @@ public sealed class ParameterStoreAppSettingsProvider : IAppSettingsProvider
             ?? _configuration["Stripe:PublishableKey"]
             ?? "pk_test_placeholder";
 
-        var supportEmail = await _secretValueProvider.GetValueAsync("ses/admin-email", secure: false, cancellationToken)
+        var supportEmail = await _secretValueProvider.GetValueAsync("admin/email", secure: false, cancellationToken)
+            ?? await _secretValueProvider.GetValueAsync("ses/admin-email", secure: false, cancellationToken)
             ?? _configuration["Support:Email"]
             ?? "support@example.com";
 

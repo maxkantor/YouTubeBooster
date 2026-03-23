@@ -24,7 +24,8 @@ import type {
   SaveUserYouTubeSettingsRequest,
   UserOnboardingState,
   UserSessionStatus,
-  UserYouTubeSettings
+  UserYouTubeSettings,
+  ContactSubmitResponse
 } from '../types';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
@@ -143,6 +144,31 @@ export const publicApi = {
   /** Mirrors SSM /pricing/one-time-price + /pricing/currency */
   async getPricing(): Promise<{ oneTimePrice: string; currency: string }> {
     return fetchJson<{ oneTimePrice: string; currency: string }>('/api/public/pricing');
+  },
+  /** Public contact form — creates support thread + admin email (credentials: include for signed-in linking). */
+  async submitContact(body: {
+    email: string;
+    name?: string | null;
+    subject: string;
+    message: string;
+    productArea?: string;
+    channelUrl?: string | null;
+    orderReference?: string | null;
+    accountEmail?: string | null;
+  }): Promise<ContactSubmitResponse> {
+    return fetchJson<ContactSubmitResponse>('/api/contact', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: body.email.trim(),
+        name: body.name?.trim() ?? null,
+        subject: body.subject.trim(),
+        message: body.message.trim(),
+        productArea: body.productArea?.trim() || 'general',
+        channelUrl: body.channelUrl?.trim() || null,
+        orderReference: body.orderReference?.trim() || null,
+        accountEmail: body.accountEmail?.trim() || null
+      })
+    });
   }
 };
 

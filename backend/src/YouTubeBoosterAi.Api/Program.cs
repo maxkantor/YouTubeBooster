@@ -122,6 +122,17 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+    options.AddPolicy("contact-form", httpContext =>
+    {
+        var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromHours(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
 });
 
 var app = builder.Build();
@@ -216,16 +227,27 @@ publicApi.MapPost("/runner/log_issue", async (PublicRunnerIssueRequest request, 
     return Results.Ok(new { status = "ok" });
 });
 
-publicApi.MapPost("/support/contact", async (SupportTicketRequest request, ISupportService supportService, CancellationToken cancellationToken) =>
+async Task<IResult> HandleContactSubmission(
+    SupportTicketRequest request,
+    ISupportService supportService,
+    SessionCookieService sessionCookieService,
+    HttpContext httpContext,
+    CancellationToken cancellationToken)
 {
-    if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Subject) || string.IsNullOrWhiteSpace(request.Message))
+    try
     {
-        return Results.BadRequest(new { error = "Email, subject, and message are required." });
+        var user = await sessionCookieService.GetAuthenticatedUserAsync(httpContext, cancellationToken);
+        var response = await supportService.CreateTicketAsync(request, user?.UserId, cancellationToken);
+        return Results.Ok(response);
     }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+}
 
-    var response = await supportService.CreateTicketAsync(request, cancellationToken);
-    return Results.Ok(response);
-});
+publicApi.MapPost("/support/contact", HandleContactSubmission).RequireRateLimiting("contact-form");
+app.MapPost("/api/contact", HandleContactSubmission).RequireRateLimiting("contact-form");
 
 var checkoutApi = app.MapGroup("/api/checkout");
 checkoutApi.MapPost("/session", async (CreateCheckoutSessionRequest request, ICheckoutService service, CancellationToken cancellationToken) =>
@@ -765,7 +787,6 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
     IAppDataStore appDataStore,
     IAmazonSimpleEmailService ses,
     ISecretValueProvider secretValueProvider,
-    IAppSettingsProvider appSettingsProvider,
     CancellationToken cancellationToken) =>
 {
     var ticket = await appDataStore.GetSupportTicketAsync(ticketId, cancellationToken);
@@ -775,24 +796,39 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
     if (string.IsNullOrWhiteSpace(fromAddress)) return Results.Problem("SES sender identity is not configured.");
 
     var subject = string.IsNullOrWhiteSpace(request.Subject) ? $"Re: {ticket.Ticket.Subject}" : request.Subject.Trim();
-    await ses.SendEmailAsync(new Amazon.SimpleEmail.Model.SendEmailRequest
+    string? sesMessageId = null;
+    try
     {
-        Source = fromAddress,
-        Destination = new Amazon.SimpleEmail.Model.Destination { ToAddresses = [ticket.Ticket.Email] },
-        Message = new Amazon.SimpleEmail.Model.Message
+        var sendResponse = await ses.SendEmailAsync(new Amazon.SimpleEmail.Model.SendEmailRequest
         {
-            Subject = new Amazon.SimpleEmail.Model.Content(subject),
-            Body = new Amazon.SimpleEmail.Model.Body
+            Source = fromAddress,
+            Destination = new Amazon.SimpleEmail.Model.Destination { ToAddresses = [ticket.Ticket.Email] },
+            Message = new Amazon.SimpleEmail.Model.Message
             {
-                Text = new Amazon.SimpleEmail.Model.Content(request.Body ?? string.Empty)
+                Subject = new Amazon.SimpleEmail.Model.Content(subject),
+                Body = new Amazon.SimpleEmail.Model.Body
+                {
+                    Text = new Amazon.SimpleEmail.Model.Content(request.Body ?? string.Empty)
+                }
             }
-        }
-    }, cancellationToken);
-
-    await appDataStore.SaveSupportReplyAsync(ticketId, subject, request.Body ?? string.Empty, cancellationToken);
-    await appDataStore.TrackEventAsync("admin_support_reply_sent", ticketId, new Dictionary<string, string?>
+        }, cancellationToken);
+        sesMessageId = sendResponse.MessageId;
+    }
+    catch (Exception ex)
     {
-        ["to"] = ticket.Ticket.Email
+        await appDataStore.TrackEventAsync("support_reply_failed", ticketId, new Dictionary<string, string?>
+        {
+            ["to"] = ticket.Ticket.Email,
+            ["error"] = ex.Message
+        }, cancellationToken);
+        return Results.Problem("Failed to send email.");
+    }
+
+    await appDataStore.SaveSupportReplyAsync(ticketId, subject, request.Body ?? string.Empty, sesMessageId, "sent", cancellationToken);
+    await appDataStore.TrackEventAsync("support_reply_sent", ticketId, new Dictionary<string, string?>
+    {
+        ["to"] = ticket.Ticket.Email,
+        ["sesMessageId"] = sesMessageId
     }, cancellationToken);
 
     return Results.Ok(new { ok = true });

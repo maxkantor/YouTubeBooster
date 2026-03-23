@@ -17,58 +17,86 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
 {
     private readonly IAmazonSimpleEmailService _ses;
     private readonly ISecretValueProvider _secretValueProvider;
-    private readonly IAppSettingsProvider _appSettingsProvider;
+    private readonly IAppDataStore _appDataStore;
+    private readonly IConfiguration _configuration;
 
     public SesSupportNotificationService(
         IAmazonSimpleEmailService ses,
         ISecretValueProvider secretValueProvider,
-        IAppSettingsProvider appSettingsProvider)
+        IAppDataStore appDataStore,
+        IConfiguration configuration)
     {
         _ses = ses;
         _secretValueProvider = secretValueProvider;
-        _appSettingsProvider = appSettingsProvider;
+        _appDataStore = appDataStore;
+        _configuration = configuration;
     }
 
     public async Task NotifyNewTicketAsync(string ticketId, SupportTicketRequest request, CancellationToken cancellationToken)
     {
         var fromAddress = await _secretValueProvider.GetValueAsync("ses/from-email", secure: true, cancellationToken);
-        var settings = await _appSettingsProvider.GetSettingsAsync(cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(fromAddress) || string.IsNullOrWhiteSpace(settings.SupportEmail))
+        var adminEmail = await _secretValueProvider.GetValueAsync("admin/email", secure: false, cancellationToken);
+        if (string.IsNullOrWhiteSpace(fromAddress) || string.IsNullOrWhiteSpace(adminEmail))
         {
+            await _appDataStore.TrackEventAsync("contact_notification_failed", ticketId, new Dictionary<string, string?>
+            {
+                ["reason"] = "missing_ses_or_admin_email"
+            }, cancellationToken);
             return;
         }
 
+        var baseUrl = _configuration["App:PublicSiteUrl"]
+                      ?? _configuration["PUBLIC_SITE_URL"]
+                      ?? "https://youtubebooster.com";
+        baseUrl = baseUrl.TrimEnd('/');
+
+        var subject = $"[YouTubeBooster] New contact form submission — {request.Subject}";
         var body = $"""
-        New support ticket: {ticketId}
+            New contact / support thread
 
-        Email: {request.Email}
-        Name: {request.Name}
-        Product Area: {request.ProductArea}
-        Channel URL: {request.ChannelUrl}
+            Ticket ID: {ticketId}
+            CRM: {baseUrl}/admin/support/{Uri.EscapeDataString(ticketId)}
 
-        Subject:
-        {request.Subject}
+            Contact name: {request.Name ?? "(not provided)"}
+            Contact email: {request.Email}
+            Account email (if different): {request.AccountEmail ?? "(not provided)"}
+            Order reference: {request.OrderReference ?? "(not provided)"}
+            Channel URL: {request.ChannelUrl ?? "(not provided)"}
+            Area: {request.ProductArea}
 
-        Message:
-        {request.Message}
-        """;
+            Subject:
+            {request.Subject}
 
-        await _ses.SendEmailAsync(new SendEmailRequest
+            Message:
+            {request.Message}
+
+            Created (UTC): {DateTimeOffset.UtcNow:O}
+            """;
+
+        try
         {
-            Source = fromAddress,
-            Destination = new Destination
+            await _ses.SendEmailAsync(new SendEmailRequest
             {
-                ToAddresses = [settings.SupportEmail]
-            },
-            Message = new Message
-            {
-                Subject = new Content($"[YouTube Booster AI] New support ticket {ticketId}"),
-                Body = new Body
+                Source = fromAddress,
+                Destination = new Destination { ToAddresses = [adminEmail] },
+                Message = new Message
                 {
-                    Text = new Content(body)
+                    Subject = new Content(subject),
+                    Body = new Body { Text = new Content(body) }
                 }
-            }
-        }, cancellationToken);
+            }, cancellationToken);
+
+            await _appDataStore.TrackEventAsync("contact_notification_sent", ticketId, new Dictionary<string, string?>
+            {
+                ["to"] = adminEmail
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            await _appDataStore.TrackEventAsync("contact_notification_failed", ticketId, new Dictionary<string, string?>
+            {
+                ["reason"] = ex.Message
+            }, cancellationToken);
+        }
     }
 }

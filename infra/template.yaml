@@ -16,6 +16,7 @@ Globals:
         STRIPE__PRICELOOKUPKEY: ytboosterai_default
         SUPPORT__EMAIL: support@example.com
         SSM__BASEPATH: /youtubebooster
+        PUBLIC_SITE_URL: https://youtubebooster.com
 
 Resources:
   ApiGateway:

@@ -7,7 +7,7 @@ namespace YouTubeBoosterAi.Api;
 public interface IAppDataStore
 {
     Task SaveDemoAsync(DemoAnalysisRequest request, DemoAnalysisResponse response, CancellationToken cancellationToken);
-    Task<string> SaveSupportTicketAsync(SupportTicketRequest request, CancellationToken cancellationToken);
+    Task<string> SaveSupportTicketAsync(SupportTicketRequest request, string? linkedUserId, CancellationToken cancellationToken);
     Task SavePurchaseAsync(PurchaseRecord purchase, CancellationToken cancellationToken);
     Task<UserAccount> UpsertPurchasedUserAsync(string email, string? channelInput, CancellationToken cancellationToken);
     Task<UserAccount?> GetUserByEmailAsync(string email, CancellationToken cancellationToken);
@@ -53,7 +53,7 @@ public interface IAppDataStore
     Task<AdminListResponse<PurchaseRecord>> ListPurchasesAsync(int limit, string? cursor, CancellationToken cancellationToken);
     Task<AdminListResponse<AdminSupportTicketDto>> ListSupportTicketsAsync(int limit, string? cursor, CancellationToken cancellationToken);
     Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken);
-    Task SaveSupportReplyAsync(string ticketId, string subject, string body, CancellationToken cancellationToken);
+    Task SaveSupportReplyAsync(string ticketId, string subject, string body, string? sesMessageId, string? deliveryStatus, CancellationToken cancellationToken);
     Task<AdminListResponse<AdminDemoAuditDto>> ListDemoAuditsAsync(int limit, string? cursor, CancellationToken cancellationToken);
 
     Task<AdminOperationalDashboardResponse> GetOperationalDashboardAsync(string range, CancellationToken cancellationToken);
@@ -105,6 +105,7 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     private readonly List<ActivityFeedItem> _activity = [];
     private readonly List<string> _supportTickets = [];
     private readonly Dictionary<string, SupportTicketRequest> _supportTicketsById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string?> _supportLinkedUserId = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<AdminSupportMessageDto>> _supportThreads = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UserAccount> _usersById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _userIdsByEmail = new(StringComparer.OrdinalIgnoreCase);
@@ -129,11 +130,15 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
         return Task.CompletedTask;
     }
 
-    public Task<string> SaveSupportTicketAsync(SupportTicketRequest request, CancellationToken cancellationToken)
+    public Task<string> SaveSupportTicketAsync(SupportTicketRequest request, string? linkedUserId, CancellationToken cancellationToken)
     {
         var ticketId = $"ticket_{Guid.NewGuid():N}";
         _supportTickets.Add(ticketId);
         _supportTicketsById[ticketId] = request;
+        if (!string.IsNullOrWhiteSpace(linkedUserId))
+        {
+            _supportLinkedUserId[ticketId] = linkedUserId;
+        }
         _supportThreads[ticketId] = new List<AdminSupportMessageDto>
         {
             new(
@@ -141,7 +146,9 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
                 Direction: "inbound",
                 Subject: request.Subject,
                 Body: request.Message,
-                SentAt: DateTimeOffset.UtcNow
+                SentAt: DateTimeOffset.UtcNow,
+                SesMessageId: null,
+                DeliveryStatus: "received"
             )
         };
         _activity.Insert(0, new ActivityFeedItem("Support ticket", request.Subject, DateTimeOffset.UtcNow));
@@ -586,13 +593,13 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
                 TicketId: x.TicketId,
                 Email: x.Req.Email,
                 Subject: x.Req.Subject,
-                Status: "new",
+                Status: "open",
                 ProductArea: x.Req.ProductArea,
                 ChannelUrl: x.Req.ChannelUrl,
                 CreatedAt: DateTimeOffset.UtcNow,
                 UpdatedAt: DateTimeOffset.UtcNow,
-                Priority: null,
-                LinkedUserId: null
+                Priority: "normal",
+                LinkedUserId: _supportLinkedUserId.GetValueOrDefault(x.TicketId)
             ))
             .Take(Math.Max(1, limit))
             .ToArray();
@@ -603,19 +610,29 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     {
         if (!_supportTicketsById.TryGetValue(ticketId, out var req))
             return Task.FromResult<AdminSupportTicketDetailResponse?>(null);
-        var ticket = new AdminSupportTicketDto(ticketId, req.Email, req.Subject, "new", req.ProductArea, req.ChannelUrl, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null);
+        var ticket = new AdminSupportTicketDto(
+            ticketId,
+            req.Email,
+            req.Subject,
+            "open",
+            req.ProductArea,
+            req.ChannelUrl,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            "normal",
+            _supportLinkedUserId.GetValueOrDefault(ticketId));
         var thread = _supportThreads.TryGetValue(ticketId, out var list) ? list.ToArray() : Array.Empty<AdminSupportMessageDto>();
         return Task.FromResult<AdminSupportTicketDetailResponse?>(new AdminSupportTicketDetailResponse(ticket, req.Name, req.Message, thread));
     }
 
-    public Task SaveSupportReplyAsync(string ticketId, string subject, string body, CancellationToken cancellationToken)
+    public Task SaveSupportReplyAsync(string ticketId, string subject, string body, string? sesMessageId, string? deliveryStatus, CancellationToken cancellationToken)
     {
         if (!_supportThreads.TryGetValue(ticketId, out var list))
         {
             list = new List<AdminSupportMessageDto>();
             _supportThreads[ticketId] = list;
         }
-        list.Add(new AdminSupportMessageDto($"msg_{Guid.NewGuid():N}", "outbound", subject, body, DateTimeOffset.UtcNow));
+        list.Add(new AdminSupportMessageDto($"msg_{Guid.NewGuid():N}", "outbound", subject, body, DateTimeOffset.UtcNow, sesMessageId, deliveryStatus));
         _activity.Insert(0, new ActivityFeedItem("support_reply_sent", ticketId, DateTimeOffset.UtcNow));
         return Task.CompletedTask;
     }
@@ -670,30 +687,57 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         }, cancellationToken);
     }
 
-    public async Task<string> SaveSupportTicketAsync(SupportTicketRequest request, CancellationToken cancellationToken)
+    public async Task<string> SaveSupportTicketAsync(SupportTicketRequest request, string? linkedUserId, CancellationToken cancellationToken)
     {
         var ticketId = $"ticket_{Guid.NewGuid():N}";
-        var now = DateTimeOffset.UtcNow.ToString("O");
+        var now = DateTimeOffset.UtcNow;
+        var nowIso = now.ToString("O");
+        var tableName = GetTableName("Storage:SupportTable", "ybai-support");
         var item = new Dictionary<string, AttributeValue>
         {
             ["pk"] = StringValue($"TICKET#{ticketId}"),
             ["sk"] = StringValue("DETAILS"),
-            ["email"] = StringValue(request.Email),
+            ["email"] = StringValue(request.Email.Trim()),
             ["name"] = StringValue(request.Name ?? string.Empty),
             ["subject"] = StringValue(request.Subject),
             ["message"] = StringValue(request.Message),
             ["productArea"] = StringValue(request.ProductArea),
             ["channelUrl"] = StringValue(request.ChannelUrl ?? string.Empty),
-            ["status"] = StringValue("new"),
-            ["createdAt"] = StringValue(now),
-            ["updatedAt"] = StringValue(now)
+            ["status"] = StringValue("open"),
+            ["priority"] = StringValue("normal"),
+            ["source"] = StringValue("contact_form"),
+            ["orderReference"] = StringValue(request.OrderReference ?? string.Empty),
+            ["accountEmail"] = StringValue(request.AccountEmail ?? string.Empty),
+            ["createdAt"] = StringValue(nowIso),
+            ["updatedAt"] = StringValue(nowIso),
+            ["lastMessageAt"] = StringValue(nowIso)
         };
+        if (!string.IsNullOrWhiteSpace(linkedUserId))
+        {
+            item["linkedUserId"] = StringValue(linkedUserId);
+        }
 
-        await PutItemAsync(GetTableName("Storage:SupportTable", "ybai-support"), item, cancellationToken);
-        await TrackEventAsync("support_submitted", request.Subject, new Dictionary<string, string?>
+        await PutItemAsync(tableName, item, cancellationToken);
+
+        var inboundId = $"msg_{Guid.NewGuid():N}";
+        await PutItemAsync(tableName, new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"TICKET#{ticketId}"),
+            ["sk"] = StringValue($"MSG#{now:O}#{inboundId}"),
+            ["direction"] = StringValue("inbound"),
+            ["subject"] = StringValue(request.Subject),
+            ["body"] = StringValue(request.Message),
+            ["sentAt"] = StringValue(nowIso),
+            ["createdByType"] = StringValue("user"),
+            ["deliveryStatus"] = StringValue("received")
+        }, cancellationToken);
+
+        await TrackEventAsync("contact_submitted", ticketId, new Dictionary<string, string?>
         {
             ["ticketId"] = ticketId,
-            ["productArea"] = request.ProductArea
+            ["email"] = request.Email,
+            ["productArea"] = request.ProductArea,
+            ["linkedUserId"] = linkedUserId
         }, cancellationToken);
 
         return ticketId;
@@ -1504,24 +1548,48 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         return new AdminSupportTicketDetailResponse(ticket, name, message, thread);
     }
 
-    public async Task SaveSupportReplyAsync(string ticketId, string subject, string body, CancellationToken cancellationToken)
+    public async Task SaveSupportReplyAsync(string ticketId, string subject, string body, string? sesMessageId, string? deliveryStatus, CancellationToken cancellationToken)
     {
         var tableName = GetTableName("Storage:SupportTable", "ybai-support");
         var sentAt = DateTimeOffset.UtcNow;
         var messageId = $"msg_{Guid.NewGuid():N}";
-        await PutItemAsync(tableName, new Dictionary<string, AttributeValue>
+        var msg = new Dictionary<string, AttributeValue>
         {
             ["pk"] = StringValue($"TICKET#{ticketId}"),
             ["sk"] = StringValue($"MSG#{sentAt:O}#{messageId}"),
             ["direction"] = StringValue("outbound"),
             ["subject"] = StringValue(subject),
             ["body"] = StringValue(body),
-            ["sentAt"] = StringValue(sentAt.ToString("O"))
+            ["sentAt"] = StringValue(sentAt.ToString("O")),
+            ["createdByType"] = StringValue("admin"),
+            ["deliveryStatus"] = StringValue(deliveryStatus ?? "sent")
+        };
+        if (!string.IsNullOrWhiteSpace(sesMessageId))
+        {
+            msg["sesMessageId"] = StringValue(sesMessageId);
+        }
+
+        await PutItemAsync(tableName, msg, cancellationToken);
+
+        await _dynamoDb.UpdateItemAsync(new UpdateItemRequest
+        {
+            TableName = tableName,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = StringValue($"TICKET#{ticketId}"),
+                ["sk"] = StringValue("DETAILS")
+            },
+            UpdateExpression = "SET updatedAt = :u, lastMessageAt = :u",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":u"] = StringValue(sentAt.ToString("O"))
+            }
         }, cancellationToken);
 
         await TrackEventAsync("support_reply_sent", ticketId, new Dictionary<string, string?>
         {
-            ["messageId"] = messageId
+            ["messageId"] = messageId,
+            ["sesMessageId"] = sesMessageId
         }, cancellationToken);
     }
 
@@ -1562,11 +1630,14 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
     {
         var pk = item.GetValueOrDefault("pk")?.S ?? string.Empty;
         var ticketId = pk.Replace("TICKET#", string.Empty, StringComparison.OrdinalIgnoreCase);
+        var rawStatus = item.GetValueOrDefault("status")?.S ?? "open";
+        var statusNorm = string.Equals(rawStatus, "new", StringComparison.OrdinalIgnoreCase) ? "open" : rawStatus;
+
         return new AdminSupportTicketDto(
             TicketId: ticketId,
             Email: item.GetValueOrDefault("email")?.S ?? string.Empty,
             Subject: item.GetValueOrDefault("subject")?.S ?? string.Empty,
-            Status: item.GetValueOrDefault("status")?.S ?? "new",
+            Status: statusNorm,
             ProductArea: item.GetValueOrDefault("productArea")?.S ?? "general",
             ChannelUrl: EmptyToNull(item.GetValueOrDefault("channelUrl")?.S),
             CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
@@ -1615,7 +1686,9 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             Direction: item.GetValueOrDefault("direction")?.S ?? "outbound",
             Subject: item.GetValueOrDefault("subject")?.S ?? string.Empty,
             Body: item.GetValueOrDefault("body")?.S ?? string.Empty,
-            SentAt: ParseDate(item.GetValueOrDefault("sentAt")?.S)
+            SentAt: ParseDate(item.GetValueOrDefault("sentAt")?.S),
+            SesMessageId: EmptyToNull(item.GetValueOrDefault("sesMessageId")?.S),
+            DeliveryStatus: EmptyToNull(item.GetValueOrDefault("deliveryStatus")?.S)
         )).ToArray();
     }
 

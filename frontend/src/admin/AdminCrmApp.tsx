@@ -12,6 +12,18 @@ import type {
   AdminActivityEventRow
 } from '../types';
 import { useAdminCrm } from './useAdminCrm';
+import {
+  AuditFilterBar,
+  Badge,
+  filterAudits,
+  filterOrders,
+  filterSupport,
+  OrderFilterBar,
+  SectionCard,
+  SupportFilterBar,
+  UserRowActions,
+  userStatusBadge
+} from './AdminCrmComponents';
 
 const NAV: { to: string; end?: boolean; label: string }[] = [
   { to: '', end: true, label: 'Dashboard' },
@@ -44,28 +56,6 @@ function formatMoney(amount: number, currency: string) {
   } catch {
     return `${amount} ${currency}`;
   }
-}
-
-function Badge({ kind, children }: { kind: 'ok' | 'warn' | 'bad' | 'neutral' | 'info'; children: React.ReactNode }) {
-  const cls =
-    kind === 'ok'
-      ? 'admin-crm-badge-ok'
-      : kind === 'warn'
-        ? 'admin-crm-badge-warn'
-        : kind === 'bad'
-          ? 'admin-crm-badge-bad'
-          : kind === 'info'
-            ? 'admin-crm-badge-info'
-            : 'admin-crm-badge-neutral';
-  return <span className={`admin-crm-badge ${cls}`}>{children}</span>;
-}
-
-function userStatusBadge(status: string) {
-  const s = (status || 'active').toLowerCase();
-  if (s === 'active') return <Badge kind="ok">active</Badge>;
-  if (s === 'suspended') return <Badge kind="warn">suspended</Badge>;
-  if (s === 'deactivated') return <Badge kind="bad">deactivated</Badge>;
-  return <Badge kind="neutral">{status}</Badge>;
 }
 
 function orderClassificationMeta(c: string) {
@@ -384,8 +374,11 @@ type UserFilter =
   | 'deactivated'
   | 'purchased'
   | 'not_purchased'
+  | 'entitled'
+  | 'not_entitled'
   | 'verified'
-  | 'unverified';
+  | 'unverified'
+  | 'recent7d';
 
 export function UsersPage() {
   const [items, setItems] = useState<AdminUserRow[]>([]);
@@ -429,17 +422,46 @@ export function UsersPage() {
     };
   }, []);
 
+  const refreshUsers = useCallback(async () => {
+    try {
+      const res = await adminApi.crmUsers(50, null);
+      setItems(res.items);
+      setNext(res.nextCursor);
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load users');
+    }
+  }, []);
+
   const filtered = useMemo(() => {
     let list = items;
     const qq = q.trim().toLowerCase();
     if (qq) list = list.filter((u) => u.email.toLowerCase().includes(qq));
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     if (filter === 'active') list = list.filter((u) => (u.userStatus || 'active').toLowerCase() === 'active');
     if (filter === 'suspended') list = list.filter((u) => (u.userStatus || '').toLowerCase() === 'suspended');
     if (filter === 'deactivated') list = list.filter((u) => (u.userStatus || '').toLowerCase() === 'deactivated');
     if (filter === 'purchased') list = list.filter((u) => u.purchased);
     if (filter === 'not_purchased') list = list.filter((u) => !u.purchased);
+    if (filter === 'entitled')
+      list = list.filter(
+        (u) =>
+          u.purchased ||
+          (u.entitlementsSummary && !u.entitlementsSummary.toLowerCase().includes('none') && u.entitlementsSummary.trim() !== '')
+      );
+    if (filter === 'not_entitled')
+      list = list.filter(
+        (u) =>
+          !u.purchased &&
+          (!u.entitlementsSummary || u.entitlementsSummary.toLowerCase().includes('none') || u.entitlementsSummary.trim() === '')
+      );
     if (filter === 'verified') list = list.filter((u) => u.emailVerified);
     if (filter === 'unverified') list = list.filter((u) => !u.emailVerified);
+    if (filter === 'recent7d')
+      list = list.filter((u) => {
+        const t = new Date(u.createdAt).getTime();
+        return !Number.isNaN(t) && t >= sevenDaysAgo;
+      });
     return list;
   }, [items, q, filter]);
 
@@ -460,8 +482,11 @@ export function UsersPage() {
           <option value="deactivated">Deactivated</option>
           <option value="purchased">Has purchase flag</option>
           <option value="not_purchased">No purchase flag</option>
+          <option value="entitled">Entitled / premium</option>
+          <option value="not_entitled">Not entitled</option>
           <option value="verified">Email verified</option>
           <option value="unverified">Email not verified</option>
+          <option value="recent7d">New (7d)</option>
         </select>
       </div>
       {loading ? (
@@ -482,12 +507,12 @@ export function UsersPage() {
                   <th>Last login</th>
                   <th>Created</th>
                   <th>Updated</th>
-                  <th />
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((u) => (
-                  <tr key={u.userId}>
+                  <tr key={u.userId} className="admin-crm-row-click">
                     <td>
                       <Link to={`/admin/user/${encodeURIComponent(u.userId)}`}>{u.email}</Link>
                     </td>
@@ -505,9 +530,7 @@ export function UsersPage() {
                     <td className="admin-crm-nowrap">{formatDt(u.createdAt)}</td>
                     <td className="admin-crm-nowrap">{formatDt(u.updatedAt)}</td>
                     <td>
-                      <Link className="admin-crm-btn admin-crm-btn-tiny" to={`/admin/user/${encodeURIComponent(u.userId)}`}>
-                        Open
-                      </Link>
+                      <UserRowActions user={u} onChanged={refreshUsers} />
                     </td>
                   </tr>
                 ))}
@@ -655,8 +678,7 @@ export function UserDetailPage() {
             </p>
           </div>
 
-          <div className="admin-crm-panel">
-            <h2>Admin notes</h2>
+          <SectionCard title="Admin notes">
             <textarea className="admin-crm-textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal notes…" />
             <button
               type="button"
@@ -675,10 +697,9 @@ export function UserDetailPage() {
             >
               {saving ? 'Saving…' : 'Save notes'}
             </button>
-          </div>
+          </SectionCard>
 
-          <div className="admin-crm-panel">
-            <h2>Grant entitlement</h2>
+          <SectionCard title="Grant entitlement">
             <p className="admin-crm-muted">Grants are recorded server-side; access flags reconcile from entitlements.</p>
             <div className="admin-crm-toolbar" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <select className="admin-crm-select" value={grantType} onChange={(e) => setGrantType(e.target.value)}>
@@ -699,10 +720,9 @@ export function UserDetailPage() {
                 Grant
               </button>
             </div>
-          </div>
+          </SectionCard>
 
-          <div className="admin-crm-panel">
-            <h2>Entitlements ({data.entitlements.length})</h2>
+          <SectionCard title={`Entitlements (${data.entitlements.length})`}>
             {data.entitlements.length === 0 ? (
               <p className="admin-crm-muted">None.</p>
             ) : (
@@ -742,10 +762,9 @@ export function UserDetailPage() {
                 </table>
               </div>
             )}
-          </div>
+          </SectionCard>
 
-          <div className="admin-crm-panel">
-            <h2>Stripe payments ({data.stripePayments.length})</h2>
+          <SectionCard title={`Stripe payments (${data.stripePayments.length})`}>
             {data.stripePayments.length === 0 ? (
               <p className="admin-crm-muted">None.</p>
             ) : (
@@ -782,10 +801,9 @@ export function UserDetailPage() {
                 </table>
               </div>
             )}
-          </div>
+          </SectionCard>
 
-          <div className="admin-crm-panel">
-            <h2>Legacy purchases ({data.purchases.length})</h2>
+          <SectionCard title={`Legacy purchases (${data.purchases.length})`}>
             {data.purchases.length === 0 ? (
               <p className="admin-crm-muted">None.</p>
             ) : (
@@ -812,17 +830,15 @@ export function UserDetailPage() {
                 </table>
               </div>
             )}
-          </div>
+          </SectionCard>
 
           {data.onboarding && (
-            <div className="admin-crm-panel">
-              <h2>Onboarding</h2>
+            <SectionCard title="Onboarding">
               <p className="admin-crm-muted">Goal: {data.onboarding.growthGoal ?? '—'}</p>
-            </div>
+            </SectionCard>
           )}
 
-          <div className="admin-crm-panel">
-            <h2>Recent events</h2>
+          <SectionCard title="Recent events">
             {data.recentEvents.length === 0 ? (
               <p className="admin-crm-muted">None.</p>
             ) : (
@@ -835,7 +851,7 @@ export function UserDetailPage() {
                 ))}
               </ul>
             )}
-          </div>
+          </SectionCard>
         </>
       )}
     </AdminShell>
@@ -848,9 +864,12 @@ export function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [orderFilter, setOrderFilter] = useState('all');
   const [linkSession, setLinkSession] = useState('');
   const [linkUser, setLinkUser] = useState('');
   const [linking, setLinking] = useState(false);
+
+  const filteredOrders = useMemo(() => filterOrders(items, orderFilter), [items, orderFilter]);
 
   const fetchPage = async (cursor: string | null, append: boolean) => {
     try {
@@ -942,63 +961,70 @@ export function OrdersPage() {
         <div className="admin-crm-panel admin-crm-empty">No payment rows.</div>
       ) : (
         <>
-          <div className="admin-crm-table-wrap">
-            <table className="admin-crm-table admin-crm-table-sticky">
-              <thead>
-                <tr>
-                  <th>Classification</th>
-                  <th>Email</th>
-                  <th>User</th>
-                  <th>Product</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Mode</th>
-                  <th>Stripe session</th>
-                  <th>Created</th>
-                  <th>Paid</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((o) => {
-                  const m = orderClassificationMeta(o.classification);
-                  const rowTone =
-                    m.kind === 'info' ? 'admin-crm-row-muted' : o.userId ? '' : 'admin-crm-row-warn';
-                  return (
-                    <tr key={o.paymentId} className={rowTone}>
-                      <td>
-                        <Badge kind={m.kind}>{m.label}</Badge>
-                      </td>
-                      <td>{o.accountEmail || o.stripeEmail || '—'}</td>
-                      <td>
-                        {o.userId ? (
-                          <Link to={`/admin/user/${encodeURIComponent(o.userId)}`}>{o.userId.slice(0, 8)}…</Link>
-                        ) : (
-                          <span className="admin-crm-muted">unmatched</span>
-                        )}
-                      </td>
-                      <td>{o.planCode}</td>
-                      <td>{formatMoney(o.amount, o.currency)}</td>
-                      <td>{o.status}</td>
-                      <td>
-                        <Badge kind={o.mode === 'live' ? 'ok' : 'info'}>{o.mode}</Badge>
-                      </td>
-                      <td>
-                        <code className="admin-crm-mono">{o.stripeCheckoutSessionId.slice(0, 12)}…</code>
-                      </td>
-                      <td className="admin-crm-nowrap">{formatDt(o.createdAt)}</td>
-                      <td className="admin-crm-nowrap">{o.paidAt ? formatDt(o.paidAt) : '—'}</td>
-                      <td>
-                        <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => copyText(o.stripeCheckoutSessionId)}>
-                          Copy session
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div style={{ marginBottom: 12 }}>
+            <OrderFilterBar value={orderFilter} onChange={setOrderFilter} />
           </div>
+          {filteredOrders.length === 0 ? (
+            <div className="admin-crm-panel admin-crm-empty">No orders match this filter.</div>
+          ) : (
+            <div className="admin-crm-table-wrap">
+              <table className="admin-crm-table admin-crm-table-sticky">
+                <thead>
+                  <tr>
+                    <th>Classification</th>
+                    <th>Email</th>
+                    <th>User</th>
+                    <th>Product</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Mode</th>
+                    <th>Stripe session</th>
+                    <th>Created</th>
+                    <th>Paid</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOrders.map((o) => {
+                    const m = orderClassificationMeta(o.classification);
+                    const rowTone =
+                      m.kind === 'info' ? 'admin-crm-row-muted' : o.userId ? '' : 'admin-crm-row-warn';
+                    return (
+                      <tr key={o.paymentId} className={rowTone}>
+                        <td>
+                          <Badge kind={m.kind}>{m.label}</Badge>
+                        </td>
+                        <td>{o.accountEmail || o.stripeEmail || '—'}</td>
+                        <td>
+                          {o.userId ? (
+                            <Link to={`/admin/user/${encodeURIComponent(o.userId)}`}>{o.userId.slice(0, 8)}…</Link>
+                          ) : (
+                            <span className="admin-crm-muted">unmatched</span>
+                          )}
+                        </td>
+                        <td>{o.planCode}</td>
+                        <td>{formatMoney(o.amount, o.currency)}</td>
+                        <td>{o.status}</td>
+                        <td>
+                          <Badge kind={o.mode === 'live' ? 'ok' : 'info'}>{o.mode}</Badge>
+                        </td>
+                        <td>
+                          <code className="admin-crm-mono">{o.stripeCheckoutSessionId.slice(0, 12)}…</code>
+                        </td>
+                        <td className="admin-crm-nowrap">{formatDt(o.createdAt)}</td>
+                        <td className="admin-crm-nowrap">{o.paidAt ? formatDt(o.paidAt) : '—'}</td>
+                        <td>
+                          <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => copyText(o.stripeCheckoutSessionId)}>
+                            Copy session
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
           {next && (
             <button
               type="button"
@@ -1029,6 +1055,9 @@ export function AuditsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [auditFilter, setAuditFilter] = useState('all');
+
+  const filteredAudits = useMemo(() => filterAudits(items, auditFilter), [items, auditFilter]);
 
   const fetchPage = async (cursor: string | null, append: boolean) => {
     try {
@@ -1072,42 +1101,49 @@ export function AuditsPage() {
         <div className="admin-crm-panel admin-crm-empty">No audits recorded.</div>
       ) : (
         <>
-          <div className="admin-crm-table-wrap">
-            <table className="admin-crm-table admin-crm-table-sticky">
-              <thead>
-                <tr>
-                  <th>Channel</th>
-                  <th>Handle</th>
-                  <th>User</th>
-                  <th>Type</th>
-                  <th>Score</th>
-                  <th>Status</th>
-                  <th>Visibility</th>
-                  <th>When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((r) => (
-                  <tr key={r.demoId}>
-                    <td>{r.channelTitle || r.channelInput}</td>
-                    <td>{r.channelHandle || '—'}</td>
-                    <td>
-                      {r.linkedUserId ? (
-                        <Link to={`/admin/user/${encodeURIComponent(r.linkedUserId)}`}>linked</Link>
-                      ) : (
-                        <span className="admin-crm-muted">—</span>
-                      )}
-                    </td>
-                    <td>{r.auditType}</td>
-                    <td>{r.healthScore}</td>
-                    <td>{r.status}</td>
-                    <td>{r.visibility}</td>
-                    <td className="admin-crm-nowrap">{formatDt(r.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ marginBottom: 12 }}>
+            <AuditFilterBar value={auditFilter} onChange={setAuditFilter} />
           </div>
+          {filteredAudits.length === 0 ? (
+            <div className="admin-crm-panel admin-crm-empty">No audits match this filter.</div>
+          ) : (
+            <div className="admin-crm-table-wrap">
+              <table className="admin-crm-table admin-crm-table-sticky">
+                <thead>
+                  <tr>
+                    <th>Channel</th>
+                    <th>Handle</th>
+                    <th>User</th>
+                    <th>Type</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                    <th>Visibility</th>
+                    <th>When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAudits.map((r) => (
+                    <tr key={r.demoId}>
+                      <td>{r.channelTitle || r.channelInput}</td>
+                      <td>{r.channelHandle || '—'}</td>
+                      <td>
+                        {r.linkedUserId ? (
+                          <Link to={`/admin/user/${encodeURIComponent(r.linkedUserId)}`}>linked</Link>
+                        ) : (
+                          <span className="admin-crm-muted">—</span>
+                        )}
+                      </td>
+                      <td>{r.auditType}</td>
+                      <td>{r.healthScore}</td>
+                      <td>{r.status}</td>
+                      <td>{r.visibility}</td>
+                      <td className="admin-crm-nowrap">{formatDt(r.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {next && (
             <button
               type="button"
@@ -1135,6 +1171,9 @@ export function ContactListPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [supportFilter, setSupportFilter] = useState('all');
+
+  const filteredSupport = useMemo(() => filterSupport(items, supportFilter), [items, supportFilter]);
 
   const fetchPage = async (cursor: string | null, append: boolean) => {
     try {
@@ -1187,56 +1226,63 @@ export function ContactListPage() {
         <div className="admin-crm-panel admin-crm-empty">No support tickets.</div>
       ) : (
         <>
-          <div className="admin-crm-table-wrap">
-            <table className="admin-crm-table admin-crm-table-sticky">
-              <thead>
-                <tr>
-                  <th>Subject</th>
-                  <th>Email</th>
-                  <th>User</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Area</th>
-                  <th>Updated</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((t) => (
-                  <tr key={t.ticketId}>
-                    <td>
-                      <Link to={`/admin/support/${encodeURIComponent(t.ticketId)}`}>{t.subject}</Link>
-                    </td>
-                    <td>{t.email}</td>
-                    <td>
-                      {t.linkedUserId ? (
-                        <Link to={`/admin/user/${encodeURIComponent(t.linkedUserId)}`}>profile</Link>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>{t.status}</td>
-                    <td>{t.priority ?? '—'}</td>
-                    <td>{t.productArea}</td>
-                    <td className="admin-crm-nowrap">{formatDt(t.updatedAt)}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'pending')}>
-                          Pending
-                        </button>
-                        <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'resolved')}>
-                          Resolve
-                        </button>
-                        <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'closed')}>
-                          Close
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ marginBottom: 12 }}>
+            <SupportFilterBar value={supportFilter} onChange={setSupportFilter} />
           </div>
+          {filteredSupport.length === 0 ? (
+            <div className="admin-crm-panel admin-crm-empty">No tickets match this filter.</div>
+          ) : (
+            <div className="admin-crm-table-wrap">
+              <table className="admin-crm-table admin-crm-table-sticky">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>Email</th>
+                    <th>User</th>
+                    <th>Status</th>
+                    <th>Priority</th>
+                    <th>Area</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSupport.map((t) => (
+                    <tr key={t.ticketId}>
+                      <td>
+                        <Link to={`/admin/support/${encodeURIComponent(t.ticketId)}`}>{t.subject}</Link>
+                      </td>
+                      <td>{t.email}</td>
+                      <td>
+                        {t.linkedUserId ? (
+                          <Link to={`/admin/user/${encodeURIComponent(t.linkedUserId)}`}>profile</Link>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>{t.status}</td>
+                      <td>{t.priority ?? '—'}</td>
+                      <td>{t.productArea}</td>
+                      <td className="admin-crm-nowrap">{formatDt(t.updatedAt)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'pending')}>
+                            Pending
+                          </button>
+                          <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'resolved')}>
+                            Resolve
+                          </button>
+                          <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => setTicketStatus(t.ticketId, 'closed')}>
+                            Close
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {next && (
             <button
               type="button"
@@ -1339,6 +1385,13 @@ export function ContactTicketPage() {
                 >
                   <div className="admin-crm-msg-meta">
                     {m.direction} · {formatDt(m.sentAt)}
+                    {m.sesMessageId ? (
+                      <>
+                        {' '}
+                        · SES <code className="admin-crm-mono">{m.sesMessageId}</code>
+                      </>
+                    ) : null}
+                    {m.deliveryStatus ? ` · ${m.deliveryStatus}` : ''}
                   </div>
                   <div className="admin-crm-msg-body">{m.body}</div>
                 </div>

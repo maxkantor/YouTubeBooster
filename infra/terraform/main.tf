@@ -156,6 +156,11 @@ resource "aws_ssm_parameter" "defaults_string" {
   overwrite   = true
 
   tags = local.common_tags
+
+  # After first create, preserve Console / CLI edits (same pattern as SecureString + pricing params).
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
 
 resource "aws_ssm_parameter" "defaults_secure" {
@@ -205,7 +210,7 @@ resource "aws_ssm_parameter" "pricing_currency" {
   }
 }
 
-# Admin CRM login email: not in defaults_string (that map uses overwrite without ignore_changes and would clobber Console edits).
+# Admin CRM login email: dedicated resource (also split from legacy defaults_string for clearer ops / state migration).
 resource "aws_ssm_parameter" "admin_email" {
   count = var.create_placeholder_parameters ? 1 : 0
 
@@ -582,6 +587,7 @@ resource "aws_lambda_function" "backend" {
       Stripe__PriceLookupKey         = "ytboosterai_default"
       Features__EnablePublicDemo     = "true"
       Features__DemoRateLimitPerHour = "10"
+      PUBLIC_SITE_URL                = var.public_site_url
     }
   }
 

@@ -277,6 +277,8 @@ export type AdminSupportMessage = {
   subject: string;
   body: string;
   sentAt: string;
+  sesMessageId: string | null;
+  deliveryStatus: string | null;
 };
 
 export type AdminSupportTicketDetail = {
@@ -364,6 +366,11 @@ export type MagicLinkLoginResponse = {
   delivery: 'email' | 'mock' | string;
   message: string;
   magicLinkUrl: string | null;
+};
+
+export type ContactSubmitResponse = {
+  ticketId: string;
+  status: string;
 };
 
 export type SessionUser = {
