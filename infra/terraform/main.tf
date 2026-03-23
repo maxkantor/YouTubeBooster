@@ -188,7 +188,6 @@ resource "aws_ssm_parameter" "pricing_one_time_price" {
   type        = "String"
   value       = var.one_time_price
   overwrite   = true
-  tags        = local.common_tags
 
   lifecycle {
     ignore_changes = [value]
@@ -203,7 +202,6 @@ resource "aws_ssm_parameter" "pricing_currency" {
   type        = "String"
   value       = var.currency
   overwrite   = true
-  tags        = local.common_tags
 
   lifecycle {
     ignore_changes = [value]

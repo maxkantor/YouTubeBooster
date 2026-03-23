@@ -65,7 +65,6 @@ export function SignInPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
-  const [magicLinkSending, setMagicLinkSending] = useState(false);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -160,16 +159,7 @@ export function SignInPage({
 
               // Avoid account-enumeration style messaging (e.g. "User is not confirmed" / "User exists").
               if (code === 'UserNotFoundException') {
-                try {
-                  setMagicLinkSending(true);
-                  await authApi.requestMagicLink(emailTrimmed, '/');
-                  setInfo('We found your account. Check your email for a secure sign-in link.');
-                } catch (err) {
-                  setError('No account exists for this email. Sign up or try another email.');
-                  console.warn('Magic link request failed:', err);
-                } finally {
-                  setMagicLinkSending(false);
-                }
+                setError('No account exists for this email. Sign up or try another email.');
               } else if (
                 code === 'UserNotConfirmedException' ||
                 (code === 'NotAuthorizedException' && msg && /not\s*confirmed|unconfirmed/i.test(msg)) ||
@@ -235,33 +225,6 @@ export function SignInPage({
             disabled={loading}
           >
             {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={magicLinkSending || !email.trim()}
-            onClick={async () => {
-              const emailTrimmed = (emailInputRef.current?.value ?? email).trim();
-              if (!emailTrimmed) {
-                setError('Enter your email to receive a sign-in link.');
-                return;
-              }
-              setMagicLinkSending(true);
-              setError('');
-              setInfo('');
-              try {
-                await authApi.requestMagicLink(emailTrimmed, '/');
-                setInfo('Check your email for a secure sign-in link.');
-              } catch (err) {
-                setError('Could not send a sign-in link.');
-                console.warn('Magic link request failed:', err);
-              } finally {
-                setMagicLinkSending(false);
-              }
-            }}
-          >
-            {magicLinkSending ? 'Sending link…' : 'Email me a sign-in link'}
           </button>
 
           <div className="auth-links">
