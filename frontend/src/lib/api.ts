@@ -319,6 +319,18 @@ export const adminApi = {
       body: JSON.stringify({ subject, body })
     });
   },
+  async crmSupportNote(ticketId: string, body: string): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}/note`, {
+      method: 'POST',
+      body: JSON.stringify({ body })
+    });
+  },
+  async crmSupportLinkUser(ticketId: string, userId: string | null): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}/link-user`, {
+      method: 'POST',
+      body: JSON.stringify({ userId })
+    });
+  },
   async crmDashboard(range = '30d'): Promise<AdminOperationalDashboard> {
     const q = new URLSearchParams({ range });
     return fetchJson<AdminOperationalDashboard>(`/api/admin/crm/dashboard?${q}`);

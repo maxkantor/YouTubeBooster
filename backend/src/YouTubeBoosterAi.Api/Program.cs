@@ -833,6 +833,47 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
     return Results.Ok(new { ok = true });
 });
 
+adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/note", async (
+    string ticketId,
+    AdminSupportNoteRequest request,
+    HttpContext httpContext,
+    IAppDataStore appDataStore,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Body))
+    {
+        return Results.BadRequest(new { error = "Note body is required." });
+    }
+
+    var admin = httpContext.Items["authenticatedAdmin"] as AdminSessionRecord
+                ?? throw new InvalidOperationException("admin");
+    await appDataStore.SaveSupportNoteAsync(ticketId, request.Body.Trim(), admin.Email, cancellationToken);
+    return Results.Ok(new { ok = true });
+});
+
+adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/link-user", async (
+    string ticketId,
+    AdminSupportLinkUserRequest request,
+    HttpContext httpContext,
+    IAppDataStore appDataStore,
+    CancellationToken cancellationToken) =>
+{
+    var admin = httpContext.Items["authenticatedAdmin"] as AdminSessionRecord
+                ?? throw new InvalidOperationException("admin");
+
+    if (!string.IsNullOrWhiteSpace(request.UserId))
+    {
+        var existingUser = await appDataStore.GetUserByIdAsync(request.UserId.Trim(), cancellationToken);
+        if (existingUser is null)
+        {
+            return Results.BadRequest(new { error = "User not found." });
+        }
+    }
+
+    await appDataStore.LinkSupportTicketUserAsync(ticketId, string.IsNullOrWhiteSpace(request.UserId) ? null : request.UserId.Trim(), admin.Email, cancellationToken);
+    return Results.Ok(new { ok = true });
+});
+
 adminProtectedApi.MapGet("/crm/dashboard", async (string? range, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
 {
     var result = await appDataStore.GetOperationalDashboardAsync(string.IsNullOrWhiteSpace(range) ? "30d" : range!, cancellationToken);

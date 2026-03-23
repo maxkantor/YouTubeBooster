@@ -29,7 +29,7 @@ const NAV: { to: string; end?: boolean; label: string }[] = [
   { to: 'users', label: 'Users' },
   { to: 'orders', label: 'Orders' },
   { to: 'audits', label: 'Audits' },
-  { to: 'contacts', label: 'Contacts' },
+  { to: 'contacts', label: 'Support' },
   { to: 'activity', label: 'Activity logs' }
 ];
 
@@ -1182,8 +1182,24 @@ export function ContactListPage() {
   const [error, setError] = useState('');
   const [draftStatus, setDraftStatus] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
 
-  const filteredSupport = useMemo(() => filterSupport(items, statusFilter), [items, statusFilter]);
+  const filteredSupport = useMemo(() => {
+    const base = filterSupport(items, statusFilter);
+    const searchTerm = search.trim().toLowerCase();
+    const linkedFiltered = linkFilter === 'all'
+      ? base
+      : base.filter((t) => (linkFilter === 'linked' ? !!t.linkedUserId : !t.linkedUserId));
+    if (!searchTerm) return linkedFiltered;
+    return linkedFiltered.filter((t) => {
+      return (
+        t.ticketId.toLowerCase().includes(searchTerm) ||
+        t.email.toLowerCase().includes(searchTerm) ||
+        t.subject.toLowerCase().includes(searchTerm)
+      );
+    });
+  }, [items, statusFilter, search, linkFilter]);
 
   const fetchPage = async (cursor: string | null, append: boolean) => {
     try {
@@ -1219,7 +1235,7 @@ export function ContactListPage() {
   }, []);
 
   return (
-    <AdminShell title="Contacts">
+    <AdminShell title="Support">
       {error && <p className="admin-crm-error">{error}</p>}
       {loading ? (
         <p style={{ color: '#64748b' }}>Loading…</p>
@@ -1229,12 +1245,24 @@ export function ContactListPage() {
         <>
           <div style={{ marginBottom: 12 }}>
             <div className="admin-crm-toolbar" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <input
+                className="admin-crm-input"
+                placeholder="Search by email, subject, or ticket id"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ minWidth: 260 }}
+              />
               <select className="admin-crm-select" value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)}>
                 <option value="all">All status</option>
                 <option value="open">Open</option>
                 <option value="pending">Pending</option>
                 <option value="resolved">Resolved</option>
                 <option value="closed">Closed</option>
+              </select>
+              <select className="admin-crm-select" value={linkFilter} onChange={(e) => setLinkFilter(e.target.value as any)}>
+                <option value="all">All links</option>
+                <option value="linked">Linked users</option>
+                <option value="unlinked">Unlinked</option>
               </select>
               <button
                 type="button"
@@ -1252,22 +1280,37 @@ export function ContactListPage() {
               <table className="admin-crm-table admin-crm-table-sticky">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Email</th>
+                    <th>Ticket</th>
                     <th>Subject</th>
+                    <th>Contact</th>
+                    <th>Linked user</th>
                     <th>Status</th>
-                    <th>Date</th>
+                    <th>Priority</th>
+                    <th>Last message</th>
+                    <th>Created</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredSupport.map((t) => (
                     <tr key={t.ticketId}>
-                      <td>{t.name ?? '—'}</td>
-                      <td>{t.email}</td>
+                      <td className="admin-crm-mono">{t.ticketId}</td>
                       <td>
                         <Link to={`/admin/contacts/${encodeURIComponent(t.ticketId)}`}>{t.subject}</Link>
                       </td>
+                      <td>
+                        <div>{t.name ?? '—'}</div>
+                        <div className="admin-crm-muted">{t.email}</div>
+                      </td>
+                      <td>
+                        {t.linkedUserId ? (
+                          <Link to={`/admin/user/${encodeURIComponent(t.linkedUserId)}`}>Open</Link>
+                        ) : (
+                          <span className="admin-crm-muted">—</span>
+                        )}
+                      </td>
                       <td>{contactsStatusBadge(t.status)}</td>
+                      <td>{t.priority ?? 'normal'}</td>
+                      <td className="admin-crm-nowrap">{t.lastMessageAt ? formatDt(t.lastMessageAt) : '—'}</td>
                       <td className="admin-crm-nowrap">{formatDt(t.createdAt)}</td>
                     </tr>
                   ))}
@@ -1306,6 +1349,16 @@ export function ContactTicketPage() {
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [sendErr, setSendErr] = useState('');
+  const [noteBody, setNoteBody] = useState('');
+  const [noteSending, setNoteSending] = useState(false);
+  const [noteErr, setNoteErr] = useState('');
+  const [statusValue, setStatusValue] = useState('open');
+  const [priorityValue, setPriorityValue] = useState('normal');
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusErr, setStatusErr] = useState('');
+  const [linkUserId, setLinkUserId] = useState('');
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [linkErr, setLinkErr] = useState('');
 
   useEffect(() => {
     if (!ticketId) return;
@@ -1317,6 +1370,9 @@ export function ContactTicketPage() {
         if (!c) {
           setData(d);
           setSubject(`Re: ${d.ticket.subject}`);
+          setStatusValue(d.ticket.status || 'open');
+          setPriorityValue(d.ticket.priority || 'normal');
+          setLinkUserId(d.ticket.linkedUserId ?? '');
         }
       })
       .catch((e) => {
@@ -1346,8 +1402,57 @@ export function ContactTicketPage() {
     }
   }
 
+  async function addNote() {
+    if (!ticketId || !noteBody.trim()) return;
+    setNoteSending(true);
+    setNoteErr('');
+    try {
+      await adminApi.crmSupportNote(ticketId, noteBody.trim());
+      const refreshed = await adminApi.crmSupportTicket(ticketId);
+      setData(refreshed);
+      setNoteBody('');
+    } catch (e) {
+      setNoteErr(e instanceof Error ? e.message : 'Failed to add note');
+    } finally {
+      setNoteSending(false);
+    }
+  }
+
+  async function updateTicket() {
+    if (!ticketId) return;
+    setStatusSaving(true);
+    setStatusErr('');
+    try {
+      await adminApi.crmPatchSupportTicket(ticketId, {
+        status: statusValue,
+        priority: priorityValue
+      });
+      const refreshed = await adminApi.crmSupportTicket(ticketId);
+      setData(refreshed);
+    } catch (e) {
+      setStatusErr(e instanceof Error ? e.message : 'Failed to update ticket');
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function linkUser() {
+    if (!ticketId) return;
+    setLinkSaving(true);
+    setLinkErr('');
+    try {
+      await adminApi.crmSupportLinkUser(ticketId, linkUserId.trim() ? linkUserId.trim() : null);
+      const refreshed = await adminApi.crmSupportTicket(ticketId);
+      setData(refreshed);
+    } catch (e) {
+      setLinkErr(e instanceof Error ? e.message : 'Failed to link user');
+    } finally {
+      setLinkSaving(false);
+    }
+  }
+
   return (
-    <AdminShell title="Contact thread">
+    <AdminShell title="Support thread">
       <button type="button" className="admin-crm-btn" style={{ marginBottom: 16 }} onClick={() => navigate('/admin/contacts')}>
         ← Inbox
       </button>
@@ -1357,14 +1462,67 @@ export function ContactTicketPage() {
         <>
           <div className="admin-crm-panel">
             <h2>{data.ticket.subject}</h2>
-            <p style={{ color: '#94a3b8' }}>
-              {data.ticket.email} · {data.ticket.status} · {data.name ?? '—'}
-            </p>
-            {data.ticket.linkedUserId && (
-              <p>
-                <Link to={`/admin/user/${encodeURIComponent(data.ticket.linkedUserId)}`}>Open linked user</Link>
-              </p>
-            )}
+            <div className="admin-crm-muted" style={{ marginBottom: 12 }}>
+              Ticket <span className="admin-crm-mono">{data.ticket.ticketId}</span>
+            </div>
+            <div className="admin-crm-two-col">
+              <div>
+                <p><strong>Contact</strong>: {data.name ?? '—'} · {data.ticket.email}</p>
+                {data.ticket.accountEmail && <p><strong>Account email</strong>: {data.ticket.accountEmail}</p>}
+                {data.ticket.orderReference && <p><strong>Order reference</strong>: {data.ticket.orderReference}</p>}
+                {data.ticket.channelUrl && (
+                  <p>
+                    <strong>Channel</strong>: <a href={data.ticket.channelUrl} target="_blank" rel="noreferrer">{data.ticket.channelUrl}</a>
+                  </p>
+                )}
+                <p><strong>Source</strong>: {data.ticket.source ?? 'contact_form'}</p>
+              </div>
+              <div>
+                <p><strong>Status</strong>: {contactsStatusBadge(data.ticket.status)}</p>
+                <p><strong>Priority</strong>: {data.ticket.priority ?? 'normal'}</p>
+                <p><strong>Last message</strong>: {data.ticket.lastMessageAt ? formatDt(data.ticket.lastMessageAt) : '—'}</p>
+                <p><strong>Created</strong>: {formatDt(data.ticket.createdAt)}</p>
+                {data.ticket.assignedAdmin && <p><strong>Assigned</strong>: {data.ticket.assignedAdmin}</p>}
+              </div>
+            </div>
+            {statusErr && <p className="admin-crm-error">{statusErr}</p>}
+            <div className="admin-crm-toolbar" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              <select className="admin-crm-select" value={statusValue} onChange={(e) => setStatusValue(e.target.value)}>
+                <option value="open">Open</option>
+                <option value="pending">Pending</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+              <select className="admin-crm-select" value={priorityValue} onChange={(e) => setPriorityValue(e.target.value)}>
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+              </select>
+              <button type="button" className="admin-crm-btn admin-crm-btn-primary" disabled={statusSaving} onClick={updateTicket}>
+                {statusSaving ? 'Saving…' : 'Update'}
+              </button>
+            </div>
+            {linkErr && <p className="admin-crm-error" style={{ marginTop: 12 }}>{linkErr}</p>}
+            <div className="admin-crm-toolbar" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <input
+                className="admin-crm-input"
+                placeholder="Link user id (leave empty to unlink)"
+                value={linkUserId}
+                onChange={(e) => setLinkUserId(e.target.value)}
+                style={{ minWidth: 280 }}
+              />
+              <button type="button" className="admin-crm-btn" disabled={linkSaving} onClick={linkUser}>
+                {linkSaving ? 'Linking…' : linkUserId.trim() ? 'Link user' : 'Unlink'}
+              </button>
+              {data.ticket.linkedUserId && (
+                <Link to={`/admin/user/${encodeURIComponent(data.ticket.linkedUserId)}`} style={{ alignSelf: 'center' }}>
+                  Open linked user
+                </Link>
+              )}
+            </div>
+          </div>
+          <div className="admin-crm-panel">
+            <h2>Conversation</h2>
             <div className="admin-crm-thread" style={{ marginTop: 16 }}>
               <div className="admin-crm-msg admin-crm-msg-in">
                 <div className="admin-crm-msg-meta">Original · {formatDt(data.ticket.createdAt)}</div>
@@ -1377,6 +1535,7 @@ export function ContactTicketPage() {
                 >
                   <div className="admin-crm-msg-meta">
                     {m.direction} · {formatDt(m.sentAt)}
+                    {m.createdByType ? ` · ${m.createdByType}` : ''}
                     {m.sesMessageId ? (
                       <>
                         {' '}
@@ -1397,6 +1556,14 @@ export function ContactTicketPage() {
             <textarea className="admin-crm-textarea" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" />
             <button type="button" className="admin-crm-btn admin-crm-btn-primary" disabled={sending || !body.trim()} onClick={sendReply}>
               {sending ? 'Sending…' : 'Send reply'}
+            </button>
+          </div>
+          <div className="admin-crm-panel">
+            <h2>Internal note</h2>
+            {noteErr && <p className="admin-crm-error">{noteErr}</p>}
+            <textarea className="admin-crm-textarea" value={noteBody} onChange={(e) => setNoteBody(e.target.value)} placeholder="Add an internal note" />
+            <button type="button" className="admin-crm-btn" disabled={noteSending || !noteBody.trim()} onClick={addNote}>
+              {noteSending ? 'Saving…' : 'Add note'}
             </button>
           </div>
         </>

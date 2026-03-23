@@ -54,6 +54,8 @@ public interface IAppDataStore
     Task<AdminListResponse<AdminSupportTicketDto>> ListSupportTicketsAsync(int limit, string? cursor, CancellationToken cancellationToken);
     Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken);
     Task SaveSupportReplyAsync(string ticketId, string subject, string body, string? sesMessageId, string? deliveryStatus, CancellationToken cancellationToken);
+    Task SaveSupportNoteAsync(string ticketId, string body, string adminEmail, CancellationToken cancellationToken);
+    Task LinkSupportTicketUserAsync(string ticketId, string? userId, string adminEmail, CancellationToken cancellationToken);
     Task<AdminListResponse<AdminDemoAuditDto>> ListDemoAuditsAsync(int limit, string? cursor, CancellationToken cancellationToken);
 
     Task<AdminOperationalDashboardResponse> GetOperationalDashboardAsync(string range, CancellationToken cancellationToken);
@@ -107,6 +109,7 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     private readonly Dictionary<string, SupportTicketRequest> _supportTicketsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string?> _supportLinkedUserId = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<AdminSupportMessageDto>> _supportThreads = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SupportTicketMeta> _supportMeta = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, UserAccount> _usersById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _userIdsByEmail = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _userIdsByCognitoSub = new(StringComparer.OrdinalIgnoreCase);
@@ -117,6 +120,18 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     private readonly Dictionary<string, long> _adminAuthEpochByEmail = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, StoredProtectedYouTubeSettings> _userYouTubeSettings = new(StringComparer.OrdinalIgnoreCase);
     private readonly IDataProtector _protector;
+
+    private sealed record SupportTicketMeta(
+        string Status,
+        string Priority,
+        string? AccountEmail,
+        string? OrderReference,
+        string Source,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt,
+        DateTimeOffset LastMessageAt,
+        string? AssignedAdmin
+    );
 
     public InMemoryAppDataStore(IDataProtectionProvider dataProtectionProvider)
     {
@@ -133,12 +148,24 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     public Task<string> SaveSupportTicketAsync(SupportTicketRequest request, string? linkedUserId, CancellationToken cancellationToken)
     {
         var ticketId = $"ticket_{Guid.NewGuid():N}";
+        var now = DateTimeOffset.UtcNow;
         _supportTickets.Add(ticketId);
         _supportTicketsById[ticketId] = request;
         if (!string.IsNullOrWhiteSpace(linkedUserId))
         {
             _supportLinkedUserId[ticketId] = linkedUserId;
         }
+        _supportMeta[ticketId] = new SupportTicketMeta(
+            Status: "open",
+            Priority: "normal",
+            AccountEmail: request.AccountEmail,
+            OrderReference: request.OrderReference,
+            Source: "contact_form",
+            CreatedAt: now,
+            UpdatedAt: now,
+            LastMessageAt: now,
+            AssignedAdmin: null
+        );
         _supportThreads[ticketId] = new List<AdminSupportMessageDto>
         {
             new(
@@ -146,9 +173,11 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
                 Direction: "inbound",
                 Subject: request.Subject,
                 Body: request.Message,
-                SentAt: DateTimeOffset.UtcNow,
+                SentAt: now,
                 SesMessageId: null,
-                DeliveryStatus: "received"
+                DeliveryStatus: "received",
+                CreatedByType: "user",
+                CreatedById: null
             )
         };
         _activity.Insert(0, new ActivityFeedItem("Support ticket", request.Subject, DateTimeOffset.UtcNow));
@@ -594,13 +623,18 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
                 Email: x.Req.Email,
                 Name: x.Req.Name,
                 Subject: x.Req.Subject,
-                Status: "open",
+                Status: _supportMeta.TryGetValue(x.TicketId, out var meta) ? meta.Status : "open",
                 ProductArea: x.Req.ProductArea,
                 ChannelUrl: x.Req.ChannelUrl,
-                CreatedAt: DateTimeOffset.UtcNow,
-                UpdatedAt: DateTimeOffset.UtcNow,
-                Priority: "normal",
-                LinkedUserId: _supportLinkedUserId.GetValueOrDefault(x.TicketId)
+                CreatedAt: _supportMeta.TryGetValue(x.TicketId, out var metaCreated) ? metaCreated.CreatedAt : DateTimeOffset.UtcNow,
+                UpdatedAt: _supportMeta.TryGetValue(x.TicketId, out var metaUpdated) ? metaUpdated.UpdatedAt : DateTimeOffset.UtcNow,
+                Priority: _supportMeta.TryGetValue(x.TicketId, out var metaPriority) ? metaPriority.Priority : "normal",
+                LinkedUserId: _supportLinkedUserId.GetValueOrDefault(x.TicketId),
+                AccountEmail: _supportMeta.TryGetValue(x.TicketId, out var metaAccount) ? metaAccount.AccountEmail : null,
+                OrderReference: _supportMeta.TryGetValue(x.TicketId, out var metaOrder) ? metaOrder.OrderReference : null,
+                Source: _supportMeta.TryGetValue(x.TicketId, out var metaSource) ? metaSource.Source : "contact_form",
+                LastMessageAt: _supportMeta.TryGetValue(x.TicketId, out var metaLast) ? metaLast.LastMessageAt : null,
+                AssignedAdmin: _supportMeta.TryGetValue(x.TicketId, out var metaAdmin) ? metaAdmin.AssignedAdmin : null
             ))
             .Take(Math.Max(1, limit))
             .ToArray();
@@ -611,18 +645,24 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     {
         if (!_supportTicketsById.TryGetValue(ticketId, out var req))
             return Task.FromResult<AdminSupportTicketDetailResponse?>(null);
+        _supportMeta.TryGetValue(ticketId, out var meta);
         var ticket = new AdminSupportTicketDto(
             ticketId,
             req.Email,
             req.Name,
             req.Subject,
-            "open",
+            meta?.Status ?? "open",
             req.ProductArea,
             req.ChannelUrl,
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow,
-            "normal",
-            _supportLinkedUserId.GetValueOrDefault(ticketId));
+            meta?.CreatedAt ?? DateTimeOffset.UtcNow,
+            meta?.UpdatedAt ?? DateTimeOffset.UtcNow,
+            meta?.Priority ?? "normal",
+            _supportLinkedUserId.GetValueOrDefault(ticketId),
+            meta?.AccountEmail,
+            meta?.OrderReference,
+            meta?.Source ?? "contact_form",
+            meta?.LastMessageAt,
+            meta?.AssignedAdmin);
         var thread = _supportThreads.TryGetValue(ticketId, out var list) ? list.ToArray() : Array.Empty<AdminSupportMessageDto>();
         return Task.FromResult<AdminSupportTicketDetailResponse?>(new AdminSupportTicketDetailResponse(ticket, req.Name, req.Message, thread));
     }
@@ -634,8 +674,67 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
             list = new List<AdminSupportMessageDto>();
             _supportThreads[ticketId] = list;
         }
-        list.Add(new AdminSupportMessageDto($"msg_{Guid.NewGuid():N}", "outbound", subject, body, DateTimeOffset.UtcNow, sesMessageId, deliveryStatus));
+        var now = DateTimeOffset.UtcNow;
+        list.Add(new AdminSupportMessageDto(
+            $"msg_{Guid.NewGuid():N}",
+            "outbound",
+            subject,
+            body,
+            now,
+            sesMessageId,
+            deliveryStatus,
+            "admin",
+            null));
+        if (_supportMeta.TryGetValue(ticketId, out var meta))
+        {
+            _supportMeta[ticketId] = meta with { UpdatedAt = now, LastMessageAt = now };
+        }
         _activity.Insert(0, new ActivityFeedItem("support_reply_sent", ticketId, DateTimeOffset.UtcNow));
+        return Task.CompletedTask;
+    }
+
+    public Task SaveSupportNoteAsync(string ticketId, string body, string adminEmail, CancellationToken cancellationToken)
+    {
+        if (!_supportThreads.TryGetValue(ticketId, out var list))
+        {
+            list = new List<AdminSupportMessageDto>();
+            _supportThreads[ticketId] = list;
+        }
+        var now = DateTimeOffset.UtcNow;
+        list.Add(new AdminSupportMessageDto(
+            $"msg_{Guid.NewGuid():N}",
+            "internal_note",
+            "",
+            body,
+            now,
+            null,
+            "note",
+            "admin",
+            adminEmail));
+        if (_supportMeta.TryGetValue(ticketId, out var meta))
+        {
+            _supportMeta[ticketId] = meta with { UpdatedAt = now, LastMessageAt = now };
+        }
+        _activity.Insert(0, new ActivityFeedItem("support_note_added", ticketId, DateTimeOffset.UtcNow));
+        return Task.CompletedTask;
+    }
+
+    public Task LinkSupportTicketUserAsync(string ticketId, string? userId, string adminEmail, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            _supportLinkedUserId.Remove(ticketId);
+        }
+        else
+        {
+            _supportLinkedUserId[ticketId] = userId;
+        }
+
+        if (_supportMeta.TryGetValue(ticketId, out var meta))
+        {
+            _supportMeta[ticketId] = meta with { UpdatedAt = DateTimeOffset.UtcNow, AssignedAdmin = adminEmail };
+        }
+        _activity.Insert(0, new ActivityFeedItem("support_linked_user", ticketId, DateTimeOffset.UtcNow));
         return Task.CompletedTask;
     }
 
@@ -1595,6 +1694,85 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         }, cancellationToken);
     }
 
+    public async Task SaveSupportNoteAsync(string ticketId, string body, string adminEmail, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:SupportTable", "ybai-support");
+        var sentAt = DateTimeOffset.UtcNow;
+        var messageId = $"msg_{Guid.NewGuid():N}";
+        var msg = new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"TICKET#{ticketId}"),
+            ["sk"] = StringValue($"MSG#{sentAt:O}#{messageId}"),
+            ["direction"] = StringValue("internal_note"),
+            ["subject"] = StringValue(string.Empty),
+            ["body"] = StringValue(body),
+            ["sentAt"] = StringValue(sentAt.ToString("O")),
+            ["createdByType"] = StringValue("admin"),
+            ["createdById"] = StringValue(adminEmail),
+            ["deliveryStatus"] = StringValue("note")
+        };
+
+        await PutItemAsync(tableName, msg, cancellationToken);
+
+        await _dynamoDb.UpdateItemAsync(new UpdateItemRequest
+        {
+            TableName = tableName,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = StringValue($"TICKET#{ticketId}"),
+                ["sk"] = StringValue("DETAILS")
+            },
+            UpdateExpression = "SET updatedAt = :u, lastMessageAt = :u",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":u"] = StringValue(sentAt.ToString("O"))
+            }
+        }, cancellationToken);
+
+        await TrackEventAsync("support_note_added", ticketId, new Dictionary<string, string?>
+        {
+            ["messageId"] = messageId,
+            ["admin"] = adminEmail
+        }, cancellationToken);
+    }
+
+    public async Task LinkSupportTicketUserAsync(string ticketId, string? userId, string adminEmail, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:SupportTable", "ybai-support");
+        var now = DateTimeOffset.UtcNow;
+        var update = string.IsNullOrWhiteSpace(userId)
+            ? "REMOVE linkedUserId SET updatedAt = :u, assignedAdmin = :a"
+            : "SET linkedUserId = :l, updatedAt = :u, assignedAdmin = :a";
+
+        var values = new Dictionary<string, AttributeValue>
+        {
+            [":u"] = StringValue(now.ToString("O")),
+            [":a"] = StringValue(adminEmail)
+        };
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            values[":l"] = StringValue(userId!);
+        }
+
+        await _dynamoDb.UpdateItemAsync(new UpdateItemRequest
+        {
+            TableName = tableName,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = StringValue($"TICKET#{ticketId}"),
+                ["sk"] = StringValue("DETAILS")
+            },
+            UpdateExpression = update,
+            ExpressionAttributeValues = values
+        }, cancellationToken);
+
+        await TrackEventAsync("support_linked_user", ticketId, new Dictionary<string, string?>
+        {
+            ["admin"] = adminEmail,
+            ["userId"] = userId
+        }, cancellationToken);
+    }
+
     public async Task<AdminListResponse<AdminDemoAuditDto>> ListDemoAuditsAsync(int limit, string? cursor, CancellationToken cancellationToken)
     {
         var tableName = GetTableName("Storage:DemoTable", "ybai-demo-analyses");
@@ -1647,7 +1825,12 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
             UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S),
             Priority: EmptyToNull(item.GetValueOrDefault("priority")?.S),
-            LinkedUserId: EmptyToNull(item.GetValueOrDefault("linkedUserId")?.S)
+            LinkedUserId: EmptyToNull(item.GetValueOrDefault("linkedUserId")?.S),
+            AccountEmail: EmptyToNull(item.GetValueOrDefault("accountEmail")?.S),
+            OrderReference: EmptyToNull(item.GetValueOrDefault("orderReference")?.S),
+            Source: EmptyToNull(item.GetValueOrDefault("source")?.S),
+            LastMessageAt: ParseNullableDate(item.GetValueOrDefault("lastMessageAt")?.S),
+            AssignedAdmin: EmptyToNull(item.GetValueOrDefault("assignedAdmin")?.S)
         );
     }
 
@@ -1692,7 +1875,9 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             Body: item.GetValueOrDefault("body")?.S ?? string.Empty,
             SentAt: ParseDate(item.GetValueOrDefault("sentAt")?.S),
             SesMessageId: EmptyToNull(item.GetValueOrDefault("sesMessageId")?.S),
-            DeliveryStatus: EmptyToNull(item.GetValueOrDefault("deliveryStatus")?.S)
+            DeliveryStatus: EmptyToNull(item.GetValueOrDefault("deliveryStatus")?.S),
+            CreatedByType: item.GetValueOrDefault("createdByType")?.S ?? "system",
+            CreatedById: EmptyToNull(item.GetValueOrDefault("createdById")?.S)
         )).ToArray();
     }
 

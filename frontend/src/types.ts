@@ -270,6 +270,11 @@ export type AdminSupportTicketRow = {
   updatedAt: string;
   priority: string | null;
   linkedUserId: string | null;
+  accountEmail: string | null;
+  orderReference: string | null;
+  source: string | null;
+  lastMessageAt: string | null;
+  assignedAdmin: string | null;
 };
 
 export type AdminSupportMessage = {
@@ -280,6 +285,8 @@ export type AdminSupportMessage = {
   sentAt: string;
   sesMessageId: string | null;
   deliveryStatus: string | null;
+  createdByType: string;
+  createdById: string | null;
 };
 
 export type AdminSupportTicketDetail = {

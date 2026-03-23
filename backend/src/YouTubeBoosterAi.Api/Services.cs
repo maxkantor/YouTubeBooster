@@ -538,6 +538,15 @@ public sealed class SupportService : ISupportService
             linked = byAccount?.UserId;
         }
 
+        if (linked is null && !string.IsNullOrWhiteSpace(request.OrderReference))
+        {
+            var payment = await _appDataStore.GetPaymentByCheckoutSessionIdAsync(request.OrderReference.Trim(), cancellationToken);
+            if (payment is not null)
+            {
+                linked = payment.UserId;
+            }
+        }
+
         var ticketId = await _appDataStore.SaveSupportTicketAsync(request, linked, cancellationToken);
         await _supportNotificationService.NotifyNewTicketAsync(ticketId, request, cancellationToken);
         return new SupportTicketResponse(ticketId, "open");

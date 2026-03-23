@@ -416,6 +416,21 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     public Task LinkPaymentToUserAsync(string stripeCheckoutSessionId, string userId, string adminEmail, CancellationToken cancellationToken) =>
         Task.CompletedTask;
 
-    public Task UpdateSupportTicketStatusAsync(string ticketId, AdminSupportTicketPatchRequest request, string adminEmail, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    public Task UpdateSupportTicketStatusAsync(string ticketId, AdminSupportTicketPatchRequest request, string adminEmail, CancellationToken cancellationToken)
+    {
+        if (_supportMeta.TryGetValue(ticketId, out var meta))
+        {
+            var status = string.IsNullOrWhiteSpace(request.Status) ? meta.Status : request.Status.Trim();
+            var priority = string.IsNullOrWhiteSpace(request.Priority) ? meta.Priority : request.Priority.Trim();
+            _supportMeta[ticketId] = meta with
+            {
+                Status = status,
+                Priority = priority,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                AssignedAdmin = adminEmail
+            };
+        }
+        _activity.Insert(0, new ActivityFeedItem("admin_support_ticket_updated", ticketId, DateTimeOffset.UtcNow));
+        return Task.CompletedTask;
+    }
 }

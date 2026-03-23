@@ -188,7 +188,12 @@ public sealed record AdminSupportTicketDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? Priority,
-    string? LinkedUserId
+    string? LinkedUserId,
+    string? AccountEmail,
+    string? OrderReference,
+    string? Source,
+    DateTimeOffset? LastMessageAt,
+    string? AssignedAdmin
 );
 
 public sealed record AdminSupportTicketDetailResponse(
@@ -205,10 +210,16 @@ public sealed record AdminSupportMessageDto(
     string Body,
     DateTimeOffset SentAt,
     string? SesMessageId,
-    string? DeliveryStatus
+    string? DeliveryStatus,
+    string CreatedByType,
+    string? CreatedById
 );
 
 public sealed record AdminSupportReplyRequest(string Subject, string Body);
+
+public sealed record AdminSupportNoteRequest(string Body);
+
+public sealed record AdminSupportLinkUserRequest(string? UserId);
 
 public sealed record AdminDemoAuditDto(
     string DemoId,
