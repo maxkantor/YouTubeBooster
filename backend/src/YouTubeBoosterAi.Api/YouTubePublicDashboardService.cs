@@ -223,7 +223,7 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
 
     private async Task<ResolvedChannel> ResolveChannelOrFallbackAsync(string channelInput, CancellationToken cancellationToken)
     {
-        var apiKey = await _secretValueProvider.GetValueAsync("youtube/api-key", secure: true, cancellationToken);
+        var apiKey = await _secretValueProvider.GetValueAsync("admin/youtube-api-key", secure: true, cancellationToken);
         if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Trim().Equals("replace-me", StringComparison.OrdinalIgnoreCase))
         {
             return ResolvedChannel.Fallback(channelInput);
@@ -248,7 +248,7 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
             return [];
         }
 
-        var apiKey = await _secretValueProvider.GetValueAsync("youtube/api-key", secure: true, cancellationToken);
+        var apiKey = await _secretValueProvider.GetValueAsync("admin/youtube-api-key", secure: true, cancellationToken);
         if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Trim().Equals("replace-me", StringComparison.OrdinalIgnoreCase))
         {
             return VideoSnapshot.Fallback().Take(maxResults).ToArray();

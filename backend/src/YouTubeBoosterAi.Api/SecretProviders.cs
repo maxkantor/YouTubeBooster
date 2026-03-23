@@ -50,11 +50,18 @@ public sealed class SsmSecretValueProvider : ISecretValueProvider
     }
 
     /// <summary>
-    /// YouTube Data API key: read from <c>admin/google/credentials-json</c> (SSM) — root or <c>installed</c>/<c>web</c>
+    /// YouTube Data API key: read from <c>admin/youtube-api-key</c> (SSM) or
+    /// <c>admin/google/credentials-json</c> (SSM) — root or <c>installed</c>/<c>web</c>
     /// fields <c>youtube_api_key</c> / <c>api_key</c>. Production uses SSM only (no <c>YOUTUBE_API_KEY</c> env).
     /// </summary>
     private async Task<string?> GetYouTubeApiKeyFromCredentialsJsonAsync(bool secure, CancellationToken cancellationToken)
     {
+        var directKey = await ReadSsmParameterDirectAsync("admin/youtube-api-key", secure, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(directKey))
+        {
+            return directKey;
+        }
+
         // Prefer direct SSM read so we don't pick up mis-ordered appsettings in Lambda.
         var credentialsJson = await ReadSsmParameterDirectAsync("admin/google/credentials-json", secure, cancellationToken);
         if (string.IsNullOrWhiteSpace(credentialsJson))
@@ -123,7 +130,7 @@ public sealed class SsmSecretValueProvider : ISecretValueProvider
             return cached;
         }
 
-        // Resolve YouTube Data API key from credentials-json first; optional legacy SSM param youtube/api-key after config.
+        // Resolve YouTube Data API key from admin/youtube-api-key or credentials-json first; optional legacy SSM param youtube/api-key after config.
         if (string.Equals(relativeKey, "youtube/api-key", StringComparison.OrdinalIgnoreCase))
         {
             var fromCredentials = await GetYouTubeApiKeyFromCredentialsJsonAsync(secure, cancellationToken);

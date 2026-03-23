@@ -35,7 +35,7 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
 
     public async Task<DemoAnalysisResponse> RunDemoAsync(DemoAnalysisRequest request, CancellationToken cancellationToken)
     {
-        var apiKey = await _secretValueProvider.GetValueAsync("youtube/api-key", secure: true, cancellationToken);
+        var apiKey = await _secretValueProvider.GetValueAsync("admin/youtube-api-key", secure: true, cancellationToken);
         var resolvedInput = request.ChannelInput ?? string.Empty;
         var client = _httpClientFactory.CreateClient();
 
