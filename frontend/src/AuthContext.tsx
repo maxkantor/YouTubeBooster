@@ -72,6 +72,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void authApi.logout().catch(() => undefined).finally(() => {
       cognitoSignOut();
       setSession(null);
+      try {
+        window.sessionStorage.setItem('yb_post_logout_redirect', '/');
+      } catch {
+        // ignore
+      }
+      window.location.replace('/');
     });
   }, []);
 

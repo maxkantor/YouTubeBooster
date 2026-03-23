@@ -210,7 +210,7 @@ export const premiumApi = {
 };
 
 export const authApi = {
-  async requestMagicLink(email: string, redirectPath = '/checkout/success'): Promise<MagicLinkLoginResponse> {
+  async requestMagicLink(email: string, redirectPath = '/'): Promise<MagicLinkLoginResponse> {
     return fetchJson<MagicLinkLoginResponse>('/api/auth/magic-link', {
       method: 'POST',
       body: JSON.stringify({ email, redirectPath })

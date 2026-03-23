@@ -32,11 +32,7 @@ function useReturnTo() {
   const rawReturnTo = sp.get('returnTo') || '/';
   const channel = sp.get('channel') || '';
   const plan = sp.get('plan') || 'premium';
-
-  // Aggressive UX guard:
-  // If we're being redirected back to checkout success without a session_id,
-  // it's usually the "wrong screen" loop (common in mock checkout / missing query).
-  // Send users to landing page instead.
+    const normalizedReturnTo = useMemo(() => '/', []);
   let effectiveReturnTo = rawReturnTo;
   try {
     const url = new URL(rawReturnTo, window.location.origin);
@@ -68,13 +64,13 @@ export function SignInPage({
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [magicLinkSending, setMagicLinkSending] = useState(false);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
 
   const normalizedReturnTo = useMemo(() => {
-    // Normalize URLs so `/dashboard/` doesn't accidentally miss a client route.
-    const raw = (returnTo || '/').trim();
-    return raw.replace(/\/+(?=[?#]|$)/g, '');
+          return '/';
   }, [returnTo]);
 
   // Keep the last email typed so redirects/errors don't force users to retype.
@@ -136,6 +132,7 @@ export function SignInPage({
 
             setLoading(true);
             setError('');
+            setInfo('');
             try {
               // Keep controlled inputs in sync in case Chrome autofill mutated DOM values.
               setEmail(emailTrimmed);
@@ -163,7 +160,16 @@ export function SignInPage({
 
               // Avoid account-enumeration style messaging (e.g. "User is not confirmed" / "User exists").
               if (code === 'UserNotFoundException') {
-                setError('No account exists for this email. Sign up or try another email.');
+                try {
+                  setMagicLinkSending(true);
+                  await authApi.requestMagicLink(emailTrimmed, '/');
+                  setInfo('We found your account. Check your email for a secure sign-in link.');
+                } catch (err) {
+                  setError('No account exists for this email. Sign up or try another email.');
+                  console.warn('Magic link request failed:', err);
+                } finally {
+                  setMagicLinkSending(false);
+                }
               } else if (
                 code === 'UserNotConfirmedException' ||
                 (code === 'NotAuthorizedException' && msg && /not\s*confirmed|unconfirmed/i.test(msg)) ||
@@ -221,6 +227,7 @@ export function SignInPage({
           </div>
 
           {error && <p className="error-text">{error}</p>}
+          {info && <p className="muted" style={{ marginTop: 8 }}>{info}</p>}
 
           <button
             type="submit"
@@ -228,6 +235,33 @@ export function SignInPage({
             disabled={loading}
           >
             {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={magicLinkSending || !email.trim()}
+            onClick={async () => {
+              const emailTrimmed = (emailInputRef.current?.value ?? email).trim();
+              if (!emailTrimmed) {
+                setError('Enter your email to receive a sign-in link.');
+                return;
+              }
+              setMagicLinkSending(true);
+              setError('');
+              setInfo('');
+              try {
+                await authApi.requestMagicLink(emailTrimmed, '/');
+                setInfo('Check your email for a secure sign-in link.');
+              } catch (err) {
+                setError('Could not send a sign-in link.');
+                console.warn('Magic link request failed:', err);
+              } finally {
+                setMagicLinkSending(false);
+              }
+            }}
+          >
+            {magicLinkSending ? 'Sending link…' : 'Email me a sign-in link'}
           </button>
 
           <div className="auth-links">
@@ -255,8 +289,7 @@ export function SignUpPage({
   const { refresh } = useAuth();
   const { returnTo } = useReturnTo();
   const normalizedReturnTo = useMemo(() => {
-    const raw = (returnTo || '/').trim();
-    return raw.replace(/\/+(?=[?#]|$)/g, '');
+          return '/';
   }, [returnTo]);
   const [step, setStep] = useState<'signup' | 'confirm'>('signup');
   const [email, setEmail] = useState(() => readCachedEmail());
@@ -475,7 +508,7 @@ export function SignUpPage({
                     console.warn('cognitoLogin failed after verify (suppressed):', err);
                   }
                   await refresh();
-                  nav(returnTo, { replace: true });
+                  nav('/', { replace: true });
                 }
               } catch (e) {
                 const anyErr = e as any;

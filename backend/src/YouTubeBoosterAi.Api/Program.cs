@@ -1021,7 +1021,7 @@ static string NormalizeRedirectPath(string? redirectPath)
 {
     if (string.IsNullOrWhiteSpace(redirectPath) || !redirectPath.StartsWith('/'))
     {
-        return "/checkout/success";
+        return "/";
     }
 
     return redirectPath;

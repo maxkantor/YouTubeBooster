@@ -504,6 +504,31 @@ function AppInner() {
     };
   }, []);
 
+  // Magic link verification (token query param)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (!token) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await authApi.verifyMagicLink(token);
+        await refreshUserSession();
+      } catch (err) {
+        console.warn('Magic link verification failed:', err);
+      } finally {
+        if (!cancelled) {
+          window.location.replace('/');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshUserSession]);
+
   // Post-auth hard-refresh redirect:
   // After login we hard-refresh to `/` to avoid Amplify deep-route 404s,
   // then redirect client-side once cookie session is restored.
@@ -600,7 +625,7 @@ function AppInner() {
     // Best-effort logout for both the frontend session cookie and Cognito.
     await authSignOut();
     try {
-      window.sessionStorage.setItem('yb_post_logout_redirect', '/demo');
+      window.sessionStorage.setItem('yb_post_logout_redirect', '/');
     } catch {
       // ignore
     }
