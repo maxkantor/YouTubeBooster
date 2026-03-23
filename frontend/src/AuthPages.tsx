@@ -29,21 +29,21 @@ function countTrue(obj: Record<string, boolean>): number {
 
 function useReturnTo() {
   const [sp] = useSearchParams();
-  const rawReturnTo = sp.get('returnTo') || '/dashboard';
+  const rawReturnTo = sp.get('returnTo') || '/';
   const channel = sp.get('channel') || '';
   const plan = sp.get('plan') || 'premium';
 
   // Aggressive UX guard:
   // If we're being redirected back to checkout success without a session_id,
   // it's usually the "wrong screen" loop (common in mock checkout / missing query).
-  // Send users to dashboard instead.
+  // Send users to landing page instead.
   let effectiveReturnTo = rawReturnTo;
   try {
     const url = new URL(rawReturnTo, window.location.origin);
     const isCheckoutSuccess = url.pathname === '/checkout/success';
     const sessionId = url.searchParams.get('session_id')?.trim() ?? '';
     if (isCheckoutSuccess && !sessionId) {
-      effectiveReturnTo = '/dashboard';
+      effectiveReturnTo = '/';
     }
   } catch {
     // ignore parse errors
@@ -73,7 +73,7 @@ export function SignInPage({
 
   const normalizedReturnTo = useMemo(() => {
     // Normalize URLs so `/dashboard/` doesn't accidentally miss a client route.
-    const raw = (returnTo || '/dashboard').trim();
+    const raw = (returnTo || '/').trim();
     return raw.replace(/\/+(?=[?#]|$)/g, '');
   }, [returnTo]);
 
@@ -255,7 +255,7 @@ export function SignUpPage({
   const { refresh } = useAuth();
   const { returnTo } = useReturnTo();
   const normalizedReturnTo = useMemo(() => {
-    const raw = (returnTo || '/dashboard').trim();
+    const raw = (returnTo || '/').trim();
     return raw.replace(/\/+(?=[?#]|$)/g, '');
   }, [returnTo]);
   const [step, setStep] = useState<'signup' | 'confirm'>('signup');
@@ -524,7 +524,7 @@ export function ForgotPasswordPage({
   const nav = useNavigate();
   const { returnTo } = useReturnTo();
   const normalizedReturnTo = useMemo(() => {
-    const raw = (returnTo || '/dashboard').trim();
+    const raw = (returnTo || '/').trim();
     return raw.replace(/\/+(?=[?#]|$)/g, '');
   }, [returnTo]);
   const [step, setStep] = useState<'request' | 'reset'>('request');
