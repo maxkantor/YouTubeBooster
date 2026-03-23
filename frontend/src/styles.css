@@ -656,7 +656,7 @@ textarea {
 
 /* Unified dashboard */
 .dashboard-page {
-  padding-bottom: 80px;
+  padding-bottom: 0;
 }
 
 .dashboard-header {

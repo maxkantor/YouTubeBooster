@@ -826,19 +826,43 @@ function AppInner() {
       </Routes>
       </Suspense>
       {showGlobalNav && (
-        <footer className="global-footer">
-          <div className="global-footer-content">
-            <p className="global-footer-line">Engineered by MK AI &amp; Performance Systems</p>
-            <p className="global-footer-line">
-              <Link to="/platform">Platform</Link>
-              {' · '}
-              <Link to="/blog">Blog</Link>
-              {' · '}
-              <Link to="/audit">Audits</Link>
-              {' · '}
-              <Link to="/site-map">Site map</Link>
-            </p>
-            <p className="global-footer-copy">© 2026 {BRAND.name}. All rights reserved.</p>
+        <footer className="landing-site-footer">
+          <div className="landing-site-footer-divider" aria-hidden />
+          <div className="container landing-site-footer-inner">
+            <div className="landing-site-footer-brand">
+              <Link
+                to="/"
+                className="landing-site-footer-logo brand-link brand-with-play"
+                aria-label={`${BRAND.name} home`}
+              >
+                <span className="brand-play-icon" aria-hidden />
+                <span className="landing-logo-yt">{BRAND.namePart1}</span>
+                <span className="landing-logo-boost">{BRAND.namePart2}</span>
+              </Link>
+              <p className="landing-site-footer-tagline">
+                AI-powered YouTube growth audits for creators who want more views.
+              </p>
+            </div>
+            <nav className="landing-site-footer-nav" aria-label="Footer">
+              <div className="landing-site-footer-col">
+                <h3 className="landing-site-footer-col-title">Company</h3>
+                <ul className="landing-site-footer-links">
+                  <li><Link to="/about">About Us</Link></li>
+                  <li><Link to="/contact">Contact</Link></li>
+                  <li><Link to="/platform">Platform</Link></li>
+                </ul>
+              </div>
+              <div className="landing-site-footer-col">
+                <h3 className="landing-site-footer-col-title">Legal</h3>
+                <ul className="landing-site-footer-links">
+                  <li><Link to="/privacy">Privacy Policy</Link></li>
+                  <li><Link to="/disclaimer">Disclaimer</Link></li>
+                </ul>
+              </div>
+            </nav>
+          </div>
+          <div className="landing-site-footer-bottom">
+            <p className="landing-site-footer-copy">© {new Date().getFullYear()} {BRAND.name}. All rights reserved.</p>
           </div>
         </footer>
       )}
