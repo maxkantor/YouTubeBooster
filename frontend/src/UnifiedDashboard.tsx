@@ -2009,6 +2009,22 @@ export function UnifiedDashboard({
           isLoading={checkoutLoading}
         />
       )}
+
+      <footer className="global-footer dashboard-footer">
+        <div className="global-footer-content">
+          <p className="global-footer-line">Engineered by MK AI &amp; Performance Systems</p>
+          <p className="global-footer-line">
+            <a href="/platform">Platform</a>
+            {' · '}
+            <a href="/blog">Blog</a>
+            {' · '}
+            <a href="/audit">Audits</a>
+            {' · '}
+            <a href="/site-map">Site map</a>
+          </p>
+          <p className="global-footer-copy">© 2026 {BRAND.name}. All rights reserved.</p>
+        </div>
+      </footer>
     </div>
   );
 }
