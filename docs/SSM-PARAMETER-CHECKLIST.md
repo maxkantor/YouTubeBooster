@@ -86,6 +86,16 @@ Under your prefix (default `/youtubebooster`):
 - **`pricing/one-time-price` and `pricing/currency`:** Managed as dedicated `aws_ssm_parameter` resources with `lifecycle { ignore_changes = [value] }` so **Console edits are never overwritten** by `terraform apply`. The API and Stripe checkout read these values (no separate Stripe price object required for the amount).
 - **SecureStrings (value frozen after first apply):** `stripe/secret-key`, `stripe/webhook-secret`, `stripe/openai-api-key`, `admin/password`, `admin/google/credentials-json`, `admin/google/client-id`, `admin/google/client-secret`
 
+## Bedrock AI runtime parameters
+
+Create these **String** parameters under your prefix (example uses `/youtubebooster`):
+
+- `/youtubebooster/bedrock/model` (example: `anthropic.claude-3-sonnet-20240229-v1:0`)
+- `/youtubebooster/bedrock/maxTokens` (recommended `800`–`1200`, default `900`)
+- `/youtubebooster/bedrock/temperature` (recommended `0.7`)
+
+The API reads these values at runtime for `/api/ai/generate`.
+
 ## Admin CRM login (`/admin/login` on the site)
 
 The API checks credentials against **Parameter Store** (not Cognito):

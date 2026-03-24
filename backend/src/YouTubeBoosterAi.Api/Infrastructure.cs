@@ -1,4 +1,5 @@
 using Amazon.DynamoDBv2;
+using Amazon.BedrockRuntime;
 using Amazon.SimpleEmail;
 using Amazon.SimpleSystemsManagement;
 using System;
@@ -29,6 +30,7 @@ public static class Infrastructure
         });
 
         services.AddSingleton<IAmazonDynamoDB>(_ => dynamoClient);
+        services.AddSingleton<IAmazonBedrockRuntime>(_ => new AmazonBedrockRuntimeClient());
         services.AddSingleton<IAmazonSimpleEmailService>(_ => new AmazonSimpleEmailServiceClient());
         services.AddSingleton<IAmazonSimpleSystemsManagement>(_ => new AmazonSimpleSystemsManagementClient());
 
@@ -62,6 +64,9 @@ public static class Infrastructure
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<ISupportNotificationService, SesSupportNotificationService>();
         services.AddSingleton<IPaymentAdminNotificationService, SesPaymentAdminNotificationService>();
+        services.AddScoped<IPromptBuilder, PromptBuilder>();
+        services.AddScoped<IBedrockService, BedrockService>();
+        services.AddScoped<IAiGenerationService, AiGenerationService>();
 
         return services;
     }

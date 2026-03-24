@@ -125,6 +125,33 @@ export type PublicTrafficToolsResponse = {
 
 export type PublicRunnerPingResponse = { status: string; ts: string };
 
+export type AiGenerateAction =
+  | 'rewrite_titles'
+  | 'improve_description'
+  | 'keywords'
+  | 'ideas'
+  | 'pattern';
+
+export type AiGenerateRequest = {
+  action: AiGenerateAction;
+  input: {
+    titles?: string[];
+    description?: string;
+    niche?: string;
+    audience?: string;
+  };
+};
+
+export type AiGenerateResponse = {
+  action: AiGenerateAction;
+  results: string[];
+  summary: string;
+  paid: boolean;
+  visibleResults: number;
+  badge: string;
+  generatedAt: string;
+};
+
 export type DashboardMetric = {
   label: string;
   value: string;

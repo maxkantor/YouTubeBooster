@@ -48,6 +48,10 @@ Expected: `{"status":"ok","service":"youtube-booster-ai-api"}`.
 
 - **Only** `Program.cs` should call `AddAWSLambdaHosting(LambdaEventSource.HttpApi)`. Do **not** add it in `Infrastructure.cs` or anywhere else (a duplicate `RestApi` registration was overriding and causing `MarshallRequest` errors).
 
+- For AI features, ensure the Lambda execution role includes:
+  - `bedrock:InvokeModel`
+  - SSM read access to `/youtubebooster/bedrock/*`
+
 ## If you see errors
 
 - **Invalid lambda function handler**  

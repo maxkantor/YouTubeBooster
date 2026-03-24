@@ -135,6 +135,24 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+    options.AddPolicy("ai-generate", httpContext =>
+    {
+        var userKey =
+            httpContext.User.FindFirst("sub")?.Value
+            ?? httpContext.User.FindFirst("cognito:username")?.Value
+            ?? httpContext.User.FindFirst("preferred_username")?.Value
+            ?? httpContext.User.FindFirst("username")?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(userKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
 });
 
 var app = builder.Build();
@@ -490,6 +508,74 @@ premiumApi.MapGet("/dashboard/overview", async (HttpContext httpContext, IUserDa
     var user = GetAuthenticatedUser(httpContext);
     var result = await service.GetOverviewAsync(user.UserId, cancellationToken);
     return Results.Ok(result);
+});
+
+var aiApi = app.MapGroup("/api/ai").RequireAuthorization().RequireRateLimiting("ai-generate");
+aiApi.MapPost("/generate", async (
+    AiGenerateRequest request,
+    HttpContext httpContext,
+    IAppDataStore appDataStore,
+    IAiGenerationService aiGenerationService,
+    CancellationToken cancellationToken) =>
+{
+    var action = (request.Action ?? string.Empty).Trim().ToLowerInvariant();
+    var allowedActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "rewrite_titles",
+        "improve_description",
+        "keywords",
+        "ideas",
+        "pattern"
+    };
+
+    if (!allowedActions.Contains(action))
+    {
+        return Results.BadRequest(new { error = "Unsupported action." });
+    }
+
+    var sub = ResolveCognitoSubject(httpContext.User);
+    if (string.IsNullOrWhiteSpace(sub))
+    {
+        return Results.Unauthorized();
+    }
+
+    var user = await appDataStore.GetUserByCognitoSubAsync(sub, cancellationToken);
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var hasPremium =
+        user.Purchased
+        || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase)
+        || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
+        || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
+
+    var credits = await appDataStore.GetUserAiCreditsAsync(user.UserId, cancellationToken);
+    if (!hasPremium && credits <= 0)
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+
+    if (!hasPremium)
+    {
+        var consumed = await appDataStore.TryConsumeUserAiCreditAsync(user.UserId, 1, cancellationToken);
+        if (!consumed)
+        {
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+    }
+
+    try
+    {
+        var response = await aiGenerationService.GenerateAsync(request with { Action = action }, user, hasPremium, cancellationToken);
+        return Results.Ok(response);
+    }
+    catch
+    {
+        return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "AI is busy. Try again.");
+    }
 });
 
 var authApi = app.MapGroup("/api/auth");
@@ -1165,6 +1251,17 @@ static SessionUserDto ToSessionUserDto(UserAccount user) => new(
     user.ChannelUrl,
     user.AccessStatus
 );
+
+static string? ResolveCognitoSubject(System.Security.Claims.ClaimsPrincipal principal)
+{
+    return
+        principal.FindFirst("sub")?.Value
+        ?? principal.FindFirst("cognito:username")?.Value
+        ?? principal.FindFirst("preferred_username")?.Value
+        ?? principal.FindFirst("username")?.Value
+        ?? principal.FindFirst("email")?.Value
+        ?? principal.FindFirst("emailaddress")?.Value;
+}
 
 static UserAccount GetAuthenticatedUser(HttpContext httpContext)
 {

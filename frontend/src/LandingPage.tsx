@@ -4,9 +4,10 @@ import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
-import { billingApi, meApi, publicApi } from './lib/api';
+import { aiApi, billingApi, meApi, publicApi } from './lib/api';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
+import type { AiGenerateAction } from './types';
 
 const DEMO_STORAGE_KEY = 'ybai_demo';
 
@@ -35,6 +36,8 @@ const UNLOCK_FEATURES = [
 const DEFAULT_EXAMPLE_PREVIEW_CHANNEL = '@MaxKantorCooking';
 
 type OpportunityId = 'titles' | 'description' | 'pattern' | 'ctr';
+
+type LandingAiAction = AiGenerateAction;
 
 type OpportunityPreview = {
   id: OpportunityId;
@@ -223,6 +226,44 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US').format(Math.max(0, Math.round(value)));
 }
 
+function mapOpportunityToAiAction(id: OpportunityId): LandingAiAction {
+  switch (id) {
+    case 'titles':
+      return 'rewrite_titles';
+    case 'description':
+      return 'improve_description';
+    case 'pattern':
+      return 'pattern';
+    case 'ctr':
+      return 'keywords';
+    default:
+      return 'ideas';
+  }
+}
+
+function buildPreviewAiResults(action: LandingAiAction, auditPreview: AuditPreviewData): string[] {
+  if (action === 'rewrite_titles') {
+    return auditPreview.opportunities.find((o) => o.id === 'titles')?.output ?? [];
+  }
+  if (action === 'improve_description') {
+    return auditPreview.opportunities.find((o) => o.id === 'description')?.output ?? [];
+  }
+  if (action === 'keywords') {
+    const base = auditPreview.keywords;
+    return [...base, `${base[0] ?? 'youtube strategy'} tutorial`, `${base[1] ?? 'content growth'} tips`];
+  }
+  if (action === 'pattern') {
+    return auditPreview.opportunities.find((o) => o.id === 'pattern')?.output ?? [];
+  }
+  return [
+    `7 ${auditPreview.channelLabel} video ideas that solve one painful problem`,
+    '3-part series: beginner to advanced in 30 days',
+    'React to common mistakes in your niche and fix them live',
+    'Before/after transformation format with measurable outcome',
+    'Answer top audience comments as a recurring series'
+  ];
+}
+
 function FullGrowthPlanSection({
   userState,
   auditPreview,
@@ -407,6 +448,12 @@ export function LandingPage() {
     engagementRate: number;
     topVideos: Array<{ id: string; title: string; views: number }>;
   } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiResults, setAiResults] = useState<string[]>([]);
+  const [aiVisibleResults, setAiVisibleResults] = useState(0);
+  const [aiCurrentAction, setAiCurrentAction] = useState<LandingAiAction>('rewrite_titles');
 
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
@@ -618,6 +665,42 @@ export function LandingPage() {
     opportunityTimeoutsRef.current[id] = window.setTimeout(() => {
       setOpportunityStates((prev) => ({ ...prev, [id]: 'locked' }));
     }, 2000);
+  }
+
+  async function handleGenerateAi(action: LandingAiAction) {
+    setAiCurrentAction(action);
+    setAiError('');
+    setAiLoading(true);
+
+    try {
+      const titles = auditPreview.opportunities.find((o) => o.id === 'titles')?.output ?? [auditPreview.titleOriginal];
+      const input = {
+        titles,
+        description: auditPreview.titleOriginal,
+        niche: auditPreview.channelLabel,
+        audience: 'YouTube creators growing CTR and watch time'
+      };
+
+      if (!authSession?.idToken || !hasPremium) {
+        const preview = buildPreviewAiResults(action, auditPreview);
+        setAiSummary('Preview mode: unlock full AI access to reveal all personalized results.');
+        setAiResults(preview);
+        setAiVisibleResults(Math.min(2, preview.length));
+        return;
+      }
+
+      const response = await aiApi.generate(authSession.idToken, { action, input });
+      setAiSummary(response.summary);
+      setAiResults(response.results ?? []);
+      setAiVisibleResults(response.visibleResults ?? response.results.length);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'AI is busy. Try again.');
+      setAiSummary('');
+      setAiResults([]);
+      setAiVisibleResults(0);
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   function handleOpenInstantDemo() {
@@ -988,6 +1071,71 @@ export function LandingPage() {
                 ))}
               </ul>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-section" id="ai-tools">
+        <div className="container landing-container">
+          <div className="landing-ai-studio-header">
+            <span className={`landing-ai-studio-badge ${hasPremium ? 'is-paid' : 'is-preview'}`}>
+              {hasPremium ? 'Pro Feature Active' : 'Preview'}
+            </span>
+            <h2 className="landing-section-title">AI Growth Studio</h2>
+            <p className="landing-section-sub">
+              Generate conversion-ready outputs for titles, descriptions, keywords, patterns, and video ideas.
+            </p>
+          </div>
+
+          <div className="landing-ai-studio-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => handleGenerateAi('rewrite_titles')}>Rewrite Titles</button>
+            <button type="button" className="btn btn-secondary" onClick={() => handleGenerateAi('improve_description')}>Improve Description</button>
+            <button type="button" className="btn btn-secondary" onClick={() => handleGenerateAi('keywords')}>Generate Keywords</button>
+            <button type="button" className="btn btn-secondary" onClick={() => handleGenerateAi('pattern')}>Find Winning Pattern</button>
+            <button type="button" className="btn btn-secondary" onClick={() => handleGenerateAi('ideas')}>Generate Video Ideas</button>
+          </div>
+
+          <div className="landing-ai-studio-results">
+            {aiLoading ? (
+              <>
+                <p className="muted">Generating AI results...</p>
+                <div className="landing-ai-skeleton-wrap" aria-hidden>
+                  <div className="landing-ai-skeleton" />
+                  <div className="landing-ai-skeleton" />
+                  <div className="landing-ai-skeleton" />
+                  <div className="landing-ai-skeleton" />
+                </div>
+              </>
+            ) : aiError ? (
+              <p className="landing-demo-error">{aiError}</p>
+            ) : aiResults.length > 0 ? (
+              <>
+                {aiSummary && <p className="muted">{aiSummary}</p>}
+                <div className="landing-ai-result-grid">
+                  {aiResults.map((item, index) => {
+                    const blurred = !hasPremium && index >= aiVisibleResults;
+                    return (
+                      <article key={`${aiCurrentAction}-${index}`} className={`landing-ai-result-card ${blurred ? 'is-blurred' : ''}`}>
+                        <span className="landing-ai-result-index">#{index + 1}</span>
+                        <p>{item}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="landing-ai-result-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => handleGenerateAi(aiCurrentAction)}>
+                    Regenerate
+                  </button>
+                  {!hasPremium && (
+                    <button type="button" className="btn btn-primary" onClick={handleUnlockReport}>
+                      Unlock Full AI Access
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="muted">Pick an AI action to generate your first result set.</p>
+            )}
           </div>
         </div>
       </section>

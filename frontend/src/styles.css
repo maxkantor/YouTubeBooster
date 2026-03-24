@@ -4868,3 +4868,105 @@ textarea {
   color: #94a3b8;
   font-size: 0.9rem;
 }
+
+.landing-ai-studio-header {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.landing-ai-studio-badge {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+}
+
+.landing-ai-studio-badge.is-paid {
+  background: rgba(16, 185, 129, 0.18);
+  color: #bbf7d0;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.landing-ai-studio-badge.is-preview {
+  background: rgba(59, 130, 246, 0.16);
+  color: #bfdbfe;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+.landing-ai-studio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.landing-ai-studio-results {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 16px;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.35), rgba(15, 23, 42, 0.22));
+}
+
+.landing-ai-skeleton-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.landing-ai-skeleton {
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(51, 65, 85, 0.42), rgba(71, 85, 105, 0.56), rgba(51, 65, 85, 0.42));
+  background-size: 240% 100%;
+  animation: landingSkeletonPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes landingSkeletonPulse {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+.landing-ai-result-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.landing-ai-result-card {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  display: grid;
+  gap: 8px;
+  animation: landingAiFadeIn 180ms ease-out;
+}
+
+.landing-ai-result-card.is-blurred {
+  filter: blur(3px);
+  opacity: 0.65;
+  user-select: none;
+}
+
+.landing-ai-result-index {
+  font-size: 0.75rem;
+  color: #93c5fd;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.landing-ai-result-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+@keyframes landingAiFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

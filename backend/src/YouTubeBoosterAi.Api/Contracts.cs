@@ -310,6 +310,28 @@ public sealed record LinkOrderBody(string StripeCheckoutSessionId, string UserId
 
 public sealed record OgImageRequest(string Title, string Subtitle, string Theme, string? ShareId);
 
+public sealed record AiGenerateRequest(
+    string Action,
+    AiGenerateInput Input
+);
+
+public sealed record AiGenerateInput(
+    IReadOnlyList<string>? Titles,
+    string? Description,
+    string? Niche,
+    string? Audience
+);
+
+public sealed record AiGenerateResponse(
+    string Action,
+    IReadOnlyList<string> Results,
+    string Summary,
+    bool Paid,
+    int VisibleResults,
+    string Badge,
+    DateTimeOffset GeneratedAt
+);
+
 public sealed record AppSettings(
     decimal OneTimePrice,
     string Currency,

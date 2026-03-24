@@ -34,6 +34,21 @@ public interface IAppSettingsProvider
     Task<AppSettings> GetSettingsAsync(CancellationToken cancellationToken);
 }
 
+public interface IPromptBuilder
+{
+    string BuildPrompt(AiGenerateRequest request);
+}
+
+public interface IBedrockService
+{
+    Task<string> InvokeModelAsync(string prompt, double temperature, int maxTokens, CancellationToken cancellationToken);
+}
+
+public interface IAiGenerationService
+{
+    Task<AiGenerateResponse> GenerateAsync(AiGenerateRequest request, UserAccount user, bool paidAccess, CancellationToken cancellationToken);
+}
+
 public sealed class StripeCheckoutService : ICheckoutService
 {
     private readonly IAppSettingsProvider _appSettingsProvider;

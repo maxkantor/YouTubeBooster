@@ -1,4 +1,6 @@
 import type {
+  AiGenerateRequest,
+  AiGenerateResponse,
   AdminActivityEventRow,
   AdminDemoAuditRow,
   AdminListResponse,
@@ -212,6 +214,15 @@ export const billingApi = {
 export const premiumApi = {
   async loadDashboardOverview(idToken: string): Promise<DashboardOverview> {
     return fetchJsonAuthed<DashboardOverview>('/api/premium/dashboard/overview', idToken);
+  }
+};
+
+export const aiApi = {
+  async generate(idToken: string, payload: AiGenerateRequest): Promise<AiGenerateResponse> {
+    return fetchJsonAuthed<AiGenerateResponse>('/api/ai/generate', idToken, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
   }
 };
 

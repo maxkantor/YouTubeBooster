@@ -14,6 +14,8 @@ public interface IAppDataStore
     Task<UserAccount?> GetUserByIdAsync(string userId, CancellationToken cancellationToken);
     Task<UserAccount> UpsertCognitoUserAsync(string cognitoSub, string email, bool emailVerified, string? signupSource, CancellationToken cancellationToken);
     Task<UserAccount?> GetUserByCognitoSubAsync(string cognitoSub, CancellationToken cancellationToken);
+    Task<int> GetUserAiCreditsAsync(string userId, CancellationToken cancellationToken);
+    Task<bool> TryConsumeUserAiCreditAsync(string userId, int amount, CancellationToken cancellationToken);
     Task RecordUserLoginAsync(string userId, DateTimeOffset when, CancellationToken cancellationToken);
     Task SavePaymentAsync(PaymentRecord payment, CancellationToken cancellationToken);
     Task<PaymentRecord?> GetPaymentByCheckoutSessionIdAsync(string stripeCheckoutSessionId, CancellationToken cancellationToken);
@@ -285,6 +287,31 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
         }
 
         return Task.FromResult<UserAccount?>(null);
+    }
+
+    public Task<int> GetUserAiCreditsAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (_usersById.TryGetValue(userId, out var user))
+        {
+            return Task.FromResult(Math.Max(0, user.AiCredits));
+        }
+
+        return Task.FromResult(0);
+    }
+
+    public Task<bool> TryConsumeUserAiCreditAsync(string userId, int amount, CancellationToken cancellationToken)
+    {
+        if (amount <= 0) return Task.FromResult(true);
+        if (!_usersById.TryGetValue(userId, out var user)) return Task.FromResult(false);
+        if (user.AiCredits < amount) return Task.FromResult(false);
+
+        _usersById[userId] = user with
+        {
+            AiCredits = Math.Max(0, user.AiCredits - amount),
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        return Task.FromResult(true);
     }
 
     public Task RecordUserLoginAsync(string userId, DateTimeOffset when, CancellationToken cancellationToken)
@@ -995,6 +1022,28 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
 
         var userId = response.Item?.GetValueOrDefault("userId")?.S;
         return string.IsNullOrWhiteSpace(userId) ? null : await GetUserByIdAsync(userId, cancellationToken);
+    }
+
+    public async Task<int> GetUserAiCreditsAsync(string userId, CancellationToken cancellationToken)
+    {
+        var user = await GetUserByIdAsync(userId, cancellationToken);
+        return Math.Max(0, user?.AiCredits ?? 0);
+    }
+
+    public async Task<bool> TryConsumeUserAiCreditAsync(string userId, int amount, CancellationToken cancellationToken)
+    {
+        if (amount <= 0) return true;
+
+        var user = await GetUserByIdAsync(userId, cancellationToken);
+        if (user is null || user.AiCredits < amount) return false;
+
+        await SaveUserProfileAsync(user with
+        {
+            AiCredits = Math.Max(0, user.AiCredits - amount),
+            UpdatedAt = DateTimeOffset.UtcNow
+        }, cancellationToken);
+
+        return true;
     }
 
     public async Task RecordUserLoginAsync(string userId, DateTimeOffset when, CancellationToken cancellationToken)
@@ -1928,7 +1977,8 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             ["userStatus"] = StringValue(string.IsNullOrWhiteSpace(user.UserStatus) ? "active" : user.UserStatus),
             ["adminNotes"] = StringValue(user.AdminNotes ?? string.Empty),
             ["tags"] = StringValue(user.Tags ?? string.Empty),
-            ["lastSeenAt"] = StringValue(user.LastSeenAt?.ToString("O") ?? string.Empty)
+            ["lastSeenAt"] = StringValue(user.LastSeenAt?.ToString("O") ?? string.Empty),
+            ["aiCredits"] = NumberValue((long)Math.Max(0, user.AiCredits))
         }, cancellationToken);
     }
 
@@ -1951,9 +2001,13 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             UserStatus: string.IsNullOrWhiteSpace(item.GetValueOrDefault("userStatus")?.S) ? "active" : item.GetValueOrDefault("userStatus")!.S,
             AdminNotes: EmptyToNull(item.GetValueOrDefault("adminNotes")?.S),
             Tags: EmptyToNull(item.GetValueOrDefault("tags")?.S),
-            LastSeenAt: ParseNullableDate(item.GetValueOrDefault("lastSeenAt")?.S)
+            LastSeenAt: ParseNullableDate(item.GetValueOrDefault("lastSeenAt")?.S),
+            AiCredits: ParseInt(item.GetValueOrDefault("aiCredits")?.N)
         );
     }
+
+    private static int ParseInt(string? value)
+        => int.TryParse(value, out var parsed) ? parsed : 0;
 
     private static DateTimeOffset? ParseNullableDate(string? value)
         => DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;

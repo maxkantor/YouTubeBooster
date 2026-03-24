@@ -16,7 +16,8 @@ public sealed record UserAccount(
     string UserStatus = "active",
     string? AdminNotes = null,
     string? Tags = null,
-    DateTimeOffset? LastSeenAt = null
+    DateTimeOffset? LastSeenAt = null,
+    int AiCredits = 0
 );
 
 public sealed record EntitlementRecord(
