@@ -674,19 +674,17 @@ function AppInner() {
               <span className="brand-word brand-word-2">{BRAND.namePart2}</span>
             </Link>
             <div className="nav-links nav-links-center" aria-label="Primary">
-              <a href="/#product">Product</a>
-              <a href="/#example-audit">Example Audit</a>
-              <a href="/#pricing">Pricing</a>
-              <a href="/#faq">FAQ</a>
+              <Link to="/#product">Product</Link>
+              <Link to="/#example-audit">Example Audit</Link>
+              <Link to="/#pricing">Pricing</Link>
+              <Link to="/#faq">FAQ</Link>
             </div>
-            <button
+            <Link
+              to="/#audit"
               className="btn btn-primary nav-cta"
-              onClick={() => {
-                window.location.href = '/#audit';
-              }}
             >
               Analyze Your Channel
-            </button>
+            </Link>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {userSession.authenticated && userSession.user ? (

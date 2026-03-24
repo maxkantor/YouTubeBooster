@@ -285,12 +285,13 @@ export function LandingPage() {
   }, [authSession?.idToken]);
 
   useEffect(() => {
-    if (window.location.hash === '#audit') {
-      const scrollToAudit = () => {
-        const el = document.getElementById('audit');
+    const hash = window.location.hash.replace(/^#/, '');
+    if (hash) {
+      const scrollToSection = () => {
+        const el = document.getElementById(hash);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
-      requestAnimationFrame(() => requestAnimationFrame(scrollToAudit));
+      requestAnimationFrame(() => requestAnimationFrame(scrollToSection));
       return;
     }
     window.scrollTo(0, 0);
