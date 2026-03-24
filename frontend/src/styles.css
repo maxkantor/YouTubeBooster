@@ -1618,6 +1618,15 @@ textarea {
   width: calc(100% - 4px);
 }
 
+.landing-nav-link-subtle {
+  color: rgba(148, 163, 184, 0.74);
+  letter-spacing: 0.08em;
+}
+
+.landing-nav-link-subtle:hover {
+  color: #cbd5e1;
+}
+
 .landing-nav-actions {
   display: inline-flex;
   align-items: center;

@@ -696,10 +696,21 @@ export function LandingPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'AI is busy. Try again.';
       const isMissingEndpoint = /404|status\s*404/i.test(message);
+      const isTemporaryAiIssue = /503|busy|temporarily unavailable|being enabled|bedrock/i.test(message);
 
       if (isMissingEndpoint) {
         const preview = buildPreviewAiResults(action, auditPreview);
         setAiSummary('AI backend is deploying. Showing premium preview results for now.');
+        setAiResults(preview);
+        setAiVisibleResults(hasPremium ? preview.length : Math.min(2, preview.length));
+        setAiError('');
+      } else if (isTemporaryAiIssue) {
+        const preview = buildPreviewAiResults(action, auditPreview);
+        setAiSummary(
+          hasPremium
+            ? 'Live AI is temporarily coming online. Showing your premium preview outputs for now.'
+            : 'Preview mode: unlock full AI access to reveal personalized live results when AI is online.'
+        );
         setAiResults(preview);
         setAiVisibleResults(hasPremium ? preview.length : Math.min(2, preview.length));
         setAiError('');
@@ -839,6 +850,19 @@ export function LandingPage() {
               }}
             >
               Product
+            </a>
+            <a
+              href="#ai-tools"
+              className="landing-nav-link landing-nav-link-subtle"
+              onClick={(e) => {
+                e.preventDefault();
+                const element = document.getElementById('ai-tools');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+            >
+              AI Studio
             </a>
             <a 
               href="#pricing" 

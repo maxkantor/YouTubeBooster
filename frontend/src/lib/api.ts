@@ -60,6 +60,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const msg =
       (typeof data.detail === 'string' && data.detail.trim()) ||
+      (typeof data.title === 'string' && data.title.trim()) ||
       (typeof data.error === 'string' && data.error.trim()) ||
       `Request failed with status ${response.status}`;
     throw new Error(msg);

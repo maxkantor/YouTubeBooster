@@ -516,6 +516,7 @@ aiApi.MapPost("/generate", async (
     HttpContext httpContext,
     IAppDataStore appDataStore,
     IAiGenerationService aiGenerationService,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     var action = (request.Action ?? string.Empty).Trim().ToLowerInvariant();
@@ -562,9 +563,25 @@ aiApi.MapPost("/generate", async (
         var response = await aiGenerationService.GenerateAsync(request with { Action = action }, user, hasPremium, cancellationToken);
         return Results.Ok(response);
     }
-    catch
+    catch (Exception ex)
     {
-        return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "AI is busy. Try again.");
+        logger.LogError(ex, "AI generation failed for user {UserId} action {Action}", user.UserId, action);
+
+        var isBedrockAccessIssue = ex.ToString().Contains("bedrock:InvokeModel", StringComparison.OrdinalIgnoreCase)
+            || ex.ToString().Contains("AccessDeniedException", StringComparison.OrdinalIgnoreCase);
+
+        if (isBedrockAccessIssue)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "AI Growth Studio is being enabled on the backend.",
+                detail: "Live AI generation is temporarily unavailable while AWS Bedrock permissions are finishing setup.");
+        }
+
+        return Results.Problem(
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            title: "AI Growth Studio is temporarily unavailable.",
+            detail: "Please try again in a few minutes.");
     }
 });
 

@@ -719,6 +719,7 @@ function AppInner() {
               </Link>
               <nav className="landing-nav landing-nav-center" aria-label="Primary">
                 <Link to="/#product" className="landing-nav-link">Product</Link>
+                <Link to="/#ai-tools" className="landing-nav-link landing-nav-link-subtle">AI Studio</Link>
                 <Link to="/#pricing" className="landing-nav-link">Pricing</Link>
                 <Link to="/#faq" className="landing-nav-link">FAQ</Link>
                 <Link to="/contact" className="landing-nav-link">Contact</Link>
