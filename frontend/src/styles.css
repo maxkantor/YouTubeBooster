@@ -201,7 +201,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
   min-height: calc(var(--nav-height) - 20px);
 }
 
@@ -1570,7 +1570,7 @@ textarea {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 28px;
+  gap: 20px;
   white-space: nowrap;
   flex-wrap: nowrap;
   flex: 1;
@@ -1622,7 +1622,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 8px;
 }
 
 .landing-nav-user {
@@ -1674,9 +1674,9 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 11px 22px;
+  padding: 9px 18px;
   border-radius: 9999px;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-decoration: none !important;

@@ -781,6 +781,14 @@ export function LandingPage() {
             </Link>
           </nav>
           <div className="landing-nav-actions">
+            <button
+              type="button"
+              className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
+              onClick={handleOpenInstantDemo}
+              title="Try instant demo"
+            >
+              Analyze
+            </button>
             {authSession ? (
               <>
                 <span className="landing-nav-user">{authSession.email ?? 'Account'}</span>
