@@ -605,10 +605,7 @@ export function LandingPage() {
   }
 
   function handleViewFullReport() {
-    const channelInput = previewChannelInput.trim() || DEFAULT_EXAMPLE_PREVIEW_CHANNEL;
-    navigate(`/dashboard/channel?channel=${encodeURIComponent(channelInput)}`, {
-      state: { channelInput }
-    });
+    navigate('/dashboard');
   }
 
   function handleApplyAIFixes() {
