@@ -11,6 +11,7 @@ public interface ICheckoutService
 {
     Task<CheckoutSessionResponse> CreateSessionAsync(CreateCheckoutSessionRequest request, CancellationToken cancellationToken);
     Task HandleStripeWebhookAsync(string payload, string? signatureHeader, CancellationToken cancellationToken);
+    Task<bool> ReconcileCheckoutSessionAsync(string sessionId, string currentUserId, string? currentCognitoSub, string currentAccountEmail, CancellationToken cancellationToken);
 }
 
 public interface IUserDashboardService
@@ -238,6 +239,83 @@ public sealed class StripeCheckoutService : ICheckoutService
         }
 
         await ProcessCompletedCheckoutSessionAsync(session, cancellationToken);
+    }
+
+    public async Task<bool> ReconcileCheckoutSessionAsync(
+        string sessionId,
+        string currentUserId,
+        string? currentCognitoSub,
+        string currentAccountEmail,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return false;
+
+        var existingPayment = await _appDataStore.GetPaymentByCheckoutSessionIdAsync(sessionId, cancellationToken);
+        if (existingPayment is not null)
+        {
+            return string.Equals(existingPayment.UserId, currentUserId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var stripeSecret = await _secretValueProvider.GetValueAsync("stripe/secret-key", secure: true, cancellationToken);
+        if (string.IsNullOrWhiteSpace(stripeSecret))
+        {
+            return false;
+        }
+
+        Stripe.StripeConfiguration.ApiKey = stripeSecret;
+        var sessionService = new Stripe.Checkout.SessionService();
+        var session = await sessionService.GetAsync(sessionId, options: null, cancellationToken: cancellationToken);
+        if (session is null)
+        {
+            return false;
+        }
+
+        if (!string.Equals(session.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(session.Status, "complete", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var metadata = new Dictionary<string, string>(session.Metadata ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+        var mdUserId = metadata.GetValueOrDefault("userId") ?? string.Empty;
+        var mdCognitoSub = metadata.GetValueOrDefault("cognitoSub") ?? string.Empty;
+        var mdAccountEmail = metadata.GetValueOrDefault("accountEmail") ?? metadata.GetValueOrDefault("email") ?? string.Empty;
+
+        var metadataMatchesCurrentUser =
+            (!string.IsNullOrWhiteSpace(mdUserId) && string.Equals(mdUserId, currentUserId, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(mdCognitoSub)
+                && !string.IsNullOrWhiteSpace(currentCognitoSub)
+                && string.Equals(mdCognitoSub, currentCognitoSub, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(mdAccountEmail)
+                && !string.IsNullOrWhiteSpace(currentAccountEmail)
+                && string.Equals(mdAccountEmail.Trim(), currentAccountEmail.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (!metadataMatchesCurrentUser)
+        {
+            await _appDataStore.TrackEventAsync("stripe_reconcile_user_mismatch", sessionId, new Dictionary<string, string?>
+            {
+                ["currentUserId"] = currentUserId,
+                ["metadataUserId"] = mdUserId,
+                ["metadataCognitoSub"] = mdCognitoSub,
+                ["metadataAccountEmail"] = mdAccountEmail,
+                ["currentAccountEmail"] = currentAccountEmail
+            }, cancellationToken);
+            return false;
+        }
+
+        metadata["userId"] = currentUserId;
+        metadata["cognitoSub"] = currentCognitoSub ?? string.Empty;
+        metadata["accountEmail"] = currentAccountEmail;
+        session.Metadata = metadata;
+
+        await ProcessCompletedCheckoutSessionAsync(session, cancellationToken);
+
+        await _appDataStore.TrackEventAsync("stripe_reconcile_completed", sessionId, new Dictionary<string, string?>
+        {
+            ["userId"] = currentUserId
+        }, cancellationToken);
+
+        return true;
     }
 
     private async Task<Stripe.Checkout.Session?> TryRecoverCheckoutSessionFromPayloadAsync(

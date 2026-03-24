@@ -39,6 +39,8 @@ public sealed record CreateCheckoutSessionRequest(
 
 public sealed record CheckoutSessionResponse(string CheckoutUrl, string SessionId, decimal Amount, string Currency);
 
+public sealed record ReconcileCheckoutSessionRequest(string SessionId);
+
 public sealed record MagicLinkLoginRequest(string Email, string? RedirectPath);
 
 public sealed record MagicLinkLoginResponse(

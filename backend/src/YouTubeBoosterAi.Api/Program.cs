@@ -404,6 +404,41 @@ billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionReque
     return Results.Ok(session);
 });
 
+billingApi.MapPost("/reconcile-checkout-session", async (ReconcileCheckoutSessionRequest request, HttpContext httpContext, ICheckoutService service, IAppDataStore appDataStore, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.SessionId))
+    {
+        return Results.BadRequest(new { error = "sessionId is required." });
+    }
+
+    var user = await sessionCookieService.GetAuthenticatedUserAsync(httpContext, cancellationToken);
+    if (user is null)
+    {
+        var principal = httpContext.User;
+        var sub =
+            principal.FindFirst("sub")?.Value
+            ?? principal.FindFirst("cognito:username")?.Value
+            ?? principal.FindFirst("preferred_username")?.Value
+            ?? principal.FindFirst("username")?.Value
+            ?? principal.FindFirst("email")?.Value
+            ?? principal.FindFirst("emailaddress")?.Value;
+        if (string.IsNullOrWhiteSpace(sub)) return Results.Unauthorized();
+
+        var email = EmailAddressHelpers.ResolveCognitoAccountEmail(principal, sub);
+        var emailVerified = string.Equals(principal.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
+    }
+
+    var reconciled = await service.ReconcileCheckoutSessionAsync(
+        request.SessionId,
+        user.UserId,
+        user.CognitoSub,
+        user.Email,
+        cancellationToken);
+
+    return Results.Ok(new { reconciled });
+});
+
 var premiumApi = app.MapGroup("/api/premium").RequireAuthorization();
 premiumApi.AddEndpointFilter(async (context, next) =>
 {

@@ -158,11 +158,26 @@ function CheckoutSuccessPage({
     const token = authSession.idToken;
     let cancelled = false;
     async function poll() {
+      try {
+        if (!userSession.authenticated) {
+          await authApi.cognitoLogin(token);
+          await refreshUserSession();
+        }
+      } catch {
+        // ignore; polling below will surface a concrete API error if one exists
+      }
+
       setStatus('checking');
       setError('');
       const start = Date.now();
+      let reconcileAttempted = false;
       while (!cancelled && Date.now() - start < 30_000) {
         try {
+          if (!reconcileAttempted && sessionId) {
+            reconcileAttempted = true;
+            await billingApi.reconcileCheckoutSession(token, sessionId);
+          }
+
           const data = await meApi.getAccessStatus(token);
           if (data.premium) {
             analytics.purchaseCompleted();
@@ -186,10 +201,9 @@ function CheckoutSuccessPage({
     return () => {
       cancelled = true;
     };
-  }, [authSession, navigate]);
+  }, [authSession, navigate, refreshUserSession, sessionId, userSession.authenticated]);
 
   return (
-    authSession ? <Navigate to="/dashboard" replace /> : (
     <div className="page narrow-page">
       <div className="surface">
         <div className="locked-label">Checkout</div>
@@ -236,7 +250,6 @@ function CheckoutSuccessPage({
         {error && <p className="error-text" style={{ marginTop: 14 }}>{error}</p>}
       </div>
     </div>
-    )
   );
 }
 

@@ -200,6 +200,12 @@ export const billingApi = {
         cancelUrl: `${window.location.origin}/#pricing`
       })
     });
+  },
+  async reconcileCheckoutSession(idToken: string, sessionId: string): Promise<{ reconciled: boolean }> {
+    return fetchJsonAuthed<{ reconciled: boolean }>('/api/billing/reconcile-checkout-session', idToken, {
+      method: 'POST',
+      body: JSON.stringify({ sessionId })
+    });
   }
 };
 
