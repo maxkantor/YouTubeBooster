@@ -781,14 +781,13 @@ export function LandingPage() {
             </Link>
           </nav>
           <div className="landing-nav-actions">
-            <button
-              type="button"
+            <a
+              href="https://www.youtubeboosterai.com/#audit"
               className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
-              onClick={handleOpenInstantDemo}
-              title="Try instant demo"
+              title="Analyze Channel"
             >
-              Analyze
-            </button>
+              Analyze Channel
+            </a>
             {authSession ? (
               <>
                 <span className="landing-nav-user">{authSession.email ?? 'Account'}</span>
