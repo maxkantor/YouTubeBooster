@@ -26,13 +26,6 @@ const DETECT_CARDS = [
   { title: 'Growth Opportunities', desc: 'Find the fastest path to more views and subscribers.' }
 ];
 
-const BLURRED_INSIGHTS = [
-  'CTR optimization recommendations',
-  'Title rewrite suggestions',
-  'SEO keyword opportunities',
-  'Traffic growth insights'
-];
-
 const UNLOCK_FEATURES = [
   'Find what’s killing your views',
   'Fix your titles for higher CTR',
@@ -40,6 +33,186 @@ const UNLOCK_FEATURES = [
   'Get simple steps to grow fast',
   'Save your report & track progress'
 ];
+
+const DEFAULT_EXAMPLE_PREVIEW_CHANNEL = '@MaxKantorCooking';
+
+type OpportunityId = 'titles' | 'description' | 'pattern' | 'ctr';
+
+type OpportunityPreview = {
+  id: OpportunityId;
+  title: string;
+  buttonLabel: string;
+  output: string[];
+};
+
+type AuditPreviewData = {
+  channelLabel: string;
+  score: number;
+  viewsLoss: string;
+  benchmark: string;
+  titleOriginal: string;
+  titleOptimized: string;
+  keywords: string[];
+  impact: {
+    ctrFrom: number;
+    ctrTo: number;
+    viewsFromK: number;
+    viewsToK: number;
+    subsFrom: number;
+    subsTo: number;
+  };
+  opportunities: OpportunityPreview[];
+};
+
+function normalizeChannelLabel(input: string): string {
+  const raw = input.trim();
+  if (!raw) return DEFAULT_EXAMPLE_PREVIEW_CHANNEL;
+  if (raw.startsWith('@')) return raw;
+  const handleMatch = raw.match(/@([A-Za-z0-9._-]+)/);
+  if (handleMatch?.[1]) return `@${handleMatch[1]}`;
+  const clean = raw
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/^youtube\.com\//i, '')
+    .replace(/^channel\//i, '')
+    .replace(/^c\//i, '')
+    .replace(/^user\//i, '')
+    .replace(/^@/, '')
+    .split(/[/?#]/)[0]
+    .trim();
+  return clean ? `@${clean}` : DEFAULT_EXAMPLE_PREVIEW_CHANNEL;
+}
+
+function buildAuditPreview(channelInput: string): AuditPreviewData {
+  const channelLabel = normalizeChannelLabel(channelInput);
+  const channelLower = channelLabel.toLowerCase();
+  const isCooking = /cook|food|recipe|kitchen|meal/.test(channelLower);
+
+  if (isCooking) {
+    return {
+      channelLabel,
+      score: 71,
+      viewsLoss: '12,000–45,000',
+      benchmark: 'Channels like yours average 85+ when optimized',
+      titleOriginal: 'Cooking Chicken with Potatoes and Sauce Recipe',
+      titleOptimized: 'I Cooked Chicken Like This — It Changed Everything',
+      keywords: ['kazan kebab', 'easy dinner recipe', 'one pot meals'],
+      impact: {
+        ctrFrom: 3.1,
+        ctrTo: 6.8,
+        viewsFromK: 2,
+        viewsToK: 18,
+        subsFrom: 12,
+        subsTo: 210
+      },
+      opportunities: [
+        {
+          id: 'titles',
+          title: 'Title optimization',
+          buttonLabel: 'Rewrite My Titles',
+          output: [
+            'I Cooked Chicken Like This — It Changed Everything',
+            'One-Pot Chicken & Potatoes in 30 Minutes (No Oven)',
+            'Kazan Kebab at Home: Easy Dinner That Tastes Restaurant-Level'
+          ]
+        },
+        {
+          id: 'description',
+          title: 'Description SEO',
+          buttonLabel: 'Optimize My Descriptions',
+          output: [
+            'Primary keyword added in first sentence for search relevance',
+            'Ingredient + timestamp structure boosts watch completion',
+            'CTA + related recipe links increase session time'
+          ]
+        },
+        {
+          id: 'pattern',
+          title: 'Winning content pattern',
+          buttonLabel: 'Find Winning Pattern',
+          output: [
+            'Hook in first 5 seconds: show finished dish immediately',
+            'Use “budget + easy + one-pot” angle for higher CTR',
+            'Post Tue/Thu/Sun at 6–8 PM local for your audience'
+          ]
+        },
+        {
+          id: 'ctr',
+          title: 'CTR keyword uplift',
+          buttonLabel: 'Improve CTR Keywords',
+          output: [
+            'Swap generic words with intent keywords: “easy dinner”, “one-pot”',
+            'Lead with result-driven language: “changed everything”',
+            'Pair keyword with emotional trigger for higher clicks'
+          ]
+        }
+      ]
+    };
+  }
+
+  const baseTopic = channelLabel.replace('@', '').split(/[._-]/)[0] || 'creator';
+  const topic = baseTopic.charAt(0).toUpperCase() + baseTopic.slice(1);
+
+  return {
+    channelLabel,
+    score: 66,
+    viewsLoss: '8,400–31,000',
+    benchmark: `Channels like ${channelLabel} average 82+ when optimized`,
+    titleOriginal: `${topic} tips and complete guide for beginners`,
+    titleOptimized: `I Tried ${topic} This Way for 30 Days — Here’s What Worked`,
+    keywords: [`${topic} strategy`, `${topic} for beginners`, `${topic} tutorial`],
+    impact: {
+      ctrFrom: 2.7,
+      ctrTo: 5.9,
+      viewsFromK: 2.4,
+      viewsToK: 14.6,
+      subsFrom: 18,
+      subsTo: 154
+    },
+    opportunities: [
+      {
+        id: 'titles',
+        title: 'Title optimization',
+        buttonLabel: 'Rewrite My Titles',
+        output: [
+          `I Tested ${topic} for 30 Days — Results You Can Copy`,
+          `${topic} Mistakes That Kill Growth (And How to Fix Them)`,
+          `${topic} in 10 Minutes: The Simple Framework`
+        ]
+      },
+      {
+        id: 'description',
+        title: 'Description SEO',
+        buttonLabel: 'Optimize My Descriptions',
+        output: [
+          `Add “${topic}” keyword in first 140 characters`,
+          'Use chapter timestamps to increase retention',
+          'Add two internal links to lift session depth'
+        ]
+      },
+      {
+        id: 'pattern',
+        title: 'Winning content pattern',
+        buttonLabel: 'Find Winning Pattern',
+        output: [
+          'Open with clear promise in first 3–5 seconds',
+          'Use comparison format: before/after or wrong/right',
+          'Publish in consistent 48-hour cadence windows'
+        ]
+      },
+      {
+        id: 'ctr',
+        title: 'CTR keyword uplift',
+        buttonLabel: 'Improve CTR Keywords',
+        output: [
+          `Use “${topic} mistakes”, “${topic} simple”, “${topic} fast” variants`,
+          'Pair high-intent keyword + curiosity phrase',
+          'Keep first 42 characters punchy and benefit-led'
+        ]
+      }
+    ]
+  };
+}
 
 export function LandingPage() {
   const navigate = useNavigate();
@@ -58,13 +231,32 @@ export function LandingPage() {
   const [demoInput, setDemoInput] = useState('');
   const [demoError, setDemoError] = useState('');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [pricingEmail, setPricingEmail] = useState('');
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
+  const [scoreDisplay, setScoreDisplay] = useState(0);
+  const [auditRevealed, setAuditRevealed] = useState(false);
+  const [countdownSec, setCountdownSec] = useState(14 * 60 + 32);
+  const [opportunityStates, setOpportunityStates] = useState<Record<OpportunityId, 'idle' | 'showing' | 'locked'>>({
+    titles: 'idle',
+    description: 'idle',
+    pattern: 'idle',
+    ctr: 'idle'
+  });
+  const [fixCardsBlurred, setFixCardsBlurred] = useState([false, false, false, false]);
 
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
+  const auditSectionRef = useRef<HTMLElement | null>(null);
+  const opportunityTimeoutsRef = useRef<Record<string, number>>({});
+
+  const previewChannelInput = demoInput.trim() || getStoredDemoChannel() || DEFAULT_EXAMPLE_PREVIEW_CHANNEL;
+  const auditPreview = useMemo(() => buildAuditPreview(previewChannelInput), [previewChannelInput]);
+  const countdownLabel = useMemo(() => {
+    const mins = String(Math.floor(countdownSec / 60)).padStart(2, '0');
+    const secs = String(countdownSec % 60).padStart(2, '0');
+    return `${mins}:${secs}`;
+  }, [countdownSec]);
 
   useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 16);
@@ -119,6 +311,72 @@ export function LandingPage() {
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+
+  useEffect(() => {
+    const el = auditSectionRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setAuditRevealed(true);
+          obs.disconnect();
+        }
+      },
+      { threshold: 0.25 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!auditRevealed) return;
+    let frame = 0;
+    const target = Math.max(0, Math.min(100, auditPreview.score));
+    const step = Math.max(1, Math.ceil(target / 36));
+    const timer = window.setInterval(() => {
+      frame += step;
+      setScoreDisplay((prev) => {
+        const next = Math.max(prev, frame);
+        return next >= target ? target : next;
+      });
+      if (frame >= target) window.clearInterval(timer);
+    }, 24);
+    return () => window.clearInterval(timer);
+  }, [auditRevealed, auditPreview.score]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCountdownSec((prev) => (prev <= 0 ? 14 * 60 + 32 : prev - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!auditRevealed) return;
+    setFixCardsBlurred([false, false, false, false]);
+    const timers = [
+      window.setTimeout(() => setFixCardsBlurred((prev) => [true, prev[1], prev[2], prev[3]]), 2200),
+      window.setTimeout(() => setFixCardsBlurred((prev) => [prev[0], true, prev[2], prev[3]]), 3000),
+      window.setTimeout(() => setFixCardsBlurred((prev) => [prev[0], prev[1], true, prev[3]]), 3800),
+      window.setTimeout(() => setFixCardsBlurred((prev) => [prev[0], prev[1], prev[2], true]), 4600)
+    ];
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [auditRevealed]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(opportunityTimeoutsRef.current).forEach((id) => window.clearTimeout(id));
+    };
+  }, []);
+
+  function handleTryAIFix(id: OpportunityId) {
+    const current = opportunityTimeoutsRef.current[id];
+    if (current) window.clearTimeout(current);
+    setOpportunityStates((prev) => ({ ...prev, [id]: 'showing' }));
+    opportunityTimeoutsRef.current[id] = window.setTimeout(() => {
+      setOpportunityStates((prev) => ({ ...prev, [id]: 'locked' }));
+    }, 2000);
+  }
 
   function handleAnalyzeUserChannel() {
     const channel = demoInput.trim();
@@ -506,43 +764,183 @@ export function LandingPage() {
       </section>
 
       {/* 7. Example Channel Audit */}
-      <section className="landing-section" id="example-audit">
+      <section className="landing-section" id="example-audit" ref={auditSectionRef}>
         <div className="container landing-container">
-          <h2 className="landing-section-title">Example channel audit</h2>
+          <h2 className="landing-section-title">AI-powered channel audit preview</h2>
           <p className="landing-section-sub">
-            A sample growth score and report. Your audit will look like this.
+            {demoInput.trim()
+              ? `Personalized AI preview for ${auditPreview.channelLabel}.`
+              : `Live demo preview using ${DEFAULT_EXAMPLE_PREVIEW_CHANNEL}. Paste your channel above to personalize every insight.`}
           </p>
           <div className="landing-audit-showcase">
             <div className="landing-audit-score-block">
+              <div className="landing-audit-live-pill">Live AI calculation</div>
               <h3 className="landing-audit-score-title">Channel Growth Score</h3>
-              <div className="landing-audit-score-value">71 <span className="landing-audit-score-max">/ 100</span></div>
-              <p className="landing-audit-score-desc">
-                Your channel has momentum, but packaging issues are slowing growth.
-              </p>
+              <div className="landing-audit-score-value">
+                {scoreDisplay}
+                <span className="landing-audit-score-max">/ 100</span>
+              </div>
+              <p className="landing-audit-score-desc">You’re leaving ~{auditPreview.viewsLoss} views/month on the table.</p>
+              <p className="landing-audit-score-benchmark">{auditPreview.benchmark}</p>
             </div>
-            <div className="landing-audit-lists">
-              <div className="landing-audit-list-block">
+
+            <div className="landing-audit-grid">
+              <div className="landing-audit-panel">
                 <h4>Detected problems</h4>
-                <ul>
-                  <li>Titles exceed optimal length</li>
-                  <li>Missing search keywords</li>
-                  <li>Weak video packaging</li>
-                  <li>Irregular posting cadence</li>
-                </ul>
+
+                <div className="landing-audit-example-card">
+                  <p className="landing-audit-example-label">❌ Your title</p>
+                  <p className="landing-audit-example-old">“{auditPreview.titleOriginal}”</p>
+                  <p className="landing-audit-example-label landing-audit-example-good">🔥 AI optimized</p>
+                  <p className="landing-audit-example-new">“{auditPreview.titleOptimized}”</p>
+                </div>
+
+                <div className="landing-audit-example-card">
+                  <p className="landing-audit-example-label">❌ Missing keywords</p>
+                  <div className="landing-audit-keyword-row" role="list" aria-label="Missing keywords">
+                    {auditPreview.keywords.map((k) => (
+                      <span key={k} className="landing-audit-keyword-chip" role="listitem">{k}</span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="landing-audit-example-card">
+                  <p className="landing-audit-example-label">❌ Weak packaging</p>
+                  <div className="landing-audit-thumbnail-row">
+                    <div className="landing-audit-thumb landing-audit-thumb-current">
+                      <span>Current thumbnail</span>
+                    </div>
+                    <div className="landing-audit-thumb landing-audit-thumb-suggested">
+                      <span>AI suggested</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="landing-audit-list-block">
-                <h4>Opportunities</h4>
-                <ul>
-                  <li>Rewrite high-potential titles</li>
-                  <li>Optimize descriptions for search</li>
-                  <li>Focus on winning content patterns</li>
-                  <li>Improve CTR keywords</li>
-                </ul>
+
+              <div className="landing-audit-panel">
+                <h4>Opportunities you can test now</h4>
+                <div className="landing-ai-fix-list">
+                  {auditPreview.opportunities.map((op) => {
+                    const state = opportunityStates[op.id];
+                    return (
+                      <div key={op.id} className="landing-ai-fix-item">
+                        <div className="landing-ai-fix-head">
+                          <p>{op.title}</p>
+                          <button type="button" className="landing-ai-fix-btn" onClick={() => handleTryAIFix(op.id)}>
+                            {op.buttonLabel}
+                          </button>
+                        </div>
+                        {state !== 'idle' && (
+                          <div className={`landing-ai-fix-output ${state === 'locked' ? 'locked' : 'showing'}`}>
+                            <ul>
+                              {op.output.map((line) => (
+                                <li key={line}>{line}</li>
+                              ))}
+                            </ul>
+                            {state === 'locked' && (
+                              <div className="landing-ai-fix-lock-overlay">
+                                <span>🔒</span>
+                                <span>Unlock Full Fix</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-            <div className="landing-audit-blur-block">
-              <span className="landing-unlock-icon">🔒</span>
-              See your full report &amp; fix list
+
+            <div className="landing-impact-preview">
+              <h4>🚀 Projected Growth If You Fix This</h4>
+              <div className="landing-impact-metrics">
+                <div className="landing-impact-metric">
+                  <span>CTR</span>
+                  <strong>{auditPreview.impact.ctrFrom.toFixed(1)}% → {auditPreview.impact.ctrTo.toFixed(1)}%</strong>
+                </div>
+                <div className="landing-impact-metric">
+                  <span>Views</span>
+                  <strong>{auditPreview.impact.viewsFromK.toFixed(1)}K → {auditPreview.impact.viewsToK.toFixed(1)}K</strong>
+                </div>
+                <div className="landing-impact-metric">
+                  <span>Subs / month</span>
+                  <strong>+{auditPreview.impact.subsFrom} → +{auditPreview.impact.subsTo}</strong>
+                </div>
+              </div>
+              <div className="landing-impact-chart" aria-hidden>
+                <div className="landing-impact-row">
+                  <span>CTR</span>
+                  <div className="landing-impact-track">
+                    <div className="landing-impact-bar from" style={{ width: auditRevealed ? `${auditPreview.impact.ctrFrom * 8}%` : '0%' }} />
+                    <div className="landing-impact-bar to" style={{ width: auditRevealed ? `${auditPreview.impact.ctrTo * 8}%` : '0%' }} />
+                  </div>
+                </div>
+                <div className="landing-impact-row">
+                  <span>Views</span>
+                  <div className="landing-impact-track">
+                    <div className="landing-impact-bar from" style={{ width: auditRevealed ? `${auditPreview.impact.viewsFromK * 4}%` : '0%' }} />
+                    <div className="landing-impact-bar to" style={{ width: auditRevealed ? `${auditPreview.impact.viewsToK * 4}%` : '0%' }} />
+                  </div>
+                </div>
+                <div className="landing-impact-row">
+                  <span>Subs</span>
+                  <div className="landing-impact-track">
+                    <div className="landing-impact-bar from" style={{ width: auditRevealed ? `${Math.min(96, (auditPreview.impact.subsFrom / 3))}%` : '0%' }} />
+                    <div className="landing-impact-bar to" style={{ width: auditRevealed ? `${Math.min(100, (auditPreview.impact.subsTo / 3))}%` : '0%' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="landing-ai-fix-cards">
+              {[
+                {
+                  title: 'Title Fix',
+                  body: `3 click-magnet rewrites generated for ${auditPreview.channelLabel}`
+                },
+                {
+                  title: 'Description Fix',
+                  body: 'SEO-first structure with keywords, timestamps, and CTA'
+                },
+                {
+                  title: 'Thumbnail Strategy',
+                  body: 'Contrast, emotion, and text-placement guidance per video'
+                },
+                {
+                  title: 'Posting Strategy',
+                  body: 'Best publish windows and repeatable weekly cadence'
+                }
+              ].map((card, idx) => (
+                <article key={card.title} className={`landing-ai-fix-card ${fixCardsBlurred[idx] ? 'blurred' : ''}`}>
+                  <h5>{card.title}</h5>
+                  <p>{card.body}</p>
+                  {fixCardsBlurred[idx] && (
+                    <div className="landing-ai-fix-card-lock">
+                      <span>🔒</span>
+                      <span>Unlock Full Fix</span>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+
+            <div className="landing-audit-paywall">
+              <h4>🔥 Your Full Growth Plan Is Ready</h4>
+              <p>Unlock all fixes, optimized titles, and exact steps to grow your channel.</p>
+              <button
+                type="button"
+                className="btn btn-primary btn-lg landing-audit-paywall-cta"
+                onClick={handleUnlockReport}
+                disabled={pricingLoading || hasPremium}
+              >
+                {hasPremium ? 'Already unlocked' : pricingLoading ? 'Starting checkout…' : 'Unlock My Full AI Audit →'}
+              </button>
+              <div className="landing-audit-social-proof" role="status">
+                <span>+2,184 creators improved their channel this week</span>
+                <span>Avg +312% views in 30 days</span>
+              </div>
+              <p className="landing-audit-urgency">Your report expires in {countdownLabel}</p>
             </div>
           </div>
         </div>
