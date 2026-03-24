@@ -385,6 +385,7 @@ export function LandingPage() {
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
+  const [userChannelUrl, setUserChannelUrl] = useState('');
   const [scoreDisplay, setScoreDisplay] = useState(0);
   const [auditRevealed, setAuditRevealed] = useState(false);
   const [countdownSec, setCountdownSec] = useState(14 * 60 + 32);
@@ -420,14 +421,21 @@ export function LandingPage() {
     let cancelled = false;
     if (!authSession?.idToken) {
       setHasPremium(false);
+      setUserChannelUrl('');
       return;
     }
     (async () => {
       try {
-        const status = await meApi.getAccessStatus(authSession.idToken);
-        if (!cancelled) setHasPremium(!!status.premium);
+        const [status, me] = await Promise.all([meApi.getAccessStatus(authSession.idToken), meApi.getMe(authSession.idToken)]);
+        if (!cancelled) {
+          setHasPremium(!!status.premium);
+          setUserChannelUrl(me.channelUrl?.trim() ?? '');
+        }
       } catch {
-        if (!cancelled) setHasPremium(false);
+        if (!cancelled) {
+          setHasPremium(false);
+          setUserChannelUrl('');
+        }
       }
     })();
     return () => {
@@ -600,7 +608,19 @@ export function LandingPage() {
   }
 
   function handleViewFullReport() {
-    navigate('/dashboard');
+    const savedChannel = userChannelUrl.trim();
+    if (savedChannel) {
+      navigate(`/dashboard/channel?channel=${encodeURIComponent(savedChannel)}`, {
+        state: { channelInput: savedChannel }
+      });
+      return;
+    }
+
+    const demoChannel = previewChannelInput.trim() || getStoredDemoChannel() || DEFAULT_DEMO_CHANNEL;
+    setStoredDemoChannel(demoChannel);
+    navigate(`/demo?channel=${encodeURIComponent(demoChannel)}`, {
+      state: { channelInput: demoChannel }
+    });
   }
 
   const fullGrowthPlanUserState: FullGrowthPlanUserState = hasPremium
@@ -627,9 +647,6 @@ export function LandingPage() {
           <nav className="landing-nav landing-nav-center" aria-label="Primary">
             <a href="#product" className="landing-nav-link">
               Product
-            </a>
-            <a href="#example-audit" className="landing-nav-link">
-              Example Audit
             </a>
             <a href="#pricing" className="landing-nav-link">
               Pricing
@@ -925,10 +942,10 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 7. Example Channel Audit */}
-      <section className="landing-section" id="example-audit" ref={auditSectionRef}>
+      {/* 7. Live Channel Audit */}
+      <section className="landing-section landing-section-premium" id="live-audit-preview" ref={auditSectionRef}>
         <div className="container landing-container">
-          <h2 className="landing-section-title">AI-powered channel audit preview</h2>
+          <h2 className="landing-section-title">Live AI channel audit preview</h2>
           <p className="landing-section-sub">
             {demoInput.trim()
               ? `Personalized AI preview for ${auditPreview.channelLabel}.`

@@ -269,7 +269,8 @@ export function UnifiedDashboard({
           demoData?.channelTitle ??
           (isEmbeddedProductDemo ? demoChannelData.channelTitle : undefined)) || demoTitleFallback()
     : (dashboardOverview?.channelTitle ?? 'Channel');
-  const dashboardTitle = !isDemo && channelTitle
+  const hasNamedDashboardChannel = !isDemo && !!channelTitle && channelTitle !== 'Channel' && channelTitle !== 'Channel setup pending';
+  const dashboardTitle = hasNamedDashboardChannel
     ? `${BRAND.name} Dashboard for "${channelTitle}"`
     : `${BRAND.name} Dashboard`;
   const displayHandle = isDemo ? getDisplayHandle(channelInput) : null;
@@ -864,7 +865,7 @@ export function UnifiedDashboard({
             )}
           </>
         )}
-        {!isDemo && <p className="dashboard-subtitle">Channel: <strong>{channelTitle}</strong></p>}
+        {!isDemo && <p className="dashboard-subtitle">Channel URL: <strong>{channelTitle}</strong></p>}
         {isDemo && premiumUnlocked && userEmail && (
           <div className="pill-row dashboard-actions">
             <span className="info-pill">Signed in as {userEmail}</span>

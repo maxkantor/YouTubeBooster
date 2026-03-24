@@ -690,7 +690,6 @@ function AppInner() {
             </Link>
             <div className="nav-links nav-links-center" aria-label="Primary">
               <Link to="/#product">Product</Link>
-              <Link to="/#example-audit">Example Audit</Link>
               <Link to="/#pricing">Pricing</Link>
               <Link to="/#faq">FAQ</Link>
             </div>
