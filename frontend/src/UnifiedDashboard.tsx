@@ -269,6 +269,9 @@ export function UnifiedDashboard({
           demoData?.channelTitle ??
           (isEmbeddedProductDemo ? demoChannelData.channelTitle : undefined)) || demoTitleFallback()
     : (dashboardOverview?.channelTitle ?? 'Channel');
+  const dashboardTitle = !isDemo && channelTitle
+    ? `${BRAND.name} Dashboard for "${channelTitle}"`
+    : `${BRAND.name} Dashboard`;
   const displayHandle = isDemo ? getDisplayHandle(channelInput) : null;
   const previewFor = isDemo
     ? displayHandle && displayHandle !== '@channel'
@@ -838,7 +841,7 @@ export function UnifiedDashboard({
   return (
     <div className="page dashboard-page">
       <header className="dashboard-header">
-        <h1 className="dashboard-title">{BRAND.name} Dashboard</h1>
+        <h1 className="dashboard-title">{isDemo ? `${BRAND.name} Dashboard` : dashboardTitle}</h1>
         {isDemo && (
           <>
             {isFullDemo ? (

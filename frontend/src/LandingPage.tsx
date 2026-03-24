@@ -227,8 +227,7 @@ function FullGrowthPlanSection({
   countdownLabel,
   pricingLoading,
   onUnlock,
-  onViewFullReport,
-  onApplyAIFixes
+  onViewFullReport
 }: {
   userState: FullGrowthPlanUserState;
   auditPreview: AuditPreviewData;
@@ -236,7 +235,6 @@ function FullGrowthPlanSection({
   pricingLoading: boolean;
   onUnlock: () => void;
   onViewFullReport: () => void;
-  onApplyAIFixes: () => void;
 }) {
   const optimizedTitles = auditPreview.opportunities.find((item) => item.id === 'titles')?.output ?? [auditPreview.titleOptimized];
   const thumbnailIdeas = [
@@ -272,9 +270,6 @@ function FullGrowthPlanSection({
             <div className="landing-growth-plan-actions">
               <button type="button" className="btn btn-primary btn-lg landing-growth-plan-btn" onClick={onViewFullReport}>
                 View Full Report →
-              </button>
-              <button type="button" className="btn btn-secondary btn-lg landing-growth-plan-btn" onClick={onApplyAIFixes}>
-                Apply AI Fixes →
               </button>
             </div>
           </div>
@@ -605,10 +600,6 @@ export function LandingPage() {
   }
 
   function handleViewFullReport() {
-    navigate('/dashboard');
-  }
-
-  function handleApplyAIFixes() {
     navigate('/dashboard');
   }
 
@@ -1103,7 +1094,6 @@ export function LandingPage() {
               pricingLoading={pricingLoading}
               onUnlock={handleUnlockReport}
               onViewFullReport={handleViewFullReport}
-              onApplyAIFixes={handleApplyAIFixes}
             />
           </div>
         </div>
