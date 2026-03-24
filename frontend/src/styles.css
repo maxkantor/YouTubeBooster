@@ -3997,7 +3997,7 @@ textarea {
 .landing-cta-inner {
   position: relative;
   z-index: 1;
-  max-width: 44rem;
+  max-width: 62rem;
   margin: 0 auto;
 }
 
@@ -4018,6 +4018,14 @@ textarea {
 
 .landing-cta-btn {
   display: inline-block;
+}
+
+@media (min-width: 1180px) {
+  .landing-cta-title,
+  .landing-cta-sub,
+  .landing-ai-studio-header .landing-section-sub {
+    white-space: nowrap;
+  }
 }
 
 /* Footer */

@@ -694,10 +694,21 @@ export function LandingPage() {
       setAiResults(response.results ?? []);
       setAiVisibleResults(response.visibleResults ?? response.results.length);
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'AI is busy. Try again.');
-      setAiSummary('');
-      setAiResults([]);
-      setAiVisibleResults(0);
+      const message = err instanceof Error ? err.message : 'AI is busy. Try again.';
+      const isMissingEndpoint = /404|status\s*404/i.test(message);
+
+      if (isMissingEndpoint) {
+        const preview = buildPreviewAiResults(action, auditPreview);
+        setAiSummary('AI backend is deploying. Showing premium preview results for now.');
+        setAiResults(preview);
+        setAiVisibleResults(hasPremium ? preview.length : Math.min(2, preview.length));
+        setAiError('');
+      } else {
+        setAiError(message);
+        setAiSummary('');
+        setAiResults([]);
+        setAiVisibleResults(0);
+      }
     } finally {
       setAiLoading(false);
     }
@@ -864,13 +875,6 @@ export function LandingPage() {
             </Link>
           </nav>
           <div className="landing-nav-actions">
-            <a
-              href="https://www.youtubeboosterai.com/#audit"
-              className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
-              title="Analyze Channel"
-            >
-              Analyze Channel
-            </a>
             {authSession ? (
               <>
                 <span className="landing-nav-user">{authSession.email ?? 'Account'}</span>
@@ -883,6 +887,13 @@ export function LandingPage() {
                 >
                   Sign out
                 </button>
+                <a
+                  href="https://www.youtubeboosterai.com/#audit"
+                  className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
+                  title="Analyze Channel"
+                >
+                  Analyze Channel
+                </a>
               </>
             ) : (
               <>
@@ -892,6 +903,13 @@ export function LandingPage() {
                 <Link className="landing-nav-link landing-nav-auth landing-nav-auth-strong" to="/auth/signup">
                   Sign Up
                 </Link>
+                <a
+                  href="https://www.youtubeboosterai.com/#audit"
+                  className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
+                  title="Analyze Channel"
+                >
+                  Analyze Channel
+                </a>
               </>
             )}
           </div>

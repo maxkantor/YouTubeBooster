@@ -552,19 +552,9 @@ aiApi.MapPost("/generate", async (
         || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
         || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
 
-    var credits = await appDataStore.GetUserAiCreditsAsync(user.UserId, cancellationToken);
-    if (!hasPremium && credits <= 0)
-    {
-        return Results.StatusCode(StatusCodes.Status403Forbidden);
-    }
-
     if (!hasPremium)
     {
-        var consumed = await appDataStore.TryConsumeUserAiCreditAsync(user.UserId, 1, cancellationToken);
-        if (!consumed)
-        {
-            return Results.StatusCode(StatusCodes.Status403Forbidden);
-        }
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
     }
 
     try
