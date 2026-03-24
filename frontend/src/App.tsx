@@ -36,6 +36,34 @@ import {
   ActivityLogsPage
 } from './admin/crmPages.lazy';
 
+/**
+ * Scroll to top on route changes or handle anchor-based scrolling
+ */
+function ScrollToTop() {
+  const location = useLocation();
+
+  useEffect(() => {
+    // Handle anchor links (e.g., #product, #pricing, #faq)
+    const hash = location.hash;
+    if (hash) {
+      // Remove the '#' and get the element
+      const elementId = hash.substring(1);
+      const element = document.getElementById(elementId);
+      if (element) {
+        // Wait for next frame to ensure DOM is ready
+        requestAnimationFrame(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+    } else {
+      // No hash: scroll to top for route changes
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [location]);
+
+  return null;
+}
+
 function AdminContactToSupportTicketRedirect() {
   const { ticketId } = useParams<{ ticketId: string }>();
   return <Navigate to={`/admin/contacts/${encodeURIComponent(ticketId ?? '')}`} replace />;
@@ -732,6 +760,7 @@ function AppInner() {
           <p style={{ opacity: 0.8 }}>Loading…</p>
         </div>
       }>
+      <ScrollToTop />
       <Routes>
         <Route
           path="/admin/login"

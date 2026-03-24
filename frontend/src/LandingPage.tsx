@@ -733,16 +733,50 @@ export function LandingPage() {
             <span className="landing-logo-boost">{BRAND.namePart2}</span>
           </Link>
           <nav className="landing-nav landing-nav-center" aria-label="Primary">
-            <a href="#product" className="landing-nav-link">
+            <a 
+              href="#product" 
+              className="landing-nav-link"
+              onClick={(e) => {
+                e.preventDefault();
+                const element = document.getElementById('product');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+            >
               Product
             </a>
-            <a href="#pricing" className="landing-nav-link">
+            <a 
+              href="#pricing" 
+              className="landing-nav-link"
+              onClick={(e) => {
+                e.preventDefault();
+                const element = document.getElementById('pricing');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+            >
               Pricing
             </a>
-            <a href="#faq" className="landing-nav-link">
+            <a 
+              href="#faq" 
+              className="landing-nav-link"
+              onClick={(e) => {
+                e.preventDefault();
+                const element = document.getElementById('faq');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+            >
               FAQ
             </a>
-            <Link to="/contact" className="landing-nav-link">
+            <Link 
+              to="/contact" 
+              className="landing-nav-link"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            >
               Contact
             </Link>
           </nav>
