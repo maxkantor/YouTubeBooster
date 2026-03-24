@@ -71,7 +71,9 @@ Resources:
               Action:
                 - bedrock:InvokeModel
               Resource:
-                - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/*
+                - "arn:aws:bedrock:*::foundation-model/*"
+                - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+                - !Sub arn:aws:bedrock:*:${AWS::AccountId}:application-inference-profile/*
 
   UsersTable:
     Type: AWS::DynamoDB::Table
