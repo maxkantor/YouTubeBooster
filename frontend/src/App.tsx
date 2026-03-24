@@ -692,13 +692,8 @@ function AppInner() {
               <Link to="/#product">Product</Link>
               <Link to="/#pricing">Pricing</Link>
               <Link to="/#faq">FAQ</Link>
+              <Link to="/contact">Contact</Link>
             </div>
-            <Link
-              to="/#audit"
-              className="btn btn-primary nav-cta"
-            >
-              Analyze Your Channel
-            </Link>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {userSession.authenticated && userSession.user ? (

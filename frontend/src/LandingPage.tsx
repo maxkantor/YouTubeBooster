@@ -660,6 +660,9 @@ export function LandingPage() {
             <a href="#faq" className="landing-nav-link">
               FAQ
             </a>
+            <Link to="/contact" className="landing-nav-link">
+              Contact
+            </Link>
           </nav>
           <div className="landing-nav-actions">
             {authSession ? (
@@ -685,9 +688,6 @@ export function LandingPage() {
                 </Link>
               </>
             )}
-            <a href="/#audit" className="landing-nav-cta landing-nav-cta-primary">
-              Analyze Channel
-            </a>
           </div>
         </div>
       </header>
@@ -870,235 +870,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 5. AI Insight Preview */}
-      <section className="landing-section">
-        <div className="container landing-container">
-          <h2 className="landing-section-title">AI Channel Insights</h2>
-          <p className="landing-section-sub">
-            Sample insights from the audit. Unlock the full plan for actionable recommendations.
-          </p>
-          <div className="landing-insights-grid">
-            <div className="landing-insight-card">
-              <h4>Title length vs. niche</h4>
-              <p>Your titles are longer than the niche average.</p>
-            </div>
-            <div className="landing-insight-card">
-              <h4>Winning format</h4>
-              <p>Your top videos follow a strong repeatable format.</p>
-            </div>
-            <div className="landing-insight-card landing-insight-card-blur">
-              <span className="landing-insight-lock">CTR optimization recommendations</span>
-            </div>
-            <div className="landing-insight-card landing-insight-card-blur">
-              <span className="landing-insight-lock">Title rewrite suggestions</span>
-            </div>
-            <div className="landing-insight-card landing-insight-card-blur">
-              <span className="landing-insight-lock">SEO keyword opportunities</span>
-            </div>
-            <div className="landing-insight-card landing-insight-card-blur">
-              <span className="landing-insight-lock">Traffic growth insights</span>
-            </div>
-          </div>
-          <div className="landing-unlock-overlay-msg">
-            <span className="landing-unlock-icon">🔒</span>
-            Unlock Full AI Growth Plan
-          </div>
-        </div>
-      </section>
-
-      {/* 6. What The AI Detects */}
-      <section className="landing-section landing-section-alt">
-        <div className="container landing-container">
-          <h2 className="landing-section-title">What the AI detects</h2>
-          <p className="landing-section-sub">
-            Six areas the audit analyzes to give you a clear growth path.
-          </p>
-          <div className="landing-detect-grid">
-            {DETECT_CARDS.map((card, i) => (
-              <div key={i} className="landing-detect-card">
-                <h3>{card.title}</h3>
-                <p>{card.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 7. Live Channel Audit */}
-      <section className="landing-section landing-section-premium" id="live-audit-preview" ref={auditSectionRef}>
-        <div className="container landing-container">
-          <h2 className="landing-section-title">Live AI channel audit preview</h2>
-          <p className="landing-section-sub">
-            {demoInput.trim()
-              ? `Personalized AI preview for ${auditPreview.channelLabel}.`
-              : `Live demo preview using ${DEFAULT_EXAMPLE_PREVIEW_CHANNEL}. Paste your channel above to personalize every insight.`}
-          </p>
-          <div className="landing-audit-showcase">
-            <div className="landing-audit-score-block">
-              <div className="landing-audit-live-pill">Live AI calculation</div>
-              <h3 className="landing-audit-score-title">Channel Growth Score</h3>
-              <div className="landing-audit-score-value">
-                {scoreDisplay}
-                <span className="landing-audit-score-max">/ 100</span>
-              </div>
-              <p className="landing-audit-score-desc">You’re leaving ~{auditPreview.viewsLoss} views/month on the table.</p>
-              <p className="landing-audit-score-benchmark">{auditPreview.benchmark}</p>
-            </div>
-
-            <div className="landing-audit-grid">
-              <div className="landing-audit-panel">
-                <h4>Detected problems</h4>
-
-                <div className="landing-audit-example-card">
-                  <p className="landing-audit-example-label">❌ Your title</p>
-                  <p className="landing-audit-example-old">“{auditPreview.titleOriginal}”</p>
-                  <p className="landing-audit-example-label landing-audit-example-good">🔥 AI optimized</p>
-                  <p className="landing-audit-example-new">“{auditPreview.titleOptimized}”</p>
-                </div>
-
-                <div className="landing-audit-example-card">
-                  <p className="landing-audit-example-label">❌ Missing keywords</p>
-                  <div className="landing-audit-keyword-row" role="list" aria-label="Missing keywords">
-                    {auditPreview.keywords.map((k) => (
-                      <span key={k} className="landing-audit-keyword-chip" role="listitem">{k}</span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="landing-audit-example-card">
-                  <p className="landing-audit-example-label">❌ Weak packaging</p>
-                  <div className="landing-audit-thumbnail-row">
-                    <div className="landing-audit-thumb landing-audit-thumb-current">
-                      <span>Current thumbnail</span>
-                    </div>
-                    <div className="landing-audit-thumb landing-audit-thumb-suggested">
-                      <span>AI suggested</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="landing-audit-panel">
-                <h4>Opportunities you can test now</h4>
-                <div className="landing-ai-fix-list">
-                  {auditPreview.opportunities.map((op) => {
-                    const state = opportunityStates[op.id];
-                    return (
-                      <div key={op.id} className="landing-ai-fix-item">
-                        <div className="landing-ai-fix-head">
-                          <p>{op.title}</p>
-                          <button type="button" className="landing-ai-fix-btn" onClick={() => handleTryAIFix(op.id)}>
-                            {op.buttonLabel}
-                          </button>
-                        </div>
-                        {state !== 'idle' && (
-                          <div className={`landing-ai-fix-output ${state === 'locked' ? 'locked' : 'showing'}`}>
-                            <ul>
-                              {op.output.map((line) => (
-                                <li key={line}>{line}</li>
-                              ))}
-                            </ul>
-                            {state === 'locked' && (
-                              <div className="landing-ai-fix-lock-overlay">
-                                <span>🔒</span>
-                                <span>Unlock Full Fix</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="landing-impact-preview">
-              <h4>🚀 Projected Growth If You Fix This</h4>
-              <div className="landing-impact-metrics">
-                <div className="landing-impact-metric">
-                  <span>CTR</span>
-                  <strong>{auditPreview.impact.ctrFrom.toFixed(1)}% → {auditPreview.impact.ctrTo.toFixed(1)}%</strong>
-                </div>
-                <div className="landing-impact-metric">
-                  <span>Views</span>
-                  <strong>{auditPreview.impact.viewsFromK.toFixed(1)}K → {auditPreview.impact.viewsToK.toFixed(1)}K</strong>
-                </div>
-                <div className="landing-impact-metric">
-                  <span>Subs / month</span>
-                  <strong>+{auditPreview.impact.subsFrom} → +{auditPreview.impact.subsTo}</strong>
-                </div>
-              </div>
-              <div className="landing-impact-chart" aria-hidden>
-                <div className="landing-impact-row">
-                  <span>CTR</span>
-                  <div className="landing-impact-track">
-                    <div className="landing-impact-bar from" style={{ width: auditRevealed ? `${auditPreview.impact.ctrFrom * 8}%` : '0%' }} />
-                    <div className="landing-impact-bar to" style={{ width: auditRevealed ? `${auditPreview.impact.ctrTo * 8}%` : '0%' }} />
-                  </div>
-                </div>
-                <div className="landing-impact-row">
-                  <span>Views</span>
-                  <div className="landing-impact-track">
-                    <div className="landing-impact-bar from" style={{ width: auditRevealed ? `${auditPreview.impact.viewsFromK * 4}%` : '0%' }} />
-                    <div className="landing-impact-bar to" style={{ width: auditRevealed ? `${auditPreview.impact.viewsToK * 4}%` : '0%' }} />
-                  </div>
-                </div>
-                <div className="landing-impact-row">
-                  <span>Subs</span>
-                  <div className="landing-impact-track">
-                    <div className="landing-impact-bar from" style={{ width: auditRevealed ? `${Math.min(96, (auditPreview.impact.subsFrom / 3))}%` : '0%' }} />
-                    <div className="landing-impact-bar to" style={{ width: auditRevealed ? `${Math.min(100, (auditPreview.impact.subsTo / 3))}%` : '0%' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="landing-ai-fix-cards">
-              {[
-                {
-                  title: 'Title Fix',
-                  body: `3 click-magnet rewrites generated for ${auditPreview.channelLabel}`
-                },
-                {
-                  title: 'Description Fix',
-                  body: 'SEO-first structure with keywords, timestamps, and CTA'
-                },
-                {
-                  title: 'Thumbnail Strategy',
-                  body: 'Contrast, emotion, and text-placement guidance per video'
-                },
-                {
-                  title: 'Posting Strategy',
-                  body: 'Best publish windows and repeatable weekly cadence'
-                }
-              ].map((card, idx) => (
-                <article key={card.title} className={`landing-ai-fix-card ${fixCardsBlurred[idx] ? 'blurred' : ''}`}>
-                  <h5>{card.title}</h5>
-                  <p>{card.body}</p>
-                  {fixCardsBlurred[idx] && fullGrowthPlanUserState !== 'paid' && (
-                    <div className="landing-ai-fix-card-lock">
-                      <span>🔒</span>
-                      <span>Unlock Full Fix</span>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-
-            <FullGrowthPlanSection
-              userState={fullGrowthPlanUserState}
-              auditPreview={auditPreview}
-              countdownLabel={countdownLabel}
-              pricingLoading={pricingLoading}
-              onUnlock={handleUnlockReport}
-              onViewFullReport={handleViewFullReport}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* 8. Why Creators Buy */}
+      {/* 5. Why Creators Buy */}
       <section className="landing-section landing-section-alt">
         <div className="container landing-container">
           <h2 className="landing-section-title">Why creators buy this</h2>
@@ -1119,7 +891,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 9. Pricing */}
+      {/* 6. Pricing */}
       <section className="landing-section landing-pricing-section" id="pricing" aria-labelledby="pricing-heading">
         <div className="container landing-container landing-pricing-inner">
           <span className="landing-section-eyebrow">One-time · no subscription</span>
@@ -1168,7 +940,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 10. FAQ */}
+      {/* 7. FAQ */}
       <section className="landing-section landing-section-alt" id="faq" aria-labelledby="faq-heading">
         <div className="container landing-container landing-faq-container">
           <h2 className="landing-section-title" id="faq-heading">
@@ -1202,7 +974,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 11. Final CTA */}
+      {/* 8. Final CTA */}
       <section className="landing-section landing-cta-section" aria-labelledby="cta-heading">
         <div className="container landing-container landing-cta-inner">
           <h2 className="landing-cta-title landing-heading-display" id="cta-heading">
@@ -1216,7 +988,7 @@ export function LandingPage() {
       </section>
       </main>
 
-      {/* 12. Footer */}
+      {/* 9. Footer */}
       <footer className="landing-site-footer">
         <div className="landing-site-footer-divider" aria-hidden />
         <div className="container landing-site-footer-inner">
