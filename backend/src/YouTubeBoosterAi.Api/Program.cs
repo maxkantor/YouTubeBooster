@@ -259,8 +259,15 @@ checkoutApi.MapPost("/session", async (CreateCheckoutSessionRequest request, ICh
         return Results.BadRequest(new { error = "Email and channel input are required." });
     }
 
-    var response = await service.CreateSessionAsync(request, cancellationToken);
-    return Results.Ok(response);
+    try
+    {
+        var response = await service.CreateSessionAsync(request, cancellationToken);
+        return Results.Ok(response);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: ex.Message);
+    }
 });
 
 var webhookApi = app.MapGroup("/api/webhooks");
@@ -400,8 +407,15 @@ billingApi.MapPost("/create-checkout-session", async (CreateCheckoutSessionReque
         PlanCode = request.PlanCode ?? request.PriceKey ?? "premium",
         Referrer = request.Referrer ?? httpContext.Request.Headers.Referer.ToString()
     };
-    var session = await service.CreateSessionAsync(safeReq, cancellationToken);
-    return Results.Ok(session);
+    try
+    {
+        var session = await service.CreateSessionAsync(safeReq, cancellationToken);
+        return Results.Ok(session);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: ex.Message);
+    }
 });
 
 billingApi.MapPost("/reconcile-checkout-session", async (ReconcileCheckoutSessionRequest request, HttpContext httpContext, ICheckoutService service, IAppDataStore appDataStore, SessionCookieService sessionCookieService, CancellationToken cancellationToken) =>

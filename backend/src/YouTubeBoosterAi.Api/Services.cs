@@ -61,53 +61,11 @@ public sealed class StripeCheckoutService : ICheckoutService
 
         if (string.IsNullOrWhiteSpace(stripeSecret))
         {
-            var mockUser = await _appDataStore.UpsertPurchasedUserAsync(request.Email, request.ChannelInput, cancellationToken);
-            var mockPurchaseId = $"mock_cs_{Guid.NewGuid():N}";
-            await _appDataStore.SavePurchaseAsync(new PurchaseRecord(
-                PurchaseId: mockPurchaseId,
-                UserId: mockUser.UserId,
-                Email: mockUser.Email,
-                Amount: settings.OneTimePrice,
-                Currency: settings.Currency.ToUpperInvariant(),
-                Status: "completed",
-                PriceVersion: request.PriceKey ?? settings.StripePriceLookupKey,
-                PurchasedAt: DateTimeOffset.UtcNow
-            ), cancellationToken);
-
-            // When Stripe is unavailable (mock mode), also grant entitlements immediately.
-            // Otherwise `/api/me/access-status` never flips to premium, and the UI stays stuck
-            // on "Confirming your access".
-            var mockEntitlement = new EntitlementRecord(
-                EntitlementId: $"ent_{mockPurchaseId}",
-                UserId: mockUser.UserId,
-                AccessType: "premium",
-                Status: "active",
-                Source: "mock",
-                GrantedAt: DateTimeOffset.UtcNow,
-                ExpiresAt: null,
-                PaymentId: mockPurchaseId,
-                Notes: "mock_checkout",
-                CreatedAt: DateTimeOffset.UtcNow,
-                UpdatedAt: DateTimeOffset.UtcNow,
-                GrantedBy: null,
-                GrantedReason: null,
-                RevokedAt: null
-            );
-            await _appDataStore.SaveEntitlementAsync(mockEntitlement, cancellationToken);
-
-            await _appDataStore.TrackEventAsync("checkout_started", request.ChannelInput, new Dictionary<string, string?>
+            await _appDataStore.TrackEventAsync("checkout_blocked_missing_stripe_secret", request.ChannelInput, new Dictionary<string, string?>
             {
-                ["email"] = request.Email,
-                ["mode"] = "mock"
+                ["email"] = request.Email
             }, cancellationToken);
-
-            var mockSeparator = hostedSuccessUrl.Contains('?') ? '&' : '?';
-            return new CheckoutSessionResponse(
-                CheckoutUrl: $"{hostedSuccessUrl}{mockSeparator}mockCheckout=true&channel={Uri.EscapeDataString(request.ChannelInput)}",
-                SessionId: mockPurchaseId,
-                Amount: settings.OneTimePrice,
-                Currency: settings.Currency
-            );
+            throw new InvalidOperationException("Payments are temporarily unavailable. Please try again shortly.");
         }
 
         Stripe.StripeConfiguration.ApiKey = stripeSecret;
@@ -232,8 +190,7 @@ public sealed class StripeCheckoutService : ICheckoutService
         }
 
         var session = completedSession;
-        if (!string.Equals(session.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(session.Status, "complete", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(session.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -270,8 +227,7 @@ public sealed class StripeCheckoutService : ICheckoutService
             return false;
         }
 
-        if (!string.Equals(session.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(session.Status, "complete", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(session.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }

@@ -193,7 +193,9 @@ function CheckoutSuccessPage({
         await new Promise((r) => setTimeout(r, 1200));
       }
       if (!cancelled) {
-        setError('Still confirming your access. Refresh in a moment.');
+        setError(sessionId
+          ? 'Payment is not confirmed as paid yet. If your card was declined, no access was unlocked.'
+          : 'Still confirming your access. Refresh in a moment.');
         setStatus('error');
       }
     }
