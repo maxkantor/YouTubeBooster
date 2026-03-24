@@ -538,6 +538,12 @@ export function LandingPage() {
     }, 2000);
   }
 
+  function handleOpenInstantDemo() {
+    setStoredDemoChannel(DEFAULT_DEMO_CHANNEL);
+    analytics.channelAuditStarted(DEFAULT_DEMO_CHANNEL);
+    navigate('/demo', { replace: true, state: { channelInput: DEFAULT_DEMO_CHANNEL } });
+  }
+
   function handleAnalyzeUserChannel() {
     const channel = demoInput.trim();
     setDemoError('');
@@ -711,20 +717,25 @@ export function LandingPage() {
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
             <h1 className="landing-hero-title" id="hero-heading">
-              <span className="landing-hero-title-line landing-heading-display">Get More Views Without Guessing</span>
+              <span className="landing-hero-title-line landing-heading-display">Turn Every Upload Into a Growth Asset</span>
             </h1>
             <p className="landing-hero-sub">
-              See exactly what’s stopping your growth—and fix it to increase views, subscribers, and watch time in minutes.
+              Elite AI pinpoints what is suppressing CTR, watch time, and discovery—then gives you exact fixes you can apply in minutes.
             </p>
             <div className="landing-hero-buttons">
               <a href="#audit" className="btn btn-lg landing-hero-cta-primary landing-cta-premium">
-                Analyze your channel
+                Analyze Your Channel
               </a>
-              <a href="#audit" className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium">
-                Analyze default channel
-              </a>
+              <button type="button" className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium" onClick={handleOpenInstantDemo}>
+                See Instant Demo
+              </button>
             </div>
-            <p className="landing-hero-micro">Free • 60 seconds • No signup</p>
+            <p className="landing-hero-micro">Free preview • ~60 seconds • No signup required</p>
+            <div className="landing-hero-proof-strip" aria-label="Social proof">
+              <span><strong>2,184+</strong> creators improved channels this week</span>
+              <span><strong>+312%</strong> avg views lift in 30 days</span>
+              <span><strong>One-time</strong> payment model</span>
+            </div>
             <ul className="landing-hero-trust" aria-label="Trust">
               <li>
                 <span className="landing-trust-check" aria-hidden />
@@ -770,78 +781,49 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 3. Audit entry — two options: default demo (full) vs user channel (preview) */}
+      {/* 3. Audit entry */}
       <section className="landing-demo-entry landing-audit-section" id="audit">
         <div className="landing-demo-entry-inner">
           <span className="landing-section-eyebrow">Free audit</span>
-          <h2 className="landing-section-title">Run your free channel audit</h2>
+          <h2 className="landing-section-title">Run your free channel audit now</h2>
           <p className="landing-section-sub">
-            Analyze any YouTube channel and uncover hidden growth opportunities in seconds.
+            Paste your channel URL or @handle to get an AI growth breakdown with your highest-impact next steps.
           </p>
 
-          <div className="landing-audit-options">
-            <div className="landing-audit-option landing-audit-option-highlight">
-              <h3 className="landing-audit-option-label">Default demo channel</h3>
-              <div className="landing-demo-input-wrap">
-                <input
-                  type="text"
-                  className="landing-demo-input"
-                  value={DEFAULT_DEMO_CHANNEL}
-                  readOnly
-                  aria-label="Default demo channel URL"
-                />
-              </div>
-              <button
-                type="button"
-                className="btn btn-primary btn-lg landing-audit-cta"
-                onClick={() => {
-                  setStoredDemoChannel(DEFAULT_DEMO_CHANNEL);
-                  analytics.channelAuditStarted(DEFAULT_DEMO_CHANNEL);
-                  navigate('/demo', { replace: true, state: { channelInput: DEFAULT_DEMO_CHANNEL } });
+          <div className="landing-audit-single-panel">
+            <div className="landing-demo-input-wrap">
+              <input
+                type="text"
+                className="landing-demo-input"
+                placeholder="Paste a YouTube channel URL or @handle"
+                value={demoInput}
+                onChange={(e) => {
+                  setDemoInput(e.target.value);
+                  setDemoError('');
                 }}
-              >
-                Analyze Default Channel
-              </button>
-              <p className="landing-audit-option-hint">Full product showcase — all tabs and analytics visible.</p>
+                onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeUserChannel()}
+                aria-invalid={!!demoError}
+                aria-describedby={demoError ? 'audit-channel-error' : undefined}
+              />
             </div>
-
-            <div className="landing-audit-separator" aria-hidden>
-              <span>or</span>
-            </div>
-
-            <div className="landing-audit-option">
-              <h3 className="landing-audit-option-label">Analyze your own channel</h3>
-              <div className="landing-demo-input-wrap">
-                <input
-                  type="text"
-                  className="landing-demo-input"
-                  placeholder="Paste a YouTube channel URL or @handle"
-                  value={demoInput}
-                  onChange={(e) => {
-                    setDemoInput(e.target.value);
-                    setDemoError('');
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeUserChannel()}
-                  aria-invalid={!!demoError}
-                  aria-describedby={demoError ? 'audit-channel-error' : undefined}
-                />
-              </div>
-              <button
-                type="button"
-                className="btn btn-primary btn-lg landing-audit-cta"
-                onClick={handleAnalyzeUserChannel}
-              >
-                Analyze Your Channel
-              </button>
-              {demoError && (
-                <p id="audit-channel-error" className="landing-demo-error" role="alert">
-                  {demoError}
-                </p>
-              )}
-              <p className="landing-audit-option-hint">
-                Examples: https://youtube.com/@channelname or @channelname
+            <button
+              type="button"
+              className="btn btn-primary btn-lg landing-audit-cta"
+              onClick={handleAnalyzeUserChannel}
+            >
+              Analyze My Channel
+            </button>
+            {demoError && (
+              <p id="audit-channel-error" className="landing-demo-error" role="alert">
+                {demoError}
               </p>
-            </div>
+            )}
+            <p className="landing-audit-option-hint">
+              Examples: https://youtube.com/@channelname or @channelname
+            </p>
+            <button type="button" className="landing-audit-demo-link" onClick={handleOpenInstantDemo}>
+              Want a quick sample first? Open the instant demo.
+            </button>
           </div>
         </div>
       </section>
