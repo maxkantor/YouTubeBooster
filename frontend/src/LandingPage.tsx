@@ -64,6 +64,8 @@ type AuditPreviewData = {
   opportunities: OpportunityPreview[];
 };
 
+type FullGrowthPlanUserState = 'demo' | 'loggedIn' | 'paid';
+
 function normalizeChannelLabel(input: string): string {
   const raw = input.trim();
   if (!raw) return DEFAULT_EXAMPLE_PREVIEW_CHANNEL;
@@ -212,6 +214,160 @@ function buildAuditPreview(channelInput: string): AuditPreviewData {
       }
     ]
   };
+}
+
+function maskKeyword(keyword: string): string {
+  if (keyword.length <= 4) return `${keyword.slice(0, 1)}•••`;
+  return `${keyword.slice(0, Math.min(4, Math.ceil(keyword.length / 2)))}•••`;
+}
+
+function FullGrowthPlanSection({
+  userState,
+  auditPreview,
+  countdownLabel,
+  pricingLoading,
+  onUnlock,
+  onViewFullReport,
+  onApplyAIFixes
+}: {
+  userState: FullGrowthPlanUserState;
+  auditPreview: AuditPreviewData;
+  countdownLabel: string;
+  pricingLoading: boolean;
+  onUnlock: () => void;
+  onViewFullReport: () => void;
+  onApplyAIFixes: () => void;
+}) {
+  const optimizedTitles = auditPreview.opportunities.find((item) => item.id === 'titles')?.output ?? [auditPreview.titleOptimized];
+  const thumbnailIdeas = [
+    'High-contrast face + 3-word hook',
+    'Before/after framing for instant curiosity',
+    'One clear object focus with bold text placement'
+  ];
+
+  if (userState === 'paid') {
+    return (
+      <div className="landing-growth-plan-shell landing-growth-plan-paid">
+        <div className="landing-growth-plan-header">
+          <span className="landing-growth-plan-badge">Success mode</span>
+          <h4>✅ Your Full Growth Plan Is Unlocked</h4>
+          <p>All AI fixes, optimizations, and strategies are now available.</p>
+        </div>
+
+        <div className="landing-growth-plan-success-grid">
+          <div className="landing-growth-plan-checklist-card">
+            <ul className="landing-growth-plan-checklist">
+              <li>✔ Titles optimized</li>
+              <li>✔ Keywords generated</li>
+              <li>✔ Thumbnail strategy ready</li>
+              <li>✔ Growth plan available</li>
+            </ul>
+            <p className="landing-growth-plan-success-note">🎯 Everything is unlocked. Start applying fixes to grow your channel.</p>
+          </div>
+
+          <div className="landing-growth-plan-action-card">
+            <span className="landing-growth-plan-action-label">Recommended first step</span>
+            <strong>👉 Start with title optimization — highest impact</strong>
+            <p>Open your full report, review the strongest title rewrites, and start applying the highest-leverage fixes first.</p>
+            <div className="landing-growth-plan-actions">
+              <button type="button" className="btn btn-primary btn-lg landing-growth-plan-btn" onClick={onViewFullReport}>
+                View Full Report →
+              </button>
+              <button type="button" className="btn btn-secondary btn-lg landing-growth-plan-btn" onClick={onApplyAIFixes}>
+                Apply AI Fixes →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isDemo = userState === 'demo';
+
+  return (
+    <div className={`landing-growth-plan-shell landing-growth-plan-${userState}`}>
+      <div className="landing-growth-plan-header">
+        <span className="landing-growth-plan-badge">Premium preview</span>
+        <h4>🔥 Your Full Growth Plan Is Ready</h4>
+        <p>
+          {isDemo
+            ? 'Your AI fixes are generated. Unlock to see everything.'
+            : `You’re leaving ${auditPreview.viewsLoss} views/month on the table`}
+        </p>
+      </div>
+
+      <div className="landing-growth-plan-preview-grid">
+        <article className={`landing-growth-plan-card ${isDemo ? 'is-locked' : 'is-partial'}`}>
+          <div className="landing-growth-plan-card-head">
+            <h5>Optimized titles</h5>
+            <span>🔒</span>
+          </div>
+          <ul className="landing-growth-plan-list">
+            {optimizedTitles.slice(0, 3).map((title, index) => (
+              <li key={title} className={!isDemo && index > 0 ? 'is-blurred' : ''}>
+                {title}
+              </li>
+            ))}
+          </ul>
+          {isDemo && <div className="landing-growth-plan-lock-overlay">🔒 Locked AI titles</div>}
+        </article>
+
+        <article className={`landing-growth-plan-card ${isDemo ? 'is-locked' : 'is-partial'}`}>
+          <div className="landing-growth-plan-card-head">
+            <h5>Keyword opportunities</h5>
+            <span>🔒</span>
+          </div>
+          <div className="landing-growth-plan-chip-wrap">
+            {auditPreview.keywords.map((keyword, index) => (
+              <span key={keyword} className={`landing-growth-plan-chip ${!isDemo && index > 0 ? 'is-blurred' : ''}`}>
+                {isDemo ? `🔒 ${keyword}` : index === 0 ? keyword : maskKeyword(keyword)}
+              </span>
+            ))}
+          </div>
+          {isDemo && <div className="landing-growth-plan-lock-overlay">🔒 Premium keyword set</div>}
+        </article>
+
+        <article className={`landing-growth-plan-card ${isDemo ? 'is-locked' : 'is-partial'}`}>
+          <div className="landing-growth-plan-card-head">
+            <h5>Thumbnail strategy</h5>
+            <span>🔒</span>
+          </div>
+          <ul className="landing-growth-plan-list">
+            {thumbnailIdeas.map((idea, index) => (
+              <li key={idea} className={!isDemo && index > 0 ? 'is-blurred' : ''}>
+                {idea}
+              </li>
+            ))}
+          </ul>
+          {isDemo && <div className="landing-growth-plan-lock-overlay">🔒 Thumbnail playbook</div>}
+        </article>
+      </div>
+
+      <div className="landing-growth-plan-footer">
+        <button
+          type="button"
+          className="btn btn-primary btn-lg landing-growth-plan-cta"
+          onClick={onUnlock}
+          disabled={pricingLoading}
+        >
+          {pricingLoading ? 'Starting checkout…' : isDemo ? 'Unlock My Full AI Audit →' : 'Unlock Full Plan →'}
+        </button>
+
+        {isDemo ? (
+          <>
+            <div className="landing-growth-plan-proof" role="status">
+              <span>+2,184 creators improved their channel this week</span>
+              <span>Avg +312% views in 30 days</span>
+            </div>
+            <p className="landing-growth-plan-urgency">⏳ Your report expires in {countdownLabel}</p>
+          </>
+        ) : (
+          <p className="landing-growth-plan-soft-note">Unlock once to reveal every AI fix, full keyword set, and complete growth plan.</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function LandingPage() {
@@ -447,6 +603,23 @@ export function LandingPage() {
       setPricingLoading(false);
     }
   }
+
+  function handleViewFullReport() {
+    const channelInput = previewChannelInput.trim() || DEFAULT_EXAMPLE_PREVIEW_CHANNEL;
+    navigate(`/dashboard/channel?channel=${encodeURIComponent(channelInput)}`, {
+      state: { channelInput }
+    });
+  }
+
+  function handleApplyAIFixes() {
+    navigate('/dashboard');
+  }
+
+  const fullGrowthPlanUserState: FullGrowthPlanUserState = hasPremium
+    ? 'paid'
+    : authSession
+      ? 'loggedIn'
+      : 'demo';
 
   return (
     <div className="landing landing-layout">
@@ -916,7 +1089,7 @@ export function LandingPage() {
                 <article key={card.title} className={`landing-ai-fix-card ${fixCardsBlurred[idx] ? 'blurred' : ''}`}>
                   <h5>{card.title}</h5>
                   <p>{card.body}</p>
-                  {fixCardsBlurred[idx] && (
+                  {fixCardsBlurred[idx] && fullGrowthPlanUserState !== 'paid' && (
                     <div className="landing-ai-fix-card-lock">
                       <span>🔒</span>
                       <span>Unlock Full Fix</span>
@@ -926,23 +1099,15 @@ export function LandingPage() {
               ))}
             </div>
 
-            <div className="landing-audit-paywall">
-              <h4>🔥 Your Full Growth Plan Is Ready</h4>
-              <p>Unlock all fixes, optimized titles, and exact steps to grow your channel.</p>
-              <button
-                type="button"
-                className="btn btn-primary btn-lg landing-audit-paywall-cta"
-                onClick={handleUnlockReport}
-                disabled={pricingLoading || hasPremium}
-              >
-                {hasPremium ? 'Already unlocked' : pricingLoading ? 'Starting checkout…' : 'Unlock My Full AI Audit →'}
-              </button>
-              <div className="landing-audit-social-proof" role="status">
-                <span>+2,184 creators improved their channel this week</span>
-                <span>Avg +312% views in 30 days</span>
-              </div>
-              <p className="landing-audit-urgency">Your report expires in {countdownLabel}</p>
-            </div>
+            <FullGrowthPlanSection
+              userState={fullGrowthPlanUserState}
+              auditPreview={auditPreview}
+              countdownLabel={countdownLabel}
+              pricingLoading={pricingLoading}
+              onUnlock={handleUnlockReport}
+              onViewFullReport={handleViewFullReport}
+              onApplyAIFixes={handleApplyAIFixes}
+            />
           </div>
         </div>
       </section>
