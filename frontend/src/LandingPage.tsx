@@ -681,7 +681,7 @@ export function LandingPage() {
         audience: 'YouTube creators growing CTR and watch time'
       };
 
-      if (!authSession?.idToken || !hasPremium) {
+      if (!authSession?.idToken) {
         const preview = buildPreviewAiResults(action, auditPreview);
         setAiSummary('Preview mode: unlock full AI access to reveal all personalized results.');
         setAiResults(preview);
@@ -697,12 +697,19 @@ export function LandingPage() {
       const message = err instanceof Error ? err.message : 'AI is busy. Try again.';
       const isMissingEndpoint = /404|status\s*404/i.test(message);
       const isTemporaryAiIssue = /503|busy|temporarily unavailable|being enabled|bedrock/i.test(message);
+      const isEntitlementOrAuthIssue = /403|forbidden|401|unauthorized/i.test(message);
 
       if (isMissingEndpoint) {
         const preview = buildPreviewAiResults(action, auditPreview);
         setAiSummary('AI backend is deploying. Showing premium preview results for now.');
         setAiResults(preview);
         setAiVisibleResults(hasPremium ? preview.length : Math.min(2, preview.length));
+        setAiError('');
+      } else if (isEntitlementOrAuthIssue) {
+        const preview = buildPreviewAiResults(action, auditPreview);
+        setAiSummary('Preview mode: unlock full AI access to reveal personalized live results.');
+        setAiResults(preview);
+        setAiVisibleResults(Math.min(2, preview.length));
         setAiError('');
       } else if (isTemporaryAiIssue) {
         const preview = buildPreviewAiResults(action, auditPreview);
