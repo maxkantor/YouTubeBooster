@@ -4,27 +4,25 @@ import { BRAND } from './config/brand';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
-import { billingApi, meApi } from './lib/api';
+import { billingApi, meApi, publicApi } from './lib/api';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
 
 const DEMO_STORAGE_KEY = 'ybai_demo';
 
 const EXAMPLE_VIDEOS = [
-  { title: 'How to Make Pickled Eggplants with Mushrooms', views: '9,596', id: '3BxAR1565k' },
-  { title: 'Chicken Breast Pâté / Spread — Quick & Fancy', views: '9,559', id: 'ozTRk69sNAw' },
-  { title: 'How to Make Georgian-style Pickled Cabbage', views: '7,948', id: 'aU5WF88yPZg' },
-  { title: 'How to Make Belyashi (Fried Meat Buns)', views: '6,201', id: 'belyashi-ex' }
+  { title: 'How to Make Pickled Eggplants with Mushrooms', views: 9596, id: '3BxAR1565k' },
+  { title: 'Chicken Breast Pâté / Spread — Quick & Fancy', views: 9559, id: 'ozTRk69sNAw' },
+  { title: 'How to Make Georgian-style Pickled Cabbage', views: 7948, id: 'aU5WF88yPZg' },
+  { title: 'How to Make Belyashi (Fried Meat Buns)', views: 6201, id: 'belyashi-ex' }
 ];
 
-const DETECT_CARDS = [
-  { title: 'Title Weakness Detection', desc: 'Find titles that limit click-through rate.' },
-  { title: 'SEO Gap Analysis', desc: 'Identify missing keywords and ranking opportunities.' },
-  { title: 'Traffic Leak Detection', desc: 'See where viewers drop before subscribing.' },
-  { title: 'Content Pattern Discovery', desc: 'AI finds what your best videos have in common.' },
-  { title: 'Publishing Strategy', desc: 'Reveal optimal upload timing and cadence.' },
-  { title: 'Growth Opportunities', desc: 'Find the fastest path to more views and subscribers.' }
-];
+const EXAMPLE_DASHBOARD_METRICS = {
+  subscribers: 5770,
+  totalViews: 515218,
+  videos: 188,
+  engagementRate: 3.42
+};
 
 const UNLOCK_FEATURES = [
   'Find what’s killing your views',
@@ -221,6 +219,10 @@ function maskKeyword(keyword: string): string {
   return `${keyword.slice(0, Math.min(4, Math.ceil(keyword.length / 2)))}•••`;
 }
 
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-US').format(Math.max(0, Math.round(value)));
+}
+
 function FullGrowthPlanSection({
   userState,
   auditPreview,
@@ -396,6 +398,15 @@ export function LandingPage() {
     ctr: 'idle'
   });
   const [fixCardsBlurred, setFixCardsBlurred] = useState([false, false, false, false]);
+  const [productPreviewLoading, setProductPreviewLoading] = useState(false);
+  const [productPreviewError, setProductPreviewError] = useState('');
+  const [productPreviewData, setProductPreviewData] = useState<{
+    subscribers: number;
+    totalViews: number;
+    videos: number;
+    engagementRate: number;
+    topVideos: Array<{ id: string; title: string; views: number }>;
+  } | null>(null);
 
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
@@ -404,6 +415,25 @@ export function LandingPage() {
 
   const previewChannelInput = demoInput.trim() || getStoredDemoChannel() || DEFAULT_EXAMPLE_PREVIEW_CHANNEL;
   const auditPreview = useMemo(() => buildAuditPreview(previewChannelInput), [previewChannelInput]);
+  const paidPreviewChannelInput = useMemo(() => {
+    const entered = demoInput.trim();
+    if (entered) {
+      const validated = validateYouTubeChannelInput(entered);
+      if (validated.ok) return validated.normalized;
+    }
+    return userChannelUrl.trim();
+  }, [demoInput, userChannelUrl]);
+  const productPreviewChannelInput = hasPremium ? paidPreviewChannelInput : DEFAULT_DEMO_CHANNEL;
+  const productPreviewLabel = normalizeChannelLabel(productPreviewChannelInput || DEFAULT_DEMO_CHANNEL);
+  const productPreviewSubtitle = hasPremium
+    ? productPreviewChannelInput
+      ? `Live snapshot for ${productPreviewLabel} using your paid channel data.`
+      : 'Paid account detected. Add a valid channel URL above to load your real metrics and top videos.'
+    : 'Preview of the paid dashboard experience with sample channel data. Upgrade to see your own metrics and top videos.';
+  const productPreviewMetrics = productPreviewData ?? {
+    ...EXAMPLE_DASHBOARD_METRICS,
+    topVideos: EXAMPLE_VIDEOS
+  };
   const countdownLabel = useMemo(() => {
     const mins = String(Math.floor(countdownSec / 60)).padStart(2, '0');
     const secs = String(countdownSec % 60).padStart(2, '0');
@@ -528,6 +558,58 @@ export function LandingPage() {
       Object.values(opportunityTimeoutsRef.current).forEach((id) => window.clearTimeout(id));
     };
   }, []);
+
+  useEffect(() => {
+    const channel = productPreviewChannelInput.trim();
+    if (!channel) {
+      setProductPreviewData(null);
+      setProductPreviewError('');
+      setProductPreviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setProductPreviewLoading(true);
+    setProductPreviewError('');
+
+    (async () => {
+      try {
+        const [overview, videos] = await Promise.all([
+          publicApi.analyzeChannel(channel, 30),
+          publicApi.listVideos(channel, 50)
+        ]);
+
+        if (cancelled) return;
+
+        const topVideos = [...(videos ?? [])]
+          .sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0))
+          .slice(0, 4)
+          .map((v) => ({
+            id: v.video_id,
+            title: v.title,
+            views: Number(v.view_count ?? 0)
+          }));
+
+        setProductPreviewData({
+          subscribers: Number(overview.channel_info?.subscriber_count ?? 0),
+          totalViews: Number(overview.video_performance?.total_views ?? 0),
+          videos: Number(overview.video_performance?.total_videos ?? 0),
+          engagementRate: Number(overview.video_performance?.avg_engagement_rate ?? 0),
+          topVideos
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setProductPreviewData(null);
+        setProductPreviewError(err instanceof Error ? err.message : 'Could not load live dashboard preview data.');
+      } finally {
+        if (!cancelled) setProductPreviewLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productPreviewChannelInput]);
 
   function handleTryAIFix(id: OpportunityId) {
     const current = opportunityTimeoutsRef.current[id];
@@ -833,35 +915,34 @@ export function LandingPage() {
         <div className="container landing-container">
           <span className="landing-section-eyebrow">Dashboard</span>
           <h2 className="landing-section-title">Product dashboard preview</h2>
-          <p className="landing-section-sub">
-            The same dashboard you get after purchase — metrics and top videos at a glance.
-          </p>
+          <p className="landing-section-sub">{productPreviewSubtitle}</p>
+          {productPreviewError && <p className="landing-demo-error">{productPreviewError}</p>}
           <div className="landing-dashboard-preview">
             <div className="landing-metrics-grid">
               <div className="landing-metric-card">
-                <span className="landing-metric-value">5,770</span>
+                <span className="landing-metric-value">{productPreviewLoading ? '…' : formatNumber(productPreviewMetrics.subscribers)}</span>
                 <span className="landing-metric-label">Subscribers</span>
               </div>
               <div className="landing-metric-card">
-                <span className="landing-metric-value">515,218</span>
+                <span className="landing-metric-value">{productPreviewLoading ? '…' : formatNumber(productPreviewMetrics.totalViews)}</span>
                 <span className="landing-metric-label">Total Views</span>
               </div>
               <div className="landing-metric-card">
-                <span className="landing-metric-value">188</span>
+                <span className="landing-metric-value">{productPreviewLoading ? '…' : formatNumber(productPreviewMetrics.videos)}</span>
                 <span className="landing-metric-label">Videos</span>
               </div>
               <div className="landing-metric-card">
-                <span className="landing-metric-value">3.42%</span>
+                <span className="landing-metric-value">{productPreviewLoading ? '…' : `${productPreviewMetrics.engagementRate.toFixed(2)}%`}</span>
                 <span className="landing-metric-label">Engagement Rate</span>
               </div>
             </div>
             <div className="landing-top-videos-block">
               <h3 className="landing-block-title">Top Performing Videos</h3>
               <ul className="landing-video-list">
-                {EXAMPLE_VIDEOS.map((v) => (
+                {productPreviewMetrics.topVideos.map((v) => (
                   <li key={v.id} className="landing-video-item">
                     <span className="landing-video-item-title">{v.title}</span>
-                    <span className="landing-video-item-views">{v.views} views</span>
+                    <span className="landing-video-item-views">{formatNumber(v.views)} views</span>
                   </li>
                 ))}
               </ul>
