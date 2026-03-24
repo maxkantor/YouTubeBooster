@@ -3775,6 +3775,13 @@ textarea {
   color: #a1b4c9;
 }
 
+@media (min-width: 1280px) {
+  .landing-nowrap-desktop {
+    white-space: nowrap;
+    max-width: none !important;
+  }
+}
+
 .landing-pricing-card {
   max-width: 520px;
   margin: 20px auto 0;

@@ -1041,7 +1041,7 @@ export function LandingPage() {
         <div className="landing-demo-entry-inner">
           <span className="landing-section-eyebrow">Free audit</span>
           <h2 className="landing-section-title">Run your free channel audit now</h2>
-          <p className="landing-section-sub">
+          <p className="landing-section-sub landing-nowrap-desktop">
             Paste your channel URL or @handle to get an AI growth breakdown with your highest-impact next steps.
           </p>
 
@@ -1214,10 +1214,10 @@ export function LandingPage() {
       <section className="landing-section landing-pricing-section" id="pricing" aria-labelledby="pricing-heading">
         <div className="container landing-container landing-pricing-inner">
           <span className="landing-section-eyebrow">One-time · no subscription</span>
-          <h2 className="landing-section-title landing-pricing-headline landing-heading-display" id="pricing-heading">
+          <h2 className="landing-section-title landing-pricing-headline landing-heading-display landing-nowrap-desktop" id="pricing-heading">
             See Why Your Channel Isn’t Growing — Fix It in Minutes
           </h2>
-          <p className="landing-pricing-lead">
+          <p className="landing-pricing-lead landing-nowrap-desktop">
             Start with a free preview using the demo channel — upgrade only if you want the full fix.
           </p>
           <div className="landing-pricing-card">

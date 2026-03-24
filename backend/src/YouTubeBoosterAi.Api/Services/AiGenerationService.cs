@@ -74,7 +74,7 @@ public sealed class AiGenerationService : IAiGenerationService
     {
         try
         {
-            using var doc = JsonDocument.Parse(modelText);
+            using var doc = JsonDocument.Parse(ExtractJsonCandidate(modelText));
             var root = doc.RootElement;
             var summary = root.TryGetProperty("summary", out var s)
                 ? (s.GetString() ?? string.Empty).Trim()
@@ -85,7 +85,9 @@ public sealed class AiGenerationService : IAiGenerationService
             {
                 foreach (var item in arr.EnumerateArray())
                 {
-                    var value = item.GetString();
+                    var value = item.ValueKind == JsonValueKind.String
+                        ? item.GetString()
+                        : item.ToString();
                     if (!string.IsNullOrWhiteSpace(value))
                     {
                         items.Add(value.Trim());
@@ -106,6 +108,10 @@ public sealed class AiGenerationService : IAiGenerationService
         var fallbackItems = modelText
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(line => line.TrimStart('-', '*', ' ', '\t').Trim())
+            .Where(line => !line.StartsWith("```", StringComparison.Ordinal))
+            .Where(line => !string.Equals(line, "{", StringComparison.Ordinal) && !string.Equals(line, "}", StringComparison.Ordinal))
+            .Where(line => !line.StartsWith("\"summary\"", StringComparison.OrdinalIgnoreCase))
+            .Where(line => !line.StartsWith("\"items\"", StringComparison.OrdinalIgnoreCase))
             .Where(line => !string.IsNullOrWhiteSpace(line))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(12)
@@ -124,4 +130,37 @@ public sealed class AiGenerationService : IAiGenerationService
             "pattern" => "Winning content pattern insights generated.",
             _ => "AI results generated."
         };
+
+    private static string ExtractJsonCandidate(string raw)
+    {
+        var text = (raw ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(text)) return "{}";
+
+        // Remove fenced markdown blocks like ```json ... ```
+        if (text.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstNewLine = text.IndexOf('\n');
+            if (firstNewLine >= 0)
+            {
+                text = text[(firstNewLine + 1)..];
+            }
+
+            var closingFence = text.LastIndexOf("```", StringComparison.Ordinal);
+            if (closingFence >= 0)
+            {
+                text = text[..closingFence];
+            }
+
+            text = text.Trim();
+        }
+
+        var objectStart = text.IndexOf('{');
+        var objectEnd = text.LastIndexOf('}');
+        if (objectStart >= 0 && objectEnd > objectStart)
+        {
+            return text.Substring(objectStart, objectEnd - objectStart + 1);
+        }
+
+        return text;
+    }
 }
