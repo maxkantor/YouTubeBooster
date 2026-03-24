@@ -704,56 +704,68 @@ function AppInner() {
       />
       <StructuredData graph={seoResolved.jsonLd ?? []} />
       {showGlobalNav && (
-        <nav className={`top-nav landing-top-nav ${navScrolled ? 'top-nav-scrolled' : ''}`}>
-          <div className="container nav-shell">
-            <Link
-              to="/"
-              className="brand brand-link brand-with-play"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              aria-label={`${BRAND.name} home`}
-            >
-              <span className="brand-play-icon" aria-hidden />
-              <span className="brand-word brand-word-1">{BRAND.namePart1}</span>
-              <span className="brand-word brand-word-2">{BRAND.namePart2}</span>
-            </Link>
-            <div className="nav-links nav-links-center" aria-label="Primary">
-              <Link to="/#product">Product</Link>
-              <Link to="/#pricing">Pricing</Link>
-              <Link to="/#faq">FAQ</Link>
-              <Link to="/contact">Contact</Link>
+        <>
+          <header className={`landing-header ${navScrolled ? 'landing-header-scrolled' : ''}`}>
+            <div className="container landing-header-inner nav-shell">
+              <Link
+                to="/"
+                className="landing-logo landing-logo-premium brand-link brand-with-play"
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                aria-label={`${BRAND.name} home`}
+              >
+                <span className="brand-play-icon" aria-hidden />
+                <span className="landing-logo-yt">{BRAND.namePart1}</span>
+                <span className="landing-logo-boost">{BRAND.namePart2}</span>
+              </Link>
+              <nav className="landing-nav landing-nav-center" aria-label="Primary">
+                <Link to="/#product" className="landing-nav-link">Product</Link>
+                <Link to="/#pricing" className="landing-nav-link">Pricing</Link>
+                <Link to="/#faq" className="landing-nav-link">FAQ</Link>
+                <Link to="/contact" className="landing-nav-link">Contact</Link>
+              </nav>
+              <div className="landing-nav-actions">
+                {userSession.authenticated && userSession.user ? (
+                  <>
+                    <span className="landing-nav-user">{userSession.user.email ?? 'Account'}</span>
+                    <button type="button" className="landing-nav-link landing-nav-signout" onClick={handleGlobalSignOut}>
+                      Sign out
+                    </button>
+                    <a
+                      href="https://www.youtubeboosterai.com/#audit"
+                      className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
+                      title="Analyze Channel"
+                    >
+                      Analyze Channel
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to={`/auth/signin?returnTo=${encodeURIComponent(globalReturnTo)}`}
+                      className="landing-nav-link landing-nav-auth"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      to={`/auth/signup?returnTo=${encodeURIComponent(globalReturnTo)}`}
+                      className="landing-nav-link landing-nav-auth landing-nav-auth-strong"
+                    >
+                      Sign Up
+                    </Link>
+                    <a
+                      href="https://www.youtubeboosterai.com/#audit"
+                      className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
+                      title="Analyze Channel"
+                    >
+                      Analyze Channel
+                    </a>
+                  </>
+                )}
+              </div>
             </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {userSession.authenticated && userSession.user ? (
-                <>
-                  <span style={{ color: 'rgba(226,232,240,0.95)', fontSize: 13, whiteSpace: 'nowrap' }}>
-                    {userSession.user.email ?? 'Account'}
-                  </span>
-                  <button type="button" className="btn btn-secondary" onClick={handleGlobalSignOut}>
-                    Sign out
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link
-                    to={`/auth/signin?returnTo=${encodeURIComponent(globalReturnTo)}`}
-                    className="btn btn-secondary"
-                    style={{ textDecoration: 'none' }}
-                  >
-                    Sign in
-                  </Link>
-                  <Link
-                    to={`/auth/signup?returnTo=${encodeURIComponent(globalReturnTo)}`}
-                    className="btn btn-primary"
-                    style={{ textDecoration: 'none' }}
-                  >
-                    Sign up
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </nav>
+          </header>
+          <div className="landing-header-rule" aria-hidden />
+        </>
       )}
       <Suspense fallback={
         <div className="page narrow-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '40vh' }}>
