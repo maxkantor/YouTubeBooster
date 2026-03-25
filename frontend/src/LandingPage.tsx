@@ -371,15 +371,11 @@ function FullGrowthPlanSection({
 export function LandingPage() {
   const navigate = useNavigate();
   const { oneTimePriceLabel } = usePricing();
-  const faqItems = useMemo(
+  const faqLeftColumn = useMemo(
     () => [
       {
         q: 'Will this actually help me get more views?',
         a: 'Yes — the AI identifies what’s limiting your growth (low CTR, weak titles, missed keywords) and gives you exact fixes you can apply immediately.'
-      },
-      {
-        q: 'How is this different from TubeBuddy or vidIQ?',
-        a: 'Those tools show data. This tells you what to DO with it — titles, ideas, and strategies ready to use.'
       },
       {
         q: 'What results should I expect?',
@@ -394,12 +390,21 @@ export function LandingPage() {
         a: 'No — one-time payment. No recurring fees.'
       },
       {
-        q: `Why is it only ${oneTimePriceLabel}?`,
-        a: 'This is designed as a fast, high-impact tool — not a bloated subscription. You get value instantly.'
-      },
-      {
         q: 'Do I need any technical setup?',
         a: 'No. Paste your channel URL and click analyze.'
+      }
+    ],
+    []
+  );
+  const faqRightColumn = useMemo(
+    () => [
+      {
+        q: 'How is this different from TubeBuddy or vidIQ?',
+        a: 'Those tools show data. This tells you what to DO with it — titles, ideas, and strategies ready to use.'
+      },
+      {
+        q: `Why is it only ${oneTimePriceLabel}?`,
+        a: 'This is designed as a fast, high-impact tool — not a bloated subscription. You get value instantly.'
       },
       {
         q: 'Can I analyze any channel?',
@@ -1135,30 +1140,71 @@ export function LandingPage() {
             <br />
             Here&apos;s how this tool fixes that.
           </p>
-          <div className="landing-faq-list" role="list">
-            {faqItems.map((item, i) => (
-              <div key={i} className={`landing-faq-item ${openFaq === i ? 'open' : ''}`} role="listitem">
-                <button
-                  type="button"
-                  className="landing-faq-question"
-                  aria-expanded={openFaq === i}
-                  aria-controls={`faq-panel-${i}`}
-                  id={`faq-q-${i}`}
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                >
-                  {item.q}
-                </button>
-                <div
-                  id={`faq-panel-${i}`}
-                  className="landing-faq-answer"
-                  role="region"
-                  aria-labelledby={`faq-q-${i}`}
-                  aria-hidden={openFaq !== i}
-                >
-                  <p>{item.a}</p>
-                </div>
-              </div>
-            ))}
+          <div className="landing-faq-list" role="presentation">
+            <div className="landing-faq-column" role="list">
+              {faqLeftColumn.map((item, i) => {
+                const globalIndex = i;
+                return (
+                  <div
+                    key={`faq-l-${i}`}
+                    className={`landing-faq-item ${openFaq === globalIndex ? 'open' : ''}`}
+                    role="listitem"
+                  >
+                    <button
+                      type="button"
+                      className="landing-faq-question"
+                      aria-expanded={openFaq === globalIndex}
+                      aria-controls={`faq-panel-${globalIndex}`}
+                      id={`faq-q-${globalIndex}`}
+                      onClick={() => setOpenFaq(openFaq === globalIndex ? null : globalIndex)}
+                    >
+                      {item.q}
+                    </button>
+                    <div
+                      id={`faq-panel-${globalIndex}`}
+                      className="landing-faq-answer"
+                      role="region"
+                      aria-labelledby={`faq-q-${globalIndex}`}
+                      aria-hidden={openFaq !== globalIndex}
+                    >
+                      <p>{item.a}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="landing-faq-column" role="list">
+              {faqRightColumn.map((item, i) => {
+                const globalIndex = i + faqLeftColumn.length;
+                return (
+                  <div
+                    key={`faq-r-${i}`}
+                    className={`landing-faq-item ${openFaq === globalIndex ? 'open' : ''}`}
+                    role="listitem"
+                  >
+                    <button
+                      type="button"
+                      className="landing-faq-question"
+                      aria-expanded={openFaq === globalIndex}
+                      aria-controls={`faq-panel-${globalIndex}`}
+                      id={`faq-q-${globalIndex}`}
+                      onClick={() => setOpenFaq(openFaq === globalIndex ? null : globalIndex)}
+                    >
+                      {item.q}
+                    </button>
+                    <div
+                      id={`faq-panel-${globalIndex}`}
+                      className="landing-faq-answer"
+                      role="region"
+                      aria-labelledby={`faq-q-${globalIndex}`}
+                      aria-hidden={openFaq !== globalIndex}
+                    >
+                      <p>{item.a}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
           <div className="landing-faq-post-cta">
             <p className="landing-pricing-microcopy">Still unsure? Run a free channel audit — no signup required.</p>
