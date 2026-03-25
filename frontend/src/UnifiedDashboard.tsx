@@ -234,6 +234,7 @@ export function UnifiedDashboard({
   const [runnerPicked, setRunnerPicked] = useState<Record<string, boolean>>({});
   const runnerPickedRef = useRef<Record<string, boolean>>({});
   const [runnerPlayOrder, setRunnerPlayOrder] = useState<number[]>([]);
+  const runnerPlayOrderRef = useRef<number[]>([]);
   const [runnerWatchStartPos, setRunnerWatchStartPos] = useState<number | null>(null);
   const [runnerWatchLimitFired, setRunnerWatchLimitFired] = useState(false);
 
@@ -615,7 +616,7 @@ export function UnifiedDashboard({
   function runnerCurrentVideo() {
     if (!runnerLoaded) return null;
     const list = getRunnerVideos();
-    const order = runnerPlayOrder.length ? runnerPlayOrder : buildPlayOrder();
+    const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
     const idx = order.length ? order[Math.min(runnerIndex, order.length - 1)] : -1;
     return idx >= 0 ? list[idx] : null;
   }
@@ -661,7 +662,7 @@ export function UnifiedDashboard({
   }
 
   function runnerAdvance() {
-    const order = runnerPlayOrder.length ? runnerPlayOrder : buildPlayOrder();
+    const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
     if (!order.length) return;
     const next = (runnerIndex + 1) % order.length;
     setRunnerIndex(next);
@@ -1910,7 +1911,8 @@ export function UnifiedDashboard({
                     }
                     setRunnerLoaded(true);
                     setRunnerIndex(0);
-                    setRunnerPlayOrder(buildPlayOrder());
+                  runnerPlayOrderRef.current = buildPlayOrder();
+                  setRunnerPlayOrder(runnerPlayOrderRef.current);
                     appendRunnerLog(`Loaded ${v.length} videos.`);
                   }}
                 >
@@ -1938,7 +1940,8 @@ export function UnifiedDashboard({
                     setRunnerLoaded(true);
                     suppressRunnerIndexEffectRef.current = true;
                     setRunnerIndex(0);
-                    setRunnerPlayOrder(buildPlayOrder());
+                    runnerPlayOrderRef.current = buildPlayOrder();
+                    setRunnerPlayOrder(runnerPlayOrderRef.current);
                     setRunnerServerStatus('—');
                     const ytOk = await waitForYouTubePlayerCtor(20000);
                     if (!ytOk) {
