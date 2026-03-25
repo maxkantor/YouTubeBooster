@@ -370,6 +370,11 @@ meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore app
     var user = await appDataStore.GetUserByCognitoSubAsync(sub, cancellationToken);
     if (user is null) return Results.NotFound();
 
+    var userStatus = string.IsNullOrWhiteSpace(user.UserStatus) ? "active" : user.UserStatus;
+    var isSuspendedOrDeactivated =
+        string.Equals(userStatus, "suspended", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(userStatus, "deactivated", StringComparison.OrdinalIgnoreCase);
+
     // Primary signal: user profile flags written by SaveEntitlementAsync
     // (Purchased + AccessStatus). This is more reliable than scanning entitlement
     // items (which can be affected by historical data shape/migrations).
@@ -385,6 +390,13 @@ meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore app
             await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
             || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
     }
+
+    // Admin "suspended/deactivated" must override purchased/entitlements.
+    if (isSuspendedOrDeactivated)
+    {
+        return Results.Ok(new { userId = user.UserId, premium = false, accessStatus = "free" });
+    }
+
     return Results.Ok(new { userId = user.UserId, premium = hasPremium, accessStatus = hasPremium ? "active" : "free" });
 });
 
@@ -487,10 +499,18 @@ premiumApi.AddEndpointFilter(async (context, next) =>
     var user = await store.GetUserByCognitoSubAsync(sub, httpContext.RequestAborted);
     if (user is null) return Results.Unauthorized();
 
+    var userStatus = string.IsNullOrWhiteSpace(user.UserStatus) ? "active" : user.UserStatus;
+    var isSuspendedOrDeactivated =
+        string.Equals(userStatus, "suspended", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(userStatus, "deactivated", StringComparison.OrdinalIgnoreCase);
+
     var hasPremium =
         user.Purchased
         || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
         || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
+
+    // Admin override: suspended/deactivated users must not access premium.
+    if (isSuspendedOrDeactivated) return Results.Forbid();
 
     if (!hasPremium)
     {
