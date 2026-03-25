@@ -114,6 +114,8 @@ export function AdminHomePage() {
   const [range, setRange] = useState('30d');
   const [dash, setDash] = useState<AdminOperationalDashboard | null>(null);
   const [error, setError] = useState('');
+  const [recentSortKey, setRecentSortKey] = useState<'timestamp' | 'title' | 'detail'>('timestamp');
+  const [recentSortDir, setRecentSortDir] = useState<'asc' | 'desc'>('desc');
 
   const load = useCallback(() => {
     setError('');
@@ -126,6 +128,46 @@ export function AdminHomePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Always show the most recent activity first when the range changes.
+  useEffect(() => {
+    setRecentSortKey('timestamp');
+    setRecentSortDir('desc');
+  }, [range]);
+
+  const sortedRecentActivity = useMemo(() => {
+    if (!dash) return [];
+    const dir = recentSortDir === 'asc' ? 1 : -1;
+    const getTime = (iso: string) => {
+      const t = new Date(iso).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+
+    return [...dash.recentActivity].sort((a, b) => {
+      if (recentSortKey === 'timestamp') {
+        const at = getTime(a.timestamp);
+        const bt = getTime(b.timestamp);
+        if (at !== bt) return (at - bt) * dir;
+      } else if (recentSortKey === 'title') {
+        const cmp = (a.title || '').localeCompare(b.title || '');
+        if (cmp !== 0) return cmp * dir;
+      } else if (recentSortKey === 'detail') {
+        const cmp = (a.detail || '').localeCompare(b.detail || '');
+        if (cmp !== 0) return cmp * dir;
+      }
+
+      // Deterministic tie-break: newest timestamp first.
+      return getTime(b.timestamp) - getTime(a.timestamp);
+    });
+  }, [dash, recentSortKey, recentSortDir]);
+
+  const toggleRecentSort = (key: 'timestamp' | 'title' | 'detail') => {
+    if (recentSortKey === key) setRecentSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setRecentSortKey(key);
+      setRecentSortDir(key === 'timestamp' ? 'desc' : 'asc');
+    }
+  };
 
   return (
     <AdminShell title="Dashboard">
@@ -206,20 +248,71 @@ export function AdminHomePage() {
 
           <div className="admin-crm-panel">
             <h2>Recent activity</h2>
-            {dash.recentActivity.length === 0 ? (
+            {sortedRecentActivity.length === 0 ? (
               <p className="admin-crm-muted">No events in this range.</p>
             ) : (
               <div className="admin-crm-table-wrap">
                 <table className="admin-crm-table admin-crm-table-sticky">
                   <thead>
                     <tr>
-                      <th>When</th>
-                      <th>Event</th>
-                      <th>Scope / detail</th>
+                      <th style={{ width: 190 }}>
+                        <button
+                          type="button"
+                          onClick={() => toggleRecentSort('timestamp')}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit'
+                          }}
+                          aria-label="Sort by When"
+                        >
+                          When {recentSortKey === 'timestamp' ? (recentSortDir === 'asc' ? '↑' : '↓') : ''}
+                        </button>
+                      </th>
+                      <th style={{ width: 220 }}>
+                        <button
+                          type="button"
+                          onClick={() => toggleRecentSort('title')}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit'
+                          }}
+                          aria-label="Sort by Event"
+                        >
+                          Event {recentSortKey === 'title' ? (recentSortDir === 'asc' ? '↑' : '↓') : ''}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          type="button"
+                          onClick={() => toggleRecentSort('detail')}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit'
+                          }}
+                          aria-label="Sort by Scope / detail"
+                        >
+                          Scope / detail {recentSortKey === 'detail' ? (recentSortDir === 'asc' ? '↑' : '↓') : ''}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dash.recentActivity.map((item, i: number) => (
+                    {sortedRecentActivity.map((item, i: number) => (
                       <tr key={`${item.title}-${item.timestamp}-${i}`}>
                         <td className="admin-crm-nowrap">{formatDt(item.timestamp)}</td>
                         <td>{item.title}</td>
