@@ -829,9 +829,32 @@ userApi.AddEndpointFilter(async (context, next) =>
     return await next(context);
 });
 
-userApi.MapGet("/dashboard/overview", async (HttpContext httpContext, IUserDashboardService service, CancellationToken cancellationToken) =>
+userApi.MapGet("/dashboard/overview", async (HttpContext httpContext, IAppDataStore appDataStore, IUserDashboardService service, CancellationToken cancellationToken) =>
 {
     var user = GetAuthenticatedUser(httpContext);
+
+    var userStatus = string.IsNullOrWhiteSpace(user.UserStatus) ? "active" : user.UserStatus;
+    var isSuspendedOrDeactivated =
+        string.Equals(userStatus, "suspended", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(userStatus, "deactivated", StringComparison.OrdinalIgnoreCase);
+
+    if (isSuspendedOrDeactivated) return Results.Forbid();
+
+    // Dashboard overview is premium-only; entitlement flags control "premium" status.
+    var hasPremium =
+        user.Purchased
+        || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
+
+    if (!hasPremium)
+    {
+        hasPremium =
+            await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
+            || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
+    }
+
+    if (!hasPremium) return Results.Forbid();
+
     var result = await service.GetOverviewAsync(user.UserId, cancellationToken);
     return Results.Ok(result);
 });
