@@ -480,6 +480,25 @@ public sealed class StripeCheckoutService : ICheckoutService
             RevokedAt: null
         );
         await _appDataStore.SaveEntitlementAsync(entitlement, cancellationToken);
+
+        // Full content dashboard access entitlement (admins can revoke this explicitly).
+        var dashEntitlement = new EntitlementRecord(
+            EntitlementId: $"ent_{session.Id}_dash",
+            UserId: user.UserId,
+            AccessType: "dashboard_access",
+            Status: "active",
+            Source: "stripe",
+            GrantedAt: DateTimeOffset.UtcNow,
+            ExpiresAt: null,
+            PaymentId: session.Id,
+            Notes: stripeEmail,
+            CreatedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow,
+            GrantedBy: null,
+            GrantedReason: null,
+            RevokedAt: null
+        );
+        await _appDataStore.SaveEntitlementAsync(dashEntitlement, cancellationToken);
     }
 }
 

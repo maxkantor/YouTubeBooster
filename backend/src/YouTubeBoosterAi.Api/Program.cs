@@ -375,29 +375,65 @@ meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore app
         string.Equals(userStatus, "suspended", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(userStatus, "deactivated", StringComparison.OrdinalIgnoreCase);
 
-    // Primary signal: user profile flags written by SaveEntitlementAsync
-    // (Purchased + AccessStatus). This is more reliable than scanning entitlement
-    // items (which can be affected by historical data shape/migrations).
-    var hasPremium =
-        user.Purchased
-        || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
-
-    // Secondary signal: entitlement scan (kept as a fallback for extra safety).
-    if (!hasPremium)
-    {
-        hasPremium =
-            await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
-            || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
-    }
-
     // Admin "suspended/deactivated" must override purchased/entitlements.
     if (isSuspendedOrDeactivated)
     {
         return Results.Ok(new { userId = user.UserId, premium = false, accessStatus = "free" });
     }
 
-    return Results.Ok(new { userId = user.UserId, premium = hasPremium, accessStatus = hasPremium ? "active" : "free" });
+    var entitlements = await appDataStore.ListEntitlementsByUserAsync(user.UserId, cancellationToken);
+    var now = DateTimeOffset.UtcNow;
+
+    static bool IsActive(EntitlementRecord e, DateTimeOffset now) =>
+        string.Equals(e.Status, "active", StringComparison.OrdinalIgnoreCase)
+        && (e.ExpiresAt is null || e.ExpiresAt > now);
+
+    var hasDashboardAccessEntitlement = entitlements.Any(e =>
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase));
+
+    var hasActiveDashboardAccessEntitlement = entitlements.Any(e =>
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now));
+
+    // Legacy fallback: if the user has premium (from old stripe entitlements) but we don't have any
+    // dashboard_access entitlement yet, treat it as granted and migrate so admin can revoke it later.
+    var hasLegacyPremium =
+        entitlements.Any(e => IsActive(e, now) && (
+            string.Equals(e.AccessType, "premium", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(e.AccessType, "lifetime", StringComparison.OrdinalIgnoreCase)
+        ))
+        || user.Purchased
+        || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
+
+    if (!hasDashboardAccessEntitlement && hasLegacyPremium)
+    {
+        var migratedAt = DateTimeOffset.UtcNow;
+        var migrated = new EntitlementRecord(
+            EntitlementId: $"ent_migr_{Guid.NewGuid():N}",
+            UserId: user.UserId,
+            AccessType: "dashboard_access",
+            Status: "active",
+            Source: "migration",
+            GrantedAt: migratedAt,
+            ExpiresAt: null,
+            PaymentId: null,
+            Notes: "legacy_migration_dashboard_access",
+            CreatedAt: migratedAt,
+            UpdatedAt: migratedAt
+        );
+
+        await appDataStore.SaveEntitlementAsync(migrated, cancellationToken);
+        hasDashboardAccessEntitlement = true;
+        hasActiveDashboardAccessEntitlement = true;
+    }
+
+    // Precedence: if a dashboard_access entitlement exists (active or revoked), it alone controls access.
+    // This lets admins revoke dashboard access even if the user is still paid (e.g. has "premium" entitlement).
+    var hasDashboardAccess =
+        hasActiveDashboardAccessEntitlement
+        || (!hasDashboardAccessEntitlement && hasLegacyPremium);
+
+    return Results.Ok(new { userId = user.UserId, premium = hasDashboardAccess, accessStatus = hasDashboardAccess ? "active" : "free" });
 });
 
 var billingApi = app.MapGroup("/api/billing");
@@ -504,21 +540,58 @@ premiumApi.AddEndpointFilter(async (context, next) =>
         string.Equals(userStatus, "suspended", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(userStatus, "deactivated", StringComparison.OrdinalIgnoreCase);
 
-    var hasPremium =
-        user.Purchased
+    // Admin override: suspended/deactivated users must not access dashboard.
+    if (isSuspendedOrDeactivated) return Results.Forbid();
+
+    var entitlements = await store.ListEntitlementsByUserAsync(user.UserId, httpContext.RequestAborted);
+    var now = DateTimeOffset.UtcNow;
+
+    static bool IsActive(EntitlementRecord e, DateTimeOffset now) =>
+        string.Equals(e.Status, "active", StringComparison.OrdinalIgnoreCase)
+        && (e.ExpiresAt is null || e.ExpiresAt > now);
+
+    var hasDashboardAccessEntitlement = entitlements.Any(e =>
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase));
+
+    var hasActiveDashboardAccessEntitlement = entitlements.Any(e =>
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now));
+
+    var hasLegacyPremium =
+        entitlements.Any(e => IsActive(e, now) && (
+            string.Equals(e.AccessType, "premium", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(e.AccessType, "lifetime", StringComparison.OrdinalIgnoreCase)
+        ))
+        || user.Purchased
         || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
         || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
 
-    // Admin override: suspended/deactivated users must not access premium.
-    if (isSuspendedOrDeactivated) return Results.Forbid();
-
-    if (!hasPremium)
+    // Migrate legacy paid users so admin can revoke dashboard_access entitlement explicitly.
+    if (!hasDashboardAccessEntitlement && hasLegacyPremium)
     {
-        hasPremium =
-            await store.UserHasActiveEntitlementAsync(user.UserId, "premium", httpContext.RequestAborted)
-            || await store.UserHasActiveEntitlementAsync(user.UserId, "lifetime", httpContext.RequestAborted);
+        var migratedAt = DateTimeOffset.UtcNow;
+        var migrated = new EntitlementRecord(
+            EntitlementId: $"ent_migr_{Guid.NewGuid():N}",
+            UserId: user.UserId,
+            AccessType: "dashboard_access",
+            Status: "active",
+            Source: "migration",
+            GrantedAt: migratedAt,
+            ExpiresAt: null,
+            PaymentId: null,
+            Notes: "legacy_migration_dashboard_access",
+            CreatedAt: migratedAt,
+            UpdatedAt: migratedAt
+        );
+        await store.SaveEntitlementAsync(migrated, httpContext.RequestAborted);
+        hasDashboardAccessEntitlement = true;
+        hasActiveDashboardAccessEntitlement = true;
     }
-    if (!hasPremium) return Results.Forbid();
+
+    var hasDashboardAccess =
+        hasActiveDashboardAccessEntitlement
+        || (!hasDashboardAccessEntitlement && hasLegacyPremium);
+
+    if (!hasDashboardAccess) return Results.Forbid();
     httpContext.Items["authenticatedUser"] = user;
     return await next(context);
 });
@@ -566,12 +639,32 @@ aiApi.MapPost("/generate", async (
         return Results.Unauthorized();
     }
 
-    var hasPremium =
-        user.Purchased
+    var entitlements = await appDataStore.ListEntitlementsByUserAsync(user.UserId, cancellationToken);
+    var now = DateTimeOffset.UtcNow;
+
+    static bool IsActive(EntitlementRecord e, DateTimeOffset now) =>
+        string.Equals(e.Status, "active", StringComparison.OrdinalIgnoreCase)
+        && (e.ExpiresAt is null || e.ExpiresAt > now);
+
+    var hasDashboardAccessEntitlement = entitlements.Any(e =>
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase));
+
+    var hasActiveDashboardAccessEntitlement = entitlements.Any(e =>
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now));
+
+    var hasLegacyPremium =
+        entitlements.Any(e => IsActive(e, now) && (
+            string.Equals(e.AccessType, "premium", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(e.AccessType, "lifetime", StringComparison.OrdinalIgnoreCase)
+        ))
+        || user.Purchased
         || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase)
-        || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
-        || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
+        || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
+
+    // Keep the precedence rule consistent with /access-status: dashboard_access controls access.
+    var hasPremium =
+        hasActiveDashboardAccessEntitlement
+        || (!hasDashboardAccessEntitlement && hasLegacyPremium);
 
     try
     {
@@ -840,20 +933,55 @@ userApi.MapGet("/dashboard/overview", async (HttpContext httpContext, IAppDataSt
 
     if (isSuspendedOrDeactivated) return Results.Forbid();
 
-    // Dashboard overview is premium-only; entitlement flags control "premium" status.
-    var hasPremium =
-        user.Purchased
+    var entitlements = await appDataStore.ListEntitlementsByUserAsync(user.UserId, cancellationToken);
+    var now = DateTimeOffset.UtcNow;
+
+    static bool IsActive(EntitlementRecord e, DateTimeOffset now) =>
+        string.Equals(e.Status, "active", StringComparison.OrdinalIgnoreCase)
+        && (e.ExpiresAt is null || e.ExpiresAt > now);
+
+    var hasDashboardAccessEntitlement = entitlements.Any(e =>
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase));
+
+    var hasActiveDashboardAccessEntitlement = entitlements.Any(e =>
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now));
+
+    var hasLegacyPremium =
+        entitlements.Any(e => IsActive(e, now) && (
+            string.Equals(e.AccessType, "premium", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(e.AccessType, "lifetime", StringComparison.OrdinalIgnoreCase)
+        ))
+        || user.Purchased
         || string.Equals(user.AccessStatus, "entitled", StringComparison.OrdinalIgnoreCase)
         || string.Equals(user.AccessStatus, "purchased", StringComparison.OrdinalIgnoreCase);
 
-    if (!hasPremium)
+    // Migrate legacy paid users so admin can revoke dashboard_access explicitly later.
+    if (!hasDashboardAccessEntitlement && hasLegacyPremium)
     {
-        hasPremium =
-            await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
-            || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
+        var migratedAt = DateTimeOffset.UtcNow;
+        var migrated = new EntitlementRecord(
+            EntitlementId: $"ent_migr_{Guid.NewGuid():N}",
+            UserId: user.UserId,
+            AccessType: "dashboard_access",
+            Status: "active",
+            Source: "migration",
+            GrantedAt: migratedAt,
+            ExpiresAt: null,
+            PaymentId: null,
+            Notes: "legacy_migration_dashboard_access",
+            CreatedAt: migratedAt,
+            UpdatedAt: migratedAt
+        );
+        await appDataStore.SaveEntitlementAsync(migrated, cancellationToken);
+        hasDashboardAccessEntitlement = true;
+        hasActiveDashboardAccessEntitlement = true;
     }
 
-    if (!hasPremium) return Results.Forbid();
+    var hasDashboardAccess =
+        hasActiveDashboardAccessEntitlement
+        || (!hasDashboardAccessEntitlement && hasLegacyPremium);
+
+    if (!hasDashboardAccess) return Results.Forbid();
 
     var result = await service.GetOverviewAsync(user.UserId, cancellationToken);
     return Results.Ok(result);
