@@ -1942,12 +1942,62 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         try
         {
             var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
-            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, AttributeValue>>(json);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+
+            // DynamoDB Scan cursors are a map of key attribute name -> AttributeValue.
+            // We can't reliably round-trip AWS SDK AttributeValue via JsonSerializer,
+            // so we parse the JSON and reconstruct only the fields we need.
+            var result = new Dictionary<string, AttributeValue>();
+
+            foreach (var keyProp in doc.RootElement.EnumerateObject())
+            {
+                var attrName = keyProp.Name;
+                var attrEl = keyProp.Value;
+
+                if (attrEl.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+
+                AttributeValue? av = null;
+
+                // Common scalar fields for key attributes (pk/sk) are strings.
+                if (TryGetPropertyCaseInsensitive(attrEl, "S", out var s) && s.ValueKind == System.Text.Json.JsonValueKind.String)
+                    av = new AttributeValue { S = s.GetString() };
+                else if (TryGetPropertyCaseInsensitive(attrEl, "N", out var n) && n.ValueKind == System.Text.Json.JsonValueKind.String)
+                    av = new AttributeValue { N = n.GetString() };
+                else if (TryGetPropertyCaseInsensitive(attrEl, "BOOL", out var b))
+                {
+                    if (b.ValueKind == System.Text.Json.JsonValueKind.True || b.ValueKind == System.Text.Json.JsonValueKind.False)
+                        av = new AttributeValue { BOOL = b.GetBoolean() };
+                    else if (b.ValueKind == System.Text.Json.JsonValueKind.String && bool.TryParse(b.GetString(), out var bv))
+                        av = new AttributeValue { BOOL = bv };
+                }
+
+                // Only keep entries we can reconstruct.
+                if (av != null) result[attrName] = av;
+            }
+
+            // If cursor doesn't include any usable fields, return null and let Scan start from scratch.
+            return result.Count == 0 ? null : result;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static bool TryGetPropertyCaseInsensitive(System.Text.Json.JsonElement obj, string propertyName, out System.Text.Json.JsonElement value)
+    {
+        foreach (var p in obj.EnumerateObject())
+        {
+            if (string.Equals(p.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = p.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     private static string? EncodeCursor(Dictionary<string, AttributeValue>? key)
