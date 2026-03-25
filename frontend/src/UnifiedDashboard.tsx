@@ -232,6 +232,7 @@ export function UnifiedDashboard({
   const [runnerServerStatus, setRunnerServerStatus] = useState<'—' | 'Testing…' | 'OK' | 'Offline' | 'Error'>('—');
   const [runnerIssueNote, setRunnerIssueNote] = useState('');
   const [runnerPicked, setRunnerPicked] = useState<Record<string, boolean>>({});
+  const runnerPickedRef = useRef<Record<string, boolean>>({});
   const [runnerPlayOrder, setRunnerPlayOrder] = useState<number[]>([]);
   const [runnerWatchStartPos, setRunnerWatchStartPos] = useState<number | null>(null);
   const [runnerWatchLimitFired, setRunnerWatchLimitFired] = useState(false);
@@ -240,6 +241,8 @@ export function UnifiedDashboard({
   const runnerVideosRef = useRef<PublicVideo[]>([]);
   /** Skip one runnerIndex effect after Start (avoid double player init). */
   const suppressRunnerIndexEffectRef = useRef(false);
+  /** Cancel token for async Start flow (Start can await server/payer before playing). */
+  const runnerStartTokenRef = useRef(0);
 
   // YouTube iframe API player (kept out of React state)
   const playerRef = (globalThis as any).__ybPlayerRef as { player: any | null } | undefined;
@@ -585,7 +588,7 @@ export function UnifiedDashboard({
   function buildPlayOrder() {
     const list = getRunnerVideos();
     const pickedIndices = list
-      .map((v, idx) => (runnerPicked[v.video_id] ? idx : -1))
+      .map((v, idx) => (runnerPickedRef.current[v.video_id] ? idx : -1))
       .filter((idx) => idx >= 0);
     const indices = pickedIndices.length ? pickedIndices : list.map((_, i) => i);
     if (!runnerShuffle) return indices;
@@ -644,6 +647,7 @@ export function UnifiedDashboard({
   }
 
   function runnerStopInternal() {
+    runnerStartTokenRef.current += 1; // cancel any in-flight Start
     setRunnerRunning(false);
     setRunnerStatus('STOPPED');
     setRunnerWatchStartPos(null);
@@ -671,6 +675,7 @@ export function UnifiedDashboard({
       return;
     }
     const videoId = video.video_id;
+    const playToken = runnerStartTokenRef.current;
     appendRunnerLog(`Playing ${video.title} (${videoId})`);
     setRunnerSessionStarted((v) => v + 1);
     setRunnerWatchStartPos(null);
@@ -688,6 +693,7 @@ export function UnifiedDashboard({
     if (origin) playerVars.origin = origin;
 
     const load = () => {
+      if (playToken !== runnerStartTokenRef.current) return; // Start/Stop cancellation
       const ref = (globalThis as any).__ybPlayerRef;
       const existingPlayer = ref?.player;
       if (existingPlayer && typeof existingPlayer.loadVideoById === 'function') {
@@ -697,6 +703,7 @@ export function UnifiedDashboard({
           appendRunnerLog('loadVideoById failed; try Stop then Start.');
         }
         setTimeout(() => {
+          if (playToken !== runnerStartTokenRef.current) return; // canceled by Stop
           try {
             if (typeof existingPlayer.playVideo === 'function') existingPlayer.playVideo();
           } catch {
@@ -726,6 +733,7 @@ export function UnifiedDashboard({
         playerVars,
         events: {
           onReady: () => {
+            if (playToken !== runnerStartTokenRef.current) return;
             runnerApplySpeed();
             try {
               const player = ref.player;
@@ -736,6 +744,7 @@ export function UnifiedDashboard({
             }
           },
           onStateChange: (e: any) => {
+            if (playToken !== runnerStartTokenRef.current) return;
             // PLAYING
             if (e?.data === w.YT.PlayerState.PLAYING) {
               setRunnerStatus('RUNNING');
@@ -755,6 +764,7 @@ export function UnifiedDashboard({
             }
           },
           onError: (e: any) => {
+            if (playToken !== runnerStartTokenRef.current) return;
             appendRunnerLog(`Player error code ${e?.data ?? 'unknown'} on ${videoId}. Skipping.`);
             runnerAdvance();
           }
@@ -1911,6 +1921,7 @@ export function UnifiedDashboard({
                   className="btn btn-primary"
                   disabled={runnerRunning}
                   onClick={async () => {
+                    const startToken = ++runnerStartTokenRef.current;
                     ensureYouTubeIframeApi();
                     setRunnerStatus('RUNNING');
                     setRunnerSessionStarted(0);
@@ -1923,6 +1934,7 @@ export function UnifiedDashboard({
                       setRunnerStatus('IDLE');
                       return;
                     }
+                    if (startToken !== runnerStartTokenRef.current) return;
                     setRunnerLoaded(true);
                     suppressRunnerIndexEffectRef.current = true;
                     setRunnerIndex(0);
@@ -1934,8 +1946,10 @@ export function UnifiedDashboard({
                       setRunnerStatus('ERROR');
                       return;
                     }
+                    if (startToken !== runnerStartTokenRef.current) return;
                     setRunnerRunning(true);
                     await runnerTestServer();
+                    if (startToken !== runnerStartTokenRef.current) return;
                     runnerPlayCurrent();
                   }}
                 >
@@ -2039,7 +2053,14 @@ export function UnifiedDashboard({
                       <input
                         type="checkbox"
                         checked={Boolean(runnerPicked[v.video_id])}
-                        onChange={(e) => setRunnerPicked((prev) => ({ ...prev, [v.video_id]: e.target.checked }))}
+                        onChange={(e) =>
+                          setRunnerPicked((prev) => {
+                            const next = { ...prev, [v.video_id]: e.target.checked };
+                            // Keep a sync ref so Start can immediately read the latest selection.
+                            runnerPickedRef.current = next;
+                            return next;
+                          })
+                        }
                         className="runner-video-picker-checkbox"
                       />
                       <img
