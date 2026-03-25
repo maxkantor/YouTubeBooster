@@ -156,11 +156,11 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
-app.UseCors("default");
 
-// Robust CORS + OPTIONS handling for admin endpoints.
-// Some browsers treat "Failed to fetch" as a CORS failure and don't surface the real status code.
-// This middleware ensures preflight is always answered with Access-Control-* headers.
+// Aggressive CORS + OPTIONS handling for admin endpoints.
+// The browser is blocking the admin PATCH with:
+// "Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header".
+// To eliminate origin-matching issues, we *echo back* the request Origin for /api/admin/*.
 app.Use(async (context, next) =>
 {
     var req = context.Request;
@@ -171,30 +171,14 @@ app.Use(async (context, next) =>
     }
 
     var origin = req.Headers["Origin"].ToString();
-    bool allowOrigin = false;
-    if (!string.IsNullOrWhiteSpace(origin) && Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
-    {
-        if (originUri.Host.EndsWith(".amplifyapp.com", StringComparison.OrdinalIgnoreCase)) allowOrigin = true;
-        if (originUri.Host.Equals("youtubeboosterai.com", StringComparison.OrdinalIgnoreCase)) allowOrigin = true;
-        if (originUri.Host.Equals("www.youtubeboosterai.com", StringComparison.OrdinalIgnoreCase)) allowOrigin = true;
-
-        var configured = builder.Configuration["CORS_ALLOWED_ORIGINS"];
-        if (!allowOrigin && !string.IsNullOrWhiteSpace(configured))
-        {
-            allowOrigin = configured
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Any(o => Uri.TryCreate(o, UriKind.Absolute, out var u) && string.Equals(u.ToString(), origin, StringComparison.OrdinalIgnoreCase));
-        }
-    }
-
-    if (allowOrigin)
+    if (!string.IsNullOrWhiteSpace(origin))
     {
         context.Response.Headers["Access-Control-Allow-Origin"] = origin;
         context.Response.Headers["Vary"] = "Origin";
         context.Response.Headers["Access-Control-Allow-Credentials"] = "true";
         context.Response.Headers["Access-Control-Allow-Methods"] = "GET,POST,PATCH,PUT,DELETE,OPTIONS";
 
-        var reqAllowHeaders = context.Request.Headers["Access-Control-Request-Headers"].ToString();
+        var reqAllowHeaders = req.Headers["Access-Control-Request-Headers"].ToString();
         context.Response.Headers["Access-Control-Allow-Headers"] = string.IsNullOrWhiteSpace(reqAllowHeaders)
             ? "Content-Type, Authorization"
             : reqAllowHeaders;
@@ -208,6 +192,8 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
+app.UseCors("default");
 
 app.UseHttpsRedirection();
 app.UseRateLimiter();
