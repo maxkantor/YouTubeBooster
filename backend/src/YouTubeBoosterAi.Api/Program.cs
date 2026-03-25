@@ -988,6 +988,13 @@ adminApi.MapPost("/logout", async (HttpContext httpContext, SessionCookieService
 var adminProtectedApi = app.MapGroup("/api/admin");
 adminProtectedApi.AddEndpointFilter(async (context, next) =>
 {
+    // Let CORS preflight pass through without requiring an admin session.
+    // Browsers send unauthenticated OPTIONS requests before PATCH/POST/etc.
+    if (string.Equals(context.HttpContext.Request.Method, "OPTIONS", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.Ok();
+    }
+
     var sessionCookieService = context.HttpContext.RequestServices.GetRequiredService<SessionCookieService>();
     var admin = await sessionCookieService.GetAuthenticatedAdminAsync(context.HttpContext, context.HttpContext.RequestAborted);
     if (admin is null)
