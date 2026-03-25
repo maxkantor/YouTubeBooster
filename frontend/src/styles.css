@@ -669,6 +669,117 @@ textarea {
   font-weight: 700;
 }
 
+.dashboard-channel-context {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  max-width: 640px;
+}
+
+.dashboard-channel-context-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #e0e7ff;
+  background: linear-gradient(145deg, rgba(99, 102, 241, 0.45), rgba(79, 70, 229, 0.25));
+  border: 1px solid rgba(165, 180, 252, 0.35);
+}
+
+.dashboard-channel-context-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.dashboard-channel-context-row {
+  margin-bottom: 6px;
+}
+
+.dashboard-channel-context-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.dashboard-channel-context-badge--loading {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.dashboard-channel-context-badge--ok {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.dashboard-channel-context-badge--warn {
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.dashboard-channel-context-label {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-channel-context-name {
+  margin: 0 0 2px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1.25;
+}
+
+.dashboard-channel-context-handle {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #a5b4fc;
+}
+
+.dashboard-channel-context-url {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.dashboard-channel-context-url a {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dashboard-channel-context-url a:hover {
+  color: #bfdbfe;
+}
+
+.dashboard-channel-context-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
 .dashboard-subtitle {
   margin: 0 0 12px;
   color: #94a3b8;

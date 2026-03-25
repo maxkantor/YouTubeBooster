@@ -13,7 +13,12 @@ import {
   demoTrafficTools,
   demoVideos
 } from './demoData';
-import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, normalizeChannelForComparison } from './lib/demo';
+import {
+  DEFAULT_DEMO_CHANNEL,
+  buildYoutubeChannelCanonicalUrl,
+  getDisplayHandle,
+  normalizeChannelForComparison
+} from './lib/demo';
 
 /** Only the marketing default URL/handle may use the embedded Max Kantor demo dataset. */
 function isBuiltInShowcaseChannel(channelInput: string): boolean {
@@ -280,6 +285,30 @@ export function UnifiedDashboard({
       : demoData?.channelHandle ??
         (isEmbeddedProductDemo ? demoChannelData.channelHandle : getDisplayHandle(channelInput))
     : null;
+
+  const channelPageUrl = buildYoutubeChannelCanonicalUrl(channelInput);
+  const contextHandle = isDemo
+    ? getDisplayHandle(channelInput)
+    : getDisplayHandle(channelInput || channelTitle);
+  const contextDisplayName = (channelTitle || '').trim() || contextHandle || 'Your channel';
+  const contextAvatarLetter = (() => {
+    const base = (contextDisplayName || contextHandle || '?').replace(/^@/, '');
+    const alnum = base.replace(/[^a-zA-Z0-9]/g, '');
+    return (alnum.slice(0, 1) || base.slice(0, 1) || '?').toUpperCase();
+  })();
+
+  const awaitingFirstChannelData =
+    isDemo &&
+    !!channelInput.trim() &&
+    demoData == null &&
+    pyOverview == null &&
+    !demoError &&
+    !pyError;
+  const channelContextAnalyzing =
+    isDemo && (demoLoading || pyLoading || awaitingFirstChannelData);
+  const channelContextError =
+    isDemo && !channelContextAnalyzing && !!(demoError || pyError);
+  const channelContextComplete = isDemo && !channelContextAnalyzing && !channelContextError;
 
   const growthScore = isDemo
     ? (demoData?.healthScore ?? (isEmbeddedProductDemo ? demoChannelData.growthScore : 0))
@@ -843,6 +872,51 @@ export function UnifiedDashboard({
     <div className="page dashboard-page">
       <header className="dashboard-header">
         <h1 className="dashboard-title">{isDemo ? `${BRAND.name} Dashboard` : dashboardTitle}</h1>
+
+        {(channelInput.trim() || (!isDemo && contextDisplayName)) && (
+          <div className="dashboard-channel-context" role="region" aria-label="Channel being analyzed">
+            <div className="dashboard-channel-context-avatar" aria-hidden>
+              {contextAvatarLetter}
+            </div>
+            <div className="dashboard-channel-context-body">
+              <div className="dashboard-channel-context-row">
+                {channelContextAnalyzing ? (
+                  <span className="dashboard-channel-context-badge dashboard-channel-context-badge--loading">
+                    Analyzing your channel…
+                  </span>
+                ) : channelContextError ? (
+                  <span className="dashboard-channel-context-badge dashboard-channel-context-badge--warn">
+                    Unable to load channel details — using provided URL.
+                  </span>
+                ) : isDemo && channelContextComplete ? (
+                  <span className="dashboard-channel-context-badge dashboard-channel-context-badge--ok">
+                    Analysis complete
+                  </span>
+                ) : !isDemo ? (
+                  <span className="dashboard-channel-context-badge dashboard-channel-context-badge--ok">
+                    Analysis complete
+                  </span>
+                ) : null}
+              </div>
+              <p className="dashboard-channel-context-label">
+                {channelContextAnalyzing ? 'Analyzing channel' : 'Channel'}
+              </p>
+              <p className="dashboard-channel-context-name">{contextDisplayName}</p>
+              <p className="dashboard-channel-context-handle">{contextHandle}</p>
+              {channelPageUrl ? (
+                <p className="dashboard-channel-context-url">
+                  <a href={channelPageUrl} target="_blank" rel="noopener noreferrer">
+                    {channelPageUrl}
+                  </a>
+                </p>
+              ) : null}
+              <p className="dashboard-channel-context-hint">
+                AI insights below are based on this channel&apos;s content, titles, and performance patterns.
+              </p>
+            </div>
+          </div>
+        )}
+
         {isDemo && (
           <>
             {isFullDemo ? (
@@ -879,9 +953,6 @@ export function UnifiedDashboard({
             )}
           </div>
         )}
-        {isDemo && demoLoading && (
-          <p className="dashboard-demo-loading">Analyzing your channel…</p>
-        )}
         {isDemo && demoError && (
           <p className="dashboard-demo-error">{demoError}</p>
         )}
@@ -898,9 +969,6 @@ export function UnifiedDashboard({
               placeholders — not your channel&apos;s real numbers. Fix the API configuration and refresh.
             </p>
           )}
-        {isDemo && pyLoading && (
-          <p className="dashboard-demo-loading">Analyzing your channel…</p>
-        )}
         {isDemo && pyError && (
           <p className="dashboard-demo-error">{pyError}</p>
         )}

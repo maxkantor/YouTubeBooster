@@ -9,6 +9,22 @@ export function normalizeChannelForComparison(input: string): string {
 /**
  * Parses YouTube channel URL or handle and returns a clean display identity (e.g. @KeyWestWaterman).
  */
+/** Canonical YouTube channel page URL for trust UI (link-out). */
+export function buildYoutubeChannelCanonicalUrl(input: string): string {
+  const t = (input || '').trim();
+  if (!t) return '';
+  if (/^https?:\/\//i.test(t)) {
+    try {
+      const u = new URL(t);
+      return u.toString().split('#')[0].split('?')[0];
+    } catch {
+      return t;
+    }
+  }
+  if (t.startsWith('@')) return `https://www.youtube.com/${t}`;
+  return `https://www.youtube.com/@${t.replace(/^@/, '')}`;
+}
+
 export function getDisplayHandle(input: string): string {
   const trimmed = (input || '').trim();
   if (!trimmed) return '@channel';

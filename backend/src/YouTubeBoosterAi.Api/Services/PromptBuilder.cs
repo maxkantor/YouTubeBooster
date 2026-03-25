@@ -3,7 +3,7 @@ using System.Text;
 namespace YouTubeBoosterAi.Api;
 
 /// <summary>
-/// Production prompts for AI Growth Studio — CTR, search, and retention focused; works for faceless, cooking, and general creators.
+/// High-conversion Bedrock prompts for AI Growth Studio — strategist voice, no generic AI filler.
 /// </summary>
 public sealed class PromptBuilder : IPromptBuilder
 {
@@ -21,82 +21,89 @@ public sealed class PromptBuilder : IPromptBuilder
         var description = (input.Description ?? string.Empty).Trim();
         var niche = (input.Niche ?? "General YouTube").Trim();
         var audience = (input.Audience ?? "YouTube viewers").Trim();
+        var channelLabel = niche;
 
         var sb = new StringBuilder();
-        sb.AppendLine("You are a senior YouTube growth lead who writes for real analytics (CTR, AVD, session depth).");
-        sb.AppendLine("Return ONLY valid JSON with this exact shape (no markdown fences, no prose outside JSON):");
-        sb.AppendLine("{\"summary\":\"one sentence\",\"items\":[\"...\",\"...\"]}");
+        sb.AppendLine("You are an elite YouTube growth strategist hired to lift CTR and qualified clicks. You write like a sharp operator, not a chatbot.");
+        sb.AppendLine("Voice: decisive, specific, data-minded, zero filler. No phrases like “leverage”, “unlock potential”, “game-changer”, or “in today’s video”.");
         sb.AppendLine();
-        sb.AppendLine("Context:");
-        sb.AppendLine($"- Niche / channel: {niche}");
-        sb.AppendLine($"- Target audience: {audience}");
+        sb.AppendLine("Return ONLY valid JSON (no markdown fences, no text before/after the JSON) using EXACTLY this shape:");
+        sb.AppendLine("{");
+        sb.AppendLine("  \"strategy\": \"2–3 short lines: what is weak in the user’s current angle + the strategic shift you are applying.\",");
+        sb.AppendLine("  \"bestPick\": \"The single strongest deliverable for this task (see task rules).\",");
+        sb.AppendLine("  \"whyBestWins\": [\"reason1\", \"reason2\", \"reason3\"],");
+        sb.AppendLine("  \"options\": [\"...\", \"...\"],");
+        sb.AppendLine("  \"whyTopOptions\": [");
+        sb.AppendLine("    { \"optionIndex\": 1, \"reasons\": [\"short\", \"short\"] },");
+        sb.AppendLine("    { \"optionIndex\": 2, \"reasons\": [\"short\", \"short\"] },");
+        sb.AppendLine("    { \"optionIndex\": 3, \"reasons\": [\"short\", \"short\"] }");
+        sb.AppendLine("  ]");
+        sb.AppendLine("}");
+        sb.AppendLine();
+        sb.AppendLine("Rules for ALL responses:");
+        sb.AppendLine("- bestPick MUST be one of the entries in options (copy exact string) — the one with the highest estimated CTR for this niche.");
+        sb.AppendLine("- options: exactly 7 distinct entries for this task (unless the task below overrides). No near-duplicates.");
+        sb.AppendLine("- whyBestWins: exactly 3 strings; each names a mechanism (e.g. curiosity gap, pain hook, keyword front-load, specificity, speed/benefit).");
+        sb.AppendLine("- whyTopOptions: exactly 3 objects — for optionIndex 1, 2, and 3 (1-based indices in options[]). Two short reasons each. Do not repeat whyBestWins verbatim.");
+        sb.AppendLine("- Keep every line punchy. No long paragraphs.");
+        sb.AppendLine("- NEVER output generic titles like \"Amazing X Recipe\" or \"Best X Ever\" without a concrete hook.");
+        sb.AppendLine();
+        sb.AppendLine("Context (use all of this):");
+        sb.AppendLine($"- Channel / niche label: {channelLabel}");
+        sb.AppendLine($"- Audience: {audience}");
         if (!string.IsNullOrWhiteSpace(description))
         {
-            sb.AppendLine($"- Video description or notes (may be partial): {description}");
+            sb.AppendLine($"- Current description or working copy: {description}");
         }
-
         if (titles.Length > 0)
         {
-            sb.AppendLine("- Sample titles / hooks to learn from:");
+            sb.AppendLine("- Reference titles / hooks from the user:");
             foreach (var t in titles)
             {
-                sb.AppendLine($"  - {t}");
+                sb.AppendLine($"  • {t}");
             }
         }
 
         sb.AppendLine();
-        sb.AppendLine("Constraints for all tasks:");
-        sb.AppendLine("- Be specific to the niche; avoid generic platitudes.");
-        sb.AppendLine("- Assume both on-camera and faceless channels; never require a face on camera.");
-        sb.AppendLine("- Optimize for YouTube search + browse features + suggested traffic.");
+        sb.AppendLine("--- TASK ---");
         sb.AppendLine();
 
         switch (action)
         {
             case "rewrite_titles":
-                sb.AppendLine("Task: Rewrite titles for higher CTR and qualified clicks.");
-                sb.AppendLine("Rules:");
-                sb.AppendLine("- Produce exactly 8 title rewrites.");
-                sb.AppendLine("- Each title ≤ 65 characters.");
-                sb.AppendLine("- Front-load the strongest keyword viewers actually search.");
-                sb.AppendLine("- Use concrete outcomes, time bounds, or method (when it helps clarity).");
-                sb.AppendLine("- Create curiosity without clickbait clichés (no ALL CAPS, no excessive punctuation).");
-                sb.AppendLine("- Vary angles: how-to, mistake-fix, transformation, comparison, myth-busting.");
+                sb.AppendLine("Task: REWRITE TITLES for maximum CTR (browse + search).");
+                sb.AppendLine("- options: exactly 7 title strings. Each ≤ 65 characters.");
+                sb.AppendLine("- Titles must feel instantly usable — not “AI generated”. Vary angles: mistake, transformation, time-box, contrast, contrarian.");
+                sb.AppendLine("- bestPick: the single title from options[] with the highest CTR potential for this niche (pain + curiosity + clarity).");
+                sb.AppendLine("- strategy: call out what’s weak in the user’s current title patterns and what packaging rule you’re applying.");
                 break;
 
             case "improve_description":
-                sb.AppendLine("Task: Produce optimized description blocks the creator can paste or adapt.");
-                sb.AppendLine("Rules:");
-                sb.AppendLine("- Produce exactly 6 items; each item is 1–3 short lines separated by \\n within the string.");
-                sb.AppendLine("- Cover: keyword placement in first 1–2 lines, chapters/timestamps guidance, pinned comment idea, internal link strategy, CTA, and disclaimer/community note if relevant.");
-                sb.AppendLine("- Optimize for search intent + watch time (session starts), not keyword stuffing.");
+                sb.AppendLine("Task: IMPROVE DESCRIPTION for search + session depth.");
+                sb.AppendLine("- options: exactly 7 items. Each item is ONE compact block (1–2 sentences max) the creator can paste or adapt — e.g. opening line, keyword stack, chapters line, CTA line.");
+                sb.AppendLine("- bestPick: the single block that would move CTR + watch time the most if fixed first.");
+                sb.AppendLine("- strategy: what’s wrong with typical descriptions in this niche + your fix (first 2 lines, intent, chapters, internal links).");
                 break;
 
             case "keywords":
-                sb.AppendLine("Task: Generate high-intent keyword phrases for titles, tags, and descriptions.");
-                sb.AppendLine("Rules:");
-                sb.AppendLine("- Produce exactly 12 phrases.");
-                sb.AppendLine("- Mix head terms and long-tail; include problem/outcome language.");
-                sb.AppendLine("- Each phrase ≤ 6 words unless a natural longer question.");
-                sb.AppendLine("- Avoid duplicates and vanity terms with no search intent.");
-                break;
-
-            case "ideas":
-                sb.AppendLine("Task: Generate video ideas likely to perform for this niche.");
-                sb.AppendLine("Rules:");
-                sb.AppendLine("- Produce exactly 10 ideas.");
-                sb.AppendLine("- Each idea is one string: title angle + parenthetical hook or format note.");
-                sb.AppendLine("- Balance evergreen + trend-responsive; include at least 2 series-style ideas.");
-                sb.AppendLine("- Favor solo-creator production realism.");
+                sb.AppendLine("Task: KEYWORD PHRASES for titles, tags, and first lines.");
+                sb.AppendLine("- options: exactly 7 high-intent phrases (mix head + long-tail). Each ≤ 6 words unless a natural question.");
+                sb.AppendLine("- bestPick: the phrase with the best combo of search volume intent + click fit for this channel.");
+                sb.AppendLine("- strategy: what search intent you’re targeting and what the channel was missing.");
                 break;
 
             case "pattern":
-                sb.AppendLine("Task: Identify winning content patterns and next experiments.");
-                sb.AppendLine("Rules:");
-                sb.AppendLine("- Produce exactly 8 items.");
-                sb.AppendLine("- Each item: specific packaging, hook, structure, pacing, or thumbnail language.");
-                sb.AppendLine("- Include posting cadence and series packaging where relevant.");
-                sb.AppendLine("- Make each insight actionable in one filming session.");
+                sb.AppendLine("Task: WINNING PATTERNS + next experiments.");
+                sb.AppendLine("- options: exactly 7 pattern bullets — packaging, hook, structure, cadence, or thumbnail copy. Each one sentence, actionable this week.");
+                sb.AppendLine("- bestPick: the single pattern that would move metrics fastest for this niche.");
+                sb.AppendLine("- strategy: what the sample titles imply about what’s underperforming + the pattern you’re doubling down on.");
+                break;
+
+            case "ideas":
+                sb.AppendLine("Task: VIDEO IDEAS that could win in this niche (faceless or on-camera).");
+                sb.AppendLine("- options: exactly 7 video ideas. Each is a title-style line ≤ 70 characters + you may add a short angle in parentheses if under 90 chars total.");
+                sb.AppendLine("- bestPick: the idea most likely to get clicks + retention for this audience.");
+                sb.AppendLine("- strategy: gap in the niche + the content thesis behind these ideas.");
                 break;
 
             default:

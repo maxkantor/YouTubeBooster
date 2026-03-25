@@ -71,7 +71,8 @@ public sealed class AiStudioService : IAiStudioService
         var maxTokensRaw = await _secretValueProvider.GetValueAsync("bedrock/maxTokens", secure: false, cancellationToken);
         var temperatureRaw = await _secretValueProvider.GetValueAsync("bedrock/temperature", secure: false, cancellationToken);
 
-        var maxTokens = int.TryParse(maxTokensRaw, out var parsedMax) ? parsedMax : 900;
+        // Richer JSON (strategy + bestPick + options + why blocks) needs headroom vs plain lists.
+        var maxTokens = int.TryParse(maxTokensRaw, out var parsedMax) ? parsedMax : 1100;
         var temperature = double.TryParse(temperatureRaw, out var parsedTemp) ? parsedTemp : 0.7;
 
         var modelId = await ResolveModelIdForLogAsync(cancellationToken);
