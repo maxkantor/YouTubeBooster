@@ -44,9 +44,9 @@ public interface IBedrockService
     Task<string> InvokeModelAsync(string prompt, double temperature, int maxTokens, CancellationToken cancellationToken);
 }
 
-public interface IAiGenerationService
+public interface IAiStudioService
 {
-    Task<AiGenerateResponse> GenerateAsync(AiGenerateRequest request, UserAccount user, bool paidAccess, CancellationToken cancellationToken);
+    Task<AiStudioGenerateResponse> GenerateAsync(AiGenerateRequest request, UserAccount user, bool hasPremium, CancellationToken cancellationToken);
 }
 
 public sealed class StripeCheckoutService : ICheckoutService

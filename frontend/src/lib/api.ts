@@ -1,6 +1,6 @@
 import type {
   AiGenerateRequest,
-  AiGenerateResponse,
+  AiStudioGenerateResponse,
   AdminActivityEventRow,
   AdminDemoAuditRow,
   AdminListResponse,
@@ -219,8 +219,9 @@ export const premiumApi = {
 };
 
 export const aiApi = {
-  async generate(idToken: string, payload: AiGenerateRequest): Promise<AiGenerateResponse> {
-    return fetchJsonAuthed<AiGenerateResponse>('/api/ai/generate', idToken, {
+  /** AI Growth Studio — backend enforces premium (Bedrock) vs preview (no Bedrock). */
+  async generateStudio(idToken: string, payload: AiGenerateRequest): Promise<AiStudioGenerateResponse> {
+    return fetchJsonAuthed<AiStudioGenerateResponse>('/api/ai/generate', idToken, {
       method: 'POST',
       body: JSON.stringify(payload)
     });

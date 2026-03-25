@@ -607,6 +607,8 @@ resource "aws_lambda_function" "backend" {
       Features__EnablePublicDemo     = "true"
       Features__DemoRateLimitPerHour = "10"
       PUBLIC_SITE_URL                = var.public_site_url
+      # AI Growth Studio: Bedrock client uses BEDROCK_REGION then AWS_REGION (set by Lambda). Optional: BEDROCK_MODEL_ID overrides SSM bedrock/model.
+      BEDROCK_REGION                 = var.aws_region
     }
   }
 

@@ -4961,6 +4961,7 @@ textarea {
 }
 
 .landing-ai-result-card {
+  position: relative;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 12px;
   padding: 12px;
@@ -4970,10 +4971,47 @@ textarea {
   animation: landingAiFadeIn 180ms ease-out;
 }
 
-.landing-ai-result-card.is-blurred {
-  filter: blur(3px);
-  opacity: 0.65;
+.landing-ai-blur-target {
+  filter: blur(4px);
+  opacity: 0.72;
   user-select: none;
+}
+
+.landing-ai-notes {
+  margin: 0 0 10px;
+  color: rgba(226, 232, 240, 0.88);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.landing-ai-error-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.landing-ai-result-lock-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  text-align: center;
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.88));
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.landing-ai-result-lock-overlay p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #e2e8f0;
 }
 
 .landing-ai-result-index {

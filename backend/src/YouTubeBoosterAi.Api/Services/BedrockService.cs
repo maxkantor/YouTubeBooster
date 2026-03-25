@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Amazon.BedrockRuntime;
 using Amazon.BedrockRuntime.Model;
+using Microsoft.Extensions.Configuration;
 
 namespace YouTubeBoosterAi.Api;
 
@@ -9,22 +10,30 @@ public sealed class BedrockService : IBedrockService
 {
     private readonly IAmazonBedrockRuntime _bedrock;
     private readonly ISecretValueProvider _secretValueProvider;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<BedrockService> _logger;
 
     public BedrockService(
         IAmazonBedrockRuntime bedrock,
         ISecretValueProvider secretValueProvider,
+        IConfiguration configuration,
         ILogger<BedrockService> logger)
     {
         _bedrock = bedrock;
         _secretValueProvider = secretValueProvider;
+        _configuration = configuration;
         _logger = logger;
     }
 
     public async Task<string> InvokeModelAsync(string prompt, double temperature, int maxTokens, CancellationToken cancellationToken)
     {
-        var modelId = (await _secretValueProvider.GetValueAsync("bedrock/model", secure: false, cancellationToken))
-            ?.Trim();
+        var modelId = Environment.GetEnvironmentVariable("BEDROCK_MODEL_ID")?.Trim()
+            ?? _configuration["BEDROCK_MODEL_ID"]?.Trim();
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            modelId = (await _secretValueProvider.GetValueAsync("bedrock/model", secure: false, cancellationToken))?.Trim();
+        }
+
         if (string.IsNullOrWhiteSpace(modelId))
         {
             modelId = "anthropic.claude-3-sonnet-20240229-v1:0";
@@ -52,52 +61,46 @@ public sealed class BedrockService : IBedrockService
         };
 
         var bodyJson = JsonSerializer.Serialize(payload);
-        Exception? lastException = null;
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        // 12s was too tight for Sonnet under load (503s + long Network waterfall). Stay under Lambda's 30s total.
+        try
         {
-            try
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(24));
+
+            var response = await _bedrock.InvokeModelAsync(new InvokeModelRequest
             {
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
+                ModelId = modelId,
+                ContentType = "application/json",
+                Accept = "application/json",
+                Body = new MemoryStream(Encoding.UTF8.GetBytes(bodyJson))
+            }, timeoutCts.Token);
 
-                var response = await _bedrock.InvokeModelAsync(new InvokeModelRequest
-                {
-                    ModelId = modelId,
-                    ContentType = "application/json",
-                    Accept = "application/json",
-                    Body = new MemoryStream(Encoding.UTF8.GetBytes(bodyJson))
-                }, timeoutCts.Token);
+            using var reader = new StreamReader(response.Body);
+            var responseJson = await reader.ReadToEndAsync(timeoutCts.Token);
+            var text = ExtractAnthropicText(responseJson);
 
-                using var reader = new StreamReader(response.Body);
-                var responseJson = await reader.ReadToEndAsync(timeoutCts.Token);
-                var text = ExtractAnthropicText(responseJson);
-
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    throw new InvalidOperationException("Empty response from Bedrock model.");
-                }
-
-                return text.Trim();
-            }
-            catch (OperationCanceledException oce) when (!cancellationToken.IsCancellationRequested)
+            if (string.IsNullOrWhiteSpace(text))
             {
-                lastException = oce;
-                _logger.LogWarning(oce, "Bedrock invoke timed out on attempt {Attempt}", attempt);
-            }
-            catch (Exception ex)
-            {
-                lastException = ex;
-                _logger.LogWarning(ex, "Bedrock invoke failed on attempt {Attempt}", attempt);
+                throw new InvalidOperationException("Empty response from Bedrock model.");
             }
 
-            if (attempt < 2)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(300 * attempt), cancellationToken);
-            }
+            return text.Trim();
         }
-
-        throw new InvalidOperationException("AI generation failed after retry.", lastException);
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException oce)
+        {
+            _logger.LogWarning(oce, "Bedrock invoke timed out");
+            throw new InvalidOperationException("AI generation failed: Bedrock invoke timed out.", oce);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Bedrock invoke failed");
+            throw;
+        }
     }
 
     private static string ExtractAnthropicText(string responseJson)

@@ -142,13 +142,14 @@ export type AiGenerateRequest = {
   };
 };
 
-export type AiGenerateResponse = {
+/** AI Growth Studio — server returns this for both preview (no Bedrock) and live Bedrock runs. */
+export type AiStudioGenerateResponse = {
+  success: boolean;
   action: AiGenerateAction;
-  results: string[];
-  summary: string;
-  paid: boolean;
-  visibleResults: number;
-  badge: string;
+  preview: boolean;
+  locked: boolean;
+  items: string[];
+  notes: string;
   generatedAt: string;
 };
 

@@ -515,7 +515,7 @@ aiApi.MapPost("/generate", async (
     AiGenerateRequest request,
     HttpContext httpContext,
     IAppDataStore appDataStore,
-    IAiGenerationService aiGenerationService,
+    IAiStudioService aiStudioService,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
@@ -553,22 +553,18 @@ aiApi.MapPost("/generate", async (
         || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken)
         || await appDataStore.UserHasActiveEntitlementAsync(user.UserId, "lifetime", cancellationToken);
 
-    if (!hasPremium)
-    {
-        return Results.StatusCode(StatusCodes.Status403Forbidden);
-    }
-
     try
     {
-        var response = await aiGenerationService.GenerateAsync(request with { Action = action }, user, hasPremium, cancellationToken);
+        var response = await aiStudioService.GenerateAsync(request with { Action = action }, user, hasPremium, cancellationToken);
         return Results.Ok(response);
     }
     catch (Exception ex)
     {
         logger.LogError(ex, "AI generation failed for user {UserId} action {Action}", user.UserId, action);
 
-        var isBedrockAccessIssue = ex.ToString().Contains("bedrock:InvokeModel", StringComparison.OrdinalIgnoreCase)
-            || ex.ToString().Contains("AccessDeniedException", StringComparison.OrdinalIgnoreCase);
+        var flat = ex.ToString();
+        var isBedrockAccessIssue = flat.Contains("bedrock:InvokeModel", StringComparison.OrdinalIgnoreCase)
+            || flat.Contains("AccessDeniedException", StringComparison.OrdinalIgnoreCase);
 
         if (isBedrockAccessIssue)
         {
@@ -576,6 +572,31 @@ aiApi.MapPost("/generate", async (
                 statusCode: StatusCodes.Status503ServiceUnavailable,
                 title: "AI Growth Studio is being enabled on the backend.",
                 detail: "Live AI generation is temporarily unavailable while AWS Bedrock permissions are finishing setup.");
+        }
+
+        if (ExceptionLooksLikeTimeout(ex, flat))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "AI Growth Studio is temporarily unavailable.",
+                detail: "The AI request took too long. Please try again in a moment.");
+        }
+
+        if (flat.Contains("ThrottlingException", StringComparison.OrdinalIgnoreCase)
+            || flat.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "AI Growth Studio is busy.",
+                detail: "The AI service is busy. Please wait a few seconds and try again.");
+        }
+
+        if (flat.Contains("ValidationException", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "AI Growth Studio configuration issue.",
+                detail: "Check the Bedrock model id in Parameter Store (bedrock/model) and model access in the AWS console.");
         }
 
         return Results.Problem(
@@ -1225,6 +1246,21 @@ app.MapGet("/api/route-plan", () =>
 });
 
 app.Run();
+
+static bool ExceptionLooksLikeTimeout(Exception ex, string flat)
+{
+    for (var e = ex; e is not null; e = e.InnerException)
+    {
+        if (e is OperationCanceledException or TaskCanceledException)
+        {
+            return true;
+        }
+    }
+
+    return flat.Contains("TaskCanceledException", StringComparison.OrdinalIgnoreCase)
+        || flat.Contains("OperationCanceledException", StringComparison.OrdinalIgnoreCase)
+        || flat.Contains("The operation was canceled", StringComparison.OrdinalIgnoreCase);
+}
 
 static bool FixedTimeEquals(string left, string right)
 {

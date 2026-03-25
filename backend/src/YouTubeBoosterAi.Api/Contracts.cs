@@ -322,13 +322,14 @@ public sealed record AiGenerateInput(
     string? Audience
 );
 
-public sealed record AiGenerateResponse(
+/// <summary>AI Growth Studio — unified shape for preview (no Bedrock) and live Bedrock results.</summary>
+public sealed record AiStudioGenerateResponse(
+    bool Success,
     string Action,
-    IReadOnlyList<string> Results,
-    string Summary,
-    bool Paid,
-    int VisibleResults,
-    string Badge,
+    bool Preview,
+    bool Locked,
+    IReadOnlyList<string> Items,
+    string Notes,
     DateTimeOffset GeneratedAt
 );
 

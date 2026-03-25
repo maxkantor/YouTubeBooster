@@ -1,3 +1,4 @@
+using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.BedrockRuntime;
 using Amazon.SimpleEmail;
@@ -30,7 +31,17 @@ public static class Infrastructure
         });
 
         services.AddSingleton<IAmazonDynamoDB>(_ => dynamoClient);
-        services.AddSingleton<IAmazonBedrockRuntime>(_ => new AmazonBedrockRuntimeClient());
+        services.AddSingleton<IAmazonBedrockRuntime>(sp =>
+        {
+            var cfg = sp.GetRequiredService<IConfiguration>();
+            var region =
+                Environment.GetEnvironmentVariable("BEDROCK_REGION")
+                ?? cfg["BEDROCK_REGION"]
+                ?? Environment.GetEnvironmentVariable("AWS_REGION")
+                ?? cfg["AWS_REGION"]
+                ?? "us-east-1";
+            return new AmazonBedrockRuntimeClient(RegionEndpoint.GetBySystemName(region));
+        });
         services.AddSingleton<IAmazonSimpleEmailService>(_ => new AmazonSimpleEmailServiceClient());
         services.AddSingleton<IAmazonSimpleSystemsManagement>(_ => new AmazonSimpleSystemsManagementClient());
 
@@ -66,7 +77,7 @@ public static class Infrastructure
         services.AddSingleton<IPaymentAdminNotificationService, SesPaymentAdminNotificationService>();
         services.AddScoped<IPromptBuilder, PromptBuilder>();
         services.AddScoped<IBedrockService, BedrockService>();
-        services.AddScoped<IAiGenerationService, AiGenerationService>();
+        services.AddScoped<IAiStudioService, AiStudioService>();
 
         return services;
     }
