@@ -1131,7 +1131,7 @@ export function LandingPage() {
 
       {/* 7. FAQ */}
       <section className="landing-section landing-section-alt" id="faq" aria-labelledby="faq-heading">
-        <div className="container landing-container landing-faq-container">
+        <div className="container landing-faq-container">
           <h2 className="landing-section-title" id="faq-heading">
             FAQ
           </h2>
