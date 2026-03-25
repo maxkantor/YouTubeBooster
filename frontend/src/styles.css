@@ -4033,6 +4033,19 @@ textarea {
   max-width: 640px;
 }
 
+.landing-faq-lead {
+  margin-bottom: 8px;
+}
+
+.landing-faq-post-cta {
+  margin-top: 32px;
+  text-align: center;
+}
+
+.landing-faq-post-cta .landing-pricing-microcopy {
+  margin-bottom: 14px;
+}
+
 .landing-faq-list {
   margin-top: 28px;
 }
@@ -4090,7 +4103,7 @@ textarea {
 }
 
 .landing-faq-item.open .landing-faq-answer {
-  max-height: 200px;
+  max-height: 380px;
 }
 
 .landing-faq-answer p {

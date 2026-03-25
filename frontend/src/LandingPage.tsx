@@ -373,11 +373,46 @@ export function LandingPage() {
   const { oneTimePriceLabel } = usePricing();
   const faqItems = useMemo(
     () => [
-      { q: 'Is this a subscription?', a: `No — ${oneTimePriceLabel} once. No recurring charges.` },
-      { q: 'Do I need technical setup?', a: 'No. Just paste your channel URL.' },
-      { q: 'Can I analyze any channel?', a: 'Yes. Any public YouTube channel.' },
-      { q: 'What happens after purchase?', a: 'You unlock the full AI dashboard.' },
-      { q: 'Is this source code?', a: 'No. This is a hosted analytics platform.' }
+      {
+        q: 'Will this actually help me get more views?',
+        a: 'Yes — the AI identifies what’s limiting your growth (low CTR, weak titles, missed keywords) and gives you exact fixes you can apply immediately.'
+      },
+      {
+        q: 'How is this different from TubeBuddy or vidIQ?',
+        a: 'Those tools show data. This tells you what to DO with it — titles, ideas, and strategies ready to use.'
+      },
+      {
+        q: 'What results should I expect?',
+        a: 'Most users improve click-through rate and video performance by fixing titles and packaging — the fastest way to grow.'
+      },
+      {
+        q: 'Is this safe for my YouTube account?',
+        a: 'Yes. No login required. We don’t modify anything — you stay in full control.'
+      },
+      {
+        q: 'Is this a subscription?',
+        a: 'No — one-time payment. No recurring fees.'
+      },
+      {
+        q: `Why is it only ${oneTimePriceLabel}?`,
+        a: 'This is designed as a fast, high-impact tool — not a bloated subscription. You get value instantly.'
+      },
+      {
+        q: 'Do I need any technical setup?',
+        a: 'No. Paste your channel URL and click analyze.'
+      },
+      {
+        q: 'Can I analyze any channel?',
+        a: 'Yes — yours, competitors, or any channel in your niche.'
+      },
+      {
+        q: 'What happens after purchase?',
+        a: 'You unlock full AI insights, Growth Studio tools, and all recommendations instantly.'
+      },
+      {
+        q: 'Will this work for small channels?',
+        a: 'Yes — small channels benefit the most by fixing mistakes early.'
+      }
     ],
     [oneTimePriceLabel]
   );
@@ -1095,6 +1130,11 @@ export function LandingPage() {
           <h2 className="landing-section-title" id="faq-heading">
             FAQ
           </h2>
+          <p className="landing-section-sub landing-faq-lead">
+            Most creators don&apos;t grow because they&apos;re guessing.
+            <br />
+            Here&apos;s how this tool fixes that.
+          </p>
           <div className="landing-faq-list" role="list">
             {faqItems.map((item, i) => (
               <div key={i} className={`landing-faq-item ${openFaq === i ? 'open' : ''}`} role="listitem">
@@ -1119,6 +1159,12 @@ export function LandingPage() {
                 </div>
               </div>
             ))}
+          </div>
+          <div className="landing-faq-post-cta">
+            <p className="landing-pricing-microcopy">Still unsure? Run a free channel audit — no signup required.</p>
+            <a href="#audit" className="btn btn-primary">
+              Analyze your channel
+            </a>
           </div>
         </div>
       </section>
