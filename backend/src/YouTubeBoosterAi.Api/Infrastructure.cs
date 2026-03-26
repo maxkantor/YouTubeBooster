@@ -75,6 +75,7 @@ public static class Infrastructure
         services.AddScoped<ISupportService, SupportService>();
         services.AddScoped<ISupportNotificationService, SesSupportNotificationService>();
         services.AddSingleton<IPaymentAdminNotificationService, SesPaymentAdminNotificationService>();
+        services.AddSingleton<IPaymentCustomerNotificationService, SesPaymentCustomerNotificationService>();
         services.AddScoped<IPromptBuilder, PromptBuilder>();
         services.AddScoped<IBedrockService, BedrockService>();
         services.AddScoped<IAiStudioService, AiStudioService>();

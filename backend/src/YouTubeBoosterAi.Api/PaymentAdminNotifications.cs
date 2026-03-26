@@ -66,7 +66,11 @@ public sealed class SesPaymentAdminNotificationService : IPaymentAdminNotificati
                        ?? "https://youtubeboosterai.com";
         baseUrl = baseUrl.TrimEnd('/');
 
-        var subject = $"[YouTubeBooster] New payment received — {payment.Amount:F2} {payment.Currency} ({payment.Mode})";
+        var fromName = _configuration["App:BillingFromName"]
+                       ?? _configuration["BILLING_FROM_NAME"]
+                       ?? "YouTubeBoosterAI";
+        var fromSource = $"{fromName} <{from}>";
+        var subject = $"[YouTubeBoosterAI] New payment received — {payment.Amount:F2} {payment.Currency} ({payment.Mode})";
         var body = $"""
             A successful Stripe checkout completed.
 
@@ -89,8 +93,10 @@ public sealed class SesPaymentAdminNotificationService : IPaymentAdminNotificati
         {
             await _ses.SendEmailAsync(new SendEmailRequest
             {
-                Source = from,
+                Source = fromSource,
                 Destination = new Destination { ToAddresses = [adminTo] },
+                ReplyToAddresses = [from],
+                ReturnPath = from,
                 Message = new Message
                 {
                     Subject = new Content(subject),

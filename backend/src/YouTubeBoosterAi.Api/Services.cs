@@ -55,17 +55,20 @@ public sealed class StripeCheckoutService : ICheckoutService
     private readonly ISecretValueProvider _secretValueProvider;
     private readonly IAppDataStore _appDataStore;
     private readonly IPaymentAdminNotificationService _paymentAdminNotifier;
+    private readonly IPaymentCustomerNotificationService _paymentCustomerNotifier;
 
     public StripeCheckoutService(
         IAppSettingsProvider appSettingsProvider,
         ISecretValueProvider secretValueProvider,
         IAppDataStore appDataStore,
-        IPaymentAdminNotificationService paymentAdminNotifier)
+        IPaymentAdminNotificationService paymentAdminNotifier,
+        IPaymentCustomerNotificationService paymentCustomerNotifier)
     {
         _appSettingsProvider = appSettingsProvider;
         _secretValueProvider = secretValueProvider;
         _appDataStore = appDataStore;
         _paymentAdminNotifier = paymentAdminNotifier;
+        _paymentCustomerNotifier = paymentCustomerNotifier;
     }
 
     public async Task<CheckoutSessionResponse> CreateSessionAsync(CreateCheckoutSessionRequest request, CancellationToken cancellationToken)
@@ -101,6 +104,9 @@ public sealed class StripeCheckoutService : ICheckoutService
             AllowPromotionCodes = true,
             Metadata = new Dictionary<string, string>
             {
+                // Strong app identity to prevent cross-app webhook/email confusion on shared Stripe accounts.
+                ["app"] = "youtubeboosterai",
+                ["brand"] = "YouTubeBoosterAI",
                 ["channelInput"] = request.ChannelInput,
                 ["email"] = request.Email,
                 ["priceVersion"] = request.PriceKey ?? settings.StripePriceLookupKey,
@@ -112,6 +118,19 @@ public sealed class StripeCheckoutService : ICheckoutService
                 ["utmMedium"] = request.UtmMedium ?? string.Empty,
                 ["utmCampaign"] = request.UtmCampaign ?? string.Empty,
                 ["referrer"] = request.Referrer ?? string.Empty
+            },
+            ClientReferenceId = string.IsNullOrWhiteSpace(request.UserId) ? null : request.UserId,
+            PaymentIntentData = new Stripe.Checkout.SessionPaymentIntentDataOptions
+            {
+                Metadata = new Dictionary<string, string>
+                {
+                    ["app"] = "youtubeboosterai",
+                    ["brand"] = "YouTubeBoosterAI",
+                    ["planCode"] = planCode,
+                    ["accountEmail"] = request.AccountEmail ?? request.Email,
+                    ["userId"] = request.UserId ?? string.Empty,
+                    ["cognitoSub"] = request.CognitoSub ?? string.Empty
+                }
             },
             LineItems =
             [
@@ -350,7 +369,19 @@ public sealed class StripeCheckoutService : ICheckoutService
             return;
         }
 
-        var metadata = session.Metadata ?? new Dictionary<string, string>();
+        var metadata = new Dictionary<string, string>(session.Metadata ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+        var appKey = metadata.GetValueOrDefault("app") ?? string.Empty;
+        if (!string.Equals(appKey, "youtubeboosterai", StringComparison.OrdinalIgnoreCase))
+        {
+            // Aggressive isolation: do not grant entitlements or send emails for sessions not explicitly tagged.
+            await _appDataStore.TrackEventAsync("stripe_webhook_ignored_other_app", session.Id, new Dictionary<string, string?>
+            {
+                ["app"] = appKey,
+                ["stripeEmail"] = session.CustomerEmail ?? session.CustomerDetails?.Email,
+                ["paymentIntentId"] = session.PaymentIntentId
+            }, cancellationToken);
+            return;
+        }
         var userId = metadata.GetValueOrDefault("userId") ?? string.Empty;
         var cognitoSub = metadata.GetValueOrDefault("cognitoSub") ?? string.Empty;
         var accountEmail = metadata.GetValueOrDefault("accountEmail")
@@ -435,7 +466,14 @@ public sealed class StripeCheckoutService : ICheckoutService
                     session.PaymentIntentId,
                     metadata.GetValueOrDefault("planCode") ?? "premium",
                     cancellationToken);
-                await _appDataStore.TrackEventAsync("payment_admin_notification_sent", session.Id, new Dictionary<string, string?>
+                await _paymentCustomerNotifier.NotifyCustomerPaymentAsync(
+                    payment,
+                    user,
+                    session.Id,
+                    session.PaymentIntentId,
+                    metadata.GetValueOrDefault("planCode") ?? "premium",
+                    cancellationToken);
+                await _appDataStore.TrackEventAsync("payment_notifications_sent", session.Id, new Dictionary<string, string?>
                 {
                     ["userId"] = user.UserId,
                     ["amount"] = payment.Amount.ToString("F2", CultureInfo.InvariantCulture)
@@ -443,7 +481,7 @@ public sealed class StripeCheckoutService : ICheckoutService
             }
             catch (Exception ex)
             {
-                await _appDataStore.TrackEventAsync("payment_admin_notification_failed", session.Id, new Dictionary<string, string?>
+                await _appDataStore.TrackEventAsync("payment_notification_failed", session.Id, new Dictionary<string, string?>
                 {
                     ["error"] = ex.Message
                 }, cancellationToken);
