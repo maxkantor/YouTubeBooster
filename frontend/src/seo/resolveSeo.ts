@@ -13,6 +13,7 @@ import {
   softwareApplicationSchema,
   webSiteSchema
 } from './jsonLd';
+import { getGrowthGuideByPath } from './growthGuides';
 import type { BreadcrumbItem, ResolvedSeo } from './types';
 
 type AuditEntry = (typeof audits)[number];
@@ -222,6 +223,37 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
       keywords: ['sitemap'],
       noindex: false,
       jsonLd: [...baseGraph()]
+    };
+  }
+
+  const growthGuide = getGrowthGuideByPath(path);
+  if (growthGuide) {
+    const crumbs: BreadcrumbItem[] = [
+      { name: 'Home', path: '/' },
+      { name: growthGuide.h1, path }
+    ];
+    const faq = growthGuide.faq.length ? [faqPageSchema(growthGuide.faq)] : [];
+    return {
+      title: growthGuide.title,
+      description: growthGuide.metaDescription,
+      canonicalPath: path,
+      keywords: growthGuide.keywords,
+      ogType: 'article',
+      articlePublishedTime: `${growthGuide.datePublished}T08:00:00.000Z`,
+      articleModifiedTime: `${growthGuide.datePublished}T08:00:00.000Z`,
+      breadcrumbs: crumbs,
+      jsonLd: [
+        ...baseGraph(),
+        breadcrumbListSchema(crumbs),
+        articleSchema({
+          headline: growthGuide.h1,
+          description: growthGuide.metaDescription,
+          path,
+          datePublished: growthGuide.datePublished,
+          keywords: growthGuide.keywords
+        }),
+        ...faq
+      ]
     };
   }
 

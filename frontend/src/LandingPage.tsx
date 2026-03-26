@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
+import { GROWTH_GUIDE_PAGES } from './seo/growthGuides';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
@@ -1215,16 +1216,33 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 8. Final CTA */}
-      <section className="landing-section landing-cta-section" aria-labelledby="cta-heading">
-        <div className="container landing-container landing-cta-inner">
-          <h2 className="landing-cta-title landing-heading-display" id="cta-heading">
-            Stop guessing what the algorithm wants.
+      {/* 8. Growth guides gateway + primary CTA */}
+      <section className="landing-section landing-growth-guides-section" aria-labelledby="growth-guides-heading">
+        <div className="container landing-container landing-growth-guides-inner">
+          <h2 className="landing-growth-guides-title landing-heading-display" id="growth-guides-heading">
+            Popular YouTube growth guides
           </h2>
-          <p className="landing-cta-sub">Run your AI channel audit now.</p>
-          <a href="#audit" className="btn btn-primary btn-lg landing-cta-btn">
-            Analyze your channel
-          </a>
+          <p className="landing-growth-guides-sub">
+            Practical reads on packaging, CTR, and retention—built for creators who want a serious growth system, not generic
+            tips.
+          </p>
+          <ul className="landing-growth-guides-grid">
+            {GROWTH_GUIDE_PAGES.map((g) => (
+              <li key={g.path}>
+                <Link to={g.path} className="landing-growth-guide-card">
+                  <h3 className="landing-growth-guide-card-title">{g.cardTitle}</h3>
+                  <p className="landing-growth-guide-card-teaser">{g.teaser}</p>
+                  <span className="landing-growth-guide-card-cta">Read guide</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="landing-growth-guides-primary-cta">
+            <p className="landing-growth-guides-cta-copy">Prefer action to reading? Run your AI channel audit first.</p>
+            <a href="#audit" className="btn btn-primary btn-lg landing-growth-guides-audit-btn">
+              Analyze your channel
+            </a>
+          </div>
         </div>
       </section>
       </main>
@@ -1260,6 +1278,16 @@ export function LandingPage() {
                 <li>
                   <Link to="/platform">Platform</Link>
                 </li>
+              </ul>
+            </div>
+            <div className="landing-site-footer-col">
+              <h3 className="landing-site-footer-col-title">Growth</h3>
+              <ul className="landing-site-footer-links">
+                {GROWTH_GUIDE_PAGES.map((g) => (
+                  <li key={g.path}>
+                    <Link to={g.path}>{g.cardTitle}</Link>
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="landing-site-footer-col">

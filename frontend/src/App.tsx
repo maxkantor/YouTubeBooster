@@ -6,6 +6,7 @@ import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
 import { StructuredData } from './components/StructuredData';
 import { SeoHead } from './SeoHead';
+import { GROWTH_GUIDE_PAGES } from './seo/growthGuides';
 import { resolveSeoForPath } from './seo/resolveSeo';
 import { AuthProvider } from './AuthContext';
 import { ForgotPasswordPage, SignInPage, SignUpPage } from './AuthPages';
@@ -88,6 +89,15 @@ const AboutPage = React.lazy(() => import('./pages/marketing/MarketingPages').th
 const ContactPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.ContactPage })));
 const PrivacyPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.PrivacyPage })));
 const DisclaimerPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.DisclaimerPage })));
+const WhyYourYoutubeHasNoViewsPage = React.lazy(() =>
+  import('./pages/marketing/GrowthGuidePages').then((m) => ({ default: m.WhyYourYoutubeHasNoViewsPage }))
+);
+const HowToGetMoreYoutubeViewsPage = React.lazy(() =>
+  import('./pages/marketing/GrowthGuidePages').then((m) => ({ default: m.HowToGetMoreYoutubeViewsPage }))
+);
+const YoutubeThumbnailMistakesPage = React.lazy(() =>
+  import('./pages/marketing/GrowthGuidePages').then((m) => ({ default: m.YoutubeThumbnailMistakesPage }))
+);
 
 /** Redirect from /app to the main dashboard (onboarding wizard removed). */
 function AppEntryRedirect() {
@@ -807,6 +817,9 @@ function AppInner() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/disclaimer" element={<DisclaimerPage />} />
+        <Route path="/why-your-youtube-has-no-views" element={<WhyYourYoutubeHasNoViewsPage />} />
+        <Route path="/how-to-get-more-youtube-views" element={<HowToGetMoreYoutubeViewsPage />} />
+        <Route path="/youtube-thumbnail-mistakes" element={<YoutubeThumbnailMistakesPage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/audit" element={<AuditHubPage />} />
         <Route path="/audit/:slug" element={<AuditArticleRoute />} />
@@ -899,6 +912,16 @@ function AppInner() {
                   <li><Link to="/about">About Us</Link></li>
                   <li><Link to="/contact">Contact</Link></li>
                   <li><Link to="/platform">Platform</Link></li>
+                </ul>
+              </div>
+              <div className="landing-site-footer-col">
+                <h3 className="landing-site-footer-col-title">Growth</h3>
+                <ul className="landing-site-footer-links">
+                  {GROWTH_GUIDE_PAGES.map((g) => (
+                    <li key={g.path}>
+                      <Link to={g.path}>{g.cardTitle}</Link>
+                    </li>
+                  ))}
                 </ul>
               </div>
               <div className="landing-site-footer-col">

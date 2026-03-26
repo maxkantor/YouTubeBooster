@@ -23,6 +23,9 @@ const staticPaths = [
   { path: '/solutions', changefreq: 'weekly', priority: 0.85 },
   { path: '/guides', changefreq: 'weekly', priority: 0.85 },
   { path: '/blog', changefreq: 'weekly', priority: 0.9 },
+  { path: '/why-your-youtube-has-no-views', changefreq: 'monthly', priority: 0.82 },
+  { path: '/how-to-get-more-youtube-views', changefreq: 'monthly', priority: 0.82 },
+  { path: '/youtube-thumbnail-mistakes', changefreq: 'monthly', priority: 0.82 },
   { path: '/site-map', changefreq: 'monthly', priority: 0.4 }
 ];
 

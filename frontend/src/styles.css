@@ -4188,6 +4188,250 @@ textarea {
   }
 }
 
+/* Homepage — growth guides gateway */
+.landing-growth-guides-section {
+  position: relative;
+  padding: 52px 24px 48px;
+  background: linear-gradient(180deg, rgba(79, 70, 229, 0.1) 0%, rgba(12, 14, 24, 0.94) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+
+.landing-growth-guides-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 72rem;
+  margin: 0 auto;
+}
+
+.landing-growth-guides-title {
+  margin: 0 0 12px;
+  font-size: clamp(1.75rem, 2.2vw + 1rem, 2.5rem);
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.028em;
+  line-height: 1.1;
+}
+
+.landing-growth-guides-sub {
+  margin: 0 auto 28px;
+  max-width: 40rem;
+  font-size: 1.05rem;
+  color: #a1b4c9;
+  line-height: 1.55;
+}
+
+.landing-growth-guides-grid {
+  list-style: none;
+  margin: 0 0 32px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  text-align: left;
+}
+
+.landing-growth-guides-grid li {
+  margin: 0;
+}
+
+.landing-growth-guide-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 22px 20px;
+  border-radius: 14px;
+  text-decoration: none;
+  color: inherit;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(15, 23, 42, 0.55) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+
+.landing-growth-guide-card:hover {
+  border-color: rgba(129, 140, 248, 0.45);
+  box-shadow: 0 16px 48px rgba(79, 70, 229, 0.15);
+  transform: translateY(-2px);
+}
+
+.landing-growth-guide-card-title {
+  margin: 0 0 10px;
+  font-size: 1.12rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
+}
+
+.landing-growth-guide-card-teaser {
+  margin: 0 0 14px;
+  flex: 1;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+
+.landing-growth-guide-card-cta {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #a5b4fc;
+  letter-spacing: 0.02em;
+}
+
+.landing-growth-guide-card:hover .landing-growth-guide-card-cta {
+  color: #c4b5fd;
+}
+
+.landing-growth-guides-primary-cta {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-growth-guides-cta-copy {
+  margin: 0 0 14px;
+  font-size: 0.98rem;
+  color: #94a3b8;
+}
+
+.landing-growth-guides-audit-btn {
+  display: inline-block;
+}
+
+@media (max-width: 640px) {
+  .landing-growth-guides-section {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+/* SEO growth guide articles */
+.growth-guide-page .growth-guide-surface {
+  position: relative;
+  overflow: hidden;
+}
+
+.growth-guide-page .growth-guide-surface::before {
+  content: '';
+  position: absolute;
+  inset: -40% -20% auto;
+  height: 55%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.14), transparent 65%);
+  pointer-events: none;
+}
+
+.growth-guide-page .growth-guide-surface > * {
+  position: relative;
+  z-index: 1;
+}
+
+.growth-guide-breadcrumbs {
+  font-size: 0.82rem;
+  margin: 0 0 8px;
+  color: #64748b;
+}
+
+.growth-guide-breadcrumbs a {
+  color: #94a3b8;
+  text-decoration: none;
+}
+
+.growth-guide-breadcrumbs a:hover {
+  color: #e2e8f0;
+}
+
+.growth-guide-bc-sep {
+  margin: 0 6px;
+  opacity: 0.6;
+}
+
+.growth-guide-bc-current {
+  color: #94a3b8;
+}
+
+.growth-guide-h2 {
+  font-size: clamp(1.12rem, 1.2vw + 1rem, 1.35rem);
+  font-weight: 600;
+  margin: 2rem 0 0.75rem;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.growth-guide-body > p:first-of-type {
+  margin-top: 0.25rem;
+}
+
+.growth-guide-related {
+  margin-top: 2.25rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.growth-guide-related-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: #e2e8f0;
+}
+
+.growth-guide-related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.growth-guide-related-list li {
+  margin: 0 0 14px;
+}
+
+.growth-guide-related-link {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #a5b4fc;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.growth-guide-related-link:hover {
+  color: #c4b5fd;
+}
+
+.growth-guide-related-snippet {
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.growth-guide-cta-panel {
+  margin-top: 1.75rem;
+  padding: 22px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(15, 23, 42, 0.65));
+  border: 1px solid rgba(129, 140, 248, 0.22);
+}
+
+.growth-guide-cta-lead {
+  margin: 0 0 16px;
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: #cbd5e1;
+}
+
+.growth-guide-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.growth-guide-cta-secondary {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
 /* Footer */
 .landing-footer {
   padding: 32px 24px;
