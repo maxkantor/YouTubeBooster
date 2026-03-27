@@ -48,10 +48,14 @@ const dynamic = [
 
 const all = [...staticPaths, ...dynamic];
 
+/** Build date (UTC) — helps crawlers see sitemap freshness without prerendering. */
+const lastmod = new Date().toISOString().slice(0, 10);
+
 const urlset = all
   .map(
     (u) => `  <url>
     <loc>${base}${u.path === '/' ? '' : u.path}</loc>
+    <lastmod>${lastmod}</lastmod>
     <changefreq>${u.changefreq}</changefreq>
     <priority>${u.priority}</priority>
   </url>`
