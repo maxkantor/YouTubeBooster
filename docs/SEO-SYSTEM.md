@@ -13,7 +13,7 @@ Production-oriented SEO for the **Vite + React SPA**. This doc describes what is
 | Programmatic + blog content | `frontend/src/seo/data/*.json` | Audits, solutions, guides, blog posts (scalable data source) |
 | Pages | `frontend/src/pages/seo/*`, blog pages | Semantic HTML, H1–H3, internal links, FAQ blocks for schema |
 | HTML sitemap | `frontend/src/pages/seo/HtmlSitemapPage.tsx`, `frontend/src/seo/registry.ts` | Crawl + UX; shallow links to indexable routes |
-| Build-time crawl files | `frontend/scripts/generate-sitemap.mjs` | Writes `public/sitemap.xml` + `public/robots.txt` |
+| Build-time crawl files | `frontend/scripts/generate-sitemap.ts` | Writes `public/sitemap.xml` + `public/robots.txt` (URLs from `registry.ts`, base URL from `BRAND.siteUrl` or `SEO_SITE_URL`) |
 | Code splitting | `frontend/vite.config.ts` | `manualChunks` for React, router, markdown |
 
 **First load:** `index.html` ships static title/description/canonical/OG/JSON-LD for `/`. **Client navigations:** `SeoHead` + `StructuredData` update the document for each route.
@@ -30,11 +30,11 @@ Production-oriented SEO for the **Vite + React SPA**. This doc describes what is
 
 Copy from `frontend/.env.example` into `.env` / deployment env.
 
-### Build (`generate-sitemap.mjs`)
+### Build (`generate-sitemap.ts`)
 
 | Variable | Purpose |
 |----------|---------|
-| `SEO_SITE_URL` | Base URL for `sitemap.xml` and `robots.txt` `Sitemap:` line. Default: `https://youtubebooster.com`. Set in CI to match production. |
+| `SEO_SITE_URL` | Optional override for `sitemap.xml` / `robots.txt` absolute URLs. Default: `BRAND.siteUrl` in `frontend/src/config/brand.ts`. Set in CI if it must differ from the repo default. |
 
 **Align** `SEO_SITE_URL` (build) with `VITE_SITE_URL` (runtime) for the same deployment.
 
@@ -52,7 +52,7 @@ For **hundreds/thousands** of pages, prefer generating JSON from a CMS, spreadsh
 - **Generated:** `frontend/public/robots.txt` and `frontend/public/sitemap.xml` on `npm run build:seo` (or full `npm run build`).
 - **Submit in Google Search Console:** Property → Sitemaps → add `https://<your-domain>/sitemap.xml`.
 
-Tune `Disallow` / crawl rules in `scripts/generate-sitemap.mjs` if you add admin or non-indexable areas.
+Tune `Disallow` / crawl rules in `scripts/generate-sitemap.ts` if you add admin or non-indexable areas.
 
 ## Google Search Console & indexing
 
@@ -93,4 +93,4 @@ The following need **external services or backend** work:
 
 - `frontend/README.md` — OG image workflow, `SeoHead` behavior
 - `frontend/src/seo/` — SEO resolution and JSON-LD builders
-- `frontend/scripts/generate-sitemap.mjs` — sitemap + robots generation
+- `frontend/scripts/generate-sitemap.ts` — sitemap + robots generation
