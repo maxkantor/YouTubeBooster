@@ -7,7 +7,7 @@ Production-oriented SEO for the **Vite + React SPA**. This doc describes what is
 | Layer | Location | Purpose |
 |--------|----------|---------|
 | Site URL + absolutes | `frontend/src/config/site.ts` | `getSiteUrl()`, `absoluteUrl()` from `VITE_SITE_URL` |
-| Per-route SEO | `frontend/src/seo/resolveSeo.ts` | Title, description, canonical path, keywords, `noindex`, OG/article fields, JSON-LD graph inputs |
+| Per-route SEO | `frontend/src/seo/resolveSeo.ts` | Title, description, canonical path, keywords, optional `noindex` (private + soft-404 only), OG/article fields, JSON-LD graph inputs |
 | Structured data | `frontend/src/seo/jsonLd.ts`, `frontend/src/components/StructuredData.tsx` | JSON-LD `@graph` (Organization, WebSite, SoftwareApplication, Product, BreadcrumbList, FAQPage, Article, HowTo, etc.) |
 | Head tags | `frontend/src/SeoHead.tsx` | `<title>`, meta description, canonical, robots, OG/Twitter |
 | Programmatic + blog content | `frontend/src/seo/data/*.json` | Audits, solutions, guides, blog posts (scalable data source) |
@@ -24,7 +24,7 @@ Production-oriented SEO for the **Vite + React SPA**. This doc describes what is
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_SITE_URL` | Canonical site origin (e.g. `https://youtubebooster.com`). Used for absolute URLs in meta, JSON-LD, sharing. |
+| `VITE_SITE_URL` | Canonical site origin (e.g. `https://www.youtubeboosterai.com`). Used for absolute URLs in meta, JSON-LD, sharing. |
 | `VITE_GA4_MEASUREMENT_ID` | Google Analytics 4 (e.g. `G-XXXXXXXXXX`). |
 | `VITE_GOOGLE_SITE_VERIFICATION` | Optional `<meta name="google-site-verification">` for Search Console domain verification. |
 
@@ -89,8 +89,22 @@ The following need **external services or backend** work:
 - **Headline A/B** testing infrastructure
 - **Backlink acquisition** (organic outreach)—OG/embeds support *shareability*, not guaranteed links
 
+## Indexing & `noindex` policy
+
+| Mechanism | Location |
+|-----------|----------|
+| Public default | `frontend/index.html` — `<meta name="robots" content="index, follow" />` for first paint on `/` |
+| SPA navigation | `frontend/src/SeoHead.tsx` — sets `index, follow` unless `noindex === true` |
+| Which routes are private | `frontend/src/seo/seoRobots.ts` — `isPrivateNoIndexPath()` → `/admin`, `/auth`, `/dashboard`, `/app`, `/checkout`, `/payment` |
+| Per-route titles + `noindex` | `frontend/src/seo/resolveSeo.ts` — private paths and unknown slug 404s only |
+
+**Do not** set `noindex` on resolver exceptions in `App.tsx` (fallback must stay indexable).
+
+**Post-deploy verification:** see the checklist comment block at the top of `frontend/src/seo/seoRobots.ts`.
+
 ## Related files
 
 - `frontend/README.md` — OG image workflow, `SeoHead` behavior
 - `frontend/src/seo/` — SEO resolution and JSON-LD builders
+- `frontend/src/seo/seoRobots.ts` — robots constants + private-path helper + verification checklist
 - `frontend/scripts/generate-sitemap.ts` — sitemap + robots generation

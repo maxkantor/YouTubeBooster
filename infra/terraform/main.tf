@@ -700,8 +700,22 @@ resource "aws_amplify_app" "frontend" {
   build_spec                  = file("${path.module}/../../amplify.yml")
   enable_auto_branch_creation = false
 
-  # SPA: ensure Hosting always has a rewrite even if build-spec parsing misses customRules.
-  # Same rule as root amplify.yml (catch-all to index.html).
+  # Path redirects + SPA rewrite (same order intent as root amplify.yml). Host→www uses frontend/public/_redirects.
+  custom_rule {
+    source = "/home"
+    status = "301"
+    target = "/"
+  }
+  custom_rule {
+    source = "/index"
+    status = "301"
+    target = "/"
+  }
+  custom_rule {
+    source = "/index.html"
+    status = "301"
+    target = "/"
+  }
   custom_rule {
     source = "/<*>"
     status = "200"

@@ -1,6 +1,6 @@
 /**
  * Canonical site URL for SEO (canonical, OG, JSON-LD, sitemap).
- * Override in production with VITE_SITE_URL (e.g. https://youtubeboosterai.com).
+ * Override in production with VITE_SITE_URL (e.g. https://www.youtubeboosterai.com).
  */
 import { BRAND } from './brand';
 

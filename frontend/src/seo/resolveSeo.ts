@@ -14,6 +14,7 @@ import {
   webSiteSchema
 } from './jsonLd';
 import { getGrowthGuideByPath } from './growthGuides';
+import { isPrivateNoIndexPath } from './seoRobots';
 import type { BreadcrumbItem, ResolvedSeo } from './types';
 
 type AuditEntry = (typeof audits)[number];
@@ -40,27 +41,10 @@ function withBreadcrumb(path: string, items: BreadcrumbItem[]): Record<string, u
 export function resolveSeoForPath(pathname: string): ResolvedSeo {
   const path = pathname.replace(/\/$/, '') || '/';
 
-  if (path.startsWith('/admin') || path.startsWith('/dashboard') || path.startsWith('/checkout')) {
+  if (isPrivateNoIndexPath(path)) {
+    const title = path.startsWith('/auth') ? `Sign in – ${BRAND.name}` : `${BRAND.name}`;
     return {
-      title: `${BRAND.name}`,
-      description: DEFAULT_DESC,
-      canonicalPath: path,
-      noindex: true,
-      jsonLd: []
-    };
-  }
-  if (path.startsWith('/auth')) {
-    return {
-      title: `Sign in – ${BRAND.name}`,
-      description: DEFAULT_DESC,
-      canonicalPath: path,
-      noindex: true,
-      jsonLd: []
-    };
-  }
-  if (path.startsWith('/app')) {
-    return {
-      title: `${BRAND.name}`,
+      title,
       description: DEFAULT_DESC,
       canonicalPath: path,
       noindex: true,
@@ -223,7 +207,6 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
       description: 'All indexable pages for crawlers and users: marketing, audits, solutions, guides, and blog.',
       canonicalPath: '/site-map',
       keywords: ['sitemap'],
-      noindex: false,
       jsonLd: [...baseGraph()]
     };
   }
@@ -431,7 +414,6 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
     title: `${BRAND.name} – ${BRAND.tagline}`,
     description: DEFAULT_DESC,
     canonicalPath: path,
-    noindex: false,
     jsonLd: [...baseGraph()]
   };
 }

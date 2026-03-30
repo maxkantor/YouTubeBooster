@@ -4,6 +4,8 @@
 
 See **[`docs/SEO-SYSTEM.md`](../docs/SEO-SYSTEM.md)** for sitemaps, `robots.txt`, env vars (`VITE_SITE_URL`, `SEO_SITE_URL`), structured data, and GSC/GA4 notes.
 
+**Indexing / `noindex`:** policy lives in `src/seo/seoRobots.ts` (checklist comment). After deploy, confirm View Source on `/` shows `index, follow` and private routes (`/admin`, etc.) still get `noindex` only via `SeoHead`.
+
 ## Social / Open Graph image
 
 Share previews (Facebook, Telegram, WhatsApp, X, LinkedIn) use **`/og-image.jpg`** (1200×630 canvas, **JPEG** for small file size).

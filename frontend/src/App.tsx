@@ -690,11 +690,12 @@ function AppInner() {
   try {
     seoResolved = resolveSeoForPath(pathForSeo);
   } catch {
+    // Never default to noindex on resolver errors — that can de-index the whole app in Search Console.
     seoResolved = {
       title: BRAND.name,
       description: BRAND.tagline,
       canonicalPath: pathForSeo,
-      noindex: true,
+      noindex: false,
       jsonLd: [] as Record<string, unknown>[]
     };
   }
@@ -706,7 +707,7 @@ function AppInner() {
         title={seoResolved.title}
         description={seoResolved.description}
         canonicalPath={seoResolved.canonicalPath}
-        noindex={seoResolved.noindex}
+        noindex={seoResolved.noindex === true}
         keywords={seoResolved.keywords}
         ogType={seoResolved.ogType ?? 'website'}
         articlePublishedTime={seoResolved.articlePublishedTime}
@@ -812,6 +813,8 @@ function AppInner() {
           <Route path="activity" element={<ActivityLogsPage />} />
           <Route path="system-logs" element={<Navigate to="/admin/activity" replace />} />
         </Route>
+        <Route path="/home" element={<Navigate to="/" replace />} />
+        <Route path="/index" element={<Navigate to="/" replace />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
