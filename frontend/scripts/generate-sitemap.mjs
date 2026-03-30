@@ -22,7 +22,7 @@ const staticPaths = [
   { path: '/audit', changefreq: 'weekly', priority: 0.85 },
   { path: '/solutions', changefreq: 'weekly', priority: 0.85 },
   { path: '/guides', changefreq: 'weekly', priority: 0.85 },
-  { path: '/blog', changefreq: 'weekly', priority: 0.9 },
+  { path: '/blog', changefreq: 'weekly', priority: 0.72 },
   { path: '/why-your-youtube-has-no-views', changefreq: 'monthly', priority: 0.82 },
   { path: '/how-to-get-more-youtube-views', changefreq: 'monthly', priority: 0.82 },
   { path: '/youtube-thumbnail-mistakes', changefreq: 'monthly', priority: 0.82 },
@@ -43,7 +43,7 @@ const dynamic = [
   ...audits.map((a) => ({ path: `/audit/${a.slug}`, changefreq: 'monthly', priority: 0.75 })),
   ...solutions.map((a) => ({ path: `/solutions/${a.slug}`, changefreq: 'monthly', priority: 0.75 })),
   ...guides.map((a) => ({ path: `/guides/${a.slug}`, changefreq: 'monthly', priority: 0.75 })),
-  ...blogPosts.map((a) => ({ path: `/blog/${a.slug}`, changefreq: 'monthly', priority: 0.8 }))
+  ...blogPosts.map((a) => ({ path: `/blog/${a.slug}`, changefreq: 'monthly', priority: 0.65 }))
 ];
 
 const all = [...staticPaths, ...dynamic];

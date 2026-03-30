@@ -74,6 +74,8 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
       description: BRAND.seoHomeDescription,
       canonicalPath: '/',
       keywords: [
+        'youtube booster ai',
+        'youtube booster ai official',
         'youtube channel audit',
         'youtube analytics',
         'youtube seo',

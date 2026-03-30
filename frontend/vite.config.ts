@@ -5,6 +5,9 @@ const devApiOrigin = process.env.VITE_DEV_API_ORIGIN || 'https://youtubeboostera
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    global: 'globalThis'
+  },
   build: {
     rollupOptions: {
       output: {

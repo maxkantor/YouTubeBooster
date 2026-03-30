@@ -2013,6 +2013,18 @@ textarea {
   pointer-events: none;
 }
 
+/* Full-width headline row above the two-column hero (not confined to left column) */
+.landing-hero-headline-row {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin-bottom: clamp(28px, 3.5vw, 44px);
+}
+
+.landing-hero-headline-row .landing-hero-title {
+  margin-bottom: 0;
+}
+
 .landing-hero-grid {
   position: relative;
   z-index: 1;
@@ -2047,9 +2059,10 @@ textarea {
 }
 
 .landing-hero-title {
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   display: block;
-  line-height: 1.02;
+  width: 100%;
+  line-height: 1.2;
   max-width: 100%;
   position: relative;
   z-index: 1;
@@ -2059,19 +2072,23 @@ textarea {
   text-wrap: balance;
 }
 
-.landing-hero-title-line {
+/* One row across full container width — large display scale, fluid to avoid wrap */
+.landing-hero-title-headline.landing-hero-title-line {
   display: block;
-  font-size: clamp(2.5rem, 2.85vw + 1.35rem, 3.85rem);
-  font-weight: 900;
-  line-height: 1.06;
-  letter-spacing: -0.032em;
-  color: #fafafa;
-  white-space: normal;
-  max-width: min(52rem, 100%);
+  width: 100%;
+  font-size: clamp(0.72rem, 0.12rem + 3.15vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  color: #f8fafc;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
-.landing-hero-title-line:first-child {
-  margin-bottom: 0.12em;
+.landing-hero-title-line {
+  font-weight: 900;
+  letter-spacing: -0.032em;
+  color: #fafafa;
 }
 
 .landing-hero-title-second {
@@ -2106,12 +2123,6 @@ textarea {
 @media (min-width: 980px) {
   .landing-hero-buttons {
     flex-wrap: nowrap;
-  }
-}
-
-@media (max-width: 800px) {
-  .landing-hero-title-line {
-    white-space: normal;
   }
 }
 
@@ -4932,6 +4943,10 @@ textarea {
 }
 
 @media (max-width: 900px) {
+  .landing-hero-headline-row {
+    text-align: center;
+  }
+
   .landing-hero-grid {
     grid-template-columns: 1fr;
     gap: 48px;

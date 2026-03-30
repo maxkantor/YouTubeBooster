@@ -20,7 +20,9 @@ export function webSiteSchema(): Record<string, unknown> {
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
+    '@id': `${getSiteUrl()}/#website`,
     name: BRAND.name,
+    alternateName: 'YouTube Booster AI Official Site',
     url: getSiteUrl(),
     description: BRAND.seoHomeDescription,
     potentialAction: {

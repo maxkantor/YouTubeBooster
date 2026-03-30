@@ -898,11 +898,17 @@ export function LandingPage() {
           <div className="landing-hero-bg-content-overlay" />
           <div className="landing-hero-bg-audit-overlay" />
         </div>
+        <div className="landing-hero-headline-row">
+          <div className="container">
+            <h1 className="landing-hero-title" id="hero-heading">
+              <span className="landing-hero-title-line landing-hero-title-headline landing-heading-display">
+                Turn Every YouTube Upload Into Real Growth
+              </span>
+            </h1>
+          </div>
+        </div>
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
-            <h1 className="landing-hero-title" id="hero-heading">
-              <span className="landing-hero-title-line landing-heading-display">Turn Every Upload Into a Growth Asset</span>
-            </h1>
             <p className="landing-hero-sub">
               Elite AI pinpoints what is suppressing CTR, watch time, and discovery—then gives you exact fixes you can apply in minutes.
             </p>
