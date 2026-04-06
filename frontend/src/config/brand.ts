@@ -16,8 +16,8 @@ export const BRAND = {
   /** Home page meta description (SEO + OG) */
   seoHomeDescription:
     'Official YouTube Booster AI — analyze your channel, grow views, and fix CTR with AI. The primary home for YouTube growth and channel audits.',
-  /** Base URL for canonical/OG (no trailing slash) — single indexable host: www */
-  siteUrl: 'https://www.youtubeboosterai.com',
+  /** Base URL for canonical/OG (no trailing slash) — apex only: https://youtubeboosterai.com */
+  siteUrl: 'https://youtubeboosterai.com',
 } as const;
 
 export const BRAND_NAME = BRAND.name;

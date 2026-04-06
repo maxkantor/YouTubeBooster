@@ -1,6 +1,6 @@
 /**
  * Canonical site URL for SEO (canonical, OG, JSON-LD, sitemap).
- * Override in production with VITE_SITE_URL (e.g. https://www.youtubeboosterai.com).
+ * Override in production with VITE_SITE_URL (e.g. https://youtubeboosterai.com).
  */
 import { BRAND } from './brand';
 
@@ -12,9 +12,10 @@ export function getSiteUrl(): string {
   return BRAND.siteUrl;
 }
 
+/** Full URL for a path. Home `/` uses trailing slash (canonical apex). */
 export function absoluteUrl(path: string): string {
   const base = getSiteUrl();
-  if (!path || path === '/') return base;
+  if (!path || path === '/') return `${base}/`;
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 }
 

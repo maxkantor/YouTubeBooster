@@ -848,7 +848,7 @@ export function LandingPage() {
                   Sign out
                 </button>
                 <a
-                  href="https://www.youtubeboosterai.com/#audit"
+                  href="https://youtubeboosterai.com/#audit"
                   className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
                   title="Analyze Channel"
                 >
@@ -864,7 +864,7 @@ export function LandingPage() {
                   Sign Up
                 </Link>
                 <a
-                  href="https://www.youtubeboosterai.com/#audit"
+                  href="https://youtubeboosterai.com/#audit"
                   className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
                   title="Analyze Channel"
                 >

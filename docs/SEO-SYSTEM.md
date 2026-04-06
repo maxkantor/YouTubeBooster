@@ -24,7 +24,7 @@ Production-oriented SEO for the **Vite + React SPA**. This doc describes what is
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_SITE_URL` | Canonical site origin (e.g. `https://www.youtubeboosterai.com`). Used for absolute URLs in meta, JSON-LD, sharing. |
+| `VITE_SITE_URL` | Canonical site origin (e.g. `https://youtubeboosterai.com`). Used for absolute URLs in meta, JSON-LD, sharing. |
 | `VITE_GA4_MEASUREMENT_ID` | Google Analytics 4 (e.g. `G-XXXXXXXXXX`). |
 | `VITE_GOOGLE_SITE_VERIFICATION` | Optional `<meta name="google-site-verification">` for Search Console domain verification. |
 

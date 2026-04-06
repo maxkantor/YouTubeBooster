@@ -55,9 +55,10 @@ export function SeoHead({
     const site = getSiteUrl();
     const path = canonicalPath ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
     const normalized = path === '' ? '/' : path.startsWith('/') ? path : `/${path}`;
-    const canonicalHref = `${site}${normalized === '/' ? '' : normalized}` || `${site}/`;
+    const canonicalHref =
+      normalized === '/' ? `${site}/` : `${site}${normalized}`;
 
-    // Always use canonical site origin for OG/Twitter images so og:image matches www even on legacy hosts.
+    // OG/Twitter images use canonical apex origin (matches deployed host after redirects).
     const imageUrl = ogImage.startsWith('http') ? ogImage : `${site}${ogImage.startsWith('/') ? ogImage : `/${ogImage}`}`;
     const isDefaultOgJpeg =
       ogImage === '/og-image.jpg' || ogImage.endsWith('/og-image.jpg') || imageUrl.endsWith('/og-image.jpg');

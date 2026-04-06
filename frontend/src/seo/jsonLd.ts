@@ -9,7 +9,7 @@ export function organizationSchema(): Record<string, unknown> {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: BRAND.name,
-    url: getSiteUrl(),
+    url: absoluteUrl('/'),
     logo: absoluteUrl('/og-image.jpg'),
     description: BRAND.seoHomeDescription,
     sameAs: [] as string[]
@@ -23,7 +23,7 @@ export function webSiteSchema(): Record<string, unknown> {
     '@id': `${getSiteUrl()}/#website`,
     name: BRAND.name,
     alternateName: 'YouTube Booster AI Official Site',
-    url: getSiteUrl(),
+    url: absoluteUrl('/'),
     description: BRAND.seoHomeDescription,
     potentialAction: {
       '@type': 'SearchAction',
@@ -51,7 +51,7 @@ export function softwareApplicationSchema(): Record<string, unknown> {
     },
     description: BRAND.seoHomeDescription,
     image: absoluteUrl('/og-image.jpg'),
-    url: getSiteUrl()
+    url: absoluteUrl('/')
   };
 }
 

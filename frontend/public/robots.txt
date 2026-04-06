@@ -1,16 +1,11 @@
 User-agent: *
 Allow: /
 
-# Duplicate/parameterized URLs — prefer clean paths in sitemap (canonical www)
-Disallow: /*?*
-
-# App surfaces — not for organic search
+# Block admin/private areas
 Disallow: /admin
-Disallow: /dashboard
-Disallow: /app
-Disallow: /auth/
-Disallow: /checkout/
-Disallow: /payment
+Disallow: /api
+Disallow: /payment-success
+Disallow: /payment-cancel
 
-# Sitemap (canonical host)
-Sitemap: https://www.youtubeboosterai.com/sitemap.xml
+# Sitemap
+Sitemap: https://youtubeboosterai.com/sitemap.xml

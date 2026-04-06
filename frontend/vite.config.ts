@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const devApiOrigin = process.env.VITE_DEV_API_ORIGIN || 'https://www.youtubeboosterai.com';
+const devApiOrigin = process.env.VITE_DEV_API_ORIGIN || 'https://youtubeboosterai.com';
 
 export default defineConfig({
   plugins: [react()],

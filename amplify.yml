@@ -4,7 +4,7 @@ version: 1
 applications:
   - appRoot: frontend
     customRules:
-      # Path-only redirects (host/HTTP→HTTPS/www is handled via public/_redirects + Amplify domain settings).
+      # Path-only redirects (host/HTTP→HTTPS and www→apex via public/_redirects + Amplify domain settings).
       - source: '/home'
         target: '/'
         status: '301'

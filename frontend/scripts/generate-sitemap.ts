@@ -1,5 +1,5 @@
 /**
- * Writes public/sitemap.xml and public/robots.txt from the same URL registry as the HTML sitemap (src/seo/registry.ts).
+ * Writes public/sitemap.xml and public/robots.txt (canonical apex: https://youtubeboosterai.com).
  * Run: npm run build:seo (or npm run build).
  */
 import fs from 'node:fs';
@@ -21,22 +21,36 @@ const all = raw.filter((u) => {
   seen.add(p);
   return true;
 });
-const lastmod = new Date().toISOString().slice(0, 10);
 
-const urlset = all
-  .map(
-    (u) => `  <url>
-    <loc>${base}${u.path === '/' ? '' : u.path}</loc>
-    <lastmod>${lastmod}</lastmod>
+function locForPath(path: string): string {
+  if (path === '/') return `${base}/`;
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${p}`;
+}
+
+function priorityFor(u: { path: string; priority: number }): string {
+  if (u.path === '/') return '1.0';
+  return String(u.priority);
+}
+
+const urlBlocks = all
+  .map((u) => {
+    const loc = locForPath(u.path);
+    const pr = priorityFor(u);
+    return `  <url>
+    <loc>${loc}</loc>
     <changefreq>${u.changefreq}</changefreq>
-    <priority>${u.priority}</priority>
-  </url>`
-  )
-  .join('\n');
+    <priority>${pr}</priority>
+  </url>`;
+  })
+  .join('\n\n');
 
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urlset}
+
+  <!-- Core & indexable pages -->
+${urlBlocks}
+
 </urlset>
 `;
 
@@ -46,19 +60,14 @@ console.log('Wrote sitemap.xml with', all.length, 'URLs');
 const robots = `User-agent: *
 Allow: /
 
-# Duplicate/parameterized URLs — prefer clean paths in sitemap (canonical www)
-Disallow: /*?*
-
-# App surfaces — not for organic search
+# Block admin/private areas
 Disallow: /admin
-Disallow: /dashboard
-Disallow: /app
-Disallow: /auth/
-Disallow: /checkout/
-Disallow: /payment
+Disallow: /api
+Disallow: /payment-success
+Disallow: /payment-cancel
 
-# Sitemap (canonical host)
-Sitemap: ${base}/sitemap.xml
+# Sitemap
+Sitemap: https://youtubeboosterai.com/sitemap.xml
 `;
 
 fs.writeFileSync(path.join(pub, 'robots.txt'), robots, 'utf8');

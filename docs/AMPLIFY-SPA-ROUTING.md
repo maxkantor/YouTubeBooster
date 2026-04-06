@@ -6,7 +6,7 @@
 
 1. **Root `amplify.yml` (monorepo)** — `customRules` sit next to `appRoot` (same pattern as [monorepo custom headers](https://docs.aws.amazon.com/amplify/latest/userguide/custom-header-YAML-format.html)), with a single catch‑all rewrite:
    - **`/<*>`** → **`/index.html`** — **`200`** (rewrite)
-2. **`frontend/public/_redirects`** — Netlify-style rules (copied to `dist/`): **apex/http → `https://www.youtubeboosterai.com` (301)**, then **`/home` `/index` → `/`**, then **`/* → /index.html 200`**. Confirm **Amplify → Domains** has both apex and `www` attached so redirects apply. No `#` comment lines (safer for parsers).
+2. **`frontend/public/_redirects`** — Netlify-style rules (copied to `dist/`): **`http` and `www` → canonical apex `https://youtubeboosterai.com` (301)**, then **`/home` `/index` → `/`**, then **`/* → /index.html 200`**. Confirm **Amplify → Domains** has both apex and `www` attached so redirects apply.
 3. **Terraform** (`enable_amplify_app`) — `aws_amplify_app` includes the same **`custom_rule`** so the rule exists in AWS even if Hosting ever ignores the YAML block.
 
 After push, wait for the Amplify build + deploy to finish, then hard‑refresh or try an incognito window.

@@ -1,141 +1,143 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Core & indexable pages -->
   <url>
-    <loc>https://www.youtubeboosterai.com</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/</loc>
     <changefreq>weekly</changefreq>
-    <priority>1</priority>
+    <priority>1.0</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/demo</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/demo</loc>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/about</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/about</loc>
     <changefreq>monthly</changefreq>
     <priority>0.55</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/contact</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/contact</loc>
     <changefreq>monthly</changefreq>
     <priority>0.55</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/privacy</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/privacy</loc>
     <changefreq>yearly</changefreq>
     <priority>0.45</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/disclaimer</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/disclaimer</loc>
     <changefreq>yearly</changefreq>
     <priority>0.45</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/platform</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/platform</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/audit</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/audit</loc>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/solutions</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/solutions</loc>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/guides</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/guides</loc>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/blog</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/blog</loc>
     <changefreq>weekly</changefreq>
     <priority>0.72</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/why-your-youtube-has-no-views</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/why-your-youtube-has-no-views</loc>
     <changefreq>monthly</changefreq>
     <priority>0.82</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/how-to-get-more-youtube-views</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/how-to-get-more-youtube-views</loc>
     <changefreq>monthly</changefreq>
     <priority>0.82</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/youtube-thumbnail-mistakes</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/youtube-thumbnail-mistakes</loc>
     <changefreq>monthly</changefreq>
     <priority>0.82</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/site-map</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/site-map</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/audit/youtube-seo-audit</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/audit/youtube-seo-audit</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/audit/channel-growth-audit</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/audit/channel-growth-audit</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/solutions/low-ctr-titles</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/solutions/low-ctr-titles</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/solutions/traffic-not-converting</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/solutions/traffic-not-converting</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/guides/youtube-keyword-research</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/guides/youtube-keyword-research</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/guides/content-calendar-youtube</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/guides/content-calendar-youtube</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/blog/youtube-seo-checklist-2026</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/blog/youtube-seo-checklist-2026</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+
   <url>
-    <loc>https://www.youtubeboosterai.com/blog/ai-channel-audit-explained</loc>
-    <lastmod>2026-03-30</lastmod>
+    <loc>https://youtubeboosterai.com/blog/ai-channel-audit-explained</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+
 </urlset>
