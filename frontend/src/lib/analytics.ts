@@ -1,10 +1,3 @@
-declare global {
-  interface Window {
-    gtag?: (command: string, targetId: string, params?: Record<string, unknown>) => void;
-    dataLayer?: unknown[];
-  }
-}
-
 const GA4_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID as string | undefined;
 
 if (typeof window !== 'undefined' && GA4_ID) {

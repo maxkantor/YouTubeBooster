@@ -2,6 +2,7 @@ import React, { type ReactNode, useCallback, Suspense, useEffect, useRef, useSta
 import { flushSync } from 'react-dom';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BRAND } from './config/brand';
+import { usePageTracking } from './hooks/usePageTracking';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
 import { StructuredData } from './components/StructuredData';
@@ -496,6 +497,8 @@ function AdminLoginPage({
 }
 
 function AppInner() {
+  usePageTracking();
+
   const [userSession, setUserSession] = useState<UserSessionStatus>({ authenticated: false, user: null });
   const [adminSession, setAdminSession] = useState<AdminSessionStatus>({ authenticated: false, email: null });
   const [sessionLoading, setSessionLoading] = useState(true);
