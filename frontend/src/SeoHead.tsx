@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 
 import { BRAND, BRAND_DEFAULT_TITLE } from './config/brand';
 import { absoluteUrl, getSiteUrl } from './config/site';
@@ -48,12 +48,14 @@ export function SeoHead({
   articlePublishedTime,
   articleModifiedTime
 }: SeoProps) {
-  useEffect(() => {
+  // useLayoutEffect: update <head> before paint so canonical/OG match the current route immediately.
+  useLayoutEffect(() => {
     document.title = title;
     setMeta('description', description);
 
     const site = getSiteUrl();
-    const path = canonicalPath ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
+    const path =
+      canonicalPath ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
     const normalized = path === '' ? '/' : path.startsWith('/') ? path : `/${path}`;
     const canonicalHref =
       normalized === '/' ? `${site}/` : `${site}${normalized}`;
