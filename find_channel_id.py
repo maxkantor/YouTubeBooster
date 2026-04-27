@@ -55,8 +55,8 @@ def main():
                 return None
         else:
             print("💡 To find a specific channel, provide:")
-            print("   - Channel URL: python3 find_channel_id.py 'https://www.youtube.com/@maxkantorUSA'")
-            print("   - Channel Handle: python3 find_channel_id.py '@maxkantorUSA'")
+            print("   - Channel URL: python3 find_channel_id.py 'https://www.youtube.com/@maxkantorcooking'")
+            print("   - Channel Handle: python3 find_channel_id.py '@maxkantorcooking'")
             print("   - Channel ID: python3 find_channel_id.py 'UCxxxxx...'\n")
             return None
             

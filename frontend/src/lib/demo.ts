@@ -1,5 +1,5 @@
 /** Default channel used for the full product demo (no blur). Must match backend and landing. */
-export const DEFAULT_DEMO_CHANNEL = 'https://www.youtube.com/@maxkantorUSA';
+export const DEFAULT_DEMO_CHANNEL = 'https://www.youtube.com/@maxkantorcooking';
 
 /** Normalizes channel input for comparison (lowercase, trim, optional trailing slash). */
 export function normalizeChannelForComparison(input: string): string {

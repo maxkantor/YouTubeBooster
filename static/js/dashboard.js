@@ -87,7 +87,7 @@ async function loadOverview() {
         
         // Update stats
         const channel = data.channel_info;
-        document.getElementById('channel-name').textContent = channel.title || '@maxkantorUSA';
+        document.getElementById('channel-name').textContent = channel.title || '@maxkantorcooking';
         document.getElementById('subscribers').textContent = formatNumber(channel.subscriber_count);
         document.getElementById('total-views').textContent = formatNumber(channel.view_count);
         document.getElementById('video-count').textContent = formatNumber(channel.video_count);

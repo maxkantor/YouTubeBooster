@@ -184,7 +184,7 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
         var trimmed = YouTubeChannelInputHelpers.DecodeChannelInput((channelInput ?? string.Empty).Trim());
         if (string.IsNullOrWhiteSpace(trimmed))
         {
-            return "https://www.youtube.com/@maxkantorUSA";
+            return "https://www.youtube.com/@maxkantorcooking";
         }
 
         if (ExtractChannelId(trimmed) is not null || ExtractHandle(trimmed) is not null)

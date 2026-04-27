@@ -47,7 +47,7 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
   const isDefaultChannelDemo =
     inputNormalized === defaultNormalized ||
     inputHandle === defaultHandle ||
-    inputHandle === '@maxkantorusa';
+    inputHandle === '@maxkantorcooking';
 
   const [hasPremium, setHasPremium] = useState(false);
   /** Paid-only: null = still verifying subscription with the API. */

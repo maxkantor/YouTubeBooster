@@ -168,7 +168,7 @@ def main():
                 except Exception as e:
                     # If that fails, try the handle
                     try:
-                        channel_id = api_client.get_channel_id('@maxkantorUSA')
+                        channel_id = api_client.get_channel_id('@maxkantorcooking')
                         if channel_id:
                             print(f"📍 Found channel: {channel_id}\n")
                     except Exception as e2:
@@ -181,7 +181,7 @@ def main():
             
             if not channel_id:
                 print("❌ Could not determine channel ID. Please provide --channel-id")
-                print("   Example: python3 main.py analyze --channel-id 'https://www.youtube.com/@maxkantorUSA'")
+                print("   Example: python3 main.py analyze --channel-id 'https://www.youtube.com/@maxkantorcooking'")
                 return
             
             analysis = analyzer.analyze_channel(channel_id, days=args.days)
@@ -207,7 +207,7 @@ def main():
             channel_id = args.channel_id
             
             if channel_id is None:
-                channel_id = api_client.get_channel_id('@maxkantorUSA')
+                channel_id = api_client.get_channel_id('@maxkantorcooking')
             
             suggestions = suggestions_gen.analyze_top_performers(channel_id, top_n=args.top_n)
             print_content_suggestions(suggestions)

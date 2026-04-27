@@ -112,7 +112,7 @@ def analyze_channel():
                 print(f"[WARN] Could not get authenticated channel: {e1}")
                 # Fallback: try the handle if available
                 try:
-                    channel_id = client.get_channel_id('@maxkantorUSA')
+                    channel_id = client.get_channel_id('@maxkantorcooking')
                     print(f"[OK] Found channel ID via handle: {channel_id}")
                 except Exception as e2:
                     error_msg = f'Could not determine channel ID. Error: {str(e1)}'
@@ -179,7 +179,7 @@ def get_suggestions():
             except Exception:
                 # Fallback
                 try:
-                    channel_id = client.get_channel_id('@maxkantorUSA')
+                    channel_id = client.get_channel_id('@maxkantorcooking')
                 except Exception as e:
                     return jsonify({'error': f'Could not determine channel ID: {str(e)}'}), 400
         
@@ -209,7 +209,7 @@ def get_videos():
             except Exception:
                 # Fallback
                 try:
-                    channel_id = client.get_channel_id('@maxkantorUSA')
+                    channel_id = client.get_channel_id('@maxkantorcooking')
                 except Exception as e:
                     return jsonify({'error': f'Could not determine channel ID: {str(e)}'}), 400
         
@@ -291,7 +291,7 @@ def get_traffic_tools():
                 channel_id = client.get_channel_id()
             except Exception:
                 try:
-                    channel_id = client.get_channel_id('@maxkantorUSA')
+                    channel_id = client.get_channel_id('@maxkantorcooking')
                 except Exception as e:
                     return jsonify({'error': f'Could not determine channel ID: {str(e)}'}), 400
 

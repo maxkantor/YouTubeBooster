@@ -379,11 +379,11 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
         if (string.IsNullOrWhiteSpace(channelInput)) return false;
         var t = channelInput.Trim();
         var handle = ExtractHandle(t);
-        if (!string.IsNullOrWhiteSpace(handle) && handle.Equals("maxkantorUSA", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(handle) && handle.Equals("maxkantorcooking", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        return t.Contains("maxkantorUSA", StringComparison.OrdinalIgnoreCase)
-               || t.Contains("@maxkantorusa", StringComparison.OrdinalIgnoreCase);
+        return t.Contains("maxkantorcooking", StringComparison.OrdinalIgnoreCase)
+               || t.Contains("@maxkantorcooking", StringComparison.OrdinalIgnoreCase);
     }
 
     private DemoAnalysisResponse BuildFallbackResponse(string channelInput)

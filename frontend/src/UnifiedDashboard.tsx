@@ -31,7 +31,7 @@ function isBuiltInShowcaseChannel(channelInput: string): boolean {
   return (
     inputNorm === defaultNorm ||
     handleNorm === defaultHandleNorm ||
-    handleNorm === '@maxkantorusa'
+    handleNorm === '@maxkantorcooking'
   );
 }
 import { publicApi } from './lib/api';
@@ -263,7 +263,7 @@ export function UnifiedDashboard({
   const preferDemoSnapshotOverPy =
     isDemo && pyOverview?.channel_info?.channel_id === 'UC_fallback' && demoData != null;
 
-  /** True only for https://www.youtube.com/@maxkantorUSA — never for user-entered channels. */
+  /** True only for https://www.youtube.com/@maxkantorcooking — never for user-entered channels. */
   const isEmbeddedProductDemo = isDemo && isBuiltInShowcaseChannel(channelInput || '');
 
   const demoTitleFallback = (): string => {

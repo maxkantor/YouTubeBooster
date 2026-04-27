@@ -184,7 +184,7 @@ class YouTubeAPIClient:
         """Get channel ID from channel handle, username, or URL.
         
         Args:
-            channel_handle: Channel handle (e.g., '@maxkantorUSA') or username
+            channel_handle: Channel handle (e.g., '@maxkantorcooking') or username
             channel_url: Full YouTube channel URL
             
         Returns:
@@ -312,7 +312,7 @@ class YouTubeAPIClient:
                             "Could not determine channel ID.\n\n"
                             "Please provide your channel ID or URL:\n"
                             "- Channel ID: UCxxxxx... (from youtube.com/channel/UCxxxxx)\n"
-                            "- Channel URL: https://www.youtube.com/@maxkantorUSA\n"
+                            "- Channel URL: https://www.youtube.com/@maxkantorcooking\n"
                             "- Or make sure you're authenticated with the correct Google account"
                         )
                 except HttpError as e:

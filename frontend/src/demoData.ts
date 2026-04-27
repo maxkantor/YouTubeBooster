@@ -5,7 +5,7 @@
 
 export const demoChannelData = {
   channelTitle: 'Max Kantor Cooking Recipes',
-  channelHandle: '@maxkantorUSA',
+  channelHandle: '@maxkantorcooking',
   subscribers: 5770,
   totalViews: 515218,
   videos: 188,

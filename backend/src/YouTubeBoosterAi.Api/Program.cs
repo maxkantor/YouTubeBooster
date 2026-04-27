@@ -232,35 +232,35 @@ publicApi.MapPost("/demo", async (DemoAnalysisRequest request, IDemoAnalysisServ
 // Public dashboard endpoints (role-model parity with the Python EB demo)
 publicApi.MapGet("/channel/analyze", async (string? channel, int? days, IPublicDashboardService dashboardService, CancellationToken cancellationToken) =>
 {
-    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorUSA" : channel;
+    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorcooking" : channel;
     var result = await dashboardService.AnalyzeChannelAsync(input, days ?? 30, cancellationToken);
     return Results.Ok(result);
 });
 
 publicApi.MapGet("/channel/videos", async (string? channel, int? max_results, IPublicDashboardService dashboardService, CancellationToken cancellationToken) =>
 {
-    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorUSA" : channel;
+    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorcooking" : channel;
     var result = await dashboardService.GetVideosAsync(input, max_results ?? 50, cancellationToken);
     return Results.Ok(result);
 });
 
 publicApi.MapGet("/channel/suggestions", async (string? channel, int? top_n, IPublicDashboardService dashboardService, CancellationToken cancellationToken) =>
 {
-    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorUSA" : channel;
+    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorcooking" : channel;
     var result = await dashboardService.GetSuggestionsAsync(input, top_n ?? 5, cancellationToken);
     return Results.Ok(result);
 });
 
 publicApi.MapGet("/channel/traffic_tools", async (string? channel, IPublicDashboardService dashboardService, CancellationToken cancellationToken) =>
 {
-    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorUSA" : channel;
+    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorcooking" : channel;
     var result = await dashboardService.GetTrafficToolsAsync(input, cancellationToken);
     return Results.Ok(result);
 });
 
 publicApi.MapGet("/video/seo/{videoId}", async (string videoId, string? channel, IPublicDashboardService dashboardService, CancellationToken cancellationToken) =>
 {
-    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorUSA" : channel;
+    var input = string.IsNullOrWhiteSpace(channel) ? "https://www.youtube.com/@maxkantorcooking" : channel;
     var result = await dashboardService.GetVideoSeoAsync(input, videoId, cancellationToken);
     return Results.Ok(result);
 });
