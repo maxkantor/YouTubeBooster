@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
-import { FOOTER_COMPARE_PAGES, FOOTER_GROWTH_PAGES, HOMEPAGE_GUIDE_GROUPS } from './seo/growthGuides';
+import { MarketingFooter } from './components/MarketingFooter';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
@@ -9,6 +9,8 @@ import { billingApi, meApi, publicApi } from './lib/api';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
 import { AiGrowthStudio } from './components/AiGrowthStudio';
+import { HOMEPAGE_GUIDE_GROUPS } from './seo/growthGuides';
+import { HOMEPAGE_FAQS } from './seo/homepageFaq';
 
 const DEMO_STORAGE_KEY = 'ybai_demo';
 
@@ -228,14 +230,12 @@ function formatNumber(value: number): string {
 function FullGrowthPlanSection({
   userState,
   auditPreview,
-  countdownLabel,
   pricingLoading,
   onUnlock,
   onViewFullReport
 }: {
   userState: FullGrowthPlanUserState;
   auditPreview: AuditPreviewData;
-  countdownLabel: string;
   pricingLoading: boolean;
   onUnlock: () => void;
   onViewFullReport: () => void;
@@ -356,10 +356,10 @@ function FullGrowthPlanSection({
         {isDemo ? (
           <>
             <div className="landing-growth-plan-proof" role="status">
-              <span>+2,184 creators improved their channel this week</span>
-              <span>Avg +312% views in 30 days</span>
+              <span>See the free preview before you pay</span>
+              <span>One-time unlock. No subscription.</span>
             </div>
-            <p className="landing-growth-plan-urgency">⏳ Your report expires in {countdownLabel}</p>
+            <p className="landing-growth-plan-urgency">Unlock once to save the full report and full recommendation set.</p>
           </>
         ) : (
           <p className="landing-growth-plan-soft-note">Unlock once to reveal every AI fix, full keyword set, and complete growth plan.</p>
@@ -372,44 +372,8 @@ function FullGrowthPlanSection({
 export function LandingPage() {
   const navigate = useNavigate();
   const { oneTimePriceLabel } = usePricing();
-  const faqLeftColumn = useMemo(
-    () => [
-      {
-        q: 'Is YouTubeBooster AI a subscription?',
-        a: 'No. The frontend offer is a one-time payment with no subscription. You can run the free preview first, then upgrade only if you want the full channel audit, recommendations, and growth plan.'
-      },
-      {
-        q: 'How is this different from vidIQ or TubeBuddy?',
-        a: 'Those tools can show a lot of data. YouTubeBooster AI is positioned around diagnosis and action: why the channel is not growing, what is hurting CTR or retention, and what to fix next in plain language.'
-      },
-      {
-        q: 'Can this help a small YouTube channel?',
-        a: 'Yes. Small creators usually benefit the most because a few clearer fixes around titles, thumbnails, SEO, and packaging can change the learning curve quickly before bad patterns get repeated for months.'
-      },
-      {
-        q: 'What does the free audit include?',
-        a: 'The free preview is designed to show the channel health direction, common weak spots, and the kind of practical fixes the platform surfaces. No signup is required for the preview.'
-      }
-    ],
-    []
-  );
-  const faqRightColumn = useMemo(
-    () => [
-      {
-        q: `What do I get after paying ${oneTimePriceLabel}?`,
-        a: `You unlock the full growth fix: deeper channel audit detail, clearer recommendations, growth plan guidance, stronger packaging direction, and saved report access in the premium experience.`
-      },
-      {
-        q: 'Is this safe for my YouTube account?',
-        a: 'Yes. The audit is built to be creator-friendly. You are not handing over risky automation or changing anything on your channel just to understand public growth signals and packaging issues.'
-      },
-      {
-        q: 'Do I need to connect my YouTube login?',
-        a: 'No. There is no technical setup required just to start. You can run the preview, review the recommendations, and decide whether to unlock the full fix without connecting your YouTube login.'
-      }
-    ],
-    [oneTimePriceLabel]
-  );
+  const faqLeftColumn = useMemo(() => HOMEPAGE_FAQS.slice(0, 3), []);
+  const faqRightColumn = useMemo(() => HOMEPAGE_FAQS.slice(3), []);
   const { session: authSession, signOut: authSignOut } = useAuth();
   const [demoInput, setDemoInput] = useState('');
   const [demoError, setDemoError] = useState('');
@@ -420,7 +384,6 @@ export function LandingPage() {
   const [userChannelUrl, setUserChannelUrl] = useState('');
   const [scoreDisplay, setScoreDisplay] = useState(0);
   const [auditRevealed, setAuditRevealed] = useState(false);
-  const [countdownSec, setCountdownSec] = useState(14 * 60 + 32);
   const [opportunityStates, setOpportunityStates] = useState<Record<OpportunityId, 'idle' | 'showing' | 'locked'>>({
     titles: 'idle',
     description: 'idle',
@@ -456,18 +419,13 @@ export function LandingPage() {
   const productPreviewLabel = normalizeChannelLabel(productPreviewChannelInput || DEFAULT_DEMO_CHANNEL);
   const productPreviewSubtitle = hasPremium
     ? productPreviewChannelInput
-      ? `Live snapshot for ${productPreviewLabel} using your paid channel data.`
-      : 'Paid account detected. Add a valid channel URL above to load your real metrics and top videos.'
-    : 'Preview of the paid dashboard experience with sample channel data. Upgrade to see your own metrics and top videos.';
+      ? `Live snapshot for ${productPreviewLabel} using your paid channel data, channel audit signals, and real YouTube analytics.`
+      : 'Paid account detected. Add a valid channel URL above to load your real YouTube analytics, packaging insights, and top videos.'
+    : 'Preview of the paid dashboard with sample YouTube analytics, channel audit signals, and video packaging insights. Upgrade to see your own metrics, SEO issues, and top videos.';
   const productPreviewMetrics = productPreviewData ?? {
     ...EXAMPLE_DASHBOARD_METRICS,
     topVideos: EXAMPLE_VIDEOS
   };
-  const countdownLabel = useMemo(() => {
-    const mins = String(Math.floor(countdownSec / 60)).padStart(2, '0');
-    const secs = String(countdownSec % 60).padStart(2, '0');
-    return `${mins}:${secs}`;
-  }, [countdownSec]);
 
   useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 16);
@@ -562,13 +520,6 @@ export function LandingPage() {
     }, 24);
     return () => window.clearInterval(timer);
   }, [auditRevealed, auditPreview.score]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setCountdownSec((prev) => (prev <= 0 ? 14 * 60 + 32 : prev - 1));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!auditRevealed) return;
@@ -912,23 +863,23 @@ export function LandingPage() {
               </button>
             </div>
             <p className="landing-hero-micro">Free preview • ~60 seconds • No signup required</p>
-            <div className="landing-hero-proof-strip" aria-label="Social proof">
-              <span><strong>2,184+</strong> creators improved channels this week</span>
-              <span><strong>+312%</strong> avg views lift in 30 days</span>
-              <span><strong>One-time</strong> payment model</span>
+            <div className="landing-hero-proof-strip" aria-label="Trust signals">
+              <span><strong>Free preview</strong> before you unlock the full report</span>
+              <span><strong>No subscription</strong> or recurring tool stack</span>
+              <span><strong>CTR, SEO, retention</strong> in one channel audit</span>
             </div>
             <ul className="landing-hero-trust" aria-label="Trust">
               <li>
                 <span className="landing-trust-check" aria-hidden />
-                <span>Find what’s killing your clicks</span>
+                <span>Spot weak YouTube CTR and thumbnail optimization issues</span>
               </li>
               <li>
                 <span className="landing-trust-check" aria-hidden />
-                <span>Fix titles, thumbnails, and SEO fast</span>
+                <span>Fix titles, video packaging, and YouTube SEO faster</span>
               </li>
               <li>
                 <span className="landing-trust-check" aria-hidden />
-                <span>Spot videos with breakout potential</span>
+                <span>See retention leaks and missed small creator growth opportunities</span>
               </li>
             </ul>
           </div>
@@ -1050,6 +1001,63 @@ export function LandingPage() {
         </div>
       </section>
 
+      <section className="landing-section landing-real-problems-section" aria-labelledby="real-problems-heading">
+        <div className="container landing-container">
+          <span className="landing-section-eyebrow">Creator reality</span>
+          <h2 className="landing-section-title" id="real-problems-heading">Real Creator Growth Problems We Analyze</h2>
+          <p className="landing-section-sub">
+            Examples of the actual issues preventing small YouTube channels from growing.
+          </p>
+          <div className="landing-real-problems-grid">
+            <article className="landing-real-problem-card">
+              <div className="landing-real-problem-top">
+                <span className="landing-real-problem-label">CTR signal</span>
+                <span className="landing-real-problem-status">Flagged</span>
+              </div>
+              <h3>Low CTR</h3>
+              <p>
+                Your videos appear in search and browse, but thumbnails and titles are not
+                earning clicks.
+              </p>
+              <ul className="landing-real-problem-metrics" aria-label="Low CTR indicators">
+                <li><span>Impressions</span><strong>Present</strong></li>
+                <li><span>Packaging</span><strong>Underperforming</strong></li>
+              </ul>
+            </article>
+            <article className="landing-real-problem-card">
+              <div className="landing-real-problem-top">
+                <span className="landing-real-problem-label">Retention signal</span>
+                <span className="landing-real-problem-status">Watching</span>
+              </div>
+              <h3>Weak Retention</h3>
+              <p>
+                People click but leave early because intros, pacing, or packaging lose
+                attention.
+              </p>
+              <ul className="landing-real-problem-metrics" aria-label="Weak retention indicators">
+                <li><span>Opening hook</span><strong>Needs proof faster</strong></li>
+                <li><span>Viewer hold</span><strong>Drops too early</strong></li>
+              </ul>
+            </article>
+            <article className="landing-real-problem-card">
+              <div className="landing-real-problem-top">
+                <span className="landing-real-problem-label">SEO signal</span>
+                <span className="landing-real-problem-status">Opportunity</span>
+              </div>
+              <h3>Search Visibility</h3>
+              <p>
+                Your content may be targeting topics with low discoverability or poor keyword
+                alignment.
+              </p>
+              <ul className="landing-real-problem-metrics" aria-label="Search visibility indicators">
+                <li><span>Topic fit</span><strong>Too broad</strong></li>
+                <li><span>Keyword match</span><strong>Needs clearer intent</strong></li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
       <AiGrowthStudio
         auditPreview={auditPreview}
         hasPremium={hasPremium}
@@ -1078,16 +1086,6 @@ export function LandingPage() {
               <p>No monthly subscription. Pay once and get your full report.</p>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="landing-section landing-cta-block-section">
-        <div className="container landing-container landing-cta-block">
-          <h2 className="landing-section-title">Ready to See What&apos;s Blocking Your Growth?</h2>
-          <p className="landing-section-sub">No signup required for the preview. Upgrade only if you want the full fix.</p>
-          <a href="#audit" className="btn btn-primary btn-lg">
-            Run Free Channel Audit
-          </a>
         </div>
       </section>
 
@@ -1169,7 +1167,7 @@ export function LandingPage() {
                       id={`faq-q-${globalIndex}`}
                       onClick={() => setOpenFaq(openFaq === globalIndex ? null : globalIndex)}
                     >
-                      {item.q}
+                      {item.question}
                     </button>
                     <div
                       id={`faq-panel-${globalIndex}`}
@@ -1178,7 +1176,7 @@ export function LandingPage() {
                       aria-labelledby={`faq-q-${globalIndex}`}
                       aria-hidden={openFaq !== globalIndex}
                     >
-                      <p>{item.a}</p>
+                      <p>{item.answer}</p>
                     </div>
                   </div>
                 );
@@ -1201,7 +1199,7 @@ export function LandingPage() {
                       id={`faq-q-${globalIndex}`}
                       onClick={() => setOpenFaq(openFaq === globalIndex ? null : globalIndex)}
                     >
-                      {item.q}
+                      {item.question}
                     </button>
                     <div
                       id={`faq-panel-${globalIndex}`}
@@ -1210,19 +1208,12 @@ export function LandingPage() {
                       aria-labelledby={`faq-q-${globalIndex}`}
                       aria-hidden={openFaq !== globalIndex}
                     >
-                      <p>{item.a}</p>
+                      <p>{item.answer}</p>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-          <div className="landing-faq-post-cta">
-            <h3 className="landing-cta-block-title">Ready to See What&apos;s Blocking Your Growth?</h3>
-            <p className="landing-pricing-microcopy">No signup required for the preview. Upgrade only if you want the full fix.</p>
-            <a href="#audit" className="btn btn-primary">
-              Run Free Channel Audit
-            </a>
           </div>
         </div>
       </section>
@@ -1252,87 +1243,11 @@ export function LandingPage() {
               </section>
             ))}
           </div>
-          <div className="landing-growth-guides-primary-cta">
-            <h3 className="landing-cta-block-title">Ready to See What&apos;s Blocking Your Growth?</h3>
-            <p className="landing-growth-guides-cta-copy">No signup required for the preview. Upgrade only if you want the full fix.</p>
-            <a href="#audit" className="btn btn-primary btn-lg landing-growth-guides-audit-btn">
-              Run Free Channel Audit
-            </a>
-          </div>
         </div>
       </section>
       </main>
 
-      {/* 9. Footer */}
-      <footer className="landing-site-footer">
-        <div className="landing-site-footer-divider" aria-hidden />
-        <div className="container landing-site-footer-inner">
-          <div className="landing-site-footer-brand">
-            <Link
-              to="/"
-              className="landing-site-footer-logo brand-link brand-with-play"
-              aria-label={`${BRAND.name} home`}
-            >
-              <span className="brand-play-icon" aria-hidden />
-              <span className="landing-logo-yt">{BRAND.namePart1}</span>
-              <span className="landing-logo-boost">{BRAND.namePart2}</span>
-            </Link>
-            <p className="landing-site-footer-tagline">
-              AI YouTube channel audit and growth analysis for small creators who want clearer fixes and better decisions.
-            </p>
-          </div>
-          <nav className="landing-site-footer-nav" aria-label="Footer">
-            <div className="landing-site-footer-col">
-              <h3 className="landing-site-footer-col-title">Company</h3>
-              <ul className="landing-site-footer-links">
-                <li>
-                  <Link to="/about">About Us</Link>
-                </li>
-                <li>
-                  <Link to="/contact">Contact</Link>
-                </li>
-                <li>
-                  <Link to="/platform">Platform</Link>
-                </li>
-              </ul>
-            </div>
-            <div className="landing-site-footer-col">
-              <h3 className="landing-site-footer-col-title">Growth</h3>
-              <ul className="landing-site-footer-links">
-                {FOOTER_GROWTH_PAGES.map((g) => (
-                  <li key={g.path}>
-                    <Link to={g.path}>{g.cardTitle}</Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="landing-site-footer-col">
-              <h3 className="landing-site-footer-col-title">Compare</h3>
-              <ul className="landing-site-footer-links">
-                {FOOTER_COMPARE_PAGES.map((g) => (
-                  <li key={g.path}>
-                    <Link to={g.path}>{g.cardTitle}</Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="landing-site-footer-col">
-              <h3 className="landing-site-footer-col-title">Legal</h3>
-              <ul className="landing-site-footer-links">
-                <li>
-                  <Link to="/privacy">Privacy Policy</Link>
-                </li>
-                <li>
-                  <Link to="/disclaimer">Disclaimer</Link>
-                </li>
-              </ul>
-            </div>
-          </nav>
-        </div>
-        <div className="landing-site-footer-bottom">
-          <p className="landing-site-footer-copy">© {new Date().getFullYear()} {BRAND.name}. All rights reserved.</p>
-        </div>
-      </footer>
+      <MarketingFooter showFinalCta />
     </div>
   );
 }

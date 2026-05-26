@@ -5,9 +5,9 @@ import { BRAND } from './config/brand';
 import { usePageTracking } from './hooks/usePageTracking';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
+import { MarketingFooter } from './components/MarketingFooter';
 import { StructuredData } from './components/StructuredData';
 import { SeoHead } from './SeoHead';
-import { FOOTER_COMPARE_PAGES, FOOTER_GROWTH_PAGES } from './seo/growthGuides';
 import { resolveSeoForPath } from './seo/resolveSeo';
 import { AuthProvider } from './AuthContext';
 import { ForgotPasswordPage, SignInPage, SignUpPage } from './AuthPages';
@@ -901,65 +901,7 @@ function AppInner() {
       </Routes>
       </Suspense>
       {showGlobalNav && (
-        <footer className="landing-site-footer">
-          <div className="landing-site-footer-divider" aria-hidden />
-          <div className="container landing-site-footer-inner">
-            <div className="landing-site-footer-brand">
-              <Link
-                to="/"
-                className="landing-site-footer-logo brand-link brand-with-play"
-                aria-label={`${BRAND.name} home`}
-              >
-                <span className="brand-play-icon" aria-hidden />
-                <span className="landing-logo-yt">{BRAND.namePart1}</span>
-                <span className="landing-logo-boost">{BRAND.namePart2}</span>
-              </Link>
-              <p className="landing-site-footer-tagline">
-                AI YouTube channel audit and growth analysis for small creators who want clearer fixes and better decisions.
-              </p>
-            </div>
-            <nav className="landing-site-footer-nav" aria-label="Footer">
-              <div className="landing-site-footer-col">
-                <h3 className="landing-site-footer-col-title">Company</h3>
-                <ul className="landing-site-footer-links">
-                  <li><Link to="/about">About Us</Link></li>
-                  <li><Link to="/contact">Contact</Link></li>
-                  <li><Link to="/platform">Platform</Link></li>
-                </ul>
-              </div>
-              <div className="landing-site-footer-col">
-                <h3 className="landing-site-footer-col-title">Growth</h3>
-                <ul className="landing-site-footer-links">
-                  {FOOTER_GROWTH_PAGES.map((g) => (
-                    <li key={g.path}>
-                      <Link to={g.path}>{g.cardTitle}</Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="landing-site-footer-col">
-                <h3 className="landing-site-footer-col-title">Compare</h3>
-                <ul className="landing-site-footer-links">
-                  {FOOTER_COMPARE_PAGES.map((g) => (
-                    <li key={g.path}>
-                      <Link to={g.path}>{g.cardTitle}</Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="landing-site-footer-col">
-                <h3 className="landing-site-footer-col-title">Legal</h3>
-                <ul className="landing-site-footer-links">
-                  <li><Link to="/privacy">Privacy Policy</Link></li>
-                  <li><Link to="/disclaimer">Disclaimer</Link></li>
-                </ul>
-              </div>
-            </nav>
-          </div>
-          <div className="landing-site-footer-bottom">
-            <p className="landing-site-footer-copy">© {new Date().getFullYear()} {BRAND.name}. All rights reserved.</p>
-          </div>
-        </footer>
+        <MarketingFooter />
       )}
     </>
     </AdminSessionProvider>

@@ -14,6 +14,7 @@ import {
   webSiteSchema
 } from './jsonLd';
 import { getGrowthGuideByPath } from './growthGuides';
+import { HOMEPAGE_FAQS } from './homepageFaq';
 import { isPrivateNoIndexPath } from './seoRobots';
 import type { BreadcrumbItem, ResolvedSeo } from './types';
 
@@ -74,7 +75,7 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
         'channel growth'
       ],
       ogType: 'website',
-      jsonLd: baseGraph()
+      jsonLd: [...baseGraph(), faqPageSchema(HOMEPAGE_FAQS)]
     };
   }
 

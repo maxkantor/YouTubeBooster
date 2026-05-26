@@ -27,7 +27,7 @@ export type GrowthGuidePageDef = {
 const brand = BRAND.name;
 const published = '2026-05-26';
 
-export const GROWTH_GUIDE_PAGES: GrowthGuidePageDef[] = [
+const BASE_GROWTH_GUIDE_PAGES: GrowthGuidePageDef[] = [
   {
     path: '/why-your-youtube-channel-gets-no-views',
     title: `Why Your YouTube Channel Gets No Views | ${brand}`,
@@ -1183,6 +1183,248 @@ If you want a simple place to start, use a [free YouTube channel audit](/free-yo
   }
 ];
 
+const GUIDE_APPENDIX: Record<string, GrowthGuideSection[]> = {
+  '/why-your-youtube-channel-gets-no-views': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Treating low views like a platform verdict
+A flat first day often gets misread as proof the channel is dead, suppressed, or "not for the algorithm." That mindset creates bad decisions fast because the creator stops looking at the real funnel: impressions, click response, and viewer hold. Low views usually mean one stage of the funnel is weak, not that the whole channel is broken.
+
+### Changing everything before finding the leak
+Another mistake is rebuilding the entire channel at once. New niche, new thumbnails, new schedule, new editing style, and new posting rules all arrive together. That feels active, but it destroys your ability to learn. Small channels grow faster when they identify the repeated failure point first, then fix that one layer with discipline instead of panic.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Audit the last ten uploads like a funnel
+Sort your most recent videos into three buckets: low impressions, low clicks, or weak first-minute hold. That tells you whether the bigger problem is topic fit, packaging, or opening structure. Once the failure pattern is visible, the next fix becomes much less emotional and much more practical.
+
+### Rework the videos that were already close
+Do not try to rescue every dead upload. Focus on videos that still earn impressions, target a useful topic, or held attention better than expected. Refresh the title and thumbnail on those near-miss assets first. That usually reveals the channel's real growth leak faster than publishing another random test video from scratch.`,
+    },
+  ],
+  '/how-to-get-more-youtube-views': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Publishing disconnected one-off videos
+Many creators chase more views by making each upload feel different enough to "hit wider," but the opposite usually happens. One video is tactical, the next is motivational, and the next targets a completely different viewer. That resets audience fit every time and makes the channel harder to trust.
+
+### Spending effort where viewers never see it
+Creators also over-invest in gear, transitions, or polish before fixing the decisions that control discovery. If the topic is weak or the packaging is soft, the production upgrade stays invisible. Viewers do not reward how much work went into the video before they click. They reward how clear the value feels from the outside.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Build three-video topic clusters
+Instead of asking each upload to prove everything, publish short runs of connected videos around one audience problem. That gives YouTube cleaner context and gives viewers a more obvious reason to watch the next video. It also makes your analytics easier to read because you are comparing like with like.
+
+### Decide the click before you finish the edit
+Before exporting, answer one question clearly: what exactly is the viewer buying with this click? Draft three title angles and two thumbnail concepts before upload. This habit tightens the promise, exposes weak ideas earlier, and stops the growth layer from becoming a rushed afterthought at the end of the edit.`,
+    },
+  ],
+  '/youtube-thumbnail-mistakes': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Designing at full size instead of feed size
+A thumbnail can look sharp in Photoshop and still fail in the feed. Creators often review details while zoomed in, where every element seems useful. Viewers do not see it that way. They see a tiny image surrounded by louder competitors, so anything that is not instantly readable becomes wasted effort.
+
+### Prioritizing style consistency over message clarity
+Brand consistency matters, but many creators force every idea through the same template even when the topic needs a different emphasis. That leads to thumbnails that look on-brand but do not communicate the actual reason to care. Consistency should come from recognizable judgment, not from protecting a rigid layout.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Use a one-subject, one-consequence rule
+Before finalizing a thumbnail, identify the main subject and the consequence the viewer should feel. If you cannot name both in one sentence, the concept is probably too busy. Most CTR wins come from removing the extra face, prop, or text block that weakens the first read.
+
+### Review thumbnails in realistic context
+Shrink the design down and place it beside two or three competing thumbnails in your niche. Then ask where the eye lands first and whether that first read supports the title. This exposes low contrast, weak focal hierarchy, and mobile-unfriendly text faster than endless tweaking on a blank canvas.`,
+    },
+  ],
+  '/low-click-through-rate-youtube': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Comparing CTR without checking context
+CTR numbers only make sense inside the right context. Search behaves differently from browse, and warm returning viewers behave differently from cold impressions. If you compare your video against the wrong benchmark, you can mistake a topic problem for a thumbnail problem or a search issue for a title issue.
+
+### Testing in a way that teaches you nothing
+Low CTR often triggers chaotic iteration. Creators change the title in the morning, the thumbnail at night, and both again tomorrow. The issue is not testing itself. It is muddy testing. If several layers change at once, you lose the ability to tell what actually moved performance.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Diagnose the promise before redesigning the art
+When CTR is soft, start by asking whether the video promise is strong enough to win the impression battle. If that foundation is weak, a prettier thumbnail just makes a weak idea louder. Reframe the promise first, then make the title and thumbnail express that sharper angle.
+
+### Compare similar videos, not random videos
+Build a comparison set of uploads with similar traffic source, audience warmth, and topic type. Then look for patterns in title framing, thumbnail simplicity, and opening promise. Once you see the recurring weakness, apply one major change to a shortlist of videos that still get impressions instead of treating every low-CTR upload like an emergency.`,
+    },
+  ],
+  '/youtube-seo-for-small-channels': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Writing for keywords instead of intent
+Many small creators still treat YouTube SEO like a stuffing exercise. They repeat the target phrase in the title, description, and tags until the metadata sounds unnatural. The problem is that viewers see that wording too. Good YouTube SEO matches the reason someone would search, not just the phrase itself.
+
+### Trying to optimize vague videos after the fact
+Another common mistake is filming first and hoping metadata can create clarity later. If the video covers too many subtopics or never commits to one outcome, the title and description end up broad because the idea was broad. SEO works best when the video's job is already narrow enough to name precisely.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Build a search brief before filming
+Before recording, write the viewer problem, the likely search phrase, and the specific outcome your video will deliver. That forces precision early and makes the rest of the packaging easier. Small channels benefit because tighter intent produces cleaner titles, descriptions, and audience matching signals.
+
+### Use supporting language naturally
+Pick one primary phrase, then add natural supporting phrases a real viewer would also associate with the topic. Work them into the description, chapters, and spoken framing where they belong. The best metadata feels useful to a human first, which usually creates a stronger SEO signal anyway.`,
+    },
+  ],
+  '/youtube-title-generator': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Letting AI generate before the strategy is clear
+Creators often open a title generator too early. They paste in a loose topic, get ten decent-sounding lines back, and assume the packaging problem is solved. But if the audience, outcome, and traffic goal are still fuzzy, the generated titles become polished versions of the same weak idea.
+
+### Judging titles without the thumbnail in mind
+Another mistake is choosing the "best" title in isolation. A title may sound strong on its own and still be the wrong fit once the thumbnail concept is added. Sometimes the title explains too much and leaves nothing for the image to do. Other times it withholds too much and forces the thumbnail to carry impossible weight.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Prompt the generator with better inputs
+Give the tool the viewer type, the concrete result, the tension point, and the traffic goal. Those inputs produce far better options than a vague request for title ideas. The clearer your prompt, the more the generator behaves like a useful collaborator instead of a novelty headline machine.
+
+### Shortlist with a packaging checklist
+Take the top five options and test them against simple questions: does the title promise one clear outcome, pair well with the thumbnail, sound natural out loud, and match the first minute of the video? The right title is not the cleverest line. It is the cleanest fit between viewer expectation and video delivery.`,
+    },
+  ],
+  '/how-to-increase-youtube-watch-time': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Trying to increase watch time by making videos longer
+Creators notice they need more watch time, so they add more context, more examples, and more runtime. But longer only helps when it increases momentum. If the extra minutes are repetitive or low-energy, total watch time often gets worse because more viewers leave earlier.
+
+### Structuring videos like information dumps
+Many watch-time problems come from script structure rather than edit speed. The video may be useful, but it is arranged in blocks that feel self-contained instead of sequential. Once one point is understood, the viewer feels free to leave because nothing is pulling them into the next section.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Design transitions that create forward pull
+At the end of each segment, make the next section feel necessary. That can be a mistake you are about to fix, a result you are about to prove, or a tradeoff you are about to unpack. This is not about fake cliffhangers. It is about reducing dead air and preserving momentum.
+
+### Cut for pace, then build a next-watch path
+Remove anything that repeats what the viewer already understands, then make sure the end of the video points naturally to the next relevant upload. More watch time often comes from a cleaner current video plus an easier second click. Session design matters as much as runtime.`,
+    },
+  ],
+  '/youtube-retention-analysis': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Looking at retention graphs like verdicts
+A lot of creators open the graph, see a dip, and immediately label the video a failure. That reaction misses the useful question: what specific creative decision caused the viewer to reconsider staying? Retention analysis only becomes helpful when it is tied back to script beats, pacing shifts, and expectation gaps.
+
+### Focusing only on dips and ignoring spikes
+Creators naturally study the painful parts of the graph, but spikes are just as valuable. They show where viewers replayed a moment because the explanation, proof, or demonstration was unusually effective. If you ignore those signals, you miss the chance to repeat what your audience clearly valued.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Annotate the graph against the actual video
+Open the timeline and note what happens right before each major drop or spike. Was there a slow recap, a weak transition, a sudden tangent, or the first concrete example? That habit turns retention into something operational instead of emotional and makes the next edit far easier to improve.
+
+### Compare three similar videos
+Pick three uploads with similar topic type and audience intent, then look for repeat behavior. Pattern review is where retention analysis gets powerful because it helps you create channel-level rules for hooks, transitions, and proof style instead of treating every graph like a one-off mystery.`,
+    },
+  ],
+  '/youtube-thumbnail-ctr': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Treating CTR like a pure design score
+Thumbnail CTR is often discussed like it only measures whether the artwork looks good. In practice, it measures whether the visual promise is strong enough to win attention in context. A beautifully designed image can still underperform if the concept is emotionally flat or the title already used up the available curiosity.
+
+### Redesigning videos that were never close
+Creators often keep refreshing low-potential uploads with weak topics, low impressions, or low relevance, then assume thumbnail testing does not work. The real problem is prioritization. Thumbnail CTR improves fastest when you focus on videos that still get meaningful impressions and feel close to earning more clicks.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Prioritize high-impression underclickers
+Look for videos with real impression volume, decent watch behavior, or evergreen relevance, but softer-than-expected click response. Those are your best thumbnail CTR candidates because the opportunity already exists. You are removing friction from a topic that already has a shot.
+
+### Build separate instincts for browse and search
+Browse-heavy videos usually need stronger emotional contrast, while search-heavy videos often need cleaner clarity and obvious subject recognition. Label your best-performing thumbnails by traffic source and pattern. Over time you will build a more useful visual playbook than one generic thumbnail rule set.`,
+    },
+  ],
+  '/free-youtube-channel-audit': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Expecting the audit to replace creator judgment
+A channel audit should sharpen decisions, not make them for you. Some creators treat audit output like a final answer and follow every recommendation mechanically. That creates a new problem: the channel starts sounding optimized instead of useful. The audit should help judgment, not replace it.
+
+### Using the audit once and forgetting the workflow
+Another mistake is treating the audit like a one-time diagnostic event. The creator gets useful feedback, changes a thumbnail or title, and then returns to the same publishing habits. The real value appears when audit logic becomes part of the weekly workflow and keeps repeated mistakes from returning.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Turn the audit into a short decision queue
+After reviewing the audit, extract only three categories: videos worth refreshing, patterns to stop repeating, and rules for the next upload. That keeps the output usable. The best audit result is not "interesting insight." It is "I know exactly what I am changing next."
+
+### Run the audit before expensive changes
+Use an audit before rebranding, buying gear, overhauling your niche, or rewriting the whole channel strategy. Those bigger moves can be valid, but they should come after you rule out simpler problems like weak packaging, vague topics, or underperforming intros. That sequence saves creators a lot of wasted effort.`,
+    },
+  ],
+  '/vidiq-alternative': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Comparing tools by feature count alone
+A lot of creators shop for alternatives using feature grids, but small channels rarely need the widest toolkit. They need the shortest path from confusing data to a better publishing decision. A platform can have dozens of surfaces and still leave you unsure what to fix first.
+
+### Living inside dashboards instead of decisions
+Another trap is using multiple tools as a substitute for editorial clarity. More tabs, more overlays, and more scores can feel productive while the channel itself stays fuzzy. If you still cannot decide which title angle or thumbnail concept is stronger, the stack is probably heavier than it needs to be.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Judge alternatives by next-week output
+A practical comparison is simple: after one week, did the tool help you choose better titles, sharper thumbnail concepts, or a clearer next experiment? That is a much better benchmark than raw feature volume because it measures decision quality instead of interface quantity.
+
+### Use one focused workflow from diagnosis to publish
+Pick a tool that lets you identify the bottleneck, shortlist the videos closest to working, generate better packaging angles, and apply one clean test without spreading the process across too many disconnected surfaces. Simpler systems often create more momentum for smaller creators.`,
+    },
+  ],
+  '/tubebuddy-alternative': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Solving workflow pain before solving message clarity
+Many creators start looking for alternatives because publishing feels heavy or inconsistent. That is valid, but they sometimes reach for more workflow support before tightening the actual growth levers. If the title promise is vague or the thumbnail concept is weak, workflow efficiency does not fix the core issue.
+
+### Chasing keyword support without packaging support
+Some creators over-index on metadata help and assume better keyword coverage will unlock growth on its own. But small-channel growth usually stalls because the package is not compelling enough, not because one field was left unoptimized. Keyword support helps most when packaging is already clearer.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Choose the tool that reduces publish hesitation
+The best alternative is often the one that helps you feel more certain at the final decision point. Can it help you pick between two title directions, judge whether the thumbnail is communicating the right idea, and identify whether the next upload is actually strong enough to publish? That confidence is valuable.
+
+### Compare recommendation quality on real videos
+Run the same small set of live videos through your options and compare the output. Which tool gives clearer next moves? Which one helps you tighten a title, rethink a thumbnail concept, or prioritize a refresh? The strongest alternative is not the one that sounds smartest. It is the one you can act on immediately.`,
+    },
+  ],
+  '/best-youtube-audit-tool': [
+    {
+      h2: 'Common mistakes creators make',
+      body: `### Confusing polished reports with useful prioritization
+A report can look sophisticated and still be weak if it labels a dozen problems without telling the creator which one matters first. Small creators do not need maximum observation. They need sequencing. If the tool cannot tell you whether the main issue is topic selection, packaging, or early retention, it is not doing the hardest part of the job.
+
+### Trusting scores more than explanations
+Creators also lean too heavily on health scores, optimization badges, and generic ratings. Those numbers can point toward a problem, but they rarely explain the mechanism. Without that explanation layer, the advice stays shallow and hard to apply before the next upload.`,
+    },
+    {
+      h2: 'Practical fixes that move the needle',
+      body: `### Require every audit to name the main bottleneck
+A strong audit should answer three questions clearly: what is the main growth leak, what evidence points to it, and what should change first? That standard prevents creators from getting distracted by low-priority issues and makes tool comparison much easier.
+
+### Test the tool on two different moments
+Use the tool on one older video that felt close to working and one upcoming upload you have not published yet. The first test shows whether the audit can diagnose missed opportunity. The second shows whether it can improve decision-making before the next result exists. If it helps in both cases, it is probably a strong audit tool.`,
+    },
+  ],
+};
+
+export const GROWTH_GUIDE_PAGES: GrowthGuidePageDef[] = BASE_GROWTH_GUIDE_PAGES.map((page) => ({
+  ...page,
+  sections: [...page.sections, ...(GUIDE_APPENDIX[page.path] ?? [])],
+}));
+
 export function getGrowthGuideByPath(pathname: string): GrowthGuidePageDef | undefined {
   const p = pathname.replace(/\/$/, '') || '/';
   return GROWTH_GUIDE_PAGES.find((g) => g.path === p);
@@ -1203,6 +1445,13 @@ export const FOOTER_GROWTH_PAGES = [
   '/low-click-through-rate-youtube',
   '/youtube-seo-for-small-channels',
   '/free-youtube-channel-audit'
+].map(pageByPath);
+
+export const FOOTER_AUDIT_TOPIC_PAGES = [
+  '/youtube-title-generator',
+  '/how-to-increase-youtube-watch-time',
+  '/youtube-retention-analysis',
+  '/youtube-thumbnail-ctr'
 ].map(pageByPath);
 
 export const FOOTER_COMPARE_PAGES = [
