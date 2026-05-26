@@ -134,93 +134,95 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
           </p>
         </div>
 
-        <div className="landing-ai-studio-actions">
-          {(
-            [
-              ['rewrite_titles', 'Rewrite Titles'],
-              ['improve_description', 'Improve Description'],
-              ['keywords', 'Generate Keywords'],
-              ['pattern', 'Find Winning Pattern'],
-              ['ideas', 'Generate Video Ideas']
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className="btn btn-secondary"
-              disabled={aiLoading}
-              onClick={() => runGeneration(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <div className="landing-ai-studio-panel">
+          <div className="landing-ai-studio-actions">
+            {(
+              [
+                ['rewrite_titles', 'Rewrite Titles'],
+                ['improve_description', 'Improve Description'],
+                ['keywords', 'Generate Keywords'],
+                ['pattern', 'Find Winning Pattern'],
+                ['ideas', 'Generate Video Ideas']
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className="btn btn-secondary"
+                disabled={aiLoading}
+                onClick={() => runGeneration(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-        <div className="landing-ai-studio-results">
-          {aiLoading ? (
-            <>
-              <p className="muted">Generating…</p>
-              <div className="landing-ai-skeleton-wrap" aria-hidden>
-                <div className="landing-ai-skeleton" />
-                <div className="landing-ai-skeleton" />
-                <div className="landing-ai-skeleton" />
-                <div className="landing-ai-skeleton" />
-              </div>
-            </>
-          ) : aiError ? (
-            <div className="landing-ai-error-panel">
-              <p className="landing-demo-error" role="alert">
-                {aiError}
-              </p>
-              {hasPremium && (
-                <button type="button" className="btn btn-primary" onClick={() => runGeneration(aiAction)}>
-                  Retry
-                </button>
-              )}
-            </div>
-          ) : aiItems.length > 0 ? (
-            <>
-              {aiNotes && <p className="landing-ai-notes">{aiNotes}</p>}
-              <div className="landing-ai-result-grid">
-                {aiItems.map((item, index) => {
-                  const blurred = showBlurOnIndex(index);
-                  return (
-                    <article key={`${aiAction}-${index}`} className="landing-ai-result-card">
-                      <span className="landing-ai-result-index">#{index + 1}</span>
-                      <div className={blurred ? 'landing-ai-blur-target' : undefined}>
-                        <p>{item}</p>
-                      </div>
-                      {blurred && index === 1 && (teaserLocked || clientOnly) && (
-                        <div className="landing-ai-result-lock-overlay">
-                          <p>Unlock full AI results</p>
-                          <button type="button" className="btn btn-primary btn-sm" onClick={onUnlock}>
-                            Upgrade
-                          </button>
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-              <div className="landing-ai-result-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={aiLoading}
-                  onClick={() => runGeneration(aiAction)}
-                >
-                  Regenerate
-                </button>
-                {!hasPremium && (
-                  <button type="button" className="btn btn-primary" onClick={onUnlock}>
-                    Unlock full AI access
+          <div className="landing-ai-studio-results">
+            {aiLoading ? (
+              <>
+                <p className="muted">Generating…</p>
+                <div className="landing-ai-skeleton-wrap" aria-hidden>
+                  <div className="landing-ai-skeleton" />
+                  <div className="landing-ai-skeleton" />
+                  <div className="landing-ai-skeleton" />
+                  <div className="landing-ai-skeleton" />
+                </div>
+              </>
+            ) : aiError ? (
+              <div className="landing-ai-error-panel">
+                <p className="landing-demo-error" role="alert">
+                  {aiError}
+                </p>
+                {hasPremium && (
+                  <button type="button" className="btn btn-primary" onClick={() => runGeneration(aiAction)}>
+                    Retry
                   </button>
                 )}
               </div>
-            </>
-          ) : (
-            <p className="muted">Choose an action to generate your first result set.</p>
-          )}
+            ) : aiItems.length > 0 ? (
+              <>
+                {aiNotes && <p className="landing-ai-notes">{aiNotes}</p>}
+                <div className="landing-ai-result-grid">
+                  {aiItems.map((item, index) => {
+                    const blurred = showBlurOnIndex(index);
+                    return (
+                      <article key={`${aiAction}-${index}`} className="landing-ai-result-card">
+                        <span className="landing-ai-result-index">#{index + 1}</span>
+                        <div className={blurred ? 'landing-ai-blur-target' : undefined}>
+                          <p>{item}</p>
+                        </div>
+                        {blurred && index === 1 && (teaserLocked || clientOnly) && (
+                          <div className="landing-ai-result-lock-overlay">
+                            <p>Unlock full AI results</p>
+                            <button type="button" className="btn btn-primary btn-sm" onClick={onUnlock}>
+                              Upgrade
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="landing-ai-result-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={aiLoading}
+                    onClick={() => runGeneration(aiAction)}
+                  >
+                    Regenerate
+                  </button>
+                  {!hasPremium && (
+                    <button type="button" className="btn btn-primary" onClick={onUnlock}>
+                      Unlock full AI access
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="muted">Choose an action to generate your first result set.</p>
+            )}
+          </div>
         </div>
       </div>
     </section>

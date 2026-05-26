@@ -42,8 +42,8 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
             <span className="landing-logo-boost">{BRAND.namePart2}</span>
           </Link>
           <p className="landing-site-footer-tagline">
-            AI-powered YouTube channel audit and growth analysis for creators who want more
-            views, stronger CTR, and better publishing decisions.
+            YouTubeBooster AI helps creators improve CTR, SEO, thumbnails, retention, and
+            discover growth opportunities using AI-powered channel analysis.
           </p>
           <ul className="landing-site-footer-trust-list" aria-label="Footer trust signals">
             <li>No subscription</li>
@@ -76,7 +76,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
           </div>
 
           <div className="landing-site-footer-col">
-            <h3 className="landing-site-footer-col-title">Compare / Legal</h3>
+            <h3 className="landing-site-footer-col-title">Compare / Platform</h3>
             <ul className="landing-site-footer-links">
               {FOOTER_COMPARE_PAGES.map((page) => (
                 <li key={page.path}>
@@ -92,6 +92,12 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
               <li>
                 <Link to="/contact">Contact</Link>
               </li>
+            </ul>
+          </div>
+
+          <div className="landing-site-footer-col">
+            <h3 className="landing-site-footer-col-title">Legal</h3>
+            <ul className="landing-site-footer-links">
               <li>
                 <Link to="/privacy-policy">Privacy Policy</Link>
               </li>

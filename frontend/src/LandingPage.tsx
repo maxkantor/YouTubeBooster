@@ -1066,7 +1066,7 @@ export function LandingPage() {
       />
 
       {/* 5. Why Creators Buy */}
-      <section className="landing-section landing-section-alt">
+      <section className="landing-section landing-section-alt landing-why-section">
         <div className="container landing-container">
           <h2 className="landing-section-title">Built by a Real Creator, for Real YouTube Growth</h2>
           <p className="landing-section-sub">
@@ -1074,14 +1074,17 @@ export function LandingPage() {
           </p>
           <div className="landing-why-grid">
             <div className="landing-why-card">
+              <span className="landing-why-icon" aria-hidden />
               <h3>Real Channel Audit</h3>
               <p>Uses your channel data to identify growth blockers.</p>
             </div>
             <div className="landing-why-card">
+              <span className="landing-why-icon" aria-hidden />
               <h3>Creator-Friendly Fixes</h3>
               <p>Simple recommendations you can apply without being a YouTube expert.</p>
             </div>
             <div className="landing-why-card">
+              <span className="landing-why-icon" aria-hidden />
               <h3>One-time unlock</h3>
               <p>No monthly subscription. Pay once and get your full report.</p>
             </div>
@@ -1132,7 +1135,12 @@ export function LandingPage() {
                     ? 'Starting checkout…'
                     : `Get My Full Growth Fix — ${oneTimePriceLabel}`}
               </button>
-              <p className="landing-pricing-microcopy">One-time payment. No subscription. Instant access.</p>
+              <ul className="landing-pricing-trust-list" aria-label="Pricing trust signals">
+                <li>One-time payment</li>
+                <li>No subscription</li>
+                <li>Instant access</li>
+              </ul>
+              <p className="landing-pricing-microcopy">Unlock the full report after the free preview when you are ready.</p>
             </div>
           </div>
         </div>
