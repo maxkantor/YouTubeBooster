@@ -1216,11 +1216,11 @@ export function UnifiedDashboard({
               <section className="dashboard-section conversion-bar">
                 <h2 className="conversion-bar-title">See why your channel isn’t growing</h2>
                 <p className="conversion-bar-sub">
-                  Full fix for your channel — live stats, titles, SEO, traffic. One-time payment.
+                  Start with the free preview. Upgrade only if you want the full channel audit, recommendations, and growth plan.
                 </p>
                 <div className="conversion-bar-actions">
                   <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Overview')}>
-                    Get My Growth Fix — {oneTimePriceLabel}
+                    Get My Full Growth Fix — {oneTimePriceLabel}
                   </button>
                   <button type="button" className="btn btn-secondary" onClick={() => setActiveTab('videos')}>
                     Keep Exploring Demo

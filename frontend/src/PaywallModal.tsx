@@ -8,11 +8,11 @@ import type { CheckoutSession } from './types';
 import { usePricing } from './PricingContext';
 
 const BENEFITS = [
-  'Find what’s killing your views',
-  'Fix your titles for higher CTR',
-  'Discover missed traffic opportunities',
-  'Get simple steps to grow fast',
-  'Save your report & track progress'
+  'Find what is killing your views',
+  'Fix weak titles and low CTR',
+  'Discover missed keyword and traffic opportunities',
+  'Improve thumbnails and video packaging',
+  'Save your report and track progress'
 ];
 
 export function PaywallModal({
@@ -109,7 +109,7 @@ export function PaywallModal({
           </button>
         </div>
         <p className="paywall-subtitle">
-          Fix it in minutes — full report, your channel, one payment. No subscription.
+          Start with a free preview. Upgrade only if you want the full channel audit, recommendations, and growth plan.
         </p>
         <ul className="feature-list paywall-list">
           {BENEFITS.map((item) => (
@@ -126,7 +126,7 @@ export function PaywallModal({
           </p>
           {error && <p className="error-text">{error}</p>}
           <button type="button" className="btn btn-primary" onClick={handleUnlock} disabled={isLoading || hasPremium}>
-            {authSession ? (hasPremium ? 'Already unlocked' : (isLoading ? 'Starting checkout…' : 'Unlock Full Report')) : 'Sign in to unlock'}
+            {authSession ? (hasPremium ? 'Already unlocked' : (isLoading ? 'Starting checkout…' : `Get My Full Growth Fix — ${oneTimePriceLabel}`)) : 'Sign in to unlock'}
           </button>
         </div>
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>

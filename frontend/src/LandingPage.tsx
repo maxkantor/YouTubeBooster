@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
-import { GROWTH_GUIDE_PAGES } from './seo/growthGuides';
+import { FOOTER_COMPARE_PAGES, FOOTER_GROWTH_PAGES, HOMEPAGE_GUIDE_GROUPS } from './seo/growthGuides';
 import { analytics } from './lib/analytics';
 import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
@@ -27,11 +27,11 @@ const EXAMPLE_DASHBOARD_METRICS = {
 };
 
 const UNLOCK_FEATURES = [
-  'Find what’s killing your views',
-  'Fix your titles for higher CTR',
-  'Discover missed traffic opportunities',
-  'Get simple steps to grow fast',
-  'Save your report & track progress'
+  'Find what is killing your views',
+  'Fix weak titles and low CTR',
+  'Discover missed keyword and traffic opportunities',
+  'Improve thumbnails and video packaging',
+  'Save your report and track progress'
 ];
 
 const DEFAULT_EXAMPLE_PREVIEW_CHANNEL = '@MaxKantorCooking';
@@ -375,24 +375,20 @@ export function LandingPage() {
   const faqLeftColumn = useMemo(
     () => [
       {
-        q: 'Will this actually help me get more views?',
-        a: 'Yes — the AI identifies what’s limiting your growth (low CTR, weak titles, missed keywords) and gives you exact fixes you can apply immediately.'
+        q: 'Is YouTubeBooster AI a subscription?',
+        a: 'No. The frontend offer is a one-time payment with no subscription. You can run the free preview first, then upgrade only if you want the full channel audit, recommendations, and growth plan.'
       },
       {
-        q: 'What results should I expect?',
-        a: 'Most users improve click-through rate and video performance by fixing titles and packaging — the fastest way to grow.'
+        q: 'How is this different from vidIQ or TubeBuddy?',
+        a: 'Those tools can show a lot of data. YouTubeBooster AI is positioned around diagnosis and action: why the channel is not growing, what is hurting CTR or retention, and what to fix next in plain language.'
       },
       {
-        q: 'Is this safe for my YouTube account?',
-        a: 'Yes. No login required. We don’t modify anything — you stay in full control.'
+        q: 'Can this help a small YouTube channel?',
+        a: 'Yes. Small creators usually benefit the most because a few clearer fixes around titles, thumbnails, SEO, and packaging can change the learning curve quickly before bad patterns get repeated for months.'
       },
       {
-        q: 'Is this a subscription?',
-        a: 'No — one-time payment. No recurring fees.'
-      },
-      {
-        q: 'Do I need any technical setup?',
-        a: 'No. Paste your channel URL and click analyze.'
+        q: 'What does the free audit include?',
+        a: 'The free preview is designed to show the channel health direction, common weak spots, and the kind of practical fixes the platform surfaces. No signup is required for the preview.'
       }
     ],
     []
@@ -400,24 +396,16 @@ export function LandingPage() {
   const faqRightColumn = useMemo(
     () => [
       {
-        q: 'How is this different from TubeBuddy or vidIQ?',
-        a: 'Those tools show data. This tells you what to DO with it — titles, ideas, and strategies ready to use.'
+        q: `What do I get after paying ${oneTimePriceLabel}?`,
+        a: `You unlock the full growth fix: deeper channel audit detail, clearer recommendations, growth plan guidance, stronger packaging direction, and saved report access in the premium experience.`
       },
       {
-        q: `Why is it only ${oneTimePriceLabel}?`,
-        a: 'This is designed as a fast, high-impact tool — not a bloated subscription. You get value instantly.'
+        q: 'Is this safe for my YouTube account?',
+        a: 'Yes. The audit is built to be creator-friendly. You are not handing over risky automation or changing anything on your channel just to understand public growth signals and packaging issues.'
       },
       {
-        q: 'Can I analyze any channel?',
-        a: 'Yes — yours, competitors, or any channel in your niche.'
-      },
-      {
-        q: 'What happens after purchase?',
-        a: 'You unlock full AI insights, Growth Studio tools, and all recommendations instantly.'
-      },
-      {
-        q: 'Will this work for small channels?',
-        a: 'Yes — small channels benefit the most by fixing mistakes early.'
+        q: 'Do I need to connect my YouTube login?',
+        a: 'No. There is no technical setup required just to start. You can run the preview, review the recommendations, and decide whether to unlock the full fix without connecting your YouTube login.'
       }
     ],
     [oneTimePriceLabel]
@@ -902,7 +890,7 @@ export function LandingPage() {
           <div className="container">
             <h1 className="landing-hero-title" id="hero-heading">
               <span className="landing-hero-title-line landing-hero-title-headline landing-heading-display">
-                Turn Every YouTube Upload Into Real Growth
+                AI YouTube Channel Audit &amp; Growth Analyzer
               </span>
             </h1>
           </div>
@@ -910,7 +898,10 @@ export function LandingPage() {
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
             <p className="landing-hero-sub">
-              Elite AI pinpoints what is suppressing CTR, watch time, and discovery—then gives you exact fixes you can apply in minutes.
+              Find out why your channel is not growing. Analyze CTR, titles, thumbnails, SEO, retention signals, and missed traffic opportunities in minutes.
+            </p>
+            <p className="landing-hero-trust-copy">
+              Built for small YouTube creators who need clear fixes -- not generic advice.
             </p>
             <div className="landing-hero-buttons">
               <a href="#audit" className="btn btn-lg landing-hero-cta-primary landing-cta-premium">
@@ -1069,21 +1060,34 @@ export function LandingPage() {
       {/* 5. Why Creators Buy */}
       <section className="landing-section landing-section-alt">
         <div className="container landing-container">
-          <h2 className="landing-section-title">Why creators buy this</h2>
+          <h2 className="landing-section-title">Built by a Real Creator, for Real YouTube Growth</h2>
+          <p className="landing-section-sub">
+            YouTubeBooster AI is designed for creators who are tired of guessing. It reviews your channel like a growth consultant and gives you practical fixes for titles, thumbnails, SEO, packaging, and content strategy.
+          </p>
           <div className="landing-why-grid">
             <div className="landing-why-card">
-              <h3>Stop guessing</h3>
-              <p>Know exactly what is blocking your growth.</p>
+              <h3>Real Channel Audit</h3>
+              <p>Uses your channel data to identify growth blockers.</p>
             </div>
             <div className="landing-why-card">
-              <h3>Data-driven insights</h3>
-              <p>Recommendations based on your real channel data.</p>
+              <h3>Creator-Friendly Fixes</h3>
+              <p>Simple recommendations you can apply without being a YouTube expert.</p>
             </div>
             <div className="landing-why-card">
               <h3>One-time unlock</h3>
-              <p>Pay once. No subscriptions.</p>
+              <p>No monthly subscription. Pay once and get your full report.</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="landing-section landing-cta-block-section">
+        <div className="container landing-container landing-cta-block">
+          <h2 className="landing-section-title">Ready to See What&apos;s Blocking Your Growth?</h2>
+          <p className="landing-section-sub">No signup required for the preview. Upgrade only if you want the full fix.</p>
+          <a href="#audit" className="btn btn-primary btn-lg">
+            Run Free Channel Audit
+          </a>
         </div>
       </section>
 
@@ -1092,15 +1096,15 @@ export function LandingPage() {
         <div className="container landing-container landing-pricing-inner">
           <span className="landing-section-eyebrow">One-time · no subscription</span>
           <h2 className="landing-section-title landing-pricing-headline landing-heading-display landing-nowrap-desktop" id="pricing-heading">
-            See Why Your Channel Isn’t Growing — Fix It in Minutes
+            See Why Your Channel Isn&apos;t Growing -- Unlock the Full Fix for {oneTimePriceLabel}
           </h2>
           <p className="landing-pricing-lead landing-nowrap-desktop">
-            Start with a free preview using the demo channel — upgrade only if you want the full fix.
+            Start with a free preview. Upgrade only if you want the full channel audit, recommendations, and growth plan.
           </p>
           <div className="landing-pricing-card">
-            <p className="landing-pricing-compare">Similar audits cost $100+ — get yours for {oneTimePriceLabel}</p>
+            <p className="landing-pricing-compare">See why your growth is stalled before you waste more uploads on guesswork.</p>
             <p className="landing-pricing-badge" role="note">
-              🔥 Most channels under 1K subs make these mistakes
+              Free preview first. Upgrade only if you want the full fix.
             </p>
             <div className="landing-pricing-price-row" aria-label="Price">
               <span className="landing-pricing-amount">{oneTimePriceLabel}</span>
@@ -1128,7 +1132,7 @@ export function LandingPage() {
                   ? 'Already unlocked'
                   : pricingLoading
                     ? 'Starting checkout…'
-                    : `Get My Growth Fix — ${oneTimePriceLabel}`}
+                    : `Get My Full Growth Fix — ${oneTimePriceLabel}`}
               </button>
               <p className="landing-pricing-microcopy">One-time payment. No subscription. Instant access.</p>
             </div>
@@ -1214,9 +1218,10 @@ export function LandingPage() {
             </div>
           </div>
           <div className="landing-faq-post-cta">
-            <p className="landing-pricing-microcopy">Still unsure? Run a free channel audit — no signup required.</p>
+            <h3 className="landing-cta-block-title">Ready to See What&apos;s Blocking Your Growth?</h3>
+            <p className="landing-pricing-microcopy">No signup required for the preview. Upgrade only if you want the full fix.</p>
             <a href="#audit" className="btn btn-primary">
-              Analyze your channel
+              Run Free Channel Audit
             </a>
           </div>
         </div>
@@ -1226,27 +1231,32 @@ export function LandingPage() {
       <section className="landing-section landing-growth-guides-section" aria-labelledby="growth-guides-heading">
         <div className="container landing-container landing-growth-guides-inner">
           <h2 className="landing-growth-guides-title landing-heading-display" id="growth-guides-heading">
-            Popular YouTube growth guides
+            Explore Growth Guides, Audit Topics, and Comparisons
           </h2>
           <p className="landing-growth-guides-sub">
-            Practical reads on packaging, CTR, and retention—built for creators who want a serious growth system, not generic
-            tips.
+            Indexable, useful resources for creators who want practical answers on CTR, titles, thumbnails, SEO, retention, and better publishing decisions.
           </p>
-          <ul className="landing-growth-guides-grid">
-            {GROWTH_GUIDE_PAGES.map((g) => (
-              <li key={g.path}>
-                <Link to={g.path} className="landing-growth-guide-card">
-                  <h3 className="landing-growth-guide-card-title">{g.cardTitle}</h3>
-                  <p className="landing-growth-guide-card-teaser">{g.teaser}</p>
-                  <span className="landing-growth-guide-card-cta">Read guide</span>
-                </Link>
-              </li>
+          <div className="landing-guide-directory-grid">
+            {HOMEPAGE_GUIDE_GROUPS.map((group, index) => (
+              <section key={group.title} className="landing-guide-directory-card" aria-labelledby={`guide-group-${index}`}>
+                <h3 className="landing-growth-guide-card-title" id={`guide-group-${index}`}>{group.title}</h3>
+                <ul className="landing-guide-directory-links">
+                  {group.pages.map((page) => (
+                    <li key={page.path}>
+                      <Link to={page.path} className="landing-guide-directory-link">
+                        {page.cardTitle}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
           <div className="landing-growth-guides-primary-cta">
-            <p className="landing-growth-guides-cta-copy">Prefer action to reading? Run your AI channel audit first.</p>
+            <h3 className="landing-cta-block-title">Ready to See What&apos;s Blocking Your Growth?</h3>
+            <p className="landing-growth-guides-cta-copy">No signup required for the preview. Upgrade only if you want the full fix.</p>
             <a href="#audit" className="btn btn-primary btn-lg landing-growth-guides-audit-btn">
-              Analyze your channel
+              Run Free Channel Audit
             </a>
           </div>
         </div>
@@ -1268,7 +1278,7 @@ export function LandingPage() {
               <span className="landing-logo-boost">{BRAND.namePart2}</span>
             </Link>
             <p className="landing-site-footer-tagline">
-              AI-powered YouTube growth audits for creators who want more views.
+              AI YouTube channel audit and growth analysis for small creators who want clearer fixes and better decisions.
             </p>
           </div>
           <nav className="landing-site-footer-nav" aria-label="Footer">
@@ -1289,7 +1299,17 @@ export function LandingPage() {
             <div className="landing-site-footer-col">
               <h3 className="landing-site-footer-col-title">Growth</h3>
               <ul className="landing-site-footer-links">
-                {GROWTH_GUIDE_PAGES.map((g) => (
+                {FOOTER_GROWTH_PAGES.map((g) => (
+                  <li key={g.path}>
+                    <Link to={g.path}>{g.cardTitle}</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="landing-site-footer-col">
+              <h3 className="landing-site-footer-col-title">Compare</h3>
+              <ul className="landing-site-footer-links">
+                {FOOTER_COMPARE_PAGES.map((g) => (
                   <li key={g.path}>
                     <Link to={g.path}>{g.cardTitle}</Link>
                   </li>

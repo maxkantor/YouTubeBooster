@@ -7,7 +7,7 @@ import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
 import { StructuredData } from './components/StructuredData';
 import { SeoHead } from './SeoHead';
-import { GROWTH_GUIDE_PAGES } from './seo/growthGuides';
+import { FOOTER_COMPARE_PAGES, FOOTER_GROWTH_PAGES } from './seo/growthGuides';
 import { resolveSeoForPath } from './seo/resolveSeo';
 import { AuthProvider } from './AuthContext';
 import { ForgotPasswordPage, SignInPage, SignUpPage } from './AuthPages';
@@ -90,14 +90,8 @@ const AboutPage = React.lazy(() => import('./pages/marketing/MarketingPages').th
 const ContactPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.ContactPage })));
 const PrivacyPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.PrivacyPage })));
 const DisclaimerPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.DisclaimerPage })));
-const WhyYourYoutubeHasNoViewsPage = React.lazy(() =>
-  import('./pages/marketing/GrowthGuidePages').then((m) => ({ default: m.WhyYourYoutubeHasNoViewsPage }))
-);
-const HowToGetMoreYoutubeViewsPage = React.lazy(() =>
-  import('./pages/marketing/GrowthGuidePages').then((m) => ({ default: m.HowToGetMoreYoutubeViewsPage }))
-);
-const YoutubeThumbnailMistakesPage = React.lazy(() =>
-  import('./pages/marketing/GrowthGuidePages').then((m) => ({ default: m.YoutubeThumbnailMistakesPage }))
+const GrowthGuideRoutePage = React.lazy(() =>
+  import('./pages/marketing/GrowthGuidePages').then((m) => ({ default: m.GrowthGuideRoutePage }))
 );
 
 /** Redirect from /app to the main dashboard (onboarding wizard removed). */
@@ -710,6 +704,8 @@ function AppInner() {
         title={seoResolved.title}
         description={seoResolved.description}
         canonicalPath={seoResolved.canonicalPath}
+        ogTitle={seoResolved.ogTitle}
+        ogDescription={seoResolved.ogDescription}
         noindex={seoResolved.noindex === true}
         keywords={seoResolved.keywords}
         ogType={seoResolved.ogType ?? 'website'}
@@ -823,9 +819,20 @@ function AppInner() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/disclaimer" element={<DisclaimerPage />} />
-        <Route path="/why-your-youtube-has-no-views" element={<WhyYourYoutubeHasNoViewsPage />} />
-        <Route path="/how-to-get-more-youtube-views" element={<HowToGetMoreYoutubeViewsPage />} />
-        <Route path="/youtube-thumbnail-mistakes" element={<YoutubeThumbnailMistakesPage />} />
+        <Route path="/why-your-youtube-has-no-views" element={<Navigate to="/why-your-youtube-channel-gets-no-views" replace />} />
+        <Route path="/why-your-youtube-channel-gets-no-views" element={<GrowthGuideRoutePage />} />
+        <Route path="/how-to-get-more-youtube-views" element={<GrowthGuideRoutePage />} />
+        <Route path="/youtube-thumbnail-mistakes" element={<GrowthGuideRoutePage />} />
+        <Route path="/low-click-through-rate-youtube" element={<GrowthGuideRoutePage />} />
+        <Route path="/youtube-seo-for-small-channels" element={<GrowthGuideRoutePage />} />
+        <Route path="/youtube-title-generator" element={<GrowthGuideRoutePage />} />
+        <Route path="/how-to-increase-youtube-watch-time" element={<GrowthGuideRoutePage />} />
+        <Route path="/youtube-retention-analysis" element={<GrowthGuideRoutePage />} />
+        <Route path="/youtube-thumbnail-ctr" element={<GrowthGuideRoutePage />} />
+        <Route path="/free-youtube-channel-audit" element={<GrowthGuideRoutePage />} />
+        <Route path="/vidiq-alternative" element={<GrowthGuideRoutePage />} />
+        <Route path="/tubebuddy-alternative" element={<GrowthGuideRoutePage />} />
+        <Route path="/best-youtube-audit-tool" element={<GrowthGuideRoutePage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/audit" element={<AuditHubPage />} />
         <Route path="/audit/:slug" element={<AuditArticleRoute />} />
@@ -908,7 +915,7 @@ function AppInner() {
                 <span className="landing-logo-boost">{BRAND.namePart2}</span>
               </Link>
               <p className="landing-site-footer-tagline">
-                AI-powered YouTube growth audits for creators who want more views.
+                AI YouTube channel audit and growth analysis for small creators who want clearer fixes and better decisions.
               </p>
             </div>
             <nav className="landing-site-footer-nav" aria-label="Footer">
@@ -923,7 +930,17 @@ function AppInner() {
               <div className="landing-site-footer-col">
                 <h3 className="landing-site-footer-col-title">Growth</h3>
                 <ul className="landing-site-footer-links">
-                  {GROWTH_GUIDE_PAGES.map((g) => (
+                  {FOOTER_GROWTH_PAGES.map((g) => (
+                    <li key={g.path}>
+                      <Link to={g.path}>{g.cardTitle}</Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="landing-site-footer-col">
+                <h3 className="landing-site-footer-col-title">Compare</h3>
+                <ul className="landing-site-footer-links">
+                  {FOOTER_COMPARE_PAGES.map((g) => (
                     <li key={g.path}>
                       <Link to={g.path}>{g.cardTitle}</Link>
                     </li>

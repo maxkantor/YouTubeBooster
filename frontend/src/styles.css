@@ -2219,6 +2219,17 @@ textarea {
   z-index: 1;
 }
 
+.landing-hero-trust-copy {
+  margin: 0 0 18px;
+  max-width: 38rem;
+  font-size: 0.98rem;
+  line-height: 1.6;
+  color: #dbeafe;
+  font-weight: 600;
+  position: relative;
+  z-index: 1;
+}
+
 .landing-hero-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -3976,6 +3987,27 @@ textarea {
   line-height: 1.6;
 }
 
+.landing-cta-block-section {
+  padding-top: 20px;
+}
+
+.landing-cta-block {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 30px 32px;
+  border-radius: 24px;
+  border: 1px solid rgba(129, 140, 248, 0.22);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.92));
+  box-shadow: 0 18px 50px rgba(2, 6, 23, 0.32);
+  text-align: center;
+}
+
+.landing-cta-block-title {
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+  color: #f8fafc;
+}
+
 /* Pricing */
 .landing-pricing-section {
   padding: 44px var(--app-gutter) 48px;
@@ -4341,41 +4373,20 @@ textarea {
   line-height: 1.55;
 }
 
-.landing-growth-guides-grid {
-  list-style: none;
+.landing-guide-directory-grid {
   margin: 0 0 32px;
-  padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   text-align: left;
 }
 
-.landing-growth-guides-grid li {
-  margin: 0;
-}
-
-.landing-growth-guide-card {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+.landing-guide-directory-card {
   padding: 22px 20px;
   border-radius: 14px;
-  text-decoration: none;
-  color: inherit;
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(15, 23, 42, 0.55) 100%);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s,
-    transform 0.2s;
-}
-
-.landing-growth-guide-card:hover {
-  border-color: rgba(129, 140, 248, 0.45);
-  box-shadow: 0 16px 48px rgba(79, 70, 229, 0.15);
-  transform: translateY(-2px);
 }
 
 .landing-growth-guide-card-title {
@@ -4386,23 +4397,24 @@ textarea {
   letter-spacing: -0.02em;
 }
 
-.landing-growth-guide-card-teaser {
-  margin: 0 0 14px;
-  flex: 1;
-  font-size: 0.92rem;
-  line-height: 1.55;
-  color: #94a3b8;
+.landing-guide-directory-links {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
 }
 
-.landing-growth-guide-card-cta {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: #a5b4fc;
-  letter-spacing: 0.02em;
+.landing-guide-directory-link {
+  color: #cbd5e1;
+  text-decoration: none;
+  line-height: 1.45;
 }
 
-.landing-growth-guide-card:hover .landing-growth-guide-card-cta {
-  color: #c4b5fd;
+.landing-guide-directory-link:hover {
+  color: #f8fafc;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .landing-growth-guides-primary-cta {
@@ -4424,6 +4436,10 @@ textarea {
   .landing-growth-guides-section {
     padding-left: 18px;
     padding-right: 18px;
+  }
+
+  .landing-guide-directory-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -5071,6 +5087,12 @@ textarea {
     margin-right: auto;
   }
 
+  .landing-hero-trust-copy {
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+  }
+
   .landing-hero-buttons {
     justify-content: center;
     flex-direction: column;
@@ -5201,6 +5223,10 @@ textarea {
 
   .landing-why-grid {
     grid-template-columns: 1fr;
+  }
+
+  .landing-cta-block {
+    padding: 24px 18px;
   }
 
   .landing-insights-grid {

@@ -57,14 +57,20 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
       title: BRAND_DEFAULT_TITLE,
       description: BRAND.seoHomeDescription,
       canonicalPath: '/',
+      ogTitle: 'AI YouTube Channel Audit & Growth Analyzer',
+      ogDescription:
+        'Find out why your YouTube channel is not growing and unlock practical fixes for titles, thumbnails, SEO, CTR, and content strategy.',
       keywords: [
         'youtube booster ai',
-        'youtube booster ai official',
         'youtube channel audit',
+        'ai youtube channel audit',
+        'youtube growth analyzer',
         'youtube analytics',
         'youtube seo',
         'grow youtube views',
         'youtube ctr',
+        'youtube thumbnails',
+        'youtube retention',
         'channel growth'
       ],
       ogType: 'website',

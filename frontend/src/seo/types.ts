@@ -6,6 +6,8 @@ export type ResolvedSeo = {
   title: string;
   description: string;
   canonicalPath: string;
+  ogTitle?: string;
+  ogDescription?: string;
   /** Meta keywords — optional; use sparingly (Google largely ignores; some engines still read). */
   keywords?: string[];
   /** When true, page is private (admin, auth, checkout, …). Omitted/false = indexable. */

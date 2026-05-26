@@ -4,7 +4,14 @@
 import audits from './data/audits.json';
 import blogPosts from './data/blogPosts.json';
 import guides from './data/guides.json';
+import { GROWTH_GUIDE_PAGES } from './growthGuides';
 import solutions from './data/solutions.json';
+
+const ROOT_GROWTH_GUIDE_PATHS = GROWTH_GUIDE_PAGES.map((page) => ({
+  path: page.path,
+  changefreq: 'monthly',
+  priority: 0.82
+}));
 
 export const STATIC_INDEXABLE_PATHS: { path: string; changefreq: string; priority: number }[] = [
   { path: '/', changefreq: 'weekly', priority: 1 },
@@ -18,9 +25,7 @@ export const STATIC_INDEXABLE_PATHS: { path: string; changefreq: string; priorit
   { path: '/solutions', changefreq: 'weekly', priority: 0.85 },
   { path: '/guides', changefreq: 'weekly', priority: 0.85 },
   { path: '/blog', changefreq: 'weekly', priority: 0.72 },
-  { path: '/why-your-youtube-has-no-views', changefreq: 'monthly', priority: 0.82 },
-  { path: '/how-to-get-more-youtube-views', changefreq: 'monthly', priority: 0.82 },
-  { path: '/youtube-thumbnail-mistakes', changefreq: 'monthly', priority: 0.82 },
+  ...ROOT_GROWTH_GUIDE_PATHS,
   { path: '/site-map', changefreq: 'monthly', priority: 0.4 }
 ];
 

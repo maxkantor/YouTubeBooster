@@ -41,11 +41,11 @@ export function softwareApplicationSchema(): Record<string, unknown> {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
     name: BRAND.name,
-    applicationCategory: 'AnalyticsApplication',
+    applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     offers: {
       '@type': 'Offer',
-      price: '19.99',
+      price: '9.99',
       priceCurrency: 'USD',
       availability: 'https://schema.org/InStock'
     },
@@ -68,7 +68,7 @@ export function productSchema(): Record<string, unknown> {
       '@type': 'Offer',
       url: `${getSiteUrl()}/#pricing`,
       priceCurrency: 'USD',
-      price: '19.99',
+      price: '9.99',
       availability: 'https://schema.org/InStock',
       priceValidUntil: '2027-12-31'
     }

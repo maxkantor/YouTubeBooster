@@ -5,10 +5,10 @@ import { formatPriceLabel } from './config/pricing';
 type PricingState = {
   loading: boolean;
   error: string | null;
-  /** e.g. "19.99" */
+  /** backend-reported amount (display is formatted separately) */
   oneTimePrice: string;
   currency: string;
-  /** e.g. "$19.99" for USD */
+  /** e.g. "$9.99" for USD */
   oneTimePriceLabel: string;
   refresh: () => Promise<void>;
 };
@@ -18,7 +18,7 @@ const Ctx = createContext<PricingState | null>(null);
 export function PricingProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [oneTimePrice, setOneTimePrice] = useState('19.99');
+  const [oneTimePrice, setOneTimePrice] = useState('9.99');
   const [currency, setCurrency] = useState('USD');
 
   const refresh = useCallback(async () => {
@@ -64,9 +64,9 @@ export function usePricing(): PricingState {
     return {
       loading: false,
       error: null,
-      oneTimePrice: '19.99',
+      oneTimePrice: '9.99',
       currency: 'USD',
-      oneTimePriceLabel: formatPriceLabel('19.99', 'USD'),
+      oneTimePriceLabel: formatPriceLabel('9.99', 'USD'),
       refresh: async () => undefined
     };
   }

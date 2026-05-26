@@ -12,6 +12,8 @@ export type SeoProps = {
   description?: string;
   /** Path only, e.g. /audit/foo — canonical becomes siteUrl + path */
   canonicalPath?: string;
+  ogTitle?: string;
+  ogDescription?: string;
   ogImage?: string;
   noindex?: boolean;
   keywords?: string[];
@@ -41,6 +43,8 @@ export function SeoHead({
   title = DEFAULT_TITLE,
   description = DEFAULT_DESC,
   canonicalPath,
+  ogTitle,
+  ogDescription,
   ogImage = '/og-image.jpg',
   noindex,
   keywords,
@@ -65,8 +69,10 @@ export function SeoHead({
     const isDefaultOgJpeg =
       ogImage === '/og-image.jpg' || ogImage.endsWith('/og-image.jpg') || imageUrl.endsWith('/og-image.jpg');
 
-    setMeta('og:title', title, true);
-    setMeta('og:description', description, true);
+    const resolvedOgTitle = ogTitle ?? title;
+    const resolvedOgDescription = ogDescription ?? description;
+    setMeta('og:title', resolvedOgTitle, true);
+    setMeta('og:description', resolvedOgDescription, true);
     setMeta('og:type', ogType, true);
     setMeta('og:url', canonicalHref, true);
     setMeta('og:image', imageUrl, true);
@@ -77,8 +83,8 @@ export function SeoHead({
     }
     setMeta('twitter:card', 'summary_large_image');
     setMeta('twitter:image', imageUrl);
-    setMeta('twitter:title', title);
-    setMeta('twitter:description', description);
+    setMeta('twitter:title', resolvedOgTitle);
+    setMeta('twitter:description', resolvedOgDescription);
 
     if (articlePublishedTime) setMeta('article:published_time', articlePublishedTime, true);
     else removeMeta('article:published_time', true);
@@ -113,6 +119,8 @@ export function SeoHead({
     title,
     description,
     canonicalPath,
+    ogTitle,
+    ogDescription,
     ogImage,
     noindex,
     keywords,
