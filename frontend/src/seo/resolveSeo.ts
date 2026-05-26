@@ -81,30 +81,30 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
 
   if (path === '/about') {
     return {
-      title: `About Us – ${BRAND.name}`,
-      description: `Learn about ${BRAND.name}: AI-powered YouTube channel audits built for creators who want more views and clearer growth plans.`,
+      title: `About ${BRAND.name} | Built for Small Creators`,
+      description: `Learn how ${BRAND.name} helps small YouTube creators understand CTR, thumbnails, SEO, retention, and packaging with practical growth guidance.`,
       canonicalPath: '/about',
-      keywords: ['about youtube booster', 'youtube audit company'],
+      keywords: ['about youtube booster ai', 'youtube creator growth platform', 'youtube audit company'],
       jsonLd: baseGraph()
     };
   }
 
   if (path === '/contact') {
     return {
-      title: `Contact – ${BRAND.name}`,
-      description: `Contact ${BRAND.name} for product questions, billing help, or partnership inquiries.`,
+      title: `Contact ${BRAND.name} | Creator Support`,
+      description: `Contact ${BRAND.name} for creator support, billing help, partnerships, product feedback, or account questions.`,
       canonicalPath: '/contact',
-      keywords: ['contact youtube booster'],
+      keywords: ['contact youtube booster ai', 'creator support youtube booster'],
       jsonLd: baseGraph()
     };
   }
 
-  if (path === '/privacy') {
+  if (path === '/privacy' || path === '/privacy-policy') {
     return {
       title: `Privacy Policy – ${BRAND.name}`,
-      description: `Privacy policy for ${BRAND.name}: how we handle account data, analytics, and cookies.`,
-      canonicalPath: '/privacy',
-      keywords: ['privacy policy'],
+      description: `Privacy policy for ${BRAND.name}: how we handle creator messages, account details, analytics, and product-related information.`,
+      canonicalPath: '/privacy-policy',
+      keywords: ['privacy policy', 'youtube booster ai privacy'],
       jsonLd: baseGraph()
     };
   }
@@ -112,9 +112,9 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
   if (path === '/disclaimer') {
     return {
       title: `Disclaimer – ${BRAND.name}`,
-      description: `Disclaimer for ${BRAND.name} audits and analytics: limitations, third-party data, and no guarantees.`,
+      description: `Disclaimer for ${BRAND.name}: independent tool disclosure, no guaranteed results, and creator responsibility for channel decisions.`,
       canonicalPath: '/disclaimer',
-      keywords: ['disclaimer'],
+      keywords: ['disclaimer', 'youtube booster ai disclaimer'],
       jsonLd: baseGraph()
     };
   }
@@ -132,10 +132,10 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
 
   if (path === '/platform') {
     return {
-      title: `MK Platform – ${BRAND.name}`,
-      description: 'Platform information and engineering notes for YouTube Booster.',
+      title: `Platform – ${BRAND.name} | AI YouTube Audit Workflow`,
+      description: `Explore the ${BRAND.name} platform: AI YouTube channel audits, CTR and retention analysis, thumbnail optimization, SEO guidance, and creator workflow tools.`,
       canonicalPath: '/platform',
-      keywords: ['youtube booster platform'],
+      keywords: ['youtube booster ai platform', 'youtube audit platform', 'ai youtube channel audit workflow'],
       jsonLd: [...baseGraph()]
     };
   }

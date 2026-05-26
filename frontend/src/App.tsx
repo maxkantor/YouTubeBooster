@@ -642,8 +642,7 @@ function AppInner() {
 
   const location = useLocation();
   const pathAdmin = location.pathname.startsWith('/admin');
-  const showGlobalNav =
-    !pathAdmin && location.pathname !== '/' && location.pathname !== '/platform';
+  const showGlobalNav = !pathAdmin && location.pathname !== '/';
   let globalReturnTo = `${location.pathname}${location.search}`;
   // Avoid returning to checkout success without a session_id (common "wrong screen" loop).
   try {
@@ -817,6 +816,7 @@ function AppInner() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/disclaimer" element={<DisclaimerPage />} />
         <Route path="/why-your-youtube-has-no-views" element={<Navigate to="/why-your-youtube-channel-gets-no-views" replace />} />

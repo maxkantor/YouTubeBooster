@@ -18,7 +18,7 @@ export const STATIC_INDEXABLE_PATHS: { path: string; changefreq: string; priorit
   { path: '/demo', changefreq: 'weekly', priority: 0.95 },
   { path: '/about', changefreq: 'monthly', priority: 0.55 },
   { path: '/contact', changefreq: 'monthly', priority: 0.55 },
-  { path: '/privacy', changefreq: 'yearly', priority: 0.45 },
+  { path: '/privacy-policy', changefreq: 'yearly', priority: 0.45 },
   { path: '/disclaimer', changefreq: 'yearly', priority: 0.45 },
   { path: '/platform', changefreq: 'monthly', priority: 0.6 },
   { path: '/audit', changefreq: 'weekly', priority: 0.85 },

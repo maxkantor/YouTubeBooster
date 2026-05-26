@@ -4996,6 +4996,20 @@ textarea {
 .marketing-static-body p {
   margin: 0 0 1rem;
 }
+
+.marketing-static-cta {
+  margin-top: 1.75rem;
+  padding: 22px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(15, 23, 42, 0.65));
+  border: 1px solid rgba(129, 140, 248, 0.22);
+}
+
+.marketing-static-cta .btn {
+  display: inline-block;
+  margin-top: 0.25rem;
+}
+
 .marketing-static-body a {
   color: #a5b4fc;
   text-decoration: underline;
@@ -5154,115 +5168,6 @@ textarea {
   border: 1px solid rgba(108, 99, 255, 0.2);
   background: rgba(11, 16, 32, 0.7);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
-}
-
-/* Platform page — full-screen iframe from S3 */
-.platform-page {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  overflow: hidden;
-  background: #0B1020;
-}
-
-.platform-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 24px;
-  background: rgba(15, 27, 53, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.platform-back {
-  color: #94a3b8;
-  font-size: 0.95rem;
-  font-weight: 500;
-  text-decoration: none;
-  transition: color 0.2s;
-}
-
-.platform-back:hover {
-  color: #e2e8f0;
-}
-
-.platform-title {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 600;
-  color: #f8fafc;
-}
-
-.platform-main {
-  flex: 1;
-  position: relative;
-  min-height: 0;
-  width: 100%;
-}
-
-.platform-iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: none;
-  display: block;
-  overflow: auto;
-}
-
-.platform-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  background: #0B1020;
-  color: #94a3b8;
-  font-size: 0.95rem;
-  z-index: 1;
-}
-
-.platform-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(108, 99, 255, 0.2);
-  border-top-color: #6C63FF;
-  border-radius: 50%;
-  animation: platform-spin 0.8s linear infinite;
-}
-
-@keyframes platform-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.platform-footer {
-  flex-shrink: 0;
-  padding: 14px 24px;
-  text-align: center;
-  font-size: 0.8rem;
-  color: rgba(148, 163, 184, 0.75);
-  background: rgba(11, 16, 32, 0.9);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-@media (max-width: 768px) {
-  .platform-header {
-    padding: 12px 16px;
-  }
-
-  .platform-title {
-    font-size: 1rem;
-  }
-
-  .platform-footer {
-    padding: 12px 16px;
-    font-size: 0.75rem;
-  }
 }
 
 @media (max-width: 900px) {

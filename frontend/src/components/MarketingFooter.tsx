@@ -84,7 +84,16 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
                 </li>
               ))}
               <li>
-                <Link to="/privacy">Privacy Policy</Link>
+                <Link to="/platform">Platform</Link>
+              </li>
+              <li>
+                <Link to="/about">About</Link>
+              </li>
+              <li>
+                <Link to="/contact">Contact</Link>
+              </li>
+              <li>
+                <Link to="/privacy-policy">Privacy Policy</Link>
               </li>
               <li>
                 <Link to="/disclaimer">Disclaimer</Link>

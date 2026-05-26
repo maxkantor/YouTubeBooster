@@ -9,16 +9,57 @@ export function AboutPage() {
   return (
     <MarketingStaticPage
       title="About Us"
-      description={`${BRAND.name} helps creators understand why channels stall and what to fix next—with fast, AI-assisted audits and a clear dashboard.`}
+      description={`${BRAND.name} was built for small YouTube creators who want clearer growth diagnosis, practical fixes, and a simpler path to better publishing decisions.`}
     >
       <p>
-        We focus on practical signals: titles, thumbnails, SEO fit, and momentum patterns—so you spend less time guessing and
-        more time publishing what works.
+        {BRAND.name} exists for creators who are tired of guessing. The product is built
+        around a simple question: why is this channel not growing, and what should change
+        first? Instead of leaning on hype or vanity claims, the platform focuses on the
+        areas that usually decide whether a small channel gets momentum at all: packaging,
+        CTR, thumbnails, retention, search fit, and overall content positioning.
       </p>
+
+      <h2 className="marketing-static-h2">Built for small creators</h2>
       <p>
-        <Link to="/#audit">Run a free channel audit</Link> to preview the experience, or explore{' '}
-        <Link to="/#pricing">pricing</Link> for full access.
+        The mission is practical. Small channels do not need another giant software stack
+        with more tabs than answers. They need a clearer read on what is suppressing
+        growth and better guidance on the next move. That is why the product is shaped
+        more like a creator consultant than a generic analytics warehouse.
       </p>
+
+      <h2 className="marketing-static-h2">Actionable growth fixes</h2>
+      <p>
+        Recommendations are meant to be understandable and usable. The platform looks at
+        areas like title strength, thumbnail clarity, search discoverability, retention
+        leaks, and video packaging so creators can stop changing everything at once and
+        start fixing the highest-leverage problem first.
+      </p>
+
+      <h2 className="marketing-static-h2">No subscription philosophy</h2>
+      <p>
+        The one-time unlock model is deliberate. Most creators do not need a recurring
+        bill just to understand what is hurting performance. They need a trustworthy
+        audit, a stronger set of recommendations, and enough clarity to make the next few
+        uploads better than the last few.
+      </p>
+
+      <h2 className="marketing-static-h2">What we want the product to do well</h2>
+      <p>
+        The goal is to help creators understand why videos are not getting clicked, why
+        viewers may be dropping early, where YouTube SEO is weak, and how packaging can
+        improve without making the whole process feel more technical than the creative
+        work itself. If the platform helps creators make cleaner publishing decisions, it
+        is doing its job.
+      </p>
+
+      <div className="marketing-static-cta">
+        <h2 className="marketing-static-h2">See the audit before you commit</h2>
+        <p>
+          <Link to="/#audit">Run a free channel audit</Link> to preview the experience, or
+          explore <Link to="/#pricing">pricing</Link> if you want the full report and
+          growth fix.
+        </p>
+      </div>
     </MarketingStaticPage>
   );
 }
@@ -68,8 +109,21 @@ export function ContactPage() {
   return (
     <MarketingStaticPage
       title="Contact"
-      description="Billing, access, product questions, or partnerships — we read every message."
+      description="Questions, feedback, partnerships, or creator support requests. Send a message and we will review it."
     >
+      <p>
+        Use this page for questions, feedback, partnerships, billing issues, or creator
+        support requests. If you are reaching out about a specific audit or account,
+        include the email or order reference tied to the purchase so we can help faster.
+      </p>
+
+      <h2 className="marketing-static-h2">What to contact us about</h2>
+      <p>
+        Product questions, creator workflow feedback, partnership inquiries, access
+        issues, billing questions, and support follow-ups are all appropriate here. We do
+        not offer phone support, but every message sent through the form is reviewed.
+      </p>
+
       {authLoading ? (
         <p className="muted">Loading…</p>
       ) : authSession?.email ? (
@@ -219,20 +273,39 @@ export function PrivacyPage() {
   return (
     <MarketingStaticPage
       title="Privacy Policy"
-      description="This page summarizes how we handle information in connection with the hosted product. Replace with counsel-approved legal text when ready."
+      description="Read how YouTubeBooster AI handles account details, contact messages, analytics, and creator-submitted information in connection with the hosted product."
     >
-      <h2 className="marketing-static-h2">What we collect</h2>
+      <h2 className="marketing-static-h2">What information we handle</h2>
       <p>
-        Accounts, billing-related data from our payment provider, and channel inputs you submit for audits may be processed to
-        deliver the service.
+        We may handle account information, contact form messages, payment-related records
+        from our payment provider, and the channel inputs you submit to request audits or
+        support. This information is used to operate the product, respond to creator
+        questions, and deliver the services you request.
       </p>
-      <h2 className="marketing-static-h2">Cookies & analytics</h2>
+
+      <h2 className="marketing-static-h2">Sessions, cookies, and analytics</h2>
       <p>
-        We may use first-party cookies for sessions and optional analytics to understand product usage. You can control cookies
-        in your browser settings.
+        The site may use first-party cookies or similar storage for sign-in sessions,
+        product continuity, and optional analytics. Analytics are used to understand how
+        people use the site and where the experience needs improvement. You can control
+        cookie behavior through your browser settings.
       </p>
-      <h2 className="marketing-static-h2">Contact</h2>
-      <p>Privacy questions: send from the email associated with your account and include “Privacy” in the subject line.</p>
+
+      <h2 className="marketing-static-h2">Independent platform disclosure</h2>
+      <p>
+        YouTubeBooster AI is an independent product and is not affiliated with YouTube or
+        Google. The product provides informational growth insights and does not offer
+        unauthorized access to creator accounts. Responsibility for account use, channel
+        changes, and publishing decisions remains with the user.
+      </p>
+
+      <h2 className="marketing-static-h2">Support and privacy requests</h2>
+      <p>
+        If you have a privacy-related request, contact us from the email associated with
+        your account and include enough information for us to identify your message or
+        purchase. We will review privacy questions through the same support workflow used
+        for creator and billing inquiries.
+      </p>
     </MarketingStaticPage>
   );
 }
@@ -241,19 +314,38 @@ export function DisclaimerPage() {
   return (
     <MarketingStaticPage
       title="Disclaimer"
-      description="Read this before relying on audit outputs for business or legal decisions."
+      description="Understand the limits of YouTubeBooster AI recommendations, third-party platform references, and creator responsibility before relying on audit outputs."
     >
       <h2 className="marketing-static-h2">No guarantees</h2>
       <p>
-        Audits and recommendations are informational. Results depend on public data availability, platform changes, and how you
-        implement changes. We do not guarantee views, revenue, or rankings.
+        Audits, recommendations, and growth insights are informational only. Results
+        depend on many factors, including public data availability, topic selection,
+        creative execution, platform changes, and how recommendations are implemented. We
+        do not guarantee views, subscribers, revenue, rankings, or business outcomes.
       </p>
+
       <h2 className="marketing-static-h2">Third-party data</h2>
       <p>
-        YouTube and related marks belong to their owners. We are not affiliated with or endorsed by YouTube or Google.
+        YouTube and related marks belong to their respective owners. YouTubeBooster AI is
+        an independent tool and is not affiliated with, endorsed by, or sponsored by
+        YouTube or Google. References to third-party platforms are descriptive only.
       </p>
-      <h2 className="marketing-static-h2">Not legal or financial advice</h2>
-      <p>Nothing on this site is legal, tax, or investment advice. Consult professionals for those topics.</p>
+
+      <h2 className="marketing-static-h2">Account access and creator responsibility</h2>
+      <p>
+        The product is intended to help creators review packaging, discoverability, CTR,
+        thumbnails, SEO, and retention signals. It does not grant unauthorized account
+        access, does not act on your behalf inside YouTube, and does not remove the
+        creator&apos;s responsibility to make final channel, content, or business
+        decisions.
+      </p>
+
+      <h2 className="marketing-static-h2">Not legal, financial, or professional advice</h2>
+      <p>
+        Nothing on this site should be treated as legal, tax, accounting, investment, or
+        other professional advice. If you need formal guidance in those areas, consult a
+        qualified professional rather than relying on product output alone.
+      </p>
     </MarketingStaticPage>
   );
 }
