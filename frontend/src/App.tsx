@@ -642,7 +642,8 @@ function AppInner() {
 
   const location = useLocation();
   const pathAdmin = location.pathname.startsWith('/admin');
-  const showGlobalNav = !pathAdmin && location.pathname !== '/';
+  const showGlobalNav =
+    !pathAdmin && location.pathname !== '/' && location.pathname !== '/platform';
   let globalReturnTo = `${location.pathname}${location.search}`;
   // Avoid returning to checkout success without a session_id (common "wrong screen" loop).
   try {
