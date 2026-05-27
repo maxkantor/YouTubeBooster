@@ -58,9 +58,9 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
       title: BRAND_DEFAULT_TITLE,
       description: BRAND.seoHomeDescription,
       canonicalPath: '/',
-      ogTitle: 'AI YouTube Channel Audit & Growth Analyzer',
+      ogTitle: 'YouTubeBooster AI | AI YouTube Channel Audit & Growth Analyzer',
       ogDescription:
-        'Find out why your YouTube channel is not growing and unlock practical fixes for titles, thumbnails, SEO, CTR, and content strategy.',
+        'YouTubeBooster AI helps you find out why your YouTube channel is not growing and unlock practical fixes for titles, thumbnails, SEO, CTR, and content strategy.',
       keywords: [
         'youtube booster ai',
         'youtube channel audit',
@@ -221,7 +221,7 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
   const growthGuide = getGrowthGuideByPath(path);
   if (growthGuide) {
     const crumbs: BreadcrumbItem[] = [
-      { name: 'Home', path: '/' },
+      { name: BRAND.name, path: '/' },
       { name: growthGuide.h1, path }
     ];
     const faq = growthGuide.faq.length ? [faqPageSchema(growthGuide.faq)] : [];

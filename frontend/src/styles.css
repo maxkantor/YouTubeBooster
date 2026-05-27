@@ -2945,6 +2945,17 @@ textarea {
   opacity: 0.9;
 }
 
+.landing-hero-brand-eyebrow {
+  display: block;
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.72);
+  text-align: center;
+}
+
 .landing-container {
   max-width: 1120px;
   margin: 0 auto;

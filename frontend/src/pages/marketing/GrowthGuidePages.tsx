@@ -35,7 +35,7 @@ function GrowthGuideShell({ guide }: { guide: GrowthGuidePageDef }) {
       <main>
         <article className="surface marketing-static-surface growth-guide-surface">
           <nav className="growth-guide-breadcrumbs" aria-label="Breadcrumb">
-            <Link to="/">Home</Link>
+            <Link to="/">{BRAND.name}</Link>
             <span className="growth-guide-bc-sep" aria-hidden>
               /
             </span>

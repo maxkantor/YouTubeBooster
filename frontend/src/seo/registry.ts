@@ -10,7 +10,7 @@ import solutions from './data/solutions.json';
 const ROOT_GROWTH_GUIDE_PATHS = GROWTH_GUIDE_PAGES.map((page) => ({
   path: page.path,
   changefreq: 'monthly',
-  priority: 0.82
+  priority: 0.62
 }));
 
 export const STATIC_INDEXABLE_PATHS: { path: string; changefreq: string; priority: number }[] = [

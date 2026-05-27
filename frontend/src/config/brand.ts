@@ -11,11 +11,11 @@ export const BRAND = {
   namePart2: 'AI',
   /** Default meta / SEO tagline */
   tagline: 'AI YouTube Channel Audit & Growth Analyzer',
-  /** Default page title (home) */
-  defaultTitle: 'AI YouTube Channel Audit & Growth Analyzer | YouTubeBooster AI',
+  /** Default page title (home) — brand first for navigational / brand searches */
+  defaultTitle: 'YouTubeBooster AI | AI YouTube Channel Audit & Growth Analyzer',
   /** Home page meta description (SEO + OG) */
   seoHomeDescription:
-    'Run a free AI YouTube channel audit. Analyze CTR, titles, thumbnails, SEO, retention signals, and discover why your channel is not growing.',
+    'YouTubeBooster AI (YouTube Booster AI) is the official AI YouTube channel audit and growth analyzer. Run a free preview, analyze CTR, titles, thumbnails, SEO, retention, and find why your channel is not growing.',
   /** Base URL for canonical/OG (no trailing slash) — apex only: https://youtubeboosterai.com */
   siteUrl: 'https://youtubeboosterai.com',
 } as const;

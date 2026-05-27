@@ -4,11 +4,19 @@ import type { BreadcrumbItem } from './types';
 
 export type { BreadcrumbItem };
 
+const BRAND_ALTERNATE_NAMES = [
+  'YouTube Booster AI',
+  'youtube booster ai',
+  'YouTubeBooster',
+  BRAND.tagline
+];
+
 export function organizationSchema(): Record<string, unknown> {
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: BRAND.name,
+    alternateName: BRAND_ALTERNATE_NAMES,
     url: absoluteUrl('/'),
     logo: absoluteUrl('/og-image.jpg'),
     description: BRAND.seoHomeDescription,
@@ -22,7 +30,7 @@ export function webSiteSchema(): Record<string, unknown> {
     '@type': 'WebSite',
     '@id': `${getSiteUrl()}/#website`,
     name: BRAND.name,
-    alternateName: 'YouTube Booster AI Official Site',
+    alternateName: BRAND_ALTERNATE_NAMES,
     url: absoluteUrl('/'),
     description: BRAND.seoHomeDescription,
     potentialAction: {
@@ -125,6 +133,7 @@ export function articleSchema(params: {
     datePublished: params.datePublished,
     dateModified: mod,
     mainEntityOfPage: { '@type': 'WebPage', '@id': absoluteUrl(params.path) },
+    isPartOf: { '@id': `${getSiteUrl()}/#website` },
     image: absoluteUrl('/og-image.jpg'),
     keywords: params.keywords?.join(', ')
   };

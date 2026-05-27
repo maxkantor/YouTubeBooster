@@ -839,6 +839,7 @@ export function LandingPage() {
         </div>
         <div className="landing-hero-headline-row">
           <div className="container">
+            <p className="landing-hero-brand-eyebrow">{BRAND.name}</p>
             <h1 className="landing-hero-title" id="hero-heading">
               <span className="landing-hero-title-line landing-hero-title-headline landing-heading-display">
                 AI YouTube Channel Audit &amp; Growth Analyzer
@@ -849,7 +850,7 @@ export function LandingPage() {
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
             <p className="landing-hero-sub">
-              Find out why your channel is not growing. Analyze CTR, titles, thumbnails, SEO, retention signals, and missed traffic opportunities in minutes.
+              {BRAND.name} helps you find out why your channel is not growing. Analyze CTR, titles, thumbnails, SEO, retention signals, and missed traffic opportunities in minutes.
             </p>
             <p className="landing-hero-trust-copy">
               Built for small YouTube creators who need clear fixes -- not generic advice.
