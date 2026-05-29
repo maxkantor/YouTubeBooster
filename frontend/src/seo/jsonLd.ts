@@ -31,16 +31,21 @@ export function webSiteSchema(): Record<string, unknown> {
     '@id': `${getSiteUrl()}/#website`,
     name: BRAND.name,
     alternateName: BRAND_ALTERNATE_NAMES,
+    url: absoluteUrl('/')
+  };
+}
+
+/** Homepage WebPage — reinforces / as the primary entity for brand navigational queries. */
+export function homeWebPageSchema(): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    '@id': absoluteUrl('/'),
+    name: `${BRAND.name} — Official Site`,
     url: absoluteUrl('/'),
     description: BRAND.seoHomeDescription,
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: {
-        '@type': 'EntryPoint',
-        urlTemplate: `${getSiteUrl()}/demo?channel={search_term_string}`
-      },
-      'query-input': 'required name=search_term_string'
-    }
+    isPartOf: { '@id': `${getSiteUrl()}/#website` },
+    about: { '@type': 'Organization', name: BRAND.name }
   };
 }
 

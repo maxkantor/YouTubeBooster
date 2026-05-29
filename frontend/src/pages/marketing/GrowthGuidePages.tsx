@@ -108,7 +108,7 @@ function GrowthGuideShell({ guide }: { guide: GrowthGuidePageDef }) {
                 Run Free Channel Audit
               </Link>
               <Link to="/" className="btn btn-secondary growth-guide-cta-secondary">
-                Back to home
+                {BRAND.name} — official home
               </Link>
             </div>
           </div>

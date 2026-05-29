@@ -30,7 +30,7 @@ const published = '2026-05-26';
 const BASE_GROWTH_GUIDE_PAGES: GrowthGuidePageDef[] = [
   {
     path: '/why-your-youtube-channel-gets-no-views',
-    title: `Why Your YouTube Channel Gets No Views | ${brand}`,
+    title: `Why Your YouTube Channel Gets No Views — Guide`,
     metaDescription:
       'Learn why your YouTube channel gets no views and how to fix weak packaging, unclear topics, low retention, and poor positioning without guessing.',
     lead:
@@ -119,7 +119,7 @@ That sequence matters because it turns frustration into a fix list. Instead of g
   },
   {
     path: '/how-to-get-more-youtube-views',
-    title: `How to Get More YouTube Views | ${brand}`,
+    title: `How to Get More YouTube Views — Guide`,
     metaDescription:
       'A practical guide to getting more YouTube views with better topics, stronger titles, cleaner thumbnails, sharper hooks, and smarter iteration.',
     lead:
@@ -208,7 +208,7 @@ Think in terms of session design. What should a new viewer watch after this? Wha
   },
   {
     path: '/youtube-thumbnail-mistakes',
-    title: `YouTube Thumbnail Mistakes That Hurt CTR | ${brand}`,
+    title: `YouTube Thumbnail Mistakes That Hurt CTR — Guide`,
     metaDescription:
       'Learn the YouTube thumbnail mistakes that reduce CTR, from clutter and weak contrast to poor emotional cues and bad title alignment.',
     lead:
@@ -297,7 +297,7 @@ This is also where an audit mindset helps. Instead of changing thumbnails based 
   },
   {
     path: '/low-click-through-rate-youtube',
-    title: `Low Click-Through Rate on YouTube | ${brand}`,
+    title: `Low Click-Through Rate on YouTube — Guide`,
     metaDescription:
       'Diagnose low click-through rate on YouTube with a practical framework for titles, thumbnails, topic fit, audience targeting, and cleaner packaging tests.',
     lead:
@@ -386,7 +386,7 @@ An AI audit helps by ranking repeated weaknesses across the catalog: weak title 
   },
   {
     path: '/youtube-seo-for-small-channels',
-    title: `YouTube SEO for Small Channels | ${brand}`,
+    title: `YouTube SEO for Small Channels — Guide`,
     metaDescription:
       'A practical YouTube SEO guide for small channels covering titles, descriptions, topic targeting, metadata, and discoverability without spammy tactics.',
     lead:
@@ -475,7 +475,7 @@ This is where an AI audit becomes helpful again. If the tool can show repeated g
   },
   {
     path: '/youtube-title-generator',
-    title: `YouTube Title Generator for Higher CTR | ${brand}`,
+    title: `YouTube Title Generator for Higher CTR — Guide`,
     metaDescription:
       'Generate better YouTube titles with AI. Create title ideas shaped by CTR, search intent, topic clarity, and thumbnail fit so small creators can publish with more confidence.',
     lead:
@@ -563,7 +563,7 @@ That is why the best workflow is usually generator plus audit. Generate options,
   },
   {
     path: '/how-to-increase-youtube-watch-time',
-    title: `How to Increase YouTube Watch Time | ${brand}`,
+    title: `How to Increase YouTube Watch Time — Guide`,
     metaDescription:
       'Learn how to increase YouTube watch time with better openings, tighter structure, stronger pacing, and smarter session design for small creators.',
     lead:
@@ -651,7 +651,7 @@ This is where an AI audit can save time. If the audit can surface repeated drop-
   },
   {
     path: '/youtube-retention-analysis',
-    title: `YouTube Retention Analysis | ${brand}`,
+    title: `YouTube Retention Analysis — Guide`,
     metaDescription:
       'Learn how to analyze YouTube retention graphs, spot drop-off patterns, find weak sections, and improve future videos with better creative decisions.',
     lead:
@@ -739,7 +739,7 @@ An AI audit helps by spotting repeated friction points across titles, thumbnails
   },
   {
     path: '/youtube-thumbnail-ctr',
-    title: `YouTube Thumbnail CTR | ${brand}`,
+    title: `YouTube Thumbnail CTR — Guide`,
     metaDescription:
       'Improve YouTube thumbnail CTR with better visual concepts, cleaner hierarchy, stronger title alignment, and smarter thumbnail testing.',
     lead:
@@ -827,7 +827,7 @@ An AI audit helps because it can surface repeated packaging weaknesses across ti
   },
   {
     path: '/free-youtube-channel-audit',
-    title: `Free YouTube Channel Audit | ${brand}`,
+    title: `Free YouTube Channel Audit — Guide`,
     metaDescription:
       'Run a free YouTube channel audit and see what is slowing growth. Review titles, thumbnails, SEO, CTR, retention signals, and practical next-step recommendations.',
     lead:
@@ -916,7 +916,7 @@ That approach is also better for trust. Instead of forcing a purchase before any
   },
   {
     path: '/vidiq-alternative',
-    title: `vidIQ Alternative for Small Creators | ${brand}`,
+    title: `vidIQ Alternative for Small Creators — Guide`,
     metaDescription:
       'Looking for a vidIQ alternative? Use YouTubeBooster AI for AI channel audits, title ideas, thumbnail and SEO analysis, CTR and retention guidance, and clear recommendations.',
     lead:
@@ -1005,7 +1005,7 @@ That is why a [free YouTube channel audit](/free-youtube-channel-audit) is the s
   },
   {
     path: '/tubebuddy-alternative',
-    title: `TubeBuddy Alternative for Small Creators | ${brand}`,
+    title: `TubeBuddy Alternative for Small Creators — Guide`,
     metaDescription:
       'Looking for a TubeBuddy alternative? Try YouTubeBooster AI for AI channel audits, title ideas, thumbnail and SEO analysis, CTR and retention insights, and practical recommendations.',
     lead:
@@ -1094,7 +1094,7 @@ That is why starting with a [free YouTube channel audit](/free-youtube-channel-a
   },
   {
     path: '/best-youtube-audit-tool',
-    title: `Best YouTube Audit Tool for Small Creators | ${brand}`,
+    title: `Best YouTube Audit Tool for Small Creators — Guide`,
     metaDescription:
       'Looking for the best YouTube audit tool? Choose one that explains titles, thumbnails, SEO, CTR, retention, and next-step recommendations in plain language.',
     lead:

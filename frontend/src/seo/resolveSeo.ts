@@ -10,6 +10,7 @@ import {
   howToSchema,
   organizationSchema,
   productSchema,
+  homeWebPageSchema,
   softwareApplicationSchema,
   webSiteSchema
 } from './jsonLd';
@@ -75,7 +76,7 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
         'channel growth'
       ],
       ogType: 'website',
-      jsonLd: [...baseGraph(), faqPageSchema(HOMEPAGE_FAQS)]
+      jsonLd: [...baseGraph(), homeWebPageSchema(), faqPageSchema(HOMEPAGE_FAQS)]
     };
   }
 
@@ -227,7 +228,7 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
     const faq = growthGuide.faq.length ? [faqPageSchema(growthGuide.faq)] : [];
     return {
       title: growthGuide.title,
-      description: growthGuide.metaDescription,
+      description: `${BRAND.name}: ${growthGuide.metaDescription}`,
       canonicalPath: path,
       keywords: growthGuide.keywords,
       ogType: 'article',
