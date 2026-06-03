@@ -87,6 +87,12 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
                 <Link to="/platform">Platform</Link>
               </li>
               <li>
+                <Link to="/pricing">Pricing</Link>
+              </li>
+              <li>
+                <Link to="/faq">FAQ</Link>
+              </li>
+              <li>
                 <Link to="/about">About</Link>
               </li>
               <li>
@@ -99,7 +105,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
             <h3 className="landing-site-footer-col-title">Legal</h3>
             <ul className="landing-site-footer-links">
               <li>
-                <Link to="/privacy-policy">Privacy Policy</Link>
+                <Link to="/privacy">Privacy Policy</Link>
               </li>
               <li>
                 <Link to="/disclaimer">Disclaimer</Link>

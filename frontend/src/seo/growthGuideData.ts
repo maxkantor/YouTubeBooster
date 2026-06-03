@@ -29,7 +29,7 @@ const published = '2026-05-26';
 
 const BASE_GROWTH_GUIDE_PAGES: GrowthGuidePageDef[] = [
   {
-    path: '/why-your-youtube-channel-gets-no-views',
+    path: '/why-your-channel-gets-no-views',
     title: `Why Your YouTube Channel Gets No Views — Guide`,
     metaDescription:
       'Learn why your YouTube channel gets no views and how to fix weak packaging, unclear topics, low retention, and poor positioning without guessing.',
@@ -51,7 +51,7 @@ const BASE_GROWTH_GUIDE_PAGES: GrowthGuidePageDef[] = [
     footerGroup: 'growth',
     relatedPaths: [
       '/how-to-get-more-youtube-views',
-      '/low-click-through-rate-youtube',
+      '/low-ctr-on-youtube',
       '/youtube-seo-for-small-channels',
       '/youtube-retention-analysis',
       '/youtube-thumbnail-mistakes'
@@ -89,7 +89,7 @@ That is why more effort alone rarely fixes the problem. Publishing more videos w
         h2: 'Weak packaging hides strong content',
         body: `If the title feels generic and the thumbnail looks cluttered, viewers scroll past before the content gets a fair chance. That makes a solid video look weak in the feed even when the value inside is real. Small channels feel this pain more than larger ones because they cannot afford many wasted impressions. Every missed click slows the learning loop.
 
-Packaging is not decoration. It is the front-end expression of the idea. A title should explain the value clearly enough that the right viewer instantly understands why the video matters. A thumbnail should make that promise feel emotionally legible at a glance. When those assets are weak, YouTube sees hesitation instead of interest. If you suspect this is part of your problem, start with [YouTube thumbnail mistakes](/youtube-thumbnail-mistakes) and [low click-through rate on YouTube](/low-click-through-rate-youtube) before you blame the content itself.`,
+Packaging is not decoration. It is the front-end expression of the idea. A title should explain the value clearly enough that the right viewer instantly understands why the video matters. A thumbnail should make that promise feel emotionally legible at a glance. When those assets are weak, YouTube sees hesitation instead of interest. If you suspect this is part of your problem, start with [YouTube thumbnail mistakes](/youtube-thumbnail-mistakes) and [low click-through rate on YouTube](/low-ctr-on-youtube) before you blame the content itself.`,
       },
       {
         h2: 'Broad topics create weak demand',
@@ -101,7 +101,7 @@ Narrower promises work better because they help viewers self-select quickly. The
         h2: 'Early retention decides whether views compound',
         body: `A click is only the first approval. If viewers leave in the opening seconds, the platform learns that the video did not confirm the promise quickly enough. For small creators, this is where a lot of potential reach disappears. The title and thumbnail may have been strong enough to start the test, but the video itself did not validate the click with enough speed or confidence to keep distribution moving.
 
-Treat the first minute as proof, not preamble. Show the result, state the stakes, or frame the transformation fast. Cut long branded intros, throat-clearing, and context that belongs later. A tighter opening improves more than retention. It gives every future impression more leverage because YouTube can trust the session more. If this feels like the missing piece, [YouTube retention analysis](/youtube-retention-analysis) and [how to increase YouTube watch time](/how-to-increase-youtube-watch-time) are the next pages to read.`,
+Treat the first minute as proof, not preamble. Show the result, state the stakes, or frame the transformation fast. Cut long branded intros, throat-clearing, and context that belongs later. A tighter opening improves more than retention. It gives every future impression more leverage because YouTube can trust the session more. If this feels like the missing piece, [YouTube retention analysis](/youtube-retention-analysis) and [how to increase YouTube watch time](/increase-youtube-watch-time) are the next pages to read.`,
       },
       {
         h2: 'Positioning matters as much as any single video',
@@ -139,10 +139,10 @@ That sequence matters because it turns frustration into a fix list. Instead of g
     directoryGroup: 'growth',
     footerGroup: 'growth',
     relatedPaths: [
-      '/why-your-youtube-channel-gets-no-views',
-      '/low-click-through-rate-youtube',
+      '/why-your-channel-gets-no-views',
+      '/low-ctr-on-youtube',
       '/youtube-seo-for-small-channels',
-      '/how-to-increase-youtube-watch-time',
+      '/increase-youtube-watch-time',
       '/youtube-thumbnail-ctr'
     ],
     faq: [
@@ -172,19 +172,19 @@ That sequence matters because it turns frustration into a fix list. Instead of g
         h2: 'Start with topics people already care about',
         body: `A well-produced video can still struggle if the underlying idea feels low priority. Small creators grow faster when they choose topics that solve a visible problem or tap into a clear desire. That does not mean copying the niche blindly. It means entering demand with a sharper angle so the video has a better chance of matching real viewer intent. "How I edit my videos" is weaker than "how I edit three times faster." "My morning routine" is weaker than "the routine that helped me stay consistent for 100 days."
 
-Topic strength matters because it sets the upper limit for everything else. Better titles and thumbnails help, but weak ideas cap the ceiling. This is why creators who want more views should start by reviewing which topics in their niche already trigger attention, curiosity, or urgency, then ask how their own experience can turn that demand into a more specific promise. [Why your YouTube channel gets no views](/why-your-youtube-channel-gets-no-views) often begins at the topic level before it becomes a title problem.`,
+Topic strength matters because it sets the upper limit for everything else. Better titles and thumbnails help, but weak ideas cap the ceiling. This is why creators who want more views should start by reviewing which topics in their niche already trigger attention, curiosity, or urgency, then ask how their own experience can turn that demand into a more specific promise. [Why your YouTube channel gets no views](/why-your-channel-gets-no-views) often begins at the topic level before it becomes a title problem.`,
       },
       {
         h2: 'Improve packaging before you chase production upgrades',
         body: `Most channels have more upside in titles and thumbnails than in cameras, lighting, or plugins. Packaging is what turns impressions into watches. A clearer promise usually moves performance faster than a prettier setup because viewers make the click decision before they ever experience production quality. If the feed presentation feels vague, everything behind it stays invisible.
 
-Think of packaging as the first test your video must pass. The title should explain what changes for the viewer. The thumbnail should create emotional clarity around that promise. Together they should make the video feel easier to choose. If you want more views, spend more time deciding what the click is buying the viewer. For many creators, [YouTube thumbnail CTR](/youtube-thumbnail-ctr) and [low click-through rate YouTube](/low-click-through-rate-youtube) are the first places where easy wins appear.`,
+Think of packaging as the first test your video must pass. The title should explain what changes for the viewer. The thumbnail should create emotional clarity around that promise. Together they should make the video feel easier to choose. If you want more views, spend more time deciding what the click is buying the viewer. For many creators, [YouTube thumbnail CTR](/youtube-thumbnail-ctr) and [low click-through rate YouTube](/low-ctr-on-youtube) are the first places where easy wins appear.`,
       },
       {
         h2: 'Make the opening earn the next minute',
         body: `The first minute decides whether YouTube gets encouraging watch signals or a quiet rejection. Strong openings tell the viewer they clicked correctly and that staying will be worth it. That usually means faster proof, less self-introduction, and a clearer path into the core value. The viewer should not need ninety seconds to understand the point of the video they already agreed to watch.
 
-This is where many small channels lose momentum. The packaging wins a click, but the delivery feels slow, overly contextual, or disconnected from the promise. That hurts retention and limits how far the video can spread even when the idea was good. If you want more views, improving intros is often more powerful than making videos longer. Read [how to increase YouTube watch time](/how-to-increase-youtube-watch-time) and [YouTube retention analysis](/youtube-retention-analysis) if your videos get clicks but fail to compound.`,
+This is where many small channels lose momentum. The packaging wins a click, but the delivery feels slow, overly contextual, or disconnected from the promise. That hurts retention and limits how far the video can spread even when the idea was good. If you want more views, improving intros is often more powerful than making videos longer. Read [how to increase YouTube watch time](/increase-youtube-watch-time) and [YouTube retention analysis](/youtube-retention-analysis) if your videos get clicks but fail to compound.`,
       },
       {
         h2: 'Repeat strong formats instead of starting from zero',
@@ -228,10 +228,10 @@ Think in terms of session design. What should a new viewer watch after this? Wha
     directoryGroup: 'growth',
     footerGroup: 'growth',
     relatedPaths: [
-      '/low-click-through-rate-youtube',
+      '/low-ctr-on-youtube',
       '/youtube-thumbnail-ctr',
       '/how-to-get-more-youtube-views',
-      '/why-your-youtube-channel-gets-no-views',
+      '/why-your-channel-gets-no-views',
       '/youtube-retention-analysis'
     ],
     faq: [
@@ -285,7 +285,7 @@ You do not need cartoon faces or fake shock. You need a visual reason to care. A
         h2: 'Thumbnail and title must share one promise',
         body: `A strong thumbnail does not repeat the title word for word. It complements the title by giving the same promise a faster emotional shape. When those two assets drift apart, CTR gets muddy or retention suffers later because the viewer clicked one promise and received another. This is the hidden packaging problem that makes some channels feel inconsistent even when individual assets look decent.
 
-Treat title and thumbnail as one unit in your review process. Ask what the title says, what the image says, and whether those ideas feel like the same story told from two angles. If not, the package is split. That split often shows up as soft CTR or a quick drop in the first minute. If that sounds familiar, pair this page with [low click-through rate YouTube](/low-click-through-rate-youtube) and [YouTube retention analysis](/youtube-retention-analysis).`,
+Treat title and thumbnail as one unit in your review process. Ask what the title says, what the image says, and whether those ideas feel like the same story told from two angles. If not, the package is split. That split often shows up as soft CTR or a quick drop in the first minute. If that sounds familiar, pair this page with [low click-through rate YouTube](/low-ctr-on-youtube) and [YouTube retention analysis](/youtube-retention-analysis).`,
       },
       {
         h2: 'Prioritize the thumbnails most worth fixing',
@@ -296,7 +296,7 @@ This is also where an audit mindset helps. Instead of changing thumbnails based 
     ]
   },
   {
-    path: '/low-click-through-rate-youtube',
+    path: '/low-ctr-on-youtube',
     title: `Low Click-Through Rate on YouTube — Guide`,
     metaDescription:
       'Diagnose low click-through rate on YouTube with a practical framework for titles, thumbnails, topic fit, audience targeting, and cleaner packaging tests.',
@@ -319,7 +319,7 @@ This is also where an audit mindset helps. Instead of changing thumbnails based 
     relatedPaths: [
       '/youtube-thumbnail-mistakes',
       '/youtube-thumbnail-ctr',
-      '/why-your-youtube-channel-gets-no-views',
+      '/why-your-channel-gets-no-views',
       '/how-to-get-more-youtube-views',
       '/youtube-seo-for-small-channels'
     ],
@@ -407,9 +407,9 @@ An AI audit helps by ranking repeated weaknesses across the catalog: weak title 
     footerGroup: 'growth',
     relatedPaths: [
       '/how-to-get-more-youtube-views',
-      '/why-your-youtube-channel-gets-no-views',
-      '/low-click-through-rate-youtube',
-      '/how-to-increase-youtube-watch-time',
+      '/why-your-channel-gets-no-views',
+      '/low-ctr-on-youtube',
+      '/increase-youtube-watch-time',
       '/youtube-retention-analysis'
     ],
     faq: [
@@ -495,7 +495,7 @@ This is where an AI audit becomes helpful again. If the tool can show repeated g
     directoryGroup: 'audit',
     relatedPaths: [
       '/free-youtube-channel-audit',
-      '/low-click-through-rate-youtube',
+      '/low-ctr-on-youtube',
       '/youtube-seo-for-small-channels',
       '/how-to-get-more-youtube-views',
       '/youtube-thumbnail-ctr'
@@ -562,7 +562,7 @@ That is why the best workflow is usually generator plus audit. Generate options,
     ]
   },
   {
-    path: '/how-to-increase-youtube-watch-time',
+    path: '/increase-youtube-watch-time',
     title: `How to Increase YouTube Watch Time — Guide`,
     metaDescription:
       'Learn how to increase YouTube watch time with better openings, tighter structure, stronger pacing, and smarter session design for small creators.',
@@ -584,9 +584,9 @@ That is why the best workflow is usually generator plus audit. Generate options,
     relatedPaths: [
       '/youtube-retention-analysis',
       '/how-to-get-more-youtube-views',
-      '/low-click-through-rate-youtube',
+      '/low-ctr-on-youtube',
       '/youtube-seo-for-small-channels',
-      '/why-your-youtube-channel-gets-no-views'
+      '/why-your-channel-gets-no-views'
     ],
     faq: [
       {
@@ -670,9 +670,9 @@ This is where an AI audit can save time. If the audit can surface repeated drop-
     datePublished: published,
     directoryGroup: 'audit',
     relatedPaths: [
-      '/how-to-increase-youtube-watch-time',
-      '/low-click-through-rate-youtube',
-      '/why-your-youtube-channel-gets-no-views',
+      '/increase-youtube-watch-time',
+      '/low-ctr-on-youtube',
+      '/why-your-channel-gets-no-views',
       '/youtube-thumbnail-ctr',
       '/how-to-get-more-youtube-views'
     ],
@@ -759,9 +759,9 @@ An AI audit helps by spotting repeated friction points across titles, thumbnails
     directoryGroup: 'audit',
     relatedPaths: [
       '/youtube-thumbnail-mistakes',
-      '/low-click-through-rate-youtube',
+      '/low-ctr-on-youtube',
       '/how-to-get-more-youtube-views',
-      '/why-your-youtube-channel-gets-no-views',
+      '/why-your-channel-gets-no-views',
       '/youtube-retention-analysis'
     ],
     faq: [
@@ -849,8 +849,8 @@ An AI audit helps because it can surface repeated packaging weaknesses across ti
     relatedPaths: [
       '/best-youtube-audit-tool',
       '/youtube-title-generator',
-      '/why-your-youtube-channel-gets-no-views',
-      '/low-click-through-rate-youtube',
+      '/why-your-channel-gets-no-views',
+      '/low-ctr-on-youtube',
       '/youtube-retention-analysis'
     ],
     faq: [
@@ -940,7 +940,7 @@ That approach is also better for trust. Instead of forcing a purchase before any
       '/best-youtube-audit-tool',
       '/free-youtube-channel-audit',
       '/youtube-title-generator',
-      '/low-click-through-rate-youtube'
+      '/low-ctr-on-youtube'
     ],
     faq: [
       {
@@ -1118,7 +1118,7 @@ That is why starting with a [free YouTube channel audit](/free-youtube-channel-a
       '/vidiq-alternative',
       '/tubebuddy-alternative',
       '/youtube-title-generator',
-      '/why-your-youtube-channel-gets-no-views'
+      '/why-your-channel-gets-no-views'
     ],
     faq: [
       {
@@ -1184,7 +1184,7 @@ If you want a simple place to start, use a [free YouTube channel audit](/free-yo
 ];
 
 const GUIDE_APPENDIX: Record<string, GrowthGuideSection[]> = {
-  '/why-your-youtube-channel-gets-no-views': [
+  '/why-your-channel-gets-no-views': [
     {
       h2: 'Common mistakes creators make',
       body: `### Treating low views like a platform verdict
@@ -1238,7 +1238,7 @@ Before finalizing a thumbnail, identify the main subject and the consequence the
 Shrink the design down and place it beside two or three competing thumbnails in your niche. Then ask where the eye lands first and whether that first read supports the title. This exposes low contrast, weak focal hierarchy, and mobile-unfriendly text faster than endless tweaking on a blank canvas.`,
     },
   ],
-  '/low-click-through-rate-youtube': [
+  '/low-ctr-on-youtube': [
     {
       h2: 'Common mistakes creators make',
       body: `### Comparing CTR without checking context
@@ -1273,6 +1273,14 @@ Before recording, write the viewer problem, the likely search phrase, and the sp
 ### Use supporting language naturally
 Pick one primary phrase, then add natural supporting phrases a real viewer would also associate with the topic. Work them into the description, chapters, and spoken framing where they belong. The best metadata feels useful to a human first, which usually creates a stronger SEO signal anyway.`,
     },
+    {
+      h2: 'How to measure whether SEO is working',
+      body: `### Watch qualified discovery, not vanity coverage
+Good SEO should show up as cleaner search impressions, better matches between queries and video topics, and more viewers who stay because the content answers the promise. Do not judge the work only by whether a keyword appears in a field. Judge whether the right people are finding the right videos.
+
+### Review search pages alongside browse results
+Open your YouTube Studio traffic sources and compare search-driven videos against browse-driven videos. If search viewers stay longer, your topic may be useful but the browse packaging may need more emotional pull. If search viewers leave quickly, the metadata may be attracting the wrong intent. This split helps small channels decide whether the next fix belongs in SEO language, thumbnail concept, or the actual video structure.`,
+    },
   ],
   '/youtube-title-generator': [
     {
@@ -1291,8 +1299,16 @@ Give the tool the viewer type, the concrete result, the tension point, and the t
 ### Shortlist with a packaging checklist
 Take the top five options and test them against simple questions: does the title promise one clear outcome, pair well with the thumbnail, sound natural out loud, and match the first minute of the video? The right title is not the cleverest line. It is the cleanest fit between viewer expectation and video delivery.`,
     },
+    {
+      h2: 'How to use title ideas without creating clickbait',
+      body: `### Keep the strongest claim honest
+The winning title should make the video easier to choose, not exaggerate what the viewer will get. If the generated line promises a transformation the video does not prove, rewrite it until the promise matches the footage. Honest specificity usually beats inflated urgency because it protects retention after the click.
+
+### Save rejected titles as future angles
+Do not throw away every unused title. Some rejected lines reveal better future videos than the one you already made. If a title angle feels powerful but does not fit the current upload, add it to your idea bank. That turns title generation into channel strategy instead of a one-time packaging task.`,
+    },
   ],
-  '/how-to-increase-youtube-watch-time': [
+  '/increase-youtube-watch-time': [
     {
       h2: 'Common mistakes creators make',
       body: `### Trying to increase watch time by making videos longer
@@ -1308,6 +1324,14 @@ At the end of each segment, make the next section feel necessary. That can be a 
 
 ### Cut for pace, then build a next-watch path
 Remove anything that repeats what the viewer already understands, then make sure the end of the video points naturally to the next relevant upload. More watch time often comes from a cleaner current video plus an easier second click. Session design matters as much as runtime.`,
+    },
+    {
+      h2: 'How to make watch time gains repeatable',
+      body: `### Create a retention note after every upload
+After each video has enough data, write one sentence about where viewers stayed and one sentence about where momentum broke. Keep those notes in a simple list. Over time, repeated patterns become obvious, and those patterns are more useful than reacting to one graph in isolation.
+
+### Build recurring structure from proven moments
+If viewers stay for demonstrations, put practical examples earlier. If they stay for comparisons, use more before-and-after framing. If they leave during abstract setup, shorten context and move proof forward. Repeatable watch time improvement comes from turning observed audience behavior into script rules for the next upload.`,
     },
   ],
   '/youtube-retention-analysis': [
@@ -1327,6 +1351,14 @@ Open the timeline and note what happens right before each major drop or spike. W
 ### Compare three similar videos
 Pick three uploads with similar topic type and audience intent, then look for repeat behavior. Pattern review is where retention analysis gets powerful because it helps you create channel-level rules for hooks, transitions, and proof style instead of treating every graph like a one-off mystery.`,
     },
+    {
+      h2: 'How to turn retention review into a pre-publish checklist',
+      body: `### Fix predictable drop-off points before upload
+Once you know your common weak spots, check for them before publishing. If viewers usually leave during long setup, inspect the intro. If they leave during theory, add an example sooner. If transitions drag, rewrite the bridge. Retention analysis is most valuable when it prevents repeated mistakes before the next video goes live.
+
+### Separate curiosity from confusion
+Some moments create healthy curiosity, while others create uncertainty that pushes viewers away. During review, ask whether each open loop is helping the viewer anticipate value or forcing them to guess what the video is doing. That distinction makes hooks sharper and middles easier to hold.`,
+    },
   ],
   '/youtube-thumbnail-ctr': [
     {
@@ -1344,6 +1376,14 @@ Look for videos with real impression volume, decent watch behavior, or evergreen
 
 ### Build separate instincts for browse and search
 Browse-heavy videos usually need stronger emotional contrast, while search-heavy videos often need cleaner clarity and obvious subject recognition. Label your best-performing thumbnails by traffic source and pattern. Over time you will build a more useful visual playbook than one generic thumbnail rule set.`,
+    },
+    {
+      h2: 'How to protect CTR gains after the click',
+      body: `### Match the first minute to the visual promise
+A thumbnail can earn a click and still hurt the video if the opening does not confirm what the viewer expected. Before publishing, compare the thumbnail's emotional promise with the first minute. If the image suggests a transformation, show evidence quickly. If it suggests a mistake, name that mistake early.
+
+### Avoid optimizing for the wrong viewer
+The goal is not the highest possible click rate at any cost. The goal is more qualified clicks from viewers likely to stay. If a thumbnail becomes more dramatic but retention drops, the image may be attracting curiosity without fit. Strong thumbnail CTR should improve discovery and preserve trust. The best redesigns make the right promise easier to understand, then let the video prove that promise immediately.`,
     },
   ],
   '/free-youtube-channel-audit': [
@@ -1363,6 +1403,14 @@ After reviewing the audit, extract only three categories: videos worth refreshin
 ### Run the audit before expensive changes
 Use an audit before rebranding, buying gear, overhauling your niche, or rewriting the whole channel strategy. Those bigger moves can be valid, but they should come after you rule out simpler problems like weak packaging, vague topics, or underperforming intros. That sequence saves creators a lot of wasted effort.`,
     },
+    {
+      h2: 'How to act on the audit in the first week',
+      body: `### Pick one old video and one upcoming video
+Use the audit on two fronts: refresh one older upload that still has potential and improve one video before it goes live. The older video shows whether the recommendations can recover missed opportunity. The upcoming video shows whether the audit can improve decisions before new data exists.
+
+### Keep the first action small enough to finish
+Do not turn the audit into a giant channel overhaul. Rewrite two titles, simplify one thumbnail, or tighten one intro script. Small completed changes create faster learning than a huge plan that never ships. The audit should reduce friction, not create a second job.`,
+    },
   ],
   '/vidiq-alternative': [
     {
@@ -1380,6 +1428,14 @@ A practical comparison is simple: after one week, did the tool help you choose b
 
 ### Use one focused workflow from diagnosis to publish
 Pick a tool that lets you identify the bottleneck, shortlist the videos closest to working, generate better packaging angles, and apply one clean test without spreading the process across too many disconnected surfaces. Simpler systems often create more momentum for smaller creators.`,
+    },
+    {
+      h2: 'How to compare alternatives without overcomplicating the stack',
+      body: `### Run the same channel through each workflow
+Use the same channel, same recent videos, and same goal when comparing tools. If one platform gives clearer title, thumbnail, SEO, and retention recommendations with less setup, that matters more than a longer feature checklist. Consistency makes the comparison fair.
+
+### Choose the tool that changes your next upload
+The best alternative should influence a real publishing decision. If it helps you rewrite the title, simplify the thumbnail, or identify the main bottleneck faster, it is providing practical value. If it only adds more things to monitor, it may not be the right fit for a small creator.`,
     },
   ],
   '/tubebuddy-alternative': [
@@ -1399,6 +1455,14 @@ The best alternative is often the one that helps you feel more certain at the fi
 ### Compare recommendation quality on real videos
 Run the same small set of live videos through your options and compare the output. Which tool gives clearer next moves? Which one helps you tighten a title, rethink a thumbnail concept, or prioritize a refresh? The strongest alternative is not the one that sounds smartest. It is the one you can act on immediately.`,
     },
+    {
+      h2: 'How to know a simpler alternative is enough',
+      body: `### Look for faster decisions, not fewer features alone
+Simplicity only matters if it improves the creative loop. A cleaner alternative should help you move from diagnosis to action faster: choose the title, improve the thumbnail concept, identify the retention risk, and publish with better intent. Less complexity should produce more useful output.
+
+### Keep YouTube Studio as the source of truth
+An alternative should complement Studio, not replace it. Use Studio for actual performance data and use the audit workflow to interpret what to do next. That combination keeps decisions grounded while avoiding the trap of adding another dashboard that only repeats numbers you already had. The alternative is doing its job when it turns those numbers into a clearer publishing decision and helps the next upload ship with stronger packaging.`,
+    },
   ],
   '/best-youtube-audit-tool': [
     {
@@ -1416,6 +1480,14 @@ A strong audit should answer three questions clearly: what is the main growth le
 
 ### Test the tool on two different moments
 Use the tool on one older video that felt close to working and one upcoming upload you have not published yet. The first test shows whether the audit can diagnose missed opportunity. The second shows whether it can improve decision-making before the next result exists. If it helps in both cases, it is probably a strong audit tool.`,
+    },
+    {
+      h2: 'How to choose an audit tool for long-term growth',
+      body: `### Favor tools that teach better judgment
+The best audit tool should make you a sharper creator over time. After several uses, you should notice stronger title instincts, cleaner thumbnail concepts, and faster recognition of retention risks. If the tool only creates dependency without improving judgment, its long-term value is limited.
+
+### Make sure recommendations connect to action
+Every useful recommendation should map to something you can change: rewrite the title, simplify the thumbnail, narrow the topic, tighten the opening, or build a better next-video path. When advice connects directly to action, the audit becomes a growth workflow instead of a static report. That action layer is what keeps the creator improving after the first audit is finished and makes each future review easier to apply. It also keeps improvement focused on finished uploads, not vague intentions.`,
     },
   ],
 };
@@ -1439,17 +1511,17 @@ function pageByPath(path: string): GrowthGuidePageDef {
 }
 
 export const FOOTER_GROWTH_PAGES = [
-  '/why-your-youtube-channel-gets-no-views',
+  '/why-your-channel-gets-no-views',
   '/how-to-get-more-youtube-views',
   '/youtube-thumbnail-mistakes',
-  '/low-click-through-rate-youtube',
+  '/low-ctr-on-youtube',
   '/youtube-seo-for-small-channels',
   '/free-youtube-channel-audit'
 ].map(pageByPath);
 
 export const FOOTER_AUDIT_TOPIC_PAGES = [
   '/youtube-title-generator',
-  '/how-to-increase-youtube-watch-time',
+  '/increase-youtube-watch-time',
   '/youtube-retention-analysis',
   '/youtube-thumbnail-ctr'
 ].map(pageByPath);
@@ -1464,10 +1536,10 @@ export const HOMEPAGE_GUIDE_GROUPS = [
   {
     title: 'Growth',
     pages: [
-      '/why-your-youtube-channel-gets-no-views',
+      '/why-your-channel-gets-no-views',
       '/how-to-get-more-youtube-views',
       '/youtube-thumbnail-mistakes',
-      '/low-click-through-rate-youtube',
+      '/low-ctr-on-youtube',
       '/youtube-seo-for-small-channels',
       '/free-youtube-channel-audit'
     ].map(pageByPath)
@@ -1476,7 +1548,7 @@ export const HOMEPAGE_GUIDE_GROUPS = [
     title: 'Audit Topics',
     pages: [
       '/youtube-title-generator',
-      '/how-to-increase-youtube-watch-time',
+      '/increase-youtube-watch-time',
       '/youtube-retention-analysis',
       '/youtube-thumbnail-ctr'
     ].map(pageByPath)

@@ -2,8 +2,15 @@ User-agent: *
 Allow: /
 
 # Block admin/private areas
+Disallow: /signin
+Disallow: /signup
+Disallow: /account
+Disallow: /dashboard
 Disallow: /admin
 Disallow: /api
+Disallow: /auth/
+Disallow: /app
+Disallow: /checkout/
 Disallow: /payment-success
 Disallow: /payment-cancel
 

@@ -15,6 +15,7 @@ const base = (process.env.SEO_SITE_URL || BRAND.siteUrl).replace(/\/$/, '');
 
 const raw = allProgrammaticAndBlogPaths();
 const seen = new Set<string>();
+const lastmod = new Date().toISOString().slice(0, 10);
 const all = raw.filter((u) => {
   const p = u.path === '' ? '/' : u.path.startsWith('/') ? u.path : `/${u.path}`;
   if (seen.has(p)) return false;
@@ -39,6 +40,7 @@ const urlBlocks = all
     const pr = priorityFor(u);
     return `  <url>
     <loc>${loc}</loc>
+    <lastmod>${lastmod}</lastmod>
     <changefreq>${u.changefreq}</changefreq>
     <priority>${pr}</priority>
   </url>`;
@@ -61,8 +63,15 @@ const robots = `User-agent: *
 Allow: /
 
 # Block admin/private areas
+Disallow: /signin
+Disallow: /signup
+Disallow: /account
+Disallow: /dashboard
 Disallow: /admin
 Disallow: /api
+Disallow: /auth/
+Disallow: /app
+Disallow: /checkout/
 Disallow: /payment-success
 Disallow: /payment-cancel
 

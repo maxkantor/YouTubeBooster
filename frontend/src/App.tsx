@@ -88,6 +88,8 @@ const BlogPostPage = React.lazy(() => import('./pages/seo/BlogPostPage').then((m
 const HtmlSitemapPage = React.lazy(() => import('./pages/seo/HtmlSitemapPage').then((m) => ({ default: m.HtmlSitemapPage })));
 const AboutPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.AboutPage })));
 const ContactPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.ContactPage })));
+const PricingPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.PricingPage })));
+const FaqPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.FaqPage })));
 const PrivacyPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.PrivacyPage })));
 const DisclaimerPage = React.lazy(() => import('./pages/marketing/MarketingPages').then((m) => ({ default: m.DisclaimerPage })));
 const GrowthGuideRoutePage = React.lazy(() =>
@@ -817,17 +819,22 @@ function AppInner() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
-        <Route path="/privacy-policy" element={<PrivacyPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/faq" element={<FaqPage />} />
+        <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/disclaimer" element={<DisclaimerPage />} />
-        <Route path="/why-your-youtube-has-no-views" element={<Navigate to="/why-your-youtube-channel-gets-no-views" replace />} />
-        <Route path="/why-your-youtube-channel-gets-no-views" element={<GrowthGuideRoutePage />} />
+        <Route path="/why-your-youtube-has-no-views" element={<Navigate to="/why-your-channel-gets-no-views" replace />} />
+        <Route path="/why-your-youtube-channel-gets-no-views" element={<Navigate to="/why-your-channel-gets-no-views" replace />} />
+        <Route path="/why-your-channel-gets-no-views" element={<GrowthGuideRoutePage />} />
         <Route path="/how-to-get-more-youtube-views" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-thumbnail-mistakes" element={<GrowthGuideRoutePage />} />
-        <Route path="/low-click-through-rate-youtube" element={<GrowthGuideRoutePage />} />
+        <Route path="/low-click-through-rate-youtube" element={<Navigate to="/low-ctr-on-youtube" replace />} />
+        <Route path="/low-ctr-on-youtube" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-seo-for-small-channels" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-title-generator" element={<GrowthGuideRoutePage />} />
-        <Route path="/how-to-increase-youtube-watch-time" element={<GrowthGuideRoutePage />} />
+        <Route path="/how-to-increase-youtube-watch-time" element={<Navigate to="/increase-youtube-watch-time" replace />} />
+        <Route path="/increase-youtube-watch-time" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-retention-analysis" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-thumbnail-ctr" element={<GrowthGuideRoutePage />} />
         <Route path="/free-youtube-channel-audit" element={<GrowthGuideRoutePage />} />
@@ -850,7 +857,15 @@ function AppInner() {
           element={<SignInPage userSession={userSession} sessionLoading={sessionLoading} />}
         />
         <Route
+          path="/signin"
+          element={<SignInPage userSession={userSession} sessionLoading={sessionLoading} />}
+        />
+        <Route
           path="/auth/signup"
+          element={<SignUpPage userSession={userSession} sessionLoading={sessionLoading} />}
+        />
+        <Route
+          path="/signup"
           element={<SignUpPage userSession={userSession} sessionLoading={sessionLoading} />}
         />
         <Route

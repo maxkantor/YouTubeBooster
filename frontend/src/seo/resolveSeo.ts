@@ -44,10 +44,21 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
   const path = pathname.replace(/\/$/, '') || '/';
 
   if (isPrivateNoIndexPath(path)) {
-    const title = path.startsWith('/auth') ? `Sign in – ${BRAND.name}` : `${BRAND.name}`;
+    const title =
+      path.includes('signup') || path === '/signup'
+        ? `Sign up – ${BRAND.name}`
+        : path.includes('signin') || path === '/signin'
+          ? `Sign in – ${BRAND.name}`
+          : `${BRAND.name}`;
+    const description =
+      path.includes('signup') || path === '/signup'
+        ? `Create a ${BRAND.name} account to save your AI YouTube channel audit and access creator growth recommendations.`
+        : path.includes('signin') || path === '/signin'
+          ? `Sign in to ${BRAND.name} to access your saved YouTube audit, growth dashboard, and account settings.`
+          : DEFAULT_DESC;
     return {
       title,
-      description: DEFAULT_DESC,
+      description,
       canonicalPath: path,
       noindex: true,
       jsonLd: []
@@ -76,7 +87,12 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
         'channel growth'
       ],
       ogType: 'website',
-      jsonLd: [...baseGraph(), homeWebPageSchema(), faqPageSchema(HOMEPAGE_FAQS)]
+      jsonLd: [
+        ...baseGraph(),
+        homeWebPageSchema(),
+        breadcrumbListSchema([{ name: BRAND.name, path: '/' }]),
+        faqPageSchema(HOMEPAGE_FAQS)
+      ]
     };
   }
 
@@ -100,11 +116,53 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
     };
   }
 
+  if (path === '/pricing') {
+    return {
+      title: `Pricing – ${BRAND.name} | Free Preview, One-Time Audit Unlock`,
+      description: `See ${BRAND.name} pricing: run a free preview first, then unlock the full AI YouTube channel audit and growth report with a one-time payment.`,
+      canonicalPath: '/pricing',
+      keywords: ['youtube booster ai pricing', 'youtube channel audit pricing', 'youtube audit tool cost'],
+      jsonLd: baseGraph()
+    };
+  }
+
+  if (path === '/faq') {
+    const faqItems = [
+      {
+        question: `What does ${BRAND.name} analyze?`,
+        answer:
+          'It reviews public channel and video signals around titles, SEO, thumbnails, content positioning, retention risk, and practical growth opportunities.'
+      },
+      {
+        question: 'Is the preview free?',
+        answer:
+          'Yes. Creators can run a free preview before deciding whether to unlock the full audit report.'
+      },
+      {
+        question: 'Does this guarantee more views?',
+        answer:
+          'No. The product provides informational growth recommendations and cannot guarantee views, subscribers, rankings, revenue, or platform outcomes.'
+      },
+      {
+        question: 'Is this affiliated with YouTube?',
+        answer:
+          `${BRAND.name} is an independent product and is not affiliated with, endorsed by, or sponsored by YouTube or Google.`
+      }
+    ];
+    return {
+      title: `FAQ – ${BRAND.name} | YouTube Audit Questions`,
+      description: `Answers to common ${BRAND.name} questions about channel audits, YouTube SEO, pricing, privacy, and what the AI growth report can and cannot do.`,
+      canonicalPath: '/faq',
+      keywords: ['youtube booster ai faq', 'youtube audit questions', 'youtube seo tool faq'],
+      jsonLd: [...baseGraph(), faqPageSchema(faqItems)]
+    };
+  }
+
   if (path === '/privacy' || path === '/privacy-policy') {
     return {
       title: `Privacy Policy – ${BRAND.name}`,
       description: `Privacy policy for ${BRAND.name}: how we handle creator messages, account details, analytics, and product-related information.`,
-      canonicalPath: '/privacy-policy',
+      canonicalPath: '/privacy',
       keywords: ['privacy policy', 'youtube booster ai privacy'],
       jsonLd: baseGraph()
     };

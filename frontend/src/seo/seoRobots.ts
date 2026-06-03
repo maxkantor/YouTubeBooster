@@ -28,7 +28,11 @@ export function isPrivateNoIndexPath(pathname: string): boolean {
   if (p.startsWith('/admin')) return true;
   if (p.startsWith('/dashboard')) return true;
   if (p.startsWith('/auth')) return true;
+  if (p === '/signin') return true;
+  if (p === '/signup') return true;
+  if (p.startsWith('/account')) return true;
   if (p.startsWith('/app')) return true;
+  if (p.startsWith('/api')) return true;
   if (p.startsWith('/checkout')) return true;
   if (p.startsWith('/payment')) return true;
   return false;

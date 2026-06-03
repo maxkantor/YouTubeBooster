@@ -5,7 +5,8 @@
 import { BRAND } from './brand';
 
 export function getSiteUrl(): string {
-  const env = import.meta.env.VITE_SITE_URL as string | undefined;
+  const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+  const env = viteEnv?.VITE_SITE_URL;
   if (env && /^https?:\/\//i.test(env)) {
     return env.replace(/\/$/, '');
   }

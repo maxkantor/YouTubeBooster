@@ -100,12 +100,10 @@ export function SeoHead({
     const verification = import.meta.env.VITE_GOOGLE_SITE_VERIFICATION as string | undefined;
     if (verification) setMeta('google-site-verification', verification);
 
-    let link = document.querySelector('link[rel="canonical"]');
-    if (!link) {
-      link = document.createElement('link');
-      link.setAttribute('rel', 'canonical');
-      document.head.appendChild(link);
-    }
+    document.querySelectorAll('link[rel="canonical"]').forEach((existing) => existing.remove());
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'canonical');
+    document.head.appendChild(link);
     link.setAttribute('href', canonicalHref);
 
     // Public: explicit index, follow (Google). Private: noindex, nofollow only for /admin, /auth, /dashboard, /checkout, /payment, /app.

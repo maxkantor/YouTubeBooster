@@ -110,6 +110,12 @@ function GrowthGuideShell({ guide }: { guide: GrowthGuidePageDef }) {
               <Link to="/" className="btn btn-secondary growth-guide-cta-secondary">
                 {BRAND.name} — official home
               </Link>
+              <Link to="/pricing" className="btn btn-secondary growth-guide-cta-secondary">
+                See Pricing
+              </Link>
+              <Link to="/audit" className="btn btn-secondary growth-guide-cta-secondary">
+                Browse Audit Topics
+              </Link>
             </div>
           </div>
         </article>
