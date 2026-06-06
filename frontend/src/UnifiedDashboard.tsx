@@ -238,7 +238,7 @@ export function UnifiedDashboard({
   const [runnerWatchStartPos, setRunnerWatchStartPos] = useState<number | null>(null);
   const [runnerWatchLimitFired, setRunnerWatchLimitFired] = useState(false);
   /** Play on youtube.com in a dedicated window — eligible for public Analytics vs embedded iframe. */
-  const [runnerPlayOnYouTube, setRunnerPlayOnYouTube] = useState(true);
+  const [runnerPlayOnYouTube, setRunnerPlayOnYouTube] = useState(false);
   const runnerWatchStartPosRef = useRef(0);
   const runnerWatchLimitFiredRef = useRef(false);
   const runnerYouTubeWindowRef = useRef<Window | null>(null);
@@ -1974,10 +1974,10 @@ export function UnifiedDashboard({
               Review and test your content — play through videos, use speed/shuffle to scan, and mark issues.
             </p>
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-              <strong>Views &amp; watch time:</strong> YouTube only credits public watch hours for normal playback on{' '}
-              <strong>youtube.com</strong> at 1× speed. Embedded iframe playback on this page is for quick review only
-              and usually does not count. Keep <strong>Play on YouTube.com</strong> enabled (default) so each clip opens
-              in a YouTube tab where watch time can register.
+              <strong>Views &amp; watch time:</strong> By default, videos play in the embedded player below. YouTube
+              usually does not count embedded playback toward public watch hours. Optionally enable{' '}
+              <strong>Play on YouTube.com</strong> to open each clip in a YouTube tab at 1× speed if you want
+              Analytics-eligible playback.
             </p>
             <div className="surface" style={{ padding: 18, marginTop: 14 }}>
               <div className="pill-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
@@ -1990,7 +1990,7 @@ export function UnifiedDashboard({
                       if (e.target.checked) setRunnerSpeed(1);
                     }}
                   />
-                  Play on YouTube.com (Analytics)
+                  Play on YouTube.com (opens new tab)
                 </label>
                 <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                   Speed (1–20)
