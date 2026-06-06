@@ -237,6 +237,12 @@ export function UnifiedDashboard({
   const runnerPlayOrderRef = useRef<number[]>([]);
   const [runnerWatchStartPos, setRunnerWatchStartPos] = useState<number | null>(null);
   const [runnerWatchLimitFired, setRunnerWatchLimitFired] = useState(false);
+  /** Play on youtube.com in a dedicated window — eligible for public Analytics vs embedded iframe. */
+  const [runnerPlayOnYouTube, setRunnerPlayOnYouTube] = useState(true);
+  const runnerWatchStartPosRef = useRef(0);
+  const runnerWatchLimitFiredRef = useRef(false);
+  const runnerYouTubeWindowRef = useRef<Window | null>(null);
+  const runnerYouTubeWatchTimerRef = useRef<number | null>(null);
 
   /** Synced inside loadVideos so runner can use list immediately after await (React state is async). */
   const runnerVideosRef = useRef<PublicVideo[]>([]);
@@ -621,7 +627,38 @@ export function UnifiedDashboard({
     return idx >= 0 ? list[idx] : null;
   }
 
+  function runnerResetWatchTracking() {
+    runnerWatchStartPosRef.current = 0;
+    runnerWatchLimitFiredRef.current = false;
+    setRunnerWatchStartPos(0);
+    setRunnerWatchLimitFired(false);
+  }
+
+  function runnerClearYouTubeWatchTimer() {
+    if (runnerYouTubeWatchTimerRef.current != null) {
+      window.clearTimeout(runnerYouTubeWatchTimerRef.current);
+      runnerYouTubeWatchTimerRef.current = null;
+    }
+  }
+
+  function runnerSeekVideoToStart(player: { seekTo?: (seconds: number, allowSeek: boolean) => void }) {
+    try {
+      if (typeof player.seekTo === 'function') {
+        player.seekTo(0, true);
+      }
+    } catch {
+      // ignore
+    }
+    runnerWatchStartPosRef.current = 0;
+    setRunnerWatchStartPos(0);
+  }
+
   function runnerApplySpeed() {
+    if (runnerPlayOnYouTube) {
+      setRunnerDesiredSpeed(1);
+      setRunnerActualSpeed(1);
+      return;
+    }
     try {
       const player = (globalThis as any).__ybPlayerRef?.player;
       if (!player) return;
@@ -634,6 +671,74 @@ export function UnifiedDashboard({
     } catch {
       // ignore
     }
+  }
+
+  function runnerFinishWatchLimit() {
+    if (runnerWatchLimitFiredRef.current) return;
+    runnerWatchLimitFiredRef.current = true;
+    setRunnerWatchLimitFired(true);
+    setRunnerSessionEnded((v) => v + 1);
+    appendRunnerLog(`Watch limit reached (${runnerWatchSeconds}s). Advancing.`);
+    if (!runnerPlayOnYouTube) {
+      try {
+        const player = (globalThis as any).__ybPlayerRef?.player;
+        if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
+      } catch {
+        // ignore
+      }
+    }
+    runnerAdvance();
+  }
+
+  function runnerMaybeApplyWatchLimit() {
+    if (runnerWatchSeconds <= 0 || runnerWatchLimitFiredRef.current) return;
+    try {
+      const player = (globalThis as any).__ybPlayerRef?.player;
+      if (!player || typeof player.getCurrentTime !== 'function') return;
+      const pos = player.getCurrentTime();
+      const startPos = runnerWatchStartPosRef.current;
+      if (typeof pos !== 'number' || Number.isNaN(pos)) return;
+      if (pos - startPos >= runnerWatchSeconds) {
+        runnerFinishWatchLimit();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function runnerScheduleYouTubeWatchLimit() {
+    runnerClearYouTubeWatchTimer();
+    if (runnerWatchSeconds <= 0 || runnerWatchLimitFiredRef.current) return;
+    runnerYouTubeWatchTimerRef.current = window.setTimeout(() => {
+      runnerYouTubeWatchTimerRef.current = null;
+      if (!runnerRunning) return;
+      runnerFinishWatchLimit();
+    }, runnerWatchSeconds * 1000);
+  }
+
+  function runnerOpenOnYouTube(videoId: string, userGesture = false): Window | null {
+    const url = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+    const features = 'noopener,noreferrer';
+    let win = runnerYouTubeWindowRef.current;
+    if (win && !win.closed) {
+      try {
+        win.location.href = url;
+        win.focus();
+        return win;
+      } catch {
+        runnerYouTubeWindowRef.current = null;
+      }
+    }
+    win = userGesture ? window.open(url, 'yb_runner_youtube', features) : null;
+    if (!win && userGesture) {
+      appendRunnerLog('Popup blocked. Allow popups for this site, or uncheck "Play on YouTube.com".');
+      return null;
+    }
+    if (win) {
+      runnerYouTubeWindowRef.current = win;
+      win.focus();
+    }
+    return win;
   }
 
   function runnerUpdatePosition() {
@@ -649,16 +754,26 @@ export function UnifiedDashboard({
 
   function runnerStopInternal() {
     runnerStartTokenRef.current += 1; // cancel any in-flight Start
+    runnerClearYouTubeWatchTimer();
     setRunnerRunning(false);
     setRunnerStatus('STOPPED');
+    runnerWatchStartPosRef.current = 0;
+    runnerWatchLimitFiredRef.current = false;
     setRunnerWatchStartPos(null);
     setRunnerWatchLimitFired(false);
     try {
       const player = (globalThis as any).__ybPlayerRef?.player;
       if (player && typeof player.stopVideo === 'function') player.stopVideo();
+      if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
     } catch {
       // ignore
     }
+    try {
+      runnerYouTubeWindowRef.current?.close();
+    } catch {
+      // ignore
+    }
+    runnerYouTubeWindowRef.current = null;
   }
 
   function runnerAdvance() {
@@ -679,8 +794,28 @@ export function UnifiedDashboard({
     const playToken = runnerStartTokenRef.current;
     appendRunnerLog(`Playing ${video.title} (${videoId})`);
     setRunnerSessionStarted((v) => v + 1);
-    setRunnerWatchStartPos(null);
-    setRunnerWatchLimitFired(false);
+    runnerResetWatchTracking();
+
+    if (runnerPlayOnYouTube) {
+      const needsPopup = !runnerYouTubeWindowRef.current || runnerYouTubeWindowRef.current.closed;
+      const win = runnerOpenOnYouTube(videoId, needsPopup);
+      if (!win) {
+        if (needsPopup) {
+          setRunnerStatus('ERROR');
+          setRunnerRunning(false);
+          return;
+        }
+        appendRunnerLog(`Could not switch YouTube tab for ${videoId}.`);
+        return;
+      }
+      appendRunnerLog(`Opened on YouTube.com (${videoId}). Watch at 1× for Analytics credit.`);
+      runnerScheduleYouTubeWatchLimit();
+      setRunnerDesiredSpeed(1);
+      setRunnerActualSpeed(1);
+      setRunnerPosition(0);
+      setRunnerStatus('RUNNING');
+      return;
+    }
 
     const origin =
       typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
@@ -699,13 +834,18 @@ export function UnifiedDashboard({
       const existingPlayer = ref?.player;
       if (existingPlayer && typeof existingPlayer.loadVideoById === 'function') {
         try {
-          existingPlayer.loadVideoById(videoId);
+          existingPlayer.loadVideoById({ videoId, startSeconds: 0 });
         } catch {
-          appendRunnerLog('loadVideoById failed; try Stop then Start.');
+          try {
+            existingPlayer.loadVideoById(videoId, 0);
+          } catch {
+            appendRunnerLog('loadVideoById failed; try Stop then Start.');
+          }
         }
         setTimeout(() => {
           if (playToken !== runnerStartTokenRef.current) return; // canceled by Stop
           try {
+            runnerSeekVideoToStart(existingPlayer);
             if (typeof existingPlayer.playVideo === 'function') existingPlayer.playVideo();
           } catch {
             // autoplay may block
@@ -736,26 +876,13 @@ export function UnifiedDashboard({
           onReady: () => {
             if (playToken !== runnerStartTokenRef.current) return;
             runnerApplySpeed();
-            try {
-              const player = ref.player;
-              const pos = player && typeof player.getCurrentTime === 'function' ? player.getCurrentTime() : 0;
-              setRunnerWatchStartPos(typeof pos === 'number' ? pos : 0);
-            } catch {
-              setRunnerWatchStartPos(0);
-            }
+            runnerSeekVideoToStart(ref.player);
           },
           onStateChange: (e: any) => {
             if (playToken !== runnerStartTokenRef.current) return;
             // PLAYING
             if (e?.data === w.YT.PlayerState.PLAYING) {
               setRunnerStatus('RUNNING');
-              try {
-                const player = ref.player;
-                const pos = player && typeof player.getCurrentTime === 'function' ? player.getCurrentTime() : 0;
-                setRunnerWatchStartPos((prev) => (prev == null ? (typeof pos === 'number' ? pos : 0) : prev));
-              } catch {
-                setRunnerWatchStartPos((prev) => prev ?? 0);
-              }
               runnerApplySpeed();
             }
             // ENDED
@@ -790,30 +917,14 @@ export function UnifiedDashboard({
         setRunnerSessionWallSeconds((v) => v + dt);
       }
 
-      runnerUpdatePosition();
-      runnerApplySpeed();
-
-      // Watch limit
-      if (runnerWatchSeconds > 0 && !runnerWatchLimitFired) {
-        try {
-          const player = (globalThis as any).__ybPlayerRef?.player;
-          if (player && typeof player.getCurrentTime === 'function') {
-            const pos = player.getCurrentTime();
-            const startPos = runnerWatchStartPos ?? 0;
-            if (typeof pos === 'number' && pos - startPos >= runnerWatchSeconds) {
-              setRunnerWatchLimitFired(true);
-              setRunnerSessionEnded((v) => v + 1);
-              appendRunnerLog(`Watch limit reached (${runnerWatchSeconds}s). Advancing.`);
-              runnerAdvance();
-            }
-          }
-        } catch {
-          // ignore
-        }
+      if (!runnerPlayOnYouTube) {
+        runnerUpdatePosition();
+        runnerApplySpeed();
+        runnerMaybeApplyWatchLimit();
       }
     }, 500);
     return () => window.clearInterval(id);
-  }, [runnerRunning, runnerSpeed, runnerWatchSeconds, runnerWatchLimitFired, runnerWatchStartPos]);
+  }, [runnerRunning, runnerSpeed, runnerWatchSeconds, runnerPlayOnYouTube]);
 
   // When index changes while running, play next (Start handles first play with suppress flag)
   useEffect(() => {
@@ -1863,13 +1974,24 @@ export function UnifiedDashboard({
               Review and test your content — play through videos, use speed/shuffle to scan, and mark issues.
             </p>
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-              <strong>Views &amp; watch time:</strong> YouTube does <em>not</em> count plays from this runner toward
-              your public view count or watch hours. They filter embedded playback, channel-owner views, and
-              non-normal playback (e.g. high speed). To test that a video &quot;counts,&quot; have someone else watch
-              it normally on YouTube.
+              <strong>Views &amp; watch time:</strong> YouTube only credits public watch hours for normal playback on{' '}
+              <strong>youtube.com</strong> at 1× speed. Embedded iframe playback on this page is for quick review only
+              and usually does not count. Keep <strong>Play on YouTube.com</strong> enabled (default) so each clip opens
+              in a YouTube tab where watch time can register.
             </p>
             <div className="surface" style={{ padding: 18, marginTop: 14 }}>
               <div className="pill-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+                <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={runnerPlayOnYouTube}
+                    onChange={(e) => {
+                      setRunnerPlayOnYouTube(e.target.checked);
+                      if (e.target.checked) setRunnerSpeed(1);
+                    }}
+                  />
+                  Play on YouTube.com (Analytics)
+                </label>
                 <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                   Speed (1–20)
                   <input
@@ -1877,7 +1999,8 @@ export function UnifiedDashboard({
                     min={1}
                     max={20}
                     step={0.25}
-                    value={runnerSpeed}
+                    value={runnerPlayOnYouTube ? 1 : runnerSpeed}
+                    disabled={runnerPlayOnYouTube}
                     onChange={(e) => setRunnerSpeed(Number(e.target.value) || 10)}
                     style={{ width: 90 }}
                   />
@@ -1999,8 +2122,8 @@ export function UnifiedDashboard({
                   </div>
                   <div>
                     <strong>Session:</strong> {runnerSessionStarted} started | {runnerSessionEnded} ended |{' '}
-                    {Math.floor(runnerSessionWallSeconds)}s watched | {runnerSessionStarted} runner views |{' '}
-                    {(runnerSessionWallSeconds / 3600).toFixed(2)}h runner watch | <strong>Server:</strong>{' '}
+                    {Math.floor(runnerSessionWallSeconds)}s session | {runnerSessionStarted} videos started |{' '}
+                    {(runnerSessionWallSeconds / 3600).toFixed(2)}h session (local) | <strong>Server:</strong>{' '}
                     {runnerServerStatus}
                   </div>
                 </div>
