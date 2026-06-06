@@ -241,6 +241,7 @@ export function UnifiedDashboard({
   const [runnerPlayOnYouTube, setRunnerPlayOnYouTube] = useState(false);
   const runnerWatchStartPosRef = useRef(0);
   const runnerWatchLimitFiredRef = useRef(false);
+  const runnerWatchWallStartRef = useRef<number | null>(null);
   const runnerYouTubeWindowRef = useRef<Window | null>(null);
   const runnerYouTubeWatchTimerRef = useRef<number | null>(null);
 
@@ -628,6 +629,15 @@ export function UnifiedDashboard({
   }
 
   function runnerResetWatchTracking() {
+    runnerWatchWallStartRef.current = null;
+    runnerWatchStartPosRef.current = 0;
+    runnerWatchLimitFiredRef.current = false;
+    setRunnerWatchStartPos(0);
+    setRunnerWatchLimitFired(false);
+  }
+
+  function runnerMarkWatchStarted() {
+    runnerWatchWallStartRef.current = Date.now();
     runnerWatchStartPosRef.current = 0;
     runnerWatchLimitFiredRef.current = false;
     setRunnerWatchStartPos(0);
@@ -678,7 +688,9 @@ export function UnifiedDashboard({
     runnerWatchLimitFiredRef.current = true;
     setRunnerWatchLimitFired(true);
     setRunnerSessionEnded((v) => v + 1);
-    appendRunnerLog(`Watch limit reached (${runnerWatchSeconds}s). Advancing.`);
+    const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
+    const action = order.length <= 1 ? 'Restarting' : 'Advancing';
+    appendRunnerLog(`Watch limit reached (${runnerWatchSeconds}s). ${action}.`);
     if (!runnerPlayOnYouTube) {
       try {
         const player = (globalThis as any).__ybPlayerRef?.player;
@@ -692,17 +704,10 @@ export function UnifiedDashboard({
 
   function runnerMaybeApplyWatchLimit() {
     if (runnerWatchSeconds <= 0 || runnerWatchLimitFiredRef.current) return;
-    try {
-      const player = (globalThis as any).__ybPlayerRef?.player;
-      if (!player || typeof player.getCurrentTime !== 'function') return;
-      const pos = player.getCurrentTime();
-      const startPos = runnerWatchStartPosRef.current;
-      if (typeof pos !== 'number' || Number.isNaN(pos)) return;
-      if (pos - startPos >= runnerWatchSeconds) {
-        runnerFinishWatchLimit();
-      }
-    } catch {
-      // ignore
+    if (runnerWatchWallStartRef.current == null) return;
+    const elapsed = (Date.now() - runnerWatchWallStartRef.current) / 1000;
+    if (elapsed >= runnerWatchSeconds) {
+      runnerFinishWatchLimit();
     }
   }
 
@@ -779,7 +784,20 @@ export function UnifiedDashboard({
   function runnerAdvance() {
     const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
     if (!order.length) return;
+
+    // One selected video: loop the same clip from 0 after each watch limit.
+    if (order.length === 1) {
+      setRunnerIndex(0);
+      runnerPlayCurrent();
+      return;
+    }
+
     const next = (runnerIndex + 1) % order.length;
+    // New shuffled order each full cycle when shuffle is on.
+    if (next === 0 && runnerShuffle) {
+      runnerPlayOrderRef.current = buildPlayOrder();
+      setRunnerPlayOrder([...runnerPlayOrderRef.current]);
+    }
     setRunnerIndex(next);
   }
 
@@ -847,6 +865,7 @@ export function UnifiedDashboard({
           try {
             runnerSeekVideoToStart(existingPlayer);
             if (typeof existingPlayer.playVideo === 'function') existingPlayer.playVideo();
+            runnerMarkWatchStarted();
           } catch {
             // autoplay may block
           }
@@ -883,6 +902,7 @@ export function UnifiedDashboard({
             // PLAYING
             if (e?.data === w.YT.PlayerState.PLAYING) {
               setRunnerStatus('RUNNING');
+              runnerMarkWatchStarted();
               runnerApplySpeed();
             }
             // ENDED
@@ -2006,7 +2026,7 @@ export function UnifiedDashboard({
                   />
                 </label>
                 <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                  Watch seconds (0 = full)
+                  Watch seconds (0 = full, wall clock)
                   <input
                     type="number"
                     min={0}
