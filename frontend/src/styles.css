@@ -3425,6 +3425,28 @@ textarea {
   transform: translateY(-1px);
 }
 
+.landing-dashboard-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 200px;
+  text-align: center;
+}
+
+.landing-dashboard-empty-copy {
+  margin: 0;
+  max-width: 28rem;
+  color: #94a3b8;
+  line-height: 1.6;
+}
+
+.landing-dashboard-loading {
+  margin: 8px 0 0;
+  text-align: center;
+}
+
 .landing-metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

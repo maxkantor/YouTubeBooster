@@ -15,19 +15,33 @@ import { HOMEPAGE_FAQS } from './seo/homepageFaq';
 
 const DEMO_STORAGE_KEY = 'ybai_demo';
 
-const EXAMPLE_VIDEOS = [
-  { title: 'How to Make Pickled Eggplants with Mushrooms', views: 9596, id: '3BxAR1565k' },
-  { title: 'Chicken Breast Pâté / Spread — Quick & Fancy', views: 9559, id: 'ozTRk69sNAw' },
-  { title: 'How to Make Georgian-style Pickled Cabbage', views: 7948, id: 'aU5WF88yPZg' },
-  { title: 'How to Make Belyashi (Fried Meat Buns)', views: 6201, id: 'belyashi-ex' }
-];
-
-const EXAMPLE_DASHBOARD_METRICS = {
-  subscribers: 5770,
-  totalViews: 515218,
-  videos: 188,
-  engagementRate: 3.42
+type ProductPreviewMetrics = {
+  subscribers: number;
+  totalViews: number;
+  videos: number;
+  engagementRate: number;
+  topVideos: Array<{ id: string; title: string; views: number }>;
 };
+
+function mapAnalyzeResponseToProductPreview(
+  overview: Awaited<ReturnType<typeof publicApi.analyzeChannel>>
+): ProductPreviewMetrics {
+  const topVideos = (overview.video_performance?.top_videos_by_views ?? [])
+    .slice(0, 4)
+    .map((v) => ({
+      id: v.video_id,
+      title: v.title,
+      views: Number(v.view_count ?? 0),
+    }));
+
+  return {
+    subscribers: Number(overview.channel_info?.subscriber_count ?? 0),
+    totalViews: Number(overview.channel_info?.view_count ?? 0),
+    videos: Number(overview.channel_info?.video_count ?? 0),
+    engagementRate: Number(overview.video_performance?.avg_engagement_rate ?? 0),
+    topVideos,
+  };
+}
 
 function computeChannelHealthScore(metrics: {
   subscribers: number;
@@ -405,13 +419,7 @@ export function LandingPage() {
   const [fixCardsBlurred, setFixCardsBlurred] = useState([false, false, false, false]);
   const [productPreviewLoading, setProductPreviewLoading] = useState(false);
   const [productPreviewError, setProductPreviewError] = useState('');
-  const [productPreviewData, setProductPreviewData] = useState<{
-    subscribers: number;
-    totalViews: number;
-    videos: number;
-    engagementRate: number;
-    topVideos: Array<{ id: string; title: string; views: number }>;
-  } | null>(null);
+  const [productPreviewData, setProductPreviewData] = useState<ProductPreviewMetrics | null>(null);
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
   const auditSectionRef = useRef<HTMLElement | null>(null);
@@ -433,12 +441,10 @@ export function LandingPage() {
     ? productPreviewChannelInput
       ? `Live snapshot for ${productPreviewLabel} using your paid channel data, channel audit signals, and real YouTube analytics.`
       : 'Paid account detected. Add a valid channel URL above to load your real YouTube analytics, packaging insights, and top videos.'
-    : 'Preview of the paid dashboard with sample YouTube analytics, channel audit signals, and video packaging insights. Upgrade to see your own metrics, SEO issues, and top videos.';
-  const productPreviewMetrics = productPreviewData ?? {
-    ...EXAMPLE_DASHBOARD_METRICS,
-    topVideos: EXAMPLE_VIDEOS
-  };
-  const channelHealthScore = computeChannelHealthScore(productPreviewMetrics);
+    : `Live preview for ${productPreviewLabel} using public YouTube analytics. Upgrade to analyze your own channel.`;
+  const channelHealthScore = productPreviewData
+    ? computeChannelHealthScore(productPreviewData)
+    : null;
 
   useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 16);
@@ -567,29 +573,11 @@ export function LandingPage() {
 
     (async () => {
       try {
-        const [overview, videos] = await Promise.all([
-          publicApi.analyzeChannel(channel, 30),
-          publicApi.listVideos(channel, 50)
-        ]);
+        const overview = await publicApi.analyzeChannel(channel, 30);
 
         if (cancelled) return;
 
-        const topVideos = [...(videos ?? [])]
-          .sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0))
-          .slice(0, 4)
-          .map((v) => ({
-            id: v.video_id,
-            title: v.title,
-            views: Number(v.view_count ?? 0)
-          }));
-
-        setProductPreviewData({
-          subscribers: Number(overview.channel_info?.subscriber_count ?? 0),
-          totalViews: Number(overview.video_performance?.total_views ?? 0),
-          videos: Number(overview.video_performance?.total_videos ?? 0),
-          engagementRate: Number(overview.video_performance?.avg_engagement_rate ?? 0),
-          topVideos
-        });
+        setProductPreviewData(mapAnalyzeResponseToProductPreview(overview));
       } catch (err) {
         if (cancelled) return;
         setProductPreviewData(null);
@@ -911,14 +899,14 @@ export function LandingPage() {
               </div>
               <div className="landing-insight-health-row" aria-hidden>
                 <div className="landing-insight-health-ring">
-                  <span>{channelHealthScore}</span>
+                  <span>{channelHealthScore ?? '…'}</span>
                 </div>
                 <div className="landing-insight-health-meta">
                   <span className="landing-insight-health-label">Channel Health</span>
                   <span className="landing-insight-health-track">
                     <span
                       className="landing-insight-health-fill"
-                      style={{ width: `${channelHealthScore}%` }}
+                      style={{ width: `${channelHealthScore ?? 0}%` }}
                     />
                   </span>
                 </div>
@@ -1001,57 +989,78 @@ export function LandingPage() {
           <h2 className="landing-section-title">Product dashboard preview</h2>
           <p className="landing-section-sub">{productPreviewSubtitle}</p>
           {productPreviewError && <p className="landing-demo-error">{productPreviewError}</p>}
-          <div className="landing-dashboard-preview">
-            <div className="landing-dashboard-top">
-              <div className="landing-channel-health">
-                <div
-                  className="landing-channel-health-ring"
-                  aria-label={`Channel health score ${channelHealthScore} out of 100`}
-                >
-                  <span className="landing-channel-health-value">
-                    {productPreviewLoading ? '…' : channelHealthScore}
-                  </span>
-                  <span className="landing-channel-health-max">/100</span>
+          {!productPreviewChannelInput.trim() ? (
+            <div className="landing-dashboard-preview landing-dashboard-preview-empty">
+              <p className="landing-dashboard-empty-copy">
+                Add your channel URL in the audit section above to load your live dashboard preview.
+              </p>
+              <a href="#audit" className="btn btn-primary">
+                Analyze My Channel
+              </a>
+            </div>
+          ) : (
+            <div className="landing-dashboard-preview">
+              <div className="landing-dashboard-top">
+                <div className="landing-channel-health">
+                  <div
+                    className="landing-channel-health-ring"
+                    aria-label={
+                      channelHealthScore != null
+                        ? `Channel health score ${channelHealthScore} out of 100`
+                        : 'Channel health score loading'
+                    }
+                  >
+                    <span className="landing-channel-health-value">
+                      {productPreviewLoading || channelHealthScore == null ? '…' : channelHealthScore}
+                    </span>
+                    <span className="landing-channel-health-max">/100</span>
+                  </div>
+                  <div className="landing-channel-health-copy">
+                    <span className="landing-channel-health-label">Channel Health Score</span>
+                    <span className="landing-channel-health-desc">
+                      CTR, retention &amp; SEO signal composite
+                    </span>
+                  </div>
+                  <div className="landing-channel-health-chart" aria-hidden />
                 </div>
-                <div className="landing-channel-health-copy">
-                  <span className="landing-channel-health-label">Channel Health Score</span>
-                  <span className="landing-channel-health-desc">
-                    CTR, retention &amp; SEO signal composite
-                  </span>
-                </div>
-                <div className="landing-channel-health-chart" aria-hidden />
               </div>
+              {productPreviewLoading && !productPreviewData ? (
+                <p className="landing-dashboard-loading muted">Loading live channel analytics…</p>
+              ) : productPreviewData ? (
+                <>
+                  <div className="landing-metrics-grid">
+                    <div className="landing-metric-card">
+                      <span className="landing-metric-value">{formatNumber(productPreviewData.subscribers)}</span>
+                      <span className="landing-metric-label">Subscribers</span>
+                    </div>
+                    <div className="landing-metric-card">
+                      <span className="landing-metric-value">{formatNumber(productPreviewData.totalViews)}</span>
+                      <span className="landing-metric-label">Total Views</span>
+                    </div>
+                    <div className="landing-metric-card">
+                      <span className="landing-metric-value">{formatNumber(productPreviewData.videos)}</span>
+                      <span className="landing-metric-label">Videos</span>
+                    </div>
+                    <div className="landing-metric-card">
+                      <span className="landing-metric-value">{`${productPreviewData.engagementRate.toFixed(2)}%`}</span>
+                      <span className="landing-metric-label">Engagement Rate</span>
+                    </div>
+                  </div>
+                  <div className="landing-top-videos-block">
+                    <h3 className="landing-block-title">Top Performing Videos</h3>
+                    <ul className="landing-video-list">
+                      {productPreviewData.topVideos.map((v) => (
+                        <li key={v.id} className="landing-video-item">
+                          <span className="landing-video-item-title">{v.title}</span>
+                          <span className="landing-video-item-views">{formatNumber(v.views)} views</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              ) : null}
             </div>
-            <div className="landing-metrics-grid">
-              <div className="landing-metric-card">
-                <span className="landing-metric-value">{productPreviewLoading ? '…' : formatNumber(productPreviewMetrics.subscribers)}</span>
-                <span className="landing-metric-label">Subscribers</span>
-              </div>
-              <div className="landing-metric-card">
-                <span className="landing-metric-value">{productPreviewLoading ? '…' : formatNumber(productPreviewMetrics.totalViews)}</span>
-                <span className="landing-metric-label">Total Views</span>
-              </div>
-              <div className="landing-metric-card">
-                <span className="landing-metric-value">{productPreviewLoading ? '…' : formatNumber(productPreviewMetrics.videos)}</span>
-                <span className="landing-metric-label">Videos</span>
-              </div>
-              <div className="landing-metric-card">
-                <span className="landing-metric-value">{productPreviewLoading ? '…' : `${productPreviewMetrics.engagementRate.toFixed(2)}%`}</span>
-                <span className="landing-metric-label">Engagement Rate</span>
-              </div>
-            </div>
-            <div className="landing-top-videos-block">
-              <h3 className="landing-block-title">Top Performing Videos</h3>
-              <ul className="landing-video-list">
-                {productPreviewMetrics.topVideos.map((v) => (
-                  <li key={v.id} className="landing-video-item">
-                    <span className="landing-video-item-title">{v.title}</span>
-                    <span className="landing-video-item-views">{formatNumber(v.views)} views</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+          )}
         </div>
       </section>
 
