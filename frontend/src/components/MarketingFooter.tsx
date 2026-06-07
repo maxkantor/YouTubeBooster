@@ -42,9 +42,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
             <span className="landing-logo-boost">{BRAND.namePart2}</span>
           </Link>
           <p className="landing-site-footer-tagline">
-            {BRAND.name} is an AI-powered YouTube channel audit and growth platform that helps
-            creators identify missed opportunities, improve performance, and make smarter publishing
-            decisions.
+            {BRAND.corePositioning}
           </p>
           <ul className="landing-site-footer-trust-list" aria-label="Footer trust signals">
             <li>No subscription</li>
@@ -55,7 +53,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
 
         <nav className="landing-site-footer-nav" aria-label="Footer">
           <div className="landing-site-footer-col">
-            <h3 className="landing-site-footer-col-title">Growth</h3>
+            <h3 className="landing-site-footer-col-title">Creator Growth Guides</h3>
             <ul className="landing-site-footer-links">
               {FOOTER_GROWTH_PAGES.map((page) => (
                 <li key={page.path}>
@@ -66,7 +64,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
           </div>
 
           <div className="landing-site-footer-col">
-            <h3 className="landing-site-footer-col-title">Audit Topics</h3>
+            <h3 className="landing-site-footer-col-title">Channel Audit Resources</h3>
             <ul className="landing-site-footer-links">
               {FOOTER_AUDIT_TOPIC_PAGES.map((page) => (
                 <li key={page.path}>
@@ -77,7 +75,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
           </div>
 
           <div className="landing-site-footer-col">
-            <h3 className="landing-site-footer-col-title">Compare / Platform</h3>
+            <h3 className="landing-site-footer-col-title">Comparisons &amp; Platform</h3>
             <ul className="landing-site-footer-links">
               {FOOTER_COMPARE_PAGES.map((page) => (
                 <li key={page.path}>

@@ -851,7 +851,7 @@ export function LandingPage() {
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
             <p className="landing-hero-sub">
-              {BRAND.heroDescription}
+              {BRAND.heroSubtitle}
             </p>
             <p className="landing-hero-trust-copy">
               Built for small YouTube creators who need clear fixes -- not generic advice.
@@ -1099,7 +1099,7 @@ export function LandingPage() {
         <div className="container landing-container landing-pricing-inner">
           <span className="landing-section-eyebrow">One-time · no subscription</span>
           <h2 className="landing-section-title landing-pricing-headline landing-heading-display landing-nowrap-desktop" id="pricing-heading">
-            See Why Your Channel Isn&apos;t Growing -- Unlock the Full Fix for {oneTimePriceLabel}
+            See Why Your Channel Isn&apos;t Growing -- Professional Channel Growth Audit for {oneTimePriceLabel}
           </h2>
           <p className="landing-pricing-lead landing-nowrap-desktop">
             Start with a free preview. Upgrade only if you want the full channel audit, recommendations, and growth plan.

@@ -16,9 +16,12 @@ export const BRAND = {
   /** Home page meta description (SEO + OG) */
   seoHomeDescription:
     'Get an AI-powered YouTube channel audit in minutes. Discover growth opportunities, improve CTR, optimize thumbnails, and increase views with actionable recommendations from YouTubeBooster AI.',
-  /** Homepage hero body copy */
-  heroDescription:
-    'YouTubeBooster AI helps creators understand why their channels are not growing and provides clear, actionable recommendations to improve views, subscribers, click-through rate, retention, and overall channel performance.',
+  /** Core positioning — use in footer and trust copy */
+  corePositioning:
+    'YouTubeBooster AI helps creators understand why their channels are not growing and provides actionable recommendations to improve views, subscribers, click-through rate, retention, and overall channel performance.',
+  /** Homepage hero subtitle (below H1/H2) */
+  heroSubtitle:
+    'AI-powered channel audits that help creators improve views, increase subscribers, optimize CTR, and grow with confidence.',
   /** Base URL for canonical/OG (no trailing slash) — apex only: https://youtubeboosterai.com */
   siteUrl: 'https://youtubeboosterai.com',
 } as const;

@@ -31,12 +31,12 @@ const published = '2026-05-26';
 const BASE_GROWTH_GUIDE_PAGES: GrowthGuidePageDef[] = [
   {
     path: '/why-your-channel-gets-no-views',
-    title: 'Why Your YouTube Channel Is Not Growing',
+    title: "Why Your YouTube Channel Isn't Growing",
     metaDescription:
       'Learn why your YouTube channel gets no views and how to fix weak packaging, unclear topics, low retention, and poor positioning without guessing.',
     lead:
       'When a channel stays invisible, the issue is rarely effort alone. Small creators usually need a clearer read on packaging, topic choice, retention, and how those signals combine before YouTube expands distribution.',
-    h1: 'Why Your YouTube Channel Is Not Growing',
+    h1: "Why Your YouTube Channel Isn't Growing",
     cardTitle: 'Why your channel gets no views',
     teaser:
       'Most channels do not need magic. They need a sharper diagnosis of weak topics, weak packaging, and weak viewer confirmation.',
@@ -120,12 +120,12 @@ That sequence matters because it turns frustration into a fix list. Instead of g
   },
   {
     path: '/how-to-get-more-youtube-views',
-    title: 'How to Get More YouTube Views',
+    title: 'How to Increase YouTube Views',
     metaDescription:
       'A practical guide to getting more YouTube views with better topics, stronger titles, cleaner thumbnails, sharper hooks, and smarter iteration.',
     lead:
       'More views usually come from a tighter growth system, not a lucky break. When creators improve topic choice, packaging, and viewer experience together, growth becomes far more predictable.',
-    h1: 'How to Get More YouTube Views',
+    h1: 'How to Increase YouTube Views',
     cardTitle: 'How to get more YouTube views',
     teaser:
       'More views come from earning the click, confirming it fast, and making the next video easier to choose.',
@@ -209,12 +209,12 @@ Think in terms of session design. What should a new viewer watch after this? Wha
   },
   {
     path: '/youtube-thumbnail-mistakes',
-    title: 'YouTube Thumbnail Mistakes That Kill Growth',
+    title: 'YouTube Thumbnail Mistakes That Reduce CTR',
     metaDescription:
       'Learn the YouTube thumbnail mistakes that reduce CTR, from clutter and weak contrast to poor emotional cues and bad title alignment.',
     lead:
       'Thumbnail problems are often subtle in editing software and obvious in the feed. For small creators, a few recurring design mistakes can quietly suppress reach across the whole channel.',
-    h1: 'YouTube Thumbnail Mistakes',
+    h1: 'YouTube Thumbnail Mistakes That Reduce CTR',
     cardTitle: 'YouTube thumbnail mistakes',
     teaser:
       'Most thumbnail failures come from trying to say too much, too softly, in too little time.',
@@ -298,12 +298,12 @@ This is also where an audit mindset helps. Instead of changing thumbnails based 
   },
   {
     path: '/low-ctr-on-youtube',
-    title: 'Low Click-Through Rate on YouTube',
+    title: 'How to Improve YouTube Click-Through Rate',
     metaDescription:
       'Diagnose low click-through rate on YouTube with a practical framework for titles, thumbnails, topic fit, audience targeting, and cleaner packaging tests.',
     lead:
       'A low CTR is not just a design problem. It usually means the video is losing the impression battle somewhere between the topic, the title, and the thumbnail concept.',
-    h1: 'Low Click-Through Rate on YouTube',
+    h1: 'How to Improve YouTube Click-Through Rate',
     cardTitle: 'Low CTR on YouTube',
     teaser:
       'If impressions are arriving but clicks stay soft, the issue is usually more specific and more fixable than it first appears.',
@@ -828,12 +828,12 @@ An AI audit helps because it can surface repeated packaging weaknesses across ti
   },
   {
     path: '/free-youtube-channel-audit',
-    title: 'Free YouTube Channel Audit',
+    title: 'Free AI YouTube Channel Audit',
     metaDescription:
       'Run a free YouTube channel audit and see what is slowing growth. Review titles, thumbnails, SEO, CTR, retention signals, and practical next-step recommendations.',
     lead:
       'Paste your channel URL and get a focused growth read on what is helping, what is dragging performance, and what to fix first. The goal is not more noise. It is a clearer next move.',
-    h1: 'Free YouTube Channel Audit',
+    h1: 'Free AI YouTube Channel Audit',
     cardTitle: 'Free YouTube channel audit',
     teaser:
       'Get a free AI channel audit that looks at titles, thumbnails, SEO, CTR, retention signals, and growth opportunities.',
@@ -1531,10 +1531,7 @@ const comparisonGuideLinks: Pick<GrowthGuidePageDef, 'path' | 'cardTitle'>[] = C
   (page) => ({ path: page.path, cardTitle: page.cardTitle })
 );
 
-export const FOOTER_COMPARE_PAGES = [
-  ...comparisonGuideLinks,
-  ...['/vidiq-alternative', '/tubebuddy-alternative', '/best-youtube-audit-tool'].map(pageByPath)
-];
+export const FOOTER_COMPARE_PAGES = [...comparisonGuideLinks];
 
 export const HOMEPAGE_GUIDE_GROUPS = [
   {
@@ -1559,6 +1556,6 @@ export const HOMEPAGE_GUIDE_GROUPS = [
   },
   {
     title: 'Compare',
-    pages: [...comparisonGuideLinks, pageByPath('/best-youtube-audit-tool')]
+    pages: [...comparisonGuideLinks]
   }
 ] as const;

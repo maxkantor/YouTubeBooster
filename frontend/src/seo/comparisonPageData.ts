@@ -30,7 +30,7 @@ const TUBEBUDDY_PAGE: ComparisonPageDef = {
   path: '/compare/tubebuddy-vs-youtubebooster-ai',
   title: 'TubeBuddy vs YouTubeBooster AI',
   metaDescription:
-    'Compare TubeBuddy and YouTubeBooster AI to see which platform provides better channel audits, growth recommendations, and creator-focused insights.',
+    'Compare TubeBuddy and YouTubeBooster AI to see which platform delivers better channel audits, growth recommendations, and creator-focused insights.',
   h1: 'TubeBuddy vs YouTubeBooster AI',
   cardTitle: 'TubeBuddy vs YouTubeBooster AI',
   lead:
