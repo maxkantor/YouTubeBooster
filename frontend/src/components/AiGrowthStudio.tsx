@@ -148,7 +148,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
               <button
                 key={key}
                 type="button"
-                className="btn btn-secondary"
+                className={`landing-ai-studio-tab btn btn-secondary${aiAction === key ? ' is-active' : ''}`}
                 disabled={aiLoading}
                 onClick={() => runGeneration(key)}
               >

@@ -31,7 +31,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
       )}
       <div className="landing-site-footer-divider" aria-hidden />
       <div className="container landing-site-footer-inner">
-        <div className="landing-site-footer-brand">
+        <div className="landing-site-footer-brand-bar">
           <Link
             to="/"
             className="landing-site-footer-logo brand-link brand-with-play"
@@ -41,19 +41,12 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
             <span className="landing-logo-yt">{BRAND.namePart1}</span>
             <span className="landing-logo-boost">{BRAND.namePart2}</span>
           </Link>
-          <p className="landing-site-footer-tagline">
-            {BRAND.corePositioning}
-          </p>
-          <ul className="landing-site-footer-trust-list" aria-label="Footer trust signals">
-            <li>No subscription</li>
-            <li>Built for small creators</li>
-            <li>Instant audit preview</li>
-          </ul>
+          <p className="landing-site-footer-tagline">{BRAND.corePositioning}</p>
         </div>
 
         <nav className="landing-site-footer-nav" aria-label="Footer">
           <div className="landing-site-footer-col">
-            <h3 className="landing-site-footer-col-title">Creator Growth Guides</h3>
+            <h3 className="landing-site-footer-col-title">Creator Guides</h3>
             <ul className="landing-site-footer-links">
               {FOOTER_GROWTH_PAGES.map((page) => (
                 <li key={page.path}>
@@ -64,7 +57,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
           </div>
 
           <div className="landing-site-footer-col">
-            <h3 className="landing-site-footer-col-title">Channel Audit Resources</h3>
+            <h3 className="landing-site-footer-col-title">Resources</h3>
             <ul className="landing-site-footer-links">
               {FOOTER_AUDIT_TOPIC_PAGES.map((page) => (
                 <li key={page.path}>
@@ -75,7 +68,7 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
           </div>
 
           <div className="landing-site-footer-col">
-            <h3 className="landing-site-footer-col-title">Comparisons &amp; Platform</h3>
+            <h3 className="landing-site-footer-col-title">Platform</h3>
             <ul className="landing-site-footer-links">
               {FOOTER_COMPARE_PAGES.map((page) => (
                 <li key={page.path}>

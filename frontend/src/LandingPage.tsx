@@ -29,6 +29,17 @@ const EXAMPLE_DASHBOARD_METRICS = {
   engagementRate: 3.42
 };
 
+function computeChannelHealthScore(metrics: {
+  subscribers: number;
+  totalViews: number;
+  videos: number;
+  engagementRate: number;
+}): number {
+  const engagement = Math.min(28, metrics.engagementRate * 6);
+  const catalog = Math.min(22, metrics.videos / 12);
+  return Math.round(Math.min(96, 38 + engagement + catalog));
+}
+
 const UNLOCK_FEATURES = [
   'Find what is killing your views',
   'Fix weak titles and low CTR',
@@ -427,6 +438,7 @@ export function LandingPage() {
     ...EXAMPLE_DASHBOARD_METRICS,
     topVideos: EXAMPLE_VIDEOS
   };
+  const channelHealthScore = computeChannelHealthScore(productPreviewMetrics);
 
   useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 16);
@@ -888,8 +900,28 @@ export function LandingPage() {
           <div className="landing-hero-preview" aria-hidden>
             <div className="landing-hero-insight-panel landing-insight-glass">
               <div className="landing-insight-panel-top">
+                <div className="landing-insight-panel-chrome" aria-hidden>
+                  <span className="landing-insight-chrome-dot" />
+                  <span className="landing-insight-chrome-dot" />
+                  <span className="landing-insight-chrome-dot" />
+                </div>
                 <span className="landing-insight-pulse" aria-hidden />
                 <span className="landing-insight-panel-label-single">Live Channel Audit</span>
+                <span className="landing-insight-panel-status">Scanning</span>
+              </div>
+              <div className="landing-insight-health-row" aria-hidden>
+                <div className="landing-insight-health-ring">
+                  <span>{channelHealthScore}</span>
+                </div>
+                <div className="landing-insight-health-meta">
+                  <span className="landing-insight-health-label">Channel Health</span>
+                  <span className="landing-insight-health-track">
+                    <span
+                      className="landing-insight-health-fill"
+                      style={{ width: `${channelHealthScore}%` }}
+                    />
+                  </span>
+                </div>
               </div>
               <ul className="landing-insight-list">
                 <li className="landing-insight-item landing-insight-item-pulse">
@@ -970,6 +1002,26 @@ export function LandingPage() {
           <p className="landing-section-sub">{productPreviewSubtitle}</p>
           {productPreviewError && <p className="landing-demo-error">{productPreviewError}</p>}
           <div className="landing-dashboard-preview">
+            <div className="landing-dashboard-top">
+              <div className="landing-channel-health">
+                <div
+                  className="landing-channel-health-ring"
+                  aria-label={`Channel health score ${channelHealthScore} out of 100`}
+                >
+                  <span className="landing-channel-health-value">
+                    {productPreviewLoading ? '…' : channelHealthScore}
+                  </span>
+                  <span className="landing-channel-health-max">/100</span>
+                </div>
+                <div className="landing-channel-health-copy">
+                  <span className="landing-channel-health-label">Channel Health Score</span>
+                  <span className="landing-channel-health-desc">
+                    CTR, retention &amp; SEO signal composite
+                  </span>
+                </div>
+                <div className="landing-channel-health-chart" aria-hidden />
+              </div>
+            </div>
             <div className="landing-metrics-grid">
               <div className="landing-metric-card">
                 <span className="landing-metric-value">{productPreviewLoading ? '…' : formatNumber(productPreviewMetrics.subscribers)}</span>
@@ -1098,11 +1150,11 @@ export function LandingPage() {
       <section className="landing-section landing-pricing-section" id="pricing" aria-labelledby="pricing-heading">
         <div className="container landing-container landing-pricing-inner">
           <span className="landing-section-eyebrow">One-time · no subscription</span>
-          <h2 className="landing-section-title landing-pricing-headline landing-heading-display landing-nowrap-desktop" id="pricing-heading">
-            See Why Your Channel Isn&apos;t Growing -- Professional Channel Growth Audit for {oneTimePriceLabel}
+          <h2 className="landing-section-title landing-pricing-headline landing-heading-display" id="pricing-heading">
+            Professional Channel Growth Audit
           </h2>
-          <p className="landing-pricing-lead landing-nowrap-desktop">
-            Start with a free preview. Upgrade only if you want the full channel audit, recommendations, and growth plan.
+          <p className="landing-pricing-lead">
+            Unlock personalized recommendations, growth opportunities, and channel insights.
           </p>
           <div className="landing-pricing-card">
             <p className="landing-pricing-compare">See why your growth is stalled before you waste more uploads on guesswork.</p>
