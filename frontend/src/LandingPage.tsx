@@ -9,6 +9,7 @@ import { billingApi, meApi, publicApi } from './lib/api';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
 import { AiGrowthStudio } from './components/AiGrowthStudio';
+import { HOMEPAGE_COMPARISON_LINKS } from './seo/comparisonPageData';
 import { HOMEPAGE_GUIDE_GROUPS } from './seo/growthGuides';
 import { HOMEPAGE_FAQS } from './seo/homepageFaq';
 
@@ -839,18 +840,18 @@ export function LandingPage() {
         </div>
         <div className="landing-hero-headline-row">
           <div className="container">
-            <p className="landing-hero-brand-eyebrow">{BRAND.name}</p>
-            <h1 className="landing-hero-title" id="hero-heading">
-              <span className="landing-hero-title-line landing-hero-title-headline landing-heading-display">
-                AI YouTube Channel Audit &amp; Growth Analyzer
-              </span>
+            <h1 className="landing-hero-title landing-hero-brand-h1" id="hero-heading">
+              {BRAND.name}
             </h1>
+            <h2 className="landing-hero-tagline-h2">
+              AI-Powered YouTube Channel Audit &amp; Growth Platform
+            </h2>
           </div>
         </div>
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
             <p className="landing-hero-sub">
-              {BRAND.name} helps you find out why your channel is not growing. Analyze CTR, titles, thumbnails, SEO, retention signals, and missed traffic opportunities in minutes.
+              {BRAND.heroDescription}
             </p>
             <p className="landing-hero-trust-copy">
               Built for small YouTube creators who need clear fixes -- not generic advice.
@@ -1236,6 +1237,20 @@ export function LandingPage() {
           <p className="landing-growth-guides-sub">
             Indexable, useful resources for creators who want practical answers on CTR, titles, thumbnails, SEO, retention, and better publishing decisions.
           </p>
+          <div className="landing-comparison-links" aria-labelledby="homepage-compare-heading">
+            <h3 className="landing-growth-guide-card-title" id="homepage-compare-heading">
+              Tool comparisons
+            </h3>
+            <ul className="landing-comparison-links-list">
+              {HOMEPAGE_COMPARISON_LINKS.map((item) => (
+                <li key={item.path}>
+                  <Link to={item.path} className="landing-comparison-link">
+                    {item.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
           <div className="landing-guide-directory-grid">
             {HOMEPAGE_GUIDE_GROUPS.map((group, index) => (
               <section key={group.title} className="landing-guide-directory-card" aria-labelledby={`guide-group-${index}`}>

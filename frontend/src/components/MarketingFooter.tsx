@@ -42,8 +42,9 @@ export function MarketingFooter({ showFinalCta = false }: MarketingFooterProps) 
             <span className="landing-logo-boost">{BRAND.namePart2}</span>
           </Link>
           <p className="landing-site-footer-tagline">
-            YouTubeBooster AI helps creators improve CTR, SEO, thumbnails, retention, and
-            discover growth opportunities using AI-powered channel analysis.
+            {BRAND.name} is an AI-powered YouTube channel audit and growth platform that helps
+            creators identify missed opportunities, improve performance, and make smarter publishing
+            decisions.
           </p>
           <ul className="landing-site-footer-trust-list" aria-label="Footer trust signals">
             <li>No subscription</li>

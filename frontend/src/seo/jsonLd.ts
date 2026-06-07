@@ -41,7 +41,7 @@ export function homeWebPageSchema(): Record<string, unknown> {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
     '@id': absoluteUrl('/'),
-    name: `${BRAND.name} — Official Site`,
+    name: `${BRAND.name} — AI-Powered YouTube Channel Audit & Growth Platform`,
     url: absoluteUrl('/'),
     description: BRAND.seoHomeDescription,
     isPartOf: { '@id': `${getSiteUrl()}/#website` },

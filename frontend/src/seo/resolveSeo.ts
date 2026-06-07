@@ -14,6 +14,7 @@ import {
   softwareApplicationSchema,
   webSiteSchema
 } from './jsonLd';
+import { getComparisonByPath } from './comparisonPageData';
 import { getGrowthGuideByPath } from './growthGuides';
 import { HOMEPAGE_FAQS } from './homepageFaq';
 import { isPrivateNoIndexPath } from './seoRobots';
@@ -70,9 +71,9 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
       title: BRAND_DEFAULT_TITLE,
       description: BRAND.seoHomeDescription,
       canonicalPath: '/',
-      ogTitle: 'YouTubeBooster AI | AI YouTube Channel Audit & Growth Analyzer',
+      ogTitle: 'YouTubeBooster AI | AI-Powered YouTube Channel Audit & Growth Platform',
       ogDescription:
-        'YouTubeBooster AI helps you find out why your YouTube channel is not growing and unlock practical fixes for titles, thumbnails, SEO, CTR, and content strategy.',
+        'Get an AI-powered YouTube channel audit in minutes. Discover growth opportunities, improve CTR, optimize thumbnails, and increase views with actionable recommendations.',
       keywords: [
         'youtube booster ai',
         'youtube channel audit',
@@ -98,8 +99,9 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
 
   if (path === '/about') {
     return {
-      title: `About ${BRAND.name} | Built for Small Creators`,
-      description: `Learn how ${BRAND.name} helps small YouTube creators understand CTR, thumbnails, SEO, retention, and packaging with practical growth guidance.`,
+      title: `About ${BRAND.name}`,
+      description:
+        'Learn how YouTubeBooster AI helps creators identify growth opportunities, improve channel performance, and make better publishing decisions.',
       canonicalPath: '/about',
       keywords: ['about youtube booster ai', 'youtube creator growth platform', 'youtube audit company'],
       jsonLd: baseGraph()
@@ -118,8 +120,9 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
 
   if (path === '/pricing') {
     return {
-      title: `Pricing – ${BRAND.name} | Free Preview, One-Time Audit Unlock`,
-      description: `See ${BRAND.name} pricing: run a free preview first, then unlock the full AI YouTube channel audit and growth report with a one-time payment.`,
+      title: `Pricing | ${BRAND.name}`,
+      description:
+        'Preview your channel audit for free and unlock the complete growth report with personalized recommendations and actionable insights.',
       canonicalPath: '/pricing',
       keywords: ['youtube booster ai pricing', 'youtube channel audit pricing', 'youtube audit tool cost'],
       jsonLd: baseGraph()
@@ -180,9 +183,9 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
 
   if (path === '/demo') {
     return {
-      title: `Free YouTube channel demo – ${BRAND.name}`,
+      title: `Free YouTube Channel Audit | ${BRAND.name}`,
       description:
-        'Try a live demo: AI-powered channel insights, title weaknesses, SEO gaps, and growth opportunities.',
+        'Run a free YouTube channel audit and discover opportunities to improve views, engagement, click-through rate, and channel growth.',
       canonicalPath: '/demo',
       keywords: ['youtube demo', 'channel analyzer', 'youtube ai demo'],
       jsonLd: [...baseGraph()]
@@ -277,6 +280,38 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
     };
   }
 
+  const comparisonPage = getComparisonByPath(path);
+  if (comparisonPage) {
+    const crumbs: BreadcrumbItem[] = [
+      { name: BRAND.name, path: '/' },
+      { name: 'Compare', path: comparisonPage.path },
+      { name: comparisonPage.h1, path: comparisonPage.path }
+    ];
+    const faq = comparisonPage.faq.length ? [faqPageSchema(comparisonPage.faq)] : [];
+    return {
+      title: comparisonPage.title,
+      description: comparisonPage.metaDescription,
+      canonicalPath: comparisonPage.path,
+      keywords: comparisonPage.keywords,
+      ogType: 'article',
+      articlePublishedTime: `${comparisonPage.datePublished}T08:00:00.000Z`,
+      articleModifiedTime: `${comparisonPage.datePublished}T08:00:00.000Z`,
+      breadcrumbs: crumbs,
+      jsonLd: [
+        ...baseGraph(),
+        breadcrumbListSchema(crumbs),
+        articleSchema({
+          headline: comparisonPage.h1,
+          description: comparisonPage.metaDescription,
+          path: comparisonPage.path,
+          datePublished: comparisonPage.datePublished,
+          keywords: comparisonPage.keywords
+        }),
+        ...faq
+      ]
+    };
+  }
+
   const growthGuide = getGrowthGuideByPath(path);
   if (growthGuide) {
     const crumbs: BreadcrumbItem[] = [
@@ -286,7 +321,7 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
     const faq = growthGuide.faq.length ? [faqPageSchema(growthGuide.faq)] : [];
     return {
       title: growthGuide.title,
-      description: `${BRAND.name}: ${growthGuide.metaDescription}`,
+      description: growthGuide.metaDescription,
       canonicalPath: path,
       keywords: growthGuide.keywords,
       ogType: 'article',

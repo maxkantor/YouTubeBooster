@@ -4,6 +4,7 @@
 import audits from './data/audits.json';
 import blogPosts from './data/blogPosts.json';
 import guides from './data/guides.json';
+import { COMPARISON_PAGES } from './comparisonPageData';
 import { GROWTH_GUIDE_PAGES } from './growthGuides';
 import solutions from './data/solutions.json';
 
@@ -28,6 +29,11 @@ export const STATIC_INDEXABLE_PATHS: { path: string; changefreq: string; priorit
   { path: '/guides', changefreq: 'weekly', priority: 0.85 },
   { path: '/blog', changefreq: 'weekly', priority: 0.72 },
   ...ROOT_GROWTH_GUIDE_PATHS,
+  ...COMPARISON_PAGES.map((page) => ({
+    path: page.path,
+    changefreq: 'monthly',
+    priority: 0.78
+  })),
   { path: '/site-map', changefreq: 'monthly', priority: 0.4 }
 ];
 

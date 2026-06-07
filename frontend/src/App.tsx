@@ -95,6 +95,9 @@ const DisclaimerPage = React.lazy(() => import('./pages/marketing/MarketingPages
 const GrowthGuideRoutePage = React.lazy(() =>
   import('./pages/marketing/GrowthGuidePages').then((m) => ({ default: m.GrowthGuideRoutePage }))
 );
+const ComparisonRoutePage = React.lazy(() =>
+  import('./pages/marketing/ComparisonPages').then((m) => ({ default: m.ComparisonRoutePage }))
+);
 
 /** Redirect from /app to the main dashboard (onboarding wizard removed). */
 function AppEntryRedirect() {
@@ -838,6 +841,8 @@ function AppInner() {
         <Route path="/youtube-retention-analysis" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-thumbnail-ctr" element={<GrowthGuideRoutePage />} />
         <Route path="/free-youtube-channel-audit" element={<GrowthGuideRoutePage />} />
+        <Route path="/compare/tubebuddy-vs-youtubebooster-ai" element={<ComparisonRoutePage />} />
+        <Route path="/compare/vidiq-vs-youtubebooster-ai" element={<ComparisonRoutePage />} />
         <Route path="/vidiq-alternative" element={<GrowthGuideRoutePage />} />
         <Route path="/tubebuddy-alternative" element={<GrowthGuideRoutePage />} />
         <Route path="/best-youtube-audit-tool" element={<GrowthGuideRoutePage />} />
