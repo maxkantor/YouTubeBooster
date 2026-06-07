@@ -34,11 +34,12 @@ body {
   min-height: 100dvh;
   overflow-x: clip;
   background:
-    radial-gradient(ellipse 60% 45% at 12% 18%, rgba(79, 70, 229, 0.08), transparent 60%),
-    radial-gradient(ellipse 55% 45% at 90% 26%, rgba(220, 38, 38, 0.04), transparent 62%),
-    linear-gradient(115deg, transparent 0%, rgba(220, 38, 38, 0.035) 22%, transparent 46%),
-    linear-gradient(300deg, transparent 0%, rgba(220, 38, 38, 0.028) 18%, transparent 44%),
-    linear-gradient(180deg, var(--brand-base) 0%, var(--brand-surface) 35%, #06080d 100%);
+    radial-gradient(ellipse 70% 50% at 14% 12%, rgba(79, 70, 229, 0.11), transparent 58%),
+    radial-gradient(ellipse 58% 42% at 88% 18%, rgba(220, 38, 38, 0.07), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 50% 100%, rgba(37, 99, 235, 0.06), transparent 65%),
+    linear-gradient(115deg, transparent 0%, rgba(220, 38, 38, 0.04) 22%, transparent 48%),
+    linear-gradient(300deg, transparent 0%, rgba(99, 102, 241, 0.035) 18%, transparent 44%),
+    linear-gradient(180deg, #04050a 0%, var(--brand-base) 28%, #05070e 62%, #030408 100%);
   background-attachment: fixed;
 }
 
@@ -73,11 +74,18 @@ a {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.015;
+  opacity: 0.022;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 80px 80px;
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 47px,
+      rgba(129, 140, 248, 0.03) 47px,
+      rgba(129, 140, 248, 0.03) 48px
+    );
+  background-size: 64px 64px, 64px 64px, 96px 100%;
 }
 
 #root::after {
@@ -86,13 +94,15 @@ a {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.14;
+  opacity: 0.18;
   background:
-    radial-gradient(ellipse 120% 80% at 50% 0%, rgba(0, 0, 0, 0.5), transparent 55%),
-    radial-gradient(ellipse 55% 45% at 92% 22%, rgba(220, 38, 38, 0.06), transparent 58%),
-    radial-gradient(ellipse 50% 40% at 12% 18%, rgba(79, 70, 229, 0.08), transparent 60%),
-    linear-gradient(115deg, transparent 0%, rgba(220, 38, 38, 0.045) 18%, transparent 42%),
-    linear-gradient(300deg, transparent 0%, rgba(220, 38, 38, 0.035) 16%, transparent 40%);
+    radial-gradient(ellipse 120% 80% at 50% -10%, rgba(0, 0, 0, 0.62), transparent 58%),
+    radial-gradient(circle at 78% 14%, rgba(220, 38, 38, 0.08), transparent 22%),
+    radial-gradient(circle at 18% 22%, rgba(99, 102, 241, 0.1), transparent 24%),
+    radial-gradient(ellipse 55% 45% at 92% 22%, rgba(220, 38, 38, 0.07), transparent 58%),
+    radial-gradient(ellipse 50% 40% at 12% 18%, rgba(79, 70, 229, 0.09), transparent 60%),
+    linear-gradient(115deg, transparent 0%, rgba(220, 38, 38, 0.05) 18%, transparent 42%),
+    linear-gradient(300deg, transparent 0%, rgba(99, 102, 241, 0.04) 16%, transparent 40%);
 }
 
 #root > * {
@@ -1581,18 +1591,27 @@ textarea {
 }
 
 .landing::before {
-  opacity: 0.6;
+  opacity: 0.72;
   background:
-    linear-gradient(120deg, transparent 0%, rgba(220, 38, 38, 0.035) 22%, transparent 46%),
-    linear-gradient(300deg, transparent 0%, rgba(220, 38, 38, 0.03) 20%, transparent 44%);
+    radial-gradient(ellipse 50% 38% at 72% 8%, rgba(220, 38, 38, 0.07), transparent 62%),
+    radial-gradient(ellipse 42% 34% at 8% 16%, rgba(79, 70, 229, 0.08), transparent 64%),
+    linear-gradient(120deg, transparent 0%, rgba(220, 38, 38, 0.04) 22%, transparent 46%),
+    linear-gradient(300deg, transparent 0%, rgba(99, 102, 241, 0.035) 20%, transparent 44%);
 }
 
 .landing::after {
-  opacity: 0.02;
+  opacity: 0.028;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 72px 72px;
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(129, 140, 248, 0.018) 3px,
+      rgba(129, 140, 248, 0.018) 4px
+    );
+  background-size: 72px 72px, 72px 72px, 100% 28px;
 }
 
 .landing > * {
@@ -1611,6 +1630,43 @@ textarea {
 .landing-main {
   flex: 1 0 auto;
   width: 100%;
+  position: relative;
+  isolation: isolate;
+}
+
+.landing-main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 36% 24% at 84% 12%, rgba(220, 38, 38, 0.06), transparent 70%),
+    radial-gradient(ellipse 30% 22% at 10% 42%, rgba(99, 102, 241, 0.07), transparent 72%),
+    radial-gradient(circle at 50% 68%, rgba(37, 99, 235, 0.04), transparent 45%);
+}
+
+.landing-main::after {
+  content: '';
+  position: absolute;
+  top: 18%;
+  right: 6%;
+  width: min(280px, 34vw);
+  height: min(280px, 34vw);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.14;
+  border: 1px solid rgba(220, 38, 38, 0.12);
+  box-shadow:
+    inset 0 0 40px rgba(220, 38, 38, 0.06),
+    0 0 80px rgba(99, 102, 241, 0.08);
+  background: radial-gradient(circle at 42% 38%, rgba(255, 255, 255, 0.04), transparent 55%);
+}
+
+.landing-main > * {
+  position: relative;
+  z-index: 1;
 }
 
 .landing-header {
@@ -1960,6 +2016,43 @@ textarea {
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
+}
+
+.landing-hero-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.42;
+  background:
+    radial-gradient(ellipse 48% 36% at 68% 42%, rgba(99, 102, 241, 0.08), transparent 68%),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 47px,
+      rgba(148, 163, 184, 0.035) 47px,
+      rgba(148, 163, 184, 0.035) 48px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 5px,
+      rgba(129, 140, 248, 0.02) 5px,
+      rgba(129, 140, 248, 0.02) 6px
+    );
+}
+
+.landing-hero-bg::after {
+  content: '';
+  position: absolute;
+  right: 8%;
+  top: 22%;
+  width: min(200px, 28vw);
+  height: min(200px, 28vw);
+  border-radius: 50%;
+  opacity: 0.12;
+  border: 1px solid rgba(220, 38, 38, 0.14);
+  box-shadow: inset 0 0 32px rgba(220, 38, 38, 0.05);
+  background: radial-gradient(circle at 38% 36%, rgba(255, 255, 255, 0.05), transparent 58%);
 }
 
 .landing-hero-bg-vignette {
@@ -2921,11 +3014,18 @@ textarea {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.55;
+  opacity: 0.62;
   background:
-    radial-gradient(ellipse 70% 60% at 12% 18%, rgba(79, 70, 229, 0.045), transparent 60%),
-    radial-gradient(ellipse 55% 45% at 92% 26%, rgba(220, 38, 38, 0.015), transparent 62%),
-    linear-gradient(120deg, transparent 0%, rgba(220, 38, 38, 0.016) 20%, transparent 44%);
+    radial-gradient(ellipse 70% 60% at 12% 18%, rgba(79, 70, 229, 0.055), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 92% 26%, rgba(220, 38, 38, 0.022), transparent 62%),
+    linear-gradient(120deg, transparent 0%, rgba(220, 38, 38, 0.02) 20%, transparent 44%),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 118px,
+      rgba(148, 163, 184, 0.012) 118px,
+      rgba(148, 163, 184, 0.012) 119px
+    );
 }
 
 .landing-section > .container,
@@ -4317,32 +4417,37 @@ textarea {
 
 /* Pricing */
 .landing-pricing-section {
-  padding: 34px var(--app-gutter) 38px;
+  padding: calc(var(--section-pad-y) + 8px) var(--app-gutter) calc(var(--section-pad-y) + 12px);
 }
 
 .landing-pricing-inner {
-  max-width: 720px;
+  width: 100%;
+  max-width: var(--app-max-width);
   margin: 0 auto;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .landing-pricing-inner .landing-section-eyebrow {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .landing-pricing-headline {
-  max-width: 56rem;
-  margin-left: auto;
-  margin-right: auto;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
 }
 
 .landing-pricing-lead {
-  max-width: 38rem;
-  margin: 10px auto 0;
+  width: 100%;
+  max-width: 40rem;
+  margin: 14px auto 0;
   text-align: center;
-  font-size: 1.02rem;
-  line-height: 1.5;
-  color: #a1b4c9;
+  font-size: 1.04rem;
+  line-height: 1.58;
+  color: #a8b8cb;
 }
 
 @media (min-width: 1280px) {
@@ -4353,21 +4458,51 @@ textarea {
 }
 
 .landing-pricing-card {
-  max-width: 520px;
-  margin: 18px auto 0;
-  padding: 32px 32px 28px;
-  border-radius: 22px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(129, 140, 248, 0.2);
-  box-shadow: 0 18px 46px rgba(2, 6, 23, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 0 0 1px rgba(106, 92, 255, 0.12);
-  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  width: 100%;
+  max-width: 640px;
+  margin: 30px auto 0;
+  padding: 38px 40px 34px;
+  border-radius: 24px;
+  background:
+    linear-gradient(165deg, rgba(18, 22, 36, 0.92) 0%, rgba(10, 14, 26, 0.88) 100%);
+  backdrop-filter: blur(24px) saturate(1.15);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  border: 1px solid rgba(129, 140, 248, 0.24);
+  box-shadow:
+    0 24px 56px rgba(2, 6, 23, 0.42),
+    0 0 0 1px rgba(106, 92, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -18px 36px rgba(0, 0, 0, 0.18);
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-pricing-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.55), rgba(129, 140, 248, 0.75), rgba(56, 189, 248, 0.45));
+  opacity: 0.85;
+}
+
+.landing-pricing-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 55% at 50% -20%, rgba(129, 140, 248, 0.14), transparent 62%);
 }
 
 .landing-pricing-card:hover {
-  box-shadow: 0 22px 52px rgba(2, 6, 23, 0.4), 0 0 56px rgba(106, 92, 255, 0.16);
+  border-color: rgba(129, 140, 248, 0.34);
+  box-shadow:
+    0 28px 64px rgba(2, 6, 23, 0.48),
+    0 0 72px rgba(106, 92, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
   transform: translateY(-2px);
 }
 
@@ -4442,7 +4577,9 @@ textarea {
 
 .landing-pricing-form {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .landing-pricing-trust-list {
@@ -4505,15 +4642,23 @@ textarea {
 }
 
 .landing-pricing-cta {
-  margin-top: 2px;
+  margin-top: 4px;
+  width: 100%;
+  min-height: 52px;
   position: relative;
-  box-shadow: 0 10px 28px rgba(106, 92, 255, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 12px 32px rgba(106, 92, 255, 0.36),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .landing-pricing-cta:hover:not(:disabled) {
-  transform: scale(1.02);
-  box-shadow: 0 8px 32px rgba(106, 92, 255, 0.45), 0 0 48px rgba(106, 92, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow:
+    0 16px 38px rgba(106, 92, 255, 0.46),
+    0 0 52px rgba(106, 92, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 .landing-pricing-cta:active:not(:disabled) {
@@ -5006,25 +5151,47 @@ textarea {
 .landing-site-footer {
   flex-shrink: 0;
   margin-top: 0;
-  padding: 0 0 max(28px, env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(180deg, rgba(8, 10, 18, 0.4) 0%, rgba(5, 6, 12, 0.98) 40%, #05060c 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 0 max(32px, env(safe-area-inset-bottom, 0px));
+  background:
+    linear-gradient(180deg, rgba(6, 8, 16, 0.55) 0%, rgba(4, 5, 10, 0.98) 38%, #030408 100%);
+  border-top: 1px solid rgba(129, 140, 248, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 -24px 48px rgba(99, 102, 241, 0.04);
+  position: relative;
+}
+
+.landing-site-footer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(var(--app-max-width), calc(100% - 48px));
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.45), rgba(220, 38, 38, 0.22), transparent);
+  pointer-events: none;
 }
 
 .landing-site-footer-cta-shell {
-  padding: 28px 24px 14px;
+  width: 100%;
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+  padding: 36px max(24px, env(safe-area-inset-left, 0px)) 18px max(24px, env(safe-area-inset-right, 0px));
 }
 
 .landing-site-footer-cta {
-  max-width: 980px;
+  width: 100%;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 22px 24px;
-  border-radius: 22px;
+  padding: 32px 36px 30px;
+  border-radius: 24px;
   background:
-    linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.92)),
-    radial-gradient(circle at top right, rgba(129, 140, 248, 0.2), transparent 36%);
-  border: 1px solid rgba(129, 140, 248, 0.2);
-  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.28);
+    linear-gradient(155deg, rgba(22, 28, 44, 0.94), rgba(10, 14, 26, 0.96)),
+    radial-gradient(circle at top right, rgba(129, 140, 248, 0.18), transparent 40%),
+    radial-gradient(circle at bottom left, rgba(220, 38, 38, 0.06), transparent 42%);
+  border: 1px solid rgba(129, 140, 248, 0.24);
+  box-shadow:
+    0 22px 48px rgba(2, 6, 23, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   text-align: center;
 }
 
@@ -5038,22 +5205,46 @@ textarea {
 }
 
 .landing-site-footer-cta-title {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   font-size: clamp(1.35rem, 1.6vw + 1rem, 1.85rem);
   color: #f8fafc;
   letter-spacing: -0.03em;
-  line-height: 1.08;
+  line-height: 1.12;
+}
+
+.landing-site-footer-cta-shell > .container.landing-site-footer-cta {
+  padding-left: 0;
+  padding-right: 0;
+  width: 100%;
 }
 
 .landing-site-footer-cta-copy {
-  max-width: 48rem;
-  margin: 0 auto 14px;
+  max-width: 40rem;
+  margin: 0 auto 20px;
   color: #a8b6c9;
   line-height: 1.65;
+  font-size: 0.98rem;
 }
 
 .landing-site-footer-cta-button {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: min(280px, 100%);
+  min-height: 52px;
+  box-shadow:
+    0 12px 32px rgba(106, 92, 255, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-site-footer-cta-button:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 16px 38px rgba(106, 92, 255, 0.42),
+    0 0 48px rgba(106, 92, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .landing-site-footer-divider {
@@ -5066,16 +5257,18 @@ textarea {
 
 .landing-site-footer-inner {
   display: grid;
-  grid-template-columns: minmax(260px, 1.05fr) minmax(0, 2.75fr);
-  gap: clamp(24px, 3vw, 40px);
+  grid-template-columns: minmax(240px, 1.2fr) repeat(4, minmax(0, 1fr));
+  gap: clamp(20px, 2.4vw, 32px);
   align-items: start;
-  padding: 28px 24px 18px;
+  padding: 36px max(24px, env(safe-area-inset-left, 0px)) 24px max(24px, env(safe-area-inset-right, 0px));
   max-width: var(--app-max-width);
   margin: 0 auto;
+  width: 100%;
 }
 
 .landing-site-footer-brand {
   min-width: 0;
+  padding-right: clamp(8px, 1.5vw, 20px);
 }
 
 .landing-site-footer-logo {
@@ -5090,11 +5283,11 @@ textarea {
 }
 
 .landing-site-footer-tagline {
-  margin: 10px 0 0;
-  max-width: 22rem;
+  margin: 12px 0 0;
+  max-width: 24rem;
   font-size: 0.9rem;
-  line-height: 1.6;
-  color: #9fb0c4;
+  line-height: 1.62;
+  color: #94a3b8;
 }
 
 .landing-site-footer-trust-list {
@@ -5125,18 +5318,20 @@ textarea {
 }
 
 .landing-site-footer-nav {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(16px, 2vw, 24px);
+  display: contents;
+}
+
+.landing-site-footer-col {
+  min-width: 0;
 }
 
 .landing-site-footer-col-title {
-  margin: 0 0 10px;
-  font-size: 0.68rem;
+  margin: 0 0 12px;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #64748b;
+  color: #7c8ea3;
 }
 
 .landing-site-footer-links {
@@ -5144,21 +5339,24 @@ textarea {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 9px;
+  gap: 10px;
 }
 
 .landing-site-footer-links a {
-  color: #cbd5e1;
-  font-size: 0.88rem;
+  color: #c7d2e0;
+  font-size: 0.9rem;
   font-weight: 500;
+  line-height: 1.4;
   text-decoration: none;
   border-radius: 6px;
   outline-offset: 3px;
-  transition: color 0.15s ease;
+  transition: color 0.18s ease, transform 0.18s ease;
+  display: inline-block;
 }
 
 .landing-site-footer-links a:hover {
   color: #f8fafc;
+  transform: translateX(2px);
 }
 
 .landing-site-footer-links a:focus-visible {
@@ -5166,11 +5364,12 @@ textarea {
 }
 
 .landing-site-footer-bottom {
-  padding: 0 24px 4px;
+  padding: 0 max(24px, env(safe-area-inset-left, 0px)) 4px max(24px, env(safe-area-inset-right, 0px));
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   max-width: var(--app-max-width);
-  margin: 0 auto;
+  margin: 8px auto 0;
+  width: 100%;
 }
 
 .landing-site-footer-copy {
@@ -5235,11 +5434,22 @@ textarea {
 
   .landing-site-footer-inner {
     grid-template-columns: 1fr;
-    padding-top: 32px;
+    padding-top: 28px;
+    gap: 28px;
   }
 
   .landing-site-footer-nav {
+    display: grid;
     grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .landing-site-footer-brand {
+    padding-right: 0;
+  }
+
+  .landing-pricing-headline {
+    white-space: normal;
   }
 }
 
@@ -5261,10 +5471,13 @@ textarea {
 
   .landing-site-footer-inner {
     grid-template-columns: 1fr;
+    gap: 28px;
   }
 
   .landing-site-footer-nav {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 20px;
   }
 }
 
