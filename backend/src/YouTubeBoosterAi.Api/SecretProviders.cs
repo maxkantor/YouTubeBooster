@@ -163,8 +163,9 @@ public sealed class SsmSecretValueProvider : ISecretValueProvider
                 WithDecryption = secure
             }, cancellationToken);
 
-            _cache[relativeKey] = response.Parameter?.Value;
-            return response.Parameter?.Value;
+            var value = response.Parameter?.Value?.Trim();
+            _cache[relativeKey] = value;
+            return value;
         }
         catch (ParameterNotFoundException)
         {

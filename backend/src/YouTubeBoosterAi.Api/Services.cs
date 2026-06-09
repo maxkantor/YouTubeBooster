@@ -185,43 +185,79 @@ public sealed class StripeCheckoutService : ICheckoutService
 
     public async Task HandleStripeWebhookAsync(string payload, string? signatureHeader, CancellationToken cancellationToken)
     {
-        var webhookSecret = await _secretValueProvider.GetValueAsync("stripe/webhook-secret", secure: true, cancellationToken);
+        var webhookSecret = (await _secretValueProvider.GetValueAsync("stripe/webhook-secret", secure: true, cancellationToken))?.Trim();
         if (string.IsNullOrWhiteSpace(webhookSecret))
         {
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(signatureHeader))
+        {
+            await _appDataStore.TrackEventAsync("stripe_webhook_missing_signature", "n/a", new Dictionary<string, string?>
+            {
+                ["reason"] = "Stripe-Signature header missing after API Gateway/Lambda marshalling."
+            }, cancellationToken);
+            return;
+        }
+
         Stripe.Checkout.Session? completedSession = null;
         string? stripeEventId = null;
-        if (!string.IsNullOrWhiteSpace(signatureHeader))
+        try
         {
-            try
-            {
-                var stripeEvent = Stripe.EventUtility.ConstructEvent(payload, signatureHeader, webhookSecret);
-                if (stripeEvent.Type != "checkout.session.completed")
-                {
-                    return;
-                }
+            var stripeEvent = Stripe.EventUtility.ConstructEvent(
+                payload,
+                signatureHeader,
+                webhookSecret,
+                throwOnApiVersionMismatch: false);
 
-                if (!await _appDataStore.TryMarkStripeWebhookEventProcessedAsync(stripeEvent.Id, cancellationToken))
-                {
-                    await _appDataStore.TrackEventAsync("stripe_webhook_duplicate_ignored", stripeEvent.Id, new Dictionary<string, string?>
-                    {
-                        ["eventType"] = stripeEvent.Type
-                    }, cancellationToken);
-                    return;
-                }
-
-                stripeEventId = stripeEvent.Id;
-                completedSession = stripeEvent.Data.Object as Stripe.Checkout.Session;
-            }
-            catch (Exception ex)
+            if (string.Equals(stripeEvent.Type, "checkout.session.expired", StringComparison.OrdinalIgnoreCase))
             {
-                await _appDataStore.TrackEventAsync("stripe_webhook_signature_invalid", "n/a", new Dictionary<string, string?>
+                await _appDataStore.TrackEventAsync("checkout_abandoned", stripeEvent.Id, new Dictionary<string, string?>
                 {
-                    ["reason"] = ex.Message
+                    ["eventSource"] = "webhook",
+                    ["eventType"] = stripeEvent.Type
                 }, cancellationToken);
+                return;
             }
+
+            if (!string.Equals(stripeEvent.Type, "checkout.session.completed", StringComparison.OrdinalIgnoreCase))
+            {
+                await _appDataStore.TrackEventAsync("stripe_webhook_ignored_event", stripeEvent.Id, new Dictionary<string, string?>
+                {
+                    ["eventType"] = stripeEvent.Type
+                }, cancellationToken);
+                return;
+            }
+
+            if (!await _appDataStore.TryMarkStripeWebhookEventProcessedAsync(stripeEvent.Id, cancellationToken))
+            {
+                await _appDataStore.TrackEventAsync("stripe_webhook_duplicate_ignored", stripeEvent.Id, new Dictionary<string, string?>
+                {
+                    ["eventType"] = stripeEvent.Type
+                }, cancellationToken);
+                return;
+            }
+
+            stripeEventId = stripeEvent.Id;
+            completedSession = stripeEvent.Data.Object as Stripe.Checkout.Session;
+        }
+        catch (Stripe.StripeException ex)
+        {
+            await _appDataStore.TrackEventAsync("stripe_webhook_signature_invalid", "n/a", new Dictionary<string, string?>
+            {
+                ["reason"] = ex.Message,
+                ["signaturePresent"] = (!string.IsNullOrWhiteSpace(signatureHeader)).ToString(),
+                ["signatureHasV1"] = signatureHeader.Contains("v1=", StringComparison.Ordinal).ToString()
+            }, cancellationToken);
+            return;
+        }
+        catch (Exception ex)
+        {
+            await _appDataStore.TrackEventAsync("stripe_webhook_processing_failed", "n/a", new Dictionary<string, string?>
+            {
+                ["reason"] = ex.Message
+            }, cancellationToken);
+            return;
         }
 
         if (completedSession is null)

@@ -358,11 +358,8 @@ checkoutApi.MapPost("/session", async (CreateCheckoutSessionRequest request, ICh
 var webhookApi = app.MapGroup("/api/webhooks");
 webhookApi.MapPost("/stripe", async (HttpRequest request, ICheckoutService service, CancellationToken cancellationToken) =>
 {
-    using var reader = new StreamReader(request.Body);
-    var payload = await reader.ReadToEndAsync(cancellationToken);
-    var signature = request.Headers["Stripe-Signature"].FirstOrDefault();
-
-    await service.HandleStripeWebhookAsync(payload, signature, cancellationToken);
+    var webhookRequest = await StripeWebhookHttp.ReadAsync(request, cancellationToken);
+    await service.HandleStripeWebhookAsync(webhookRequest.Payload, webhookRequest.SignatureHeader, cancellationToken);
     return Results.Ok(new { received = true });
 });
 
