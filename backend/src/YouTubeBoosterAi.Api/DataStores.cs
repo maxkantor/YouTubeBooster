@@ -1059,11 +1059,15 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         await SaveUserProfileAsync(existing with { LastLoginAt = when, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken);
         await TrackEventAsync("user_login", userId, new Dictionary<string, string?>
         {
-            ["when"] = when.ToString("O")
+            ["when"] = when.ToString("O"),
+            ["userId"] = userId,
+            ["eventSource"] = "backend"
         }, cancellationToken);
         await TrackEventAsync("login_completed", userId, new Dictionary<string, string?>
         {
-            ["when"] = when.ToString("O")
+            ["when"] = when.ToString("O"),
+            ["userId"] = userId,
+            ["eventSource"] = "backend"
         }, cancellationToken);
     }
 
@@ -1617,6 +1621,36 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         }
 
         await PutItemAsync(GetTableName("Storage:ActivityTable", "ybai-activity"), item, cancellationToken);
+        await TryPersistActorIdentityLinkAsync(metadata, cancellationToken);
+    }
+
+    private async Task TryPersistActorIdentityLinkAsync(IDictionary<string, string?> metadata, CancellationToken cancellationToken)
+    {
+        metadata.TryGetValue("anonymousId", out var anonymousId);
+        if (string.IsNullOrWhiteSpace(anonymousId))
+        {
+            metadata.TryGetValue("anonymous_id", out anonymousId);
+        }
+
+        metadata.TryGetValue("userId", out var userId);
+        if (string.IsNullOrWhiteSpace(anonymousId) || string.IsNullOrWhiteSpace(userId))
+        {
+            return;
+        }
+
+        metadata.TryGetValue("cognitoSub", out var cognitoSub);
+        metadata.TryGetValue("email_hash", out var emailHash);
+        var now = DateTimeOffset.UtcNow.ToString("O");
+        var tableName = GetTableName("Storage:ActivityTable", "ybai-activity");
+        await PutItemAsync(tableName, new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = StringValue($"IDENTITY#{anonymousId.Trim()}"),
+            ["sk"] = StringValue("LINK"),
+            ["userId"] = StringValue(userId.Trim()),
+            ["cognitoSub"] = StringValue(cognitoSub ?? string.Empty),
+            ["emailHash"] = StringValue(emailHash ?? string.Empty),
+            ["updatedAt"] = StringValue(now)
+        }, cancellationToken);
     }
 
     public async Task<AdminDataSnapshot> GetAdminSnapshotAsync(CancellationToken cancellationToken)
@@ -2222,20 +2256,29 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
     private async Task<IReadOnlyList<ActivityFeedItem>> GetRecentActivityAsync(CancellationToken cancellationToken)
     {
         var tableName = GetTableName("Storage:ActivityTable", "ybai-activity");
-        var response = await _dynamoDb.ScanAsync(new ScanRequest
-        {
-            TableName = tableName,
-            Limit = 10
-        }, cancellationToken);
+        var results = new List<ActivityFeedItem>();
+        Dictionary<string, AttributeValue>? lastKey = null;
 
-        return response.Items
-            .Select(item => new ActivityFeedItem(
+        do
+        {
+            var response = await _dynamoDb.ScanAsync(new ScanRequest
+            {
+                TableName = tableName,
+                Limit = 500,
+                ExclusiveStartKey = lastKey
+            }, cancellationToken);
+
+            results.AddRange(response.Items.Select(item => new ActivityFeedItem(
                 item.GetValueOrDefault("eventName")?.S ?? "activity",
                 item.GetValueOrDefault("scope")?.S ?? string.Empty,
-                ParseDate(item.GetValueOrDefault("createdAt")?.S)
-            ))
+                ParseDate(item.GetValueOrDefault("createdAt")?.S))));
+            lastKey = response.LastEvaluatedKey;
+        }
+        while (lastKey is not null && lastKey.Count > 0 && results.Count < 5000);
+
+        return results
             .OrderByDescending(item => item.Timestamp)
-            .Take(10)
+            .Take(25)
             .ToArray();
     }
 

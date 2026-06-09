@@ -343,7 +343,10 @@ export type AdminOperationalKpis = {
   totalUsers: number;
   activeEntitledUsers: number;
   activeLiveEntitledUsers: number;
+  /** Unique demo actors in selected range */
   totalDemos: number;
+  /** Raw demo_completed events in selected range */
+  rawDemoEvents: number;
   paidLiveOrders: number;
   revenueLiveUsd: number;
   paidTestOrders: number;
@@ -357,9 +360,39 @@ export type AdminOperationalKpis = {
 export type AdminFunnelStep = {
   eventKey: string;
   label: string;
-  count: number;
+  uniqueActorCount: number;
+  rawEventCount: number;
   conversionFromPreviousPct: number | null;
   dropOffFromPreviousPct: number | null;
+  warning: string | null;
+};
+
+export type AdminFunnelDropOffInsight = {
+  fromStepLabel: string;
+  toStepLabel: string;
+  fromUniqueActors: number;
+  toUniqueActors: number;
+  dropOffPct: number;
+  interpretation: string;
+};
+
+export type AdminFunnelEventDiagnostic = {
+  eventName: string;
+  rawCount: number;
+  uniqueActorCount: number;
+  firstSeen: string;
+  lastSeen: string;
+  missingIdentityCount: number;
+  percentMissingUserId: number;
+  percentMissingAnonymousId: number;
+  warning: string | null;
+};
+
+export type AdminDiagnosticsResponse = {
+  range: string;
+  rows: AdminDiagnosticRow[];
+  funnel: AdminFunnel;
+  eventDiagnostics: AdminFunnelEventDiagnostic[];
 };
 
 export type AdminFunnel = {
@@ -413,6 +446,7 @@ export type AdminOperationalDashboard = {
   attentionRequired: AdminAttentionItem[];
   funnel: AdminFunnel;
   diagnostics: AdminDiagnosticRow[];
+  biggestDropOff: AdminFunnelDropOffInsight | null;
 };
 
 export type AdminActivityEventRow = {

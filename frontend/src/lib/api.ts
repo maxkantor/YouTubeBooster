@@ -5,6 +5,7 @@ import type {
   AdminDemoAuditRow,
   AdminListResponse,
   AdminDiagnosticRow,
+  AdminDiagnosticsResponse,
   AdminOperationalDashboard,
   AdminOrderRow,
   AdminPurchaseRow,
@@ -33,11 +34,28 @@ import type {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
+function getAnonymousId(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const key = 'yb_anonymous_id';
+    let id = window.localStorage.getItem(key);
+    if (!id) {
+      id = `anon_${crypto.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+      window.localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const hasBody = init?.body !== undefined && init?.body !== null;
 
   const headers = new Headers(init?.headers);
+  const anon = getAnonymousId();
+  if (anon) headers.set('X-YB-Anonymous-Id', anon);
   if (hasBody && method !== 'GET' && method !== 'HEAD' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -375,9 +393,9 @@ export const adminApi = {
     const q = new URLSearchParams({ range });
     return fetchJson<AdminOperationalDashboard>(`/api/admin/crm/dashboard?${q}`);
   },
-  async crmDiagnostics(range = '30d'): Promise<AdminDiagnosticRow[]> {
+  async crmDiagnostics(range = '30d'): Promise<AdminDiagnosticsResponse> {
     const q = new URLSearchParams({ range });
-    return fetchJson<AdminDiagnosticRow[]>(`/api/admin/crm/diagnostics?${q}`);
+    return fetchJson<AdminDiagnosticsResponse>(`/api/admin/crm/diagnostics?${q}`);
   },
   async crmBackfillPaymentLivemode(): Promise<{
     scanned: number;

@@ -7,13 +7,14 @@
 | Total users | `ybai-users` (`sk=PROFILE`) | Count of profile rows |
 | Active entitled (flag) | `ybai-users` | `purchased=true` and `userStatus=active` |
 | Active live entitled | `ybai-users` entitlements | Active entitlements where `source != test_payment` |
-| Demo completions | `ybai-demo-analyses` | Row count |
+| Demo users (unique) | `ybai-activity` `demo_completed` | Unique actors in selected range |
+| Demo events (raw) | `ybai-activity` `demo_completed` | Raw event count in range |
 | Paid live orders | `ybai-purchases` / `PAYMENT#` | `status=completed`, `amount>0`, `mode=live` |
 | Revenue live | `PAYMENT#` | Sum of live paid amounts |
 | Paid test orders | `PAYMENT#` | `status=completed`, `amount>0`, `mode!=live` |
 | Revenue test | `PAYMENT#` | Sum of test paid amounts |
 | Demo → paid % | Demos + payments | `live paid orders / total demos` |
-| Funnel steps | `ybai-activity` | Event name counts |
+| Funnel steps | `ybai-activity` | Unique actors per step (raw events shown separately) |
 | GA4 visitors | Google Analytics | **Not stored in CRM** |
 
 ## Stripe live vs test

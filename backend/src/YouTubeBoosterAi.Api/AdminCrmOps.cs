@@ -47,6 +47,8 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
 
     public async Task<AdminOperationalDashboardResponse> GetOperationalDashboardAsync(string range, CancellationToken cancellationToken)
     {
+        var normalizedRange = string.IsNullOrWhiteSpace(range) ? "30d" : range.Trim();
+        var now = DateTimeOffset.UtcNow;
         var snapshot = await GetAdminSnapshotAsync(cancellationToken);
         var paymentsTable = GetTableName("Storage:PaymentsTable", GetTableName("Storage:PurchasesTable", "ybai-purchases"));
         var payScan = await _dynamoDb.ScanAsync(new ScanRequest
@@ -61,9 +63,14 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             Limit = 5000
         }, cancellationToken);
 
-        var payments = payScan.Items.Select(ReadPayment).ToArray();
-        var paymentSummary = BusinessAnalytics.SummarizePayments(payments);
-        var demoToPaid = BusinessAnalytics.DemoToLivePaidConversionPct(snapshot.TotalDemos, paymentSummary.LivePaidOrderCount);
+        var allPayments = payScan.Items.Select(ReadPayment).ToArray();
+        var paymentsInRange = BusinessAnalytics.FilterPaymentsByRange(allPayments, normalizedRange, now);
+        var paymentSummary = BusinessAnalytics.SummarizePayments(paymentsInRange);
+        var (allActivity, identityLinks) = await ScanAllActivityAndIdentityAsync(cancellationToken);
+        var activityInRange = FunnelAnalytics.FilterByRange(allActivity, normalizedRange, now);
+        var rawDemoEvents = FunnelAnalytics.CountRawEvents(allActivity, normalizedRange, "demo_completed");
+        var uniqueDemoActors = FunnelAnalytics.CountUniqueActors(allActivity, normalizedRange, "demo_completed");
+        var demoToPaid = BusinessAnalytics.DemoToLivePaidConversionPct(uniqueDemoActors, paymentSummary.LivePaidOrderCount);
 
         var usersSnap = await _dynamoDb.ScanAsync(new ScanRequest
         {
@@ -73,7 +80,6 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             Limit = 5000
         }, cancellationToken);
         var profiles = usersSnap.Items.Select(ReadUserAccount).ToArray();
-        var now = DateTimeOffset.UtcNow;
         var entitledActivePurchasedFlag = profiles.Count(u =>
             u.Purchased &&
             string.Equals(string.IsNullOrWhiteSpace(u.UserStatus) ? "active" : u.UserStatus, "active", StringComparison.OrdinalIgnoreCase));
@@ -98,16 +104,20 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             !string.Equals(t.Status, "closed", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(t.Status, "resolved", StringComparison.OrdinalIgnoreCase));
 
-        var recent = await GetRecentActivityAsync(cancellationToken);
+        var recent = activityInRange
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(25)
+            .Select(a => new ActivityFeedItem(a.EventName, a.Scope, a.CreatedAt))
+            .ToArray();
         var attention = new List<AdminAttentionItemDto>();
         if (paymentSummary.UnmatchedCount > 0)
             attention.Add(new AdminAttentionItemDto("unmatched", "Payments or orders with missing user linkage or zero-amount live completions.", null));
         if (paymentSummary.FailedOrUnpaidCount > 0)
             attention.Add(new AdminAttentionItemDto("failed_payments", $"{paymentSummary.FailedOrUnpaidCount} failed/unpaid payment rows.", null));
         if (paymentSummary.TestPaidOrderCount > 0 && paymentSummary.LivePaidOrderCount == 0)
-            attention.Add(new AdminAttentionItemDto("test_only_revenue", "All paid orders are Stripe test mode. Live revenue is $0.", null));
+            attention.Add(new AdminAttentionItemDto("test_only_revenue", "All paid orders in range are Stripe test mode. Live revenue is $0.", null));
 
-        var ordersAttention = payments
+        var ordersAttention = paymentsInRange
             .Where(p => string.IsNullOrWhiteSpace(p.UserId) || p.Amount == 0 || string.Equals(p.Status, "failed", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(p => p.CreatedAt)
             .Take(50)
@@ -119,12 +129,12 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             .Take(25)
             .ToArray();
 
-        var activityForFunnel = await ListActivityEventsAsync(2000, null, cancellationToken);
-        var funnel = BusinessAnalytics.BuildFunnel(activityForFunnel.Items, range);
+        var funnel = FunnelAnalytics.BuildFunnel(allActivity, normalizedRange, identityLinks);
+        var biggestDropOff = FunnelAnalytics.FindBiggestDropOff(funnel);
         var diagnostics = BusinessAnalytics.BuildDiagnostics(
-            range,
+            normalizedRange,
             paymentSummary,
-            snapshot.TotalDemos,
+            uniqueDemoActors,
             snapshot.TotalUsers,
             profiles.Length,
             activeLiveEntitled,
@@ -154,12 +164,13 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         var audits = await ListDemoAuditsAsync(25, null, cancellationToken);
 
         return new AdminOperationalDashboardResponse(
-            range,
+            normalizedRange,
             new AdminOperationalKpis(
                 snapshot.TotalUsers,
                 entitledActivePurchasedFlag,
                 activeLiveEntitled,
-                snapshot.TotalDemos,
+                uniqueDemoActors,
+                rawDemoEvents,
                 paymentSummary.LivePaidOrderCount,
                 paymentSummary.LiveRevenueUsd,
                 paymentSummary.TestPaidOrderCount,
@@ -175,13 +186,17 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             audits.Items.Take(15).ToArray(),
             attention.ToArray(),
             funnel,
-            diagnostics);
+            diagnostics,
+            biggestDropOff);
     }
 
     public async Task<AdminDiagnosticsResponse> GetAdminDiagnosticsAsync(string range, CancellationToken cancellationToken)
     {
-        var dashboard = await GetOperationalDashboardAsync(range, cancellationToken);
-        return new AdminDiagnosticsResponse(range, dashboard.Diagnostics, dashboard.Funnel);
+        var normalizedRange = string.IsNullOrWhiteSpace(range) ? "30d" : range.Trim();
+        var dashboard = await GetOperationalDashboardAsync(normalizedRange, cancellationToken);
+        var (allActivity, identityLinks) = await ScanAllActivityAndIdentityAsync(cancellationToken);
+        var eventDiagnostics = FunnelAnalytics.BuildEventDiagnostics(allActivity, normalizedRange, identityLinks);
+        return new AdminDiagnosticsResponse(normalizedRange, dashboard.Diagnostics, dashboard.Funnel, eventDiagnostics);
     }
 
     private static AdminOrderRowDto ToAdminOrderRow(PaymentRecord p) => new(
@@ -240,21 +255,82 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
 
     public async Task<AdminListResponse<AdminActivityEventDto>> ListActivityEventsAsync(int limit, string? cursor, CancellationToken cancellationToken)
     {
-        var tableName = GetTableName("Storage:ActivityTable", "ybai-activity");
-        var response = await _dynamoDb.ScanAsync(new ScanRequest
-        {
-            TableName = tableName,
-            Limit = Math.Max(1, Math.Min(limit, 200)),
-            ExclusiveStartKey = DecodeCursor(cursor)
-        }, cancellationToken);
-
-        var items = response.Items
-            .Select(ReadActivityEvent)
-            .OrderByDescending(a => a.CreatedAt)
-            .ToArray();
-
-        return new AdminListResponse<AdminActivityEventDto>(items, EncodeCursor(response.LastEvaluatedKey));
+        var pageSize = Math.Max(1, Math.Min(limit, 200));
+        var (all, _) = await ScanAllActivityAndIdentityAsync(cancellationToken);
+        var sorted = all.OrderByDescending(a => a.CreatedAt).ToArray();
+        var offset = DecodeOffsetCursor(cursor);
+        var page = sorted.Skip(offset).Take(pageSize).ToArray();
+        var next = offset + pageSize < sorted.Length ? EncodeOffsetCursor(offset + pageSize) : null;
+        return new AdminListResponse<AdminActivityEventDto>(page, next);
     }
+
+    private async Task<(IReadOnlyList<AdminActivityEventDto> Events, Dictionary<string, string> IdentityLinks)> ScanAllActivityAndIdentityAsync(CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:ActivityTable", "ybai-activity");
+        var results = new List<AdminActivityEventDto>();
+        var identityLinks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, AttributeValue>? lastKey = null;
+
+        do
+        {
+            var response = await _dynamoDb.ScanAsync(new ScanRequest
+            {
+                TableName = tableName,
+                Limit = 500,
+                ExclusiveStartKey = lastKey
+            }, cancellationToken);
+
+            foreach (var item in response.Items)
+            {
+                var pk = item.GetValueOrDefault("pk")?.S ?? string.Empty;
+                if (pk.StartsWith("IDENTITY#", StringComparison.Ordinal))
+                {
+                    var anon = pk["IDENTITY#".Length..];
+                    var userId = item.GetValueOrDefault("userId")?.S;
+                    if (!string.IsNullOrWhiteSpace(anon) && !string.IsNullOrWhiteSpace(userId))
+                    {
+                        identityLinks[anon] = userId;
+                    }
+
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(item.GetValueOrDefault("eventName")?.S))
+                {
+                    results.Add(ReadActivityEvent(item));
+                }
+            }
+
+            lastKey = response.LastEvaluatedKey;
+        }
+        while (lastKey is not null && lastKey.Count > 0);
+
+        return (results, identityLinks);
+    }
+
+    private static int DecodeOffsetCursor(string? cursor)
+    {
+        if (string.IsNullOrWhiteSpace(cursor)) return 0;
+        try
+        {
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("offset", out var offsetEl) && offsetEl.TryGetInt32(out var offset))
+            {
+                return Math.Max(0, offset);
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return 0;
+    }
+
+    private static string? EncodeOffsetCursor(int offset) =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+            System.Text.Json.JsonSerializer.Serialize(new { offset })));
 
     private static AdminActivityEventDto ReadActivityEvent(Dictionary<string, AttributeValue> item)
     {
@@ -405,7 +481,7 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     {
         return Task.FromResult(new AdminOperationalDashboardResponse(
             range,
-            new AdminOperationalKpis(0, 0, 0, 0, 0, 0m, 0, 0m, 0, 0, 0, 0),
+            new AdminOperationalKpis(0, 0, 0, 0, 0, 0, 0m, 0, 0m, 0, 0, 0, 0),
             Array.Empty<ActivityFeedItem>(),
             Array.Empty<AdminOrderRowDto>(),
             Array.Empty<AdminSupportTicketDto>(),
@@ -413,11 +489,16 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
             Array.Empty<AdminDemoAuditDto>(),
             Array.Empty<AdminAttentionItemDto>(),
             new AdminFunnelResponse(range, Array.Empty<AdminFunnelStepDto>(), string.Empty),
-            Array.Empty<AdminDiagnosticRowDto>()));
+            Array.Empty<AdminDiagnosticRowDto>(),
+            null));
     }
 
     public Task<AdminDiagnosticsResponse> GetAdminDiagnosticsAsync(string range, CancellationToken cancellationToken) =>
-        Task.FromResult(new AdminDiagnosticsResponse(range, Array.Empty<AdminDiagnosticRowDto>(), new AdminFunnelResponse(range, Array.Empty<AdminFunnelStepDto>(), string.Empty)));
+        Task.FromResult(new AdminDiagnosticsResponse(
+            range,
+            Array.Empty<AdminDiagnosticRowDto>(),
+            new AdminFunnelResponse(range, Array.Empty<AdminFunnelStepDto>(), string.Empty),
+            Array.Empty<AdminFunnelEventDiagnosticDto>()));
 
     public Task<bool> TryMarkStripeWebhookEventProcessedAsync(string stripeEventId, CancellationToken cancellationToken) =>
         Task.FromResult(true);

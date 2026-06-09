@@ -219,6 +219,7 @@ function CheckoutSuccessPage({
 
           const data = await meApi.getAccessStatus(token);
           if (data.premium) {
+            analytics.checkoutReturnSuccess(sessionId ?? undefined);
             analytics.purchaseCompleted();
             setStatus('active');
             navigate('/dashboard', { replace: true });

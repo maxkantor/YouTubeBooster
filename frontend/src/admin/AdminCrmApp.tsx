@@ -10,7 +10,9 @@ import type {
   AdminSupportTicketRow,
   AdminUserRow,
   AdminActivityEventRow,
-  AdminDiagnosticRow
+  AdminDiagnosticRow,
+  AdminDiagnosticsResponse,
+  AdminFunnelEventDiagnostic
 } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import {
@@ -204,8 +206,11 @@ export function AdminHomePage() {
               <strong>{dash.kpis.activeLiveEntitledUsers ?? 0}</strong>
             </div>
             <div className="admin-crm-metric">
-              <span>Demo completions</span>
+              <span>Demo users (unique)</span>
               <strong>{dash.kpis.totalDemos}</strong>
+              <small className="admin-crm-muted" style={{ display: 'block', marginTop: 4 }}>
+                Raw events: {dash.kpis.rawDemoEvents ?? dash.kpis.totalDemos}
+              </small>
             </div>
             <div className="admin-crm-metric">
               <span>Live paid orders</span>
@@ -241,31 +246,55 @@ export function AdminHomePage() {
             </div>
           </div>
 
+          {dash.biggestDropOff && (
+            <div className="admin-crm-panel admin-crm-panel-attention" style={{ marginTop: 16 }}>
+              <h2>Biggest drop-off</h2>
+              <p style={{ margin: '8px 0 4px' }}>
+                <strong>
+                  {dash.biggestDropOff.fromStepLabel} → {dash.biggestDropOff.toStepLabel}
+                </strong>
+              </p>
+              <p className="admin-crm-muted" style={{ margin: 0 }}>
+                {dash.biggestDropOff.fromUniqueActors} unique → {dash.biggestDropOff.toUniqueActors} unique (
+                {dash.biggestDropOff.dropOffPct.toFixed(1)}% drop-off)
+              </p>
+              <p className="admin-crm-muted" style={{ marginTop: 8, marginBottom: 0 }}>
+                {dash.biggestDropOff.interpretation}
+              </p>
+            </div>
+          )}
+
           {dash.funnel?.steps?.length > 0 && (
             <div className="admin-crm-panel" style={{ marginTop: 16 }}>
-              <h2>Conversion funnel (CRM activity)</h2>
+              <h2>Conversion funnel (unique actors)</h2>
               <p className="admin-crm-muted" style={{ marginTop: 0 }}>
-                {dash.funnel.notes}
+                {dash.funnel.notes} Range: <strong>{dash.range}</strong>.
               </p>
               <div className="admin-crm-table-wrap">
                 <table className="admin-crm-table admin-crm-table-sticky">
                   <thead>
                     <tr>
                       <th>Step</th>
-                      <th>Count</th>
+                      <th>Unique actors</th>
+                      <th>Raw events</th>
                       <th>Conv. from prev</th>
                       <th>Drop-off</th>
+                      <th>Note</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dash.funnel.steps
-                      .filter((s) => s.count > 0)
+                      .filter((s) => (s.uniqueActorCount ?? s.rawEventCount ?? 0) > 0)
                       .map((s) => (
                         <tr key={s.eventKey}>
                           <td>{s.label}</td>
-                          <td>{s.count}</td>
-                          <td>{s.conversionFromPreviousPct != null ? `${s.conversionFromPreviousPct.toFixed(1)}%` : '—'}</td>
+                          <td>{s.uniqueActorCount ?? 0}</td>
+                          <td>{s.rawEventCount ?? 0}</td>
+                          <td>
+                            {s.conversionFromPreviousPct != null ? `${s.conversionFromPreviousPct.toFixed(1)}%` : 'N/A'}
+                          </td>
                           <td>{s.dropOffFromPreviousPct != null ? `${s.dropOffFromPreviousPct.toFixed(1)}%` : '—'}</td>
+                          <td>{s.warning ? <Badge kind="warn">identity gap</Badge> : '—'}</td>
                         </tr>
                       ))}
                   </tbody>
@@ -1813,7 +1842,7 @@ export function ActivityLogsPage() {
 export const SystemLogsPage = ActivityLogsPage;
 
 export function DiagnosticsPage() {
-  const [rows, setRows] = useState<AdminDiagnosticRow[]>([]);
+  const [data, setData] = useState<AdminDiagnosticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [backfillMsg, setBackfillMsg] = useState('');
@@ -1826,7 +1855,7 @@ export function DiagnosticsPage() {
     adminApi
       .crmDiagnostics(range)
       .then((res) => {
-        if (!c) setRows(res);
+        if (!c) setData(res);
       })
       .catch((e) => {
         if (!c) setError(e instanceof Error ? e.message : 'Failed to load diagnostics');
@@ -1866,7 +1895,7 @@ export function DiagnosticsPage() {
                 `Backfill: scanned ${res.scanned}, updated ${res.updated}, assumed test ${res.assumedTest}, confirmed live ${res.confirmedLive}, confirmed test ${res.confirmedTest}.`
               );
               const fresh = await adminApi.crmDiagnostics(range);
-              setRows(fresh);
+              setData(fresh);
             } catch (e) {
               setBackfillMsg(e instanceof Error ? e.message : 'Backfill failed');
             } finally {
@@ -1880,35 +1909,73 @@ export function DiagnosticsPage() {
       {backfillMsg && <p className="admin-crm-muted" style={{ marginBottom: 12 }}>{backfillMsg}</p>}
       {loading ? (
         <p style={{ color: '#64748b' }}>Loading…</p>
-      ) : rows.length === 0 ? (
+      ) : !data || (data.rows.length === 0 && data.eventDiagnostics.length === 0) ? (
         <div className="admin-crm-panel admin-crm-empty">No diagnostics available.</div>
       ) : (
-        <div className="admin-crm-table-wrap">
-          <table className="admin-crm-table admin-crm-table-sticky">
-            <thead>
-              <tr>
-                <th>Metric</th>
-                <th>Value</th>
-                <th>Data source</th>
-                <th>Filters</th>
-                <th>Last updated</th>
-                <th>Warning</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.metric}>
-                  <td>{r.metric}</td>
-                  <td>{r.value}</td>
-                  <td style={{ maxWidth: 200 }}>{r.dataSource}</td>
-                  <td style={{ maxWidth: 180 }}>{r.filters}</td>
-                  <td className="admin-crm-nowrap">{formatDt(r.lastUpdated)}</td>
-                  <td>{r.warning ? <Badge kind="warn">{r.warning}</Badge> : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {data.rows.length > 0 && (
+            <div className="admin-crm-table-wrap" style={{ marginBottom: 24 }}>
+              <h2 style={{ marginTop: 0 }}>Metric sources</h2>
+              <table className="admin-crm-table admin-crm-table-sticky">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                    <th>Data source</th>
+                    <th>Filters</th>
+                    <th>Last updated</th>
+                    <th>Warning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.map((r) => (
+                    <tr key={r.metric}>
+                      <td>{r.metric}</td>
+                      <td>{r.value}</td>
+                      <td style={{ maxWidth: 200 }}>{r.dataSource}</td>
+                      <td style={{ maxWidth: 180 }}>{r.filters}</td>
+                      <td className="admin-crm-nowrap">{formatDt(r.lastUpdated)}</td>
+                      <td>{r.warning ? <Badge kind="warn">{r.warning}</Badge> : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {data.eventDiagnostics.length > 0 && (
+            <div className="admin-crm-table-wrap">
+              <h2 style={{ marginTop: 0 }}>Funnel event diagnostics</h2>
+              <table className="admin-crm-table admin-crm-table-sticky">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Raw</th>
+                    <th>Unique</th>
+                    <th>First seen</th>
+                    <th>Last seen</th>
+                    <th>Missing identity</th>
+                    <th>% no userId</th>
+                    <th>% no anonId</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.eventDiagnostics.map((r: AdminFunnelEventDiagnostic) => (
+                    <tr key={r.eventName}>
+                      <td>{r.eventName}</td>
+                      <td>{r.rawCount}</td>
+                      <td>{r.uniqueActorCount}</td>
+                      <td className="admin-crm-nowrap">{formatDt(r.firstSeen)}</td>
+                      <td className="admin-crm-nowrap">{formatDt(r.lastSeen)}</td>
+                      <td>{r.missingIdentityCount}</td>
+                      <td>{r.percentMissingUserId.toFixed(1)}%</td>
+                      <td>{r.percentMissingAnonymousId.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </AdminShell>
   );

@@ -14,6 +14,21 @@ if (typeof window !== 'undefined' && GA4_ID) {
   document.head.appendChild(s);
 }
 
+export function getAnonymousId(): string {
+  if (typeof window === 'undefined') return 'anon_server';
+  try {
+    const key = 'yb_anonymous_id';
+    let id = window.localStorage.getItem(key);
+    if (!id) {
+      id = `anon_${crypto.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+      window.localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return `anon_${Date.now()}`;
+  }
+}
+
 async function hashEmail(email: string): Promise<string | undefined> {
   const normalized = email.trim().toLowerCase();
   if (!normalized || typeof crypto?.subtle?.digest !== 'function') return undefined;
@@ -36,7 +51,9 @@ async function trackFunnel(eventName: string, scope?: string, params?: FunnelPar
   const route = params?.route ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
   const meta: Record<string, string> = {
     route,
-    environment: import.meta.env.MODE || 'production'
+    environment: import.meta.env.MODE || 'production',
+    anonymousId: getAnonymousId(),
+    eventSource: 'frontend'
   };
   if (params?.channel) meta.channel = params.channel;
   if (params?.userId) meta.userId = params.userId;
@@ -67,7 +84,10 @@ export const analytics = {
     trackEvent('channel_audit_started', channel ? { channel_input: channel } : {});
   },
   demoDashboardViewed: () => trackEvent('demo_dashboard_viewed'),
-  pricingViewed: () => trackEvent('pricing_viewed'),
+  pricingViewed: () => {
+    void trackFunnel('pricing_viewed', '/pricing');
+    trackEvent('pricing_viewed');
+  },
   signupStarted: (email?: string) => trackFunnel('signup_started', email ?? 'signup', email ? { email } : {}),
   signupCompleted: (userId?: string, email?: string) =>
     trackFunnel('signup_completed', userId ?? 'signup', { userId, email }),
@@ -77,12 +97,12 @@ export const analytics = {
     void trackFunnel('checkout_started', channel, { channel });
     trackEvent('checkout_started');
   },
+  checkoutReturnSuccess: (sessionId?: string) =>
+    trackFunnel('checkout_return_success', sessionId ?? 'checkout', { route: '/checkout/success' }),
+  checkoutReturnCancel: () => trackFunnel('checkout_return_cancel', 'checkout', { route: '/checkout/cancel' }),
   checkoutAbandoned: (channel?: string) => trackFunnel('checkout_abandoned', channel, { channel }),
-  paymentSucceeded: (livemode: boolean, userId?: string) =>
-    trackFunnel(livemode ? 'payment_succeeded_live' : 'payment_succeeded_test', userId, { livemode, userId }),
   paymentFailed: (userId?: string) => trackFunnel('payment_failed', userId, { userId }),
-  /** GA4 legacy event; live/test payment funnel events are recorded server-side via Stripe webhooks. */
+  /** GA4 only; live/test payment funnel events are recorded server-side via Stripe webhooks. */
   purchaseCompleted: () => trackEvent('purchase_completed'),
-  contactSubmitted: () => trackFunnel('contact_submitted', 'contact'),
-  entitlementGranted: (userId?: string) => trackFunnel('entitlement_granted', userId, { userId })
+  contactSubmitted: () => trackFunnel('contact_submitted', 'contact')
 };

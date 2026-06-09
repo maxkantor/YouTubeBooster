@@ -578,11 +578,13 @@ public sealed class StripeCheckoutService : ICheckoutService
         await _appDataStore.SaveEntitlementAsync(dashEntitlement, cancellationToken);
 
         await _appDataStore.SavePaymentAsync(payment with { EntitlementGranted = true, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken);
-        await _appDataStore.TrackEventAsync("entitlement_granted", user.UserId, new Dictionary<string, string?>
+        await _appDataStore.TrackEventAsync("entitlement_granted_live", user.UserId, new Dictionary<string, string?>
         {
             ["checkoutSessionId"] = session.Id,
             ["source"] = entitlementSource,
-            ["livemode"] = "true"
+            ["livemode"] = "true",
+            ["userId"] = user.UserId,
+            ["eventSource"] = "webhook"
         }, cancellationToken);
     }
 }

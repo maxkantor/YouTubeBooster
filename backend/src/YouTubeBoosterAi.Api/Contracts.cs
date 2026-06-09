@@ -254,7 +254,8 @@ public sealed record AdminOperationalDashboardResponse(
     IReadOnlyList<AdminDemoAuditDto> RecentAuditIssues,
     IReadOnlyList<AdminAttentionItemDto> AttentionRequired,
     AdminFunnelResponse Funnel,
-    IReadOnlyList<AdminDiagnosticRowDto> Diagnostics
+    IReadOnlyList<AdminDiagnosticRowDto> Diagnostics,
+    AdminFunnelDropOffInsightDto? BiggestDropOff
 );
 
 public sealed record AdminOperationalKpis(
@@ -262,6 +263,7 @@ public sealed record AdminOperationalKpis(
     int ActiveEntitledUsers,
     int ActiveLiveEntitledUsers,
     int TotalDemos,
+    int RawDemoEvents,
     int PaidLiveOrders,
     decimal RevenueLiveUsd,
     int PaidTestOrders,
@@ -275,9 +277,32 @@ public sealed record AdminOperationalKpis(
 public sealed record AdminFunnelStepDto(
     string EventKey,
     string Label,
-    int Count,
+    int UniqueActorCount,
+    int RawEventCount,
     double? ConversionFromPreviousPct,
-    double? DropOffFromPreviousPct
+    double? DropOffFromPreviousPct,
+    string? Warning
+);
+
+public sealed record AdminFunnelDropOffInsightDto(
+    string FromStepLabel,
+    string ToStepLabel,
+    int FromUniqueActors,
+    int ToUniqueActors,
+    double DropOffPct,
+    string Interpretation
+);
+
+public sealed record AdminFunnelEventDiagnosticDto(
+    string EventName,
+    int RawCount,
+    int UniqueActorCount,
+    DateTimeOffset FirstSeen,
+    DateTimeOffset LastSeen,
+    int MissingIdentityCount,
+    double PercentMissingUserId,
+    double PercentMissingAnonymousId,
+    string? Warning
 );
 
 public sealed record AdminFunnelResponse(
@@ -298,7 +323,8 @@ public sealed record AdminDiagnosticRowDto(
 public sealed record AdminDiagnosticsResponse(
     string Range,
     IReadOnlyList<AdminDiagnosticRowDto> Rows,
-    AdminFunnelResponse Funnel
+    AdminFunnelResponse Funnel,
+    IReadOnlyList<AdminFunnelEventDiagnosticDto> EventDiagnostics
 );
 
 public sealed record AdminOrderRowDto(

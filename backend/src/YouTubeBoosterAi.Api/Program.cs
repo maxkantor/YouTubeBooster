@@ -228,7 +228,10 @@ publicApi.MapPost("/analytics/event", async (PublicAnalyticsEventRequest request
     "signup_started",
     "signup_completed",
     "login_completed",
-    "checkout_abandoned"
+    "checkout_abandoned",
+    "checkout_return_success",
+    "checkout_return_cancel",
+    "pricing_viewed"
   };
   if (string.IsNullOrWhiteSpace(request.EventName) || !allowed.Contains(request.EventName))
   {
@@ -236,7 +239,10 @@ publicApi.MapPost("/analytics/event", async (PublicAnalyticsEventRequest request
   }
 
   var scope = string.IsNullOrWhiteSpace(request.Scope) ? "/" : request.Scope.Trim();
-  var metadata = request.Metadata ?? new Dictionary<string, string?>();
+  var metadata = new Dictionary<string, string?>(request.Metadata ?? new Dictionary<string, string?>(), StringComparer.OrdinalIgnoreCase)
+  {
+    ["eventSource"] = "frontend"
+  };
   await appDataStore.TrackEventAsync(request.EventName, scope, metadata, cancellationToken);
   return Results.Ok(new { ok = true });
 });
@@ -956,6 +962,18 @@ authApi.MapPost("/cognito/login", async (HttpContext httpContext, IAppDataStore 
     var emailVerified = string.Equals(emailVerifiedClaim, "true", StringComparison.OrdinalIgnoreCase);
 
     var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
+    var anonymousId = httpContext.Request.Headers["X-YB-Anonymous-Id"].FirstOrDefault();
+    if (!string.IsNullOrWhiteSpace(anonymousId))
+    {
+        await appDataStore.TrackEventAsync("login_completed", user.UserId, new Dictionary<string, string?>
+        {
+            ["userId"] = user.UserId,
+            ["anonymousId"] = anonymousId.Trim(),
+            ["cognitoSub"] = sub,
+            ["eventSource"] = "backend"
+        }, cancellationToken);
+    }
+
     await appDataStore.RecordUserLoginAsync(user.UserId, DateTimeOffset.UtcNow, cancellationToken);
     await sessionCookieService.SignInUserAsync(httpContext, user, cancellationToken);
     return Results.Ok(new UserSessionStatusResponse(true, ToSessionUserDto(user)));
