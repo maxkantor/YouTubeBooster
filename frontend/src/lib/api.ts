@@ -34,16 +34,11 @@ import type {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
-function getAnonymousId(): string | undefined {
+/** For identity stitching in JSON bodies only — never as a custom header (API Gateway CORS blocks it). */
+function readAnonymousId(): string | undefined {
   if (typeof window === 'undefined') return undefined;
   try {
-    const key = 'yb_anonymous_id';
-    let id = window.localStorage.getItem(key);
-    if (!id) {
-      id = `anon_${crypto.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
-      window.localStorage.setItem(key, id);
-    }
-    return id;
+    return window.localStorage.getItem('yb_anonymous_id') ?? undefined;
   } catch {
     return undefined;
   }
@@ -54,8 +49,6 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const hasBody = init?.body !== undefined && init?.body !== null;
 
   const headers = new Headers(init?.headers);
-  const anon = getAnonymousId();
-  if (anon) headers.set('X-YB-Anonymous-Id', anon);
   if (hasBody && method !== 'GET' && method !== 'HEAD' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -283,9 +276,11 @@ export const authApi = {
     });
   },
   async cognitoLogin(idToken: string): Promise<UserSessionStatus> {
+    const anonymousId = readAnonymousId();
     return fetchJson<UserSessionStatus>('/api/auth/cognito/login', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${idToken}` }
+      headers: { Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify(anonymousId ? { anonymousId } : {})
     });
   },
   async cognitoEnsureUser(email: string, password: string): Promise<{ ok: boolean; created: boolean }> {

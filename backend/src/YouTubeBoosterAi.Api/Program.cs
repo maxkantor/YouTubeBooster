@@ -962,7 +962,21 @@ authApi.MapPost("/cognito/login", async (HttpContext httpContext, IAppDataStore 
     var emailVerified = string.Equals(emailVerifiedClaim, "true", StringComparison.OrdinalIgnoreCase);
 
     var user = await appDataStore.UpsertCognitoUserAsync(sub, email, emailVerified, signupSource: "cognito", cancellationToken);
-    var anonymousId = httpContext.Request.Headers["X-YB-Anonymous-Id"].FirstOrDefault();
+    CognitoSessionExchangeRequest? exchangeBody = null;
+    if (httpContext.Request.ContentLength > 0)
+    {
+        try
+        {
+            exchangeBody = await httpContext.Request.ReadFromJsonAsync<CognitoSessionExchangeRequest>(cancellationToken);
+        }
+        catch
+        {
+            // optional body
+        }
+    }
+
+    var anonymousId = exchangeBody?.AnonymousId
+        ?? httpContext.Request.Headers["X-YB-Anonymous-Id"].FirstOrDefault();
     if (!string.IsNullOrWhiteSpace(anonymousId))
     {
         await appDataStore.TrackEventAsync("login_completed", user.UserId, new Dictionary<string, string?>

@@ -631,7 +631,7 @@ resource "aws_apigatewayv2_api" "http_api" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_headers     = ["content-type", "authorization", "stripe-signature"]
+    allow_headers     = ["content-type", "authorization", "stripe-signature", "x-yb-anonymous-id"]
     allow_methods     = ["GET", "POST", "OPTIONS"]
     allow_origins     = length(var.cors_allowed_origins) > 0 ? var.cors_allowed_origins : ["*"]
     allow_credentials = true
