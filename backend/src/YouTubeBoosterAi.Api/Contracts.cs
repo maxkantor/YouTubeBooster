@@ -2,6 +2,11 @@ namespace YouTubeBoosterAi.Api;
 
 public sealed record DemoAnalysisRequest(string ChannelInput, string? Email);
 
+public sealed record PublicAnalyticsEventRequest(
+    string EventName,
+    string? Scope,
+    IDictionary<string, string?>? Metadata);
+
 public sealed record DemoTopVideoDto(string VideoId, string Title, long ViewCount);
 
 public sealed record DemoAnalysisResponse(
@@ -152,7 +157,7 @@ public sealed record AdminDashboardSummaryResponse(
 public sealed record ActivityFeedItem(string Title, string Detail, DateTimeOffset Timestamp);
 
 // ===== Admin CRM DTOs =====
-public sealed record AdminListResponse<T>(IReadOnlyList<T> Items, string? NextCursor);
+public sealed record AdminListResponse<T>(IReadOnlyList<T> Items, string? NextCursor, int? TotalCount = null);
 
 public sealed record AdminUserDto(
     string UserId,
@@ -247,19 +252,53 @@ public sealed record AdminOperationalDashboardResponse(
     IReadOnlyList<AdminSupportTicketDto> SupportQueue,
     IReadOnlyList<AdminUserDto> RecentlyEntitledUsers,
     IReadOnlyList<AdminDemoAuditDto> RecentAuditIssues,
-    IReadOnlyList<AdminAttentionItemDto> AttentionRequired
+    IReadOnlyList<AdminAttentionItemDto> AttentionRequired,
+    AdminFunnelResponse Funnel,
+    IReadOnlyList<AdminDiagnosticRowDto> Diagnostics
 );
 
 public sealed record AdminOperationalKpis(
     int TotalUsers,
     int ActiveEntitledUsers,
+    int ActiveLiveEntitledUsers,
     int TotalDemos,
     int PaidLiveOrders,
     decimal RevenueLiveUsd,
+    int PaidTestOrders,
+    decimal RevenueTestUsd,
     double DemoToPaidConversionPct,
     int FailedOrUnpaidCheckouts,
     int OpenSupportTickets,
     int UnmatchedPayments
+);
+
+public sealed record AdminFunnelStepDto(
+    string EventKey,
+    string Label,
+    int Count,
+    double? ConversionFromPreviousPct,
+    double? DropOffFromPreviousPct
+);
+
+public sealed record AdminFunnelResponse(
+    string Range,
+    IReadOnlyList<AdminFunnelStepDto> Steps,
+    string Notes
+);
+
+public sealed record AdminDiagnosticRowDto(
+    string Metric,
+    string Value,
+    string DataSource,
+    string Filters,
+    DateTimeOffset LastUpdated,
+    string? Warning
+);
+
+public sealed record AdminDiagnosticsResponse(
+    string Range,
+    IReadOnlyList<AdminDiagnosticRowDto> Rows,
+    AdminFunnelResponse Funnel
 );
 
 public sealed record AdminOrderRowDto(
@@ -275,7 +314,19 @@ public sealed record AdminOrderRowDto(
     string PlanCode,
     string Classification,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? PaidAt
+    DateTimeOffset? PaidAt,
+    string Source = "stripe",
+    bool EntitlementGranted = false,
+    string? StatusNote = null
+);
+
+public sealed record PaymentBackfillResultDto(
+    int Scanned,
+    int Updated,
+    int AssumedTest,
+    int ConfirmedLive,
+    int ConfirmedTest,
+    IReadOnlyList<string> Notes
 );
 
 public sealed record AdminAttentionItemDto(string Code, string Message, string? RelatedId);

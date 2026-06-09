@@ -12,4 +12,5 @@ export const AuditsPage = lazy(() => m().then((x) => ({ default: x.AuditsPage })
 export const ContactListPage = lazy(() => m().then((x) => ({ default: x.ContactListPage })));
 export const ContactTicketPage = lazy(() => m().then((x) => ({ default: x.ContactTicketPage })));
 export const ActivityLogsPage = lazy(() => m().then((x) => ({ default: x.ActivityLogsPage })));
+export const DiagnosticsPage = lazy(() => m().then((x) => ({ default: x.DiagnosticsPage })));
 export const SystemLogsPage = lazy(() => m().then((x) => ({ default: x.SystemLogsPage })));

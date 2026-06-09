@@ -70,6 +70,7 @@ public static class Infrastructure
         services.AddScoped<IDemoAnalysisService, YouTubePublicDemoAnalysisService>();
         services.AddScoped<IPublicDashboardService, YouTubePublicDashboardService>();
         services.AddScoped<ICheckoutService, StripeCheckoutService>();
+        services.AddScoped<PaymentBackfillService>();
         services.AddScoped<IUserDashboardService, SampleUserDashboardService>();
         services.AddScoped<IAdminDashboardService, AdminDashboardService>();
         services.AddScoped<ISupportService, SupportService>();

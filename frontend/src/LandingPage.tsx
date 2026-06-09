@@ -447,6 +447,10 @@ export function LandingPage() {
     : null;
 
   useEffect(() => {
+    analytics.landingPageView();
+  }, []);
+
+  useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 16);
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
@@ -620,6 +624,7 @@ export function LandingPage() {
       return;
     }
     const normalized = validated.normalized;
+    analytics.auditUrlEntered(normalized);
     analytics.channelAuditStarted(normalized);
     setStoredDemoChannel(normalized);
     if (hasPremium) {

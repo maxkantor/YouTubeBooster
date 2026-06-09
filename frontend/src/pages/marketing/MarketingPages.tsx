@@ -100,6 +100,7 @@ export function ContactPage() {
       });
       setTicketId(res.ticketId);
       setStatus('success');
+      void import('../../lib/analytics').then(({ analytics }) => analytics.contactSubmitted());
     } catch (err) {
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Something went wrong.');

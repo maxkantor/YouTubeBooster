@@ -35,7 +35,8 @@ import {
   AuditsPage,
   ContactTicketPage,
   ContactListPage,
-  ActivityLogsPage
+  ActivityLogsPage,
+  DiagnosticsPage
 } from './admin/crmPages.lazy';
 
 /**
@@ -815,6 +816,7 @@ function AppInner() {
         <Route path="contact" element={<Navigate to="/admin/contacts" replace />} />
           <Route path="contact/:ticketId" element={<AdminContactToSupportTicketRedirect />} />
           <Route path="activity" element={<ActivityLogsPage />} />
+          <Route path="diagnostics" element={<DiagnosticsPage />} />
           <Route path="system-logs" element={<Navigate to="/admin/activity" replace />} />
         </Route>
         <Route path="/home" element={<Navigate to="/" replace />} />

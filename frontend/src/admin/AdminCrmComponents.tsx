@@ -112,8 +112,11 @@ export function OrderFilterBar({
 }) {
   const opts = [
     { id: 'all', label: 'All' },
+    { id: 'live_only', label: 'Live only' },
     { id: 'live_paid', label: 'Live paid' },
-    { id: 'test', label: 'Test' },
+    { id: 'test', label: 'Test only' },
+    { id: 'paid', label: 'Paid' },
+    { id: 'failed', label: 'Failed' },
     { id: 'unmatched', label: 'Unmatched' },
     { id: 'non_revenue', label: 'Non-revenue' }
   ];
@@ -139,11 +142,14 @@ export function filterOrders(rows: AdminOrderRow[], mode: string): AdminOrderRow
   if (mode === 'all') return rows;
   return rows.filter((o) => {
     const c = (o.classification || '').toLowerCase();
+    if (mode === 'live_only') return o.mode === 'live';
     if (mode === 'live_paid') return c.includes('live_paid') || (o.mode === 'live' && o.amount > 0 && o.status === 'completed');
-    if (mode === 'test') return o.mode === 'test';
+    if (mode === 'test') return o.mode === 'test' || c.includes('test');
+    if (mode === 'paid') return o.status === 'completed' && o.amount > 0;
+    if (mode === 'failed') return o.status === 'failed' || o.status === 'unpaid' || c.includes('failed');
     if (mode === 'unmatched') return !o.userId || c.includes('unmatched');
     if (mode === 'non_revenue')
-      return o.amount <= 0 || c.includes('zero') || c.includes('free') || c.includes('test');
+      return o.amount <= 0 || c.includes('zero') || c.includes('free');
     return true;
   });
 }

@@ -9,7 +9,8 @@ import type {
   AdminPaymentRecord,
   AdminSupportTicketRow,
   AdminUserRow,
-  AdminActivityEventRow
+  AdminActivityEventRow,
+  AdminDiagnosticRow
 } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import {
@@ -30,7 +31,8 @@ const NAV: { to: string; end?: boolean; label: string }[] = [
   { to: 'orders', label: 'Orders' },
   { to: 'audits', label: 'Audits' },
   { to: 'contacts', label: 'Support' },
-  { to: 'activity', label: 'Activity logs' }
+  { to: 'activity', label: 'Activity logs' },
+  { to: 'diagnostics', label: 'Diagnostics' }
 ];
 
 const ENTITLEMENT_PRESETS = [
@@ -194,23 +196,35 @@ export function AdminHomePage() {
               <strong>{dash.kpis.totalUsers}</strong>
             </div>
             <div className="admin-crm-metric">
-              <span>Active entitled</span>
+              <span>Active entitled (flag)</span>
               <strong>{dash.kpis.activeEntitledUsers}</strong>
+            </div>
+            <div className="admin-crm-metric">
+              <span>Live entitled</span>
+              <strong>{dash.kpis.activeLiveEntitledUsers ?? 0}</strong>
             </div>
             <div className="admin-crm-metric">
               <span>Demo completions</span>
               <strong>{dash.kpis.totalDemos}</strong>
             </div>
             <div className="admin-crm-metric">
-              <span>Paid live orders</span>
+              <span>Live paid orders</span>
               <strong>{dash.kpis.paidLiveOrders}</strong>
             </div>
             <div className="admin-crm-metric">
-              <span>Revenue (live USD)</span>
+              <span>Live revenue</span>
               <strong>{formatMoney(dash.kpis.revenueLiveUsd, 'USD')}</strong>
             </div>
             <div className="admin-crm-metric">
-              <span>Demo → paid %</span>
+              <span>Test orders</span>
+              <strong>{dash.kpis.paidTestOrders ?? 0}</strong>
+            </div>
+            <div className="admin-crm-metric">
+              <span>Test revenue</span>
+              <strong>{formatMoney(dash.kpis.revenueTestUsd ?? 0, 'USD')}</strong>
+            </div>
+            <div className="admin-crm-metric">
+              <span>Demo → live paid %</span>
               <strong>{dash.kpis.demoToPaidConversionPct.toFixed(1)}%</strong>
             </div>
             <div className="admin-crm-metric">
@@ -226,6 +240,39 @@ export function AdminHomePage() {
               <strong>{dash.kpis.unmatchedPayments}</strong>
             </div>
           </div>
+
+          {dash.funnel?.steps?.length > 0 && (
+            <div className="admin-crm-panel" style={{ marginTop: 16 }}>
+              <h2>Conversion funnel (CRM activity)</h2>
+              <p className="admin-crm-muted" style={{ marginTop: 0 }}>
+                {dash.funnel.notes}
+              </p>
+              <div className="admin-crm-table-wrap">
+                <table className="admin-crm-table admin-crm-table-sticky">
+                  <thead>
+                    <tr>
+                      <th>Step</th>
+                      <th>Count</th>
+                      <th>Conv. from prev</th>
+                      <th>Drop-off</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dash.funnel.steps
+                      .filter((s) => s.count > 0)
+                      .map((s) => (
+                        <tr key={s.eventKey}>
+                          <td>{s.label}</td>
+                          <td>{s.count}</td>
+                          <td>{s.conversionFromPreviousPct != null ? `${s.conversionFromPreviousPct.toFixed(1)}%` : '—'}</td>
+                          <td>{s.dropOffFromPreviousPct != null ? `${s.dropOffFromPreviousPct.toFixed(1)}%` : '—'}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {dash.attentionRequired.length > 0 && (
             <div className="admin-crm-panel admin-crm-panel-attention">
@@ -484,6 +531,7 @@ type UserFilter =
 
 export function UsersPage() {
   const [items, setItems] = useState<AdminUserRow[]>([]);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -496,6 +544,7 @@ export function UsersPage() {
       const res = await adminApi.crmUsers(50, cursor);
       setItems((prev) => (append ? [...prev, ...res.items] : res.items));
       setNext(res.nextCursor);
+      if (res.totalCount != null) setTotalCount(res.totalCount);
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load users');
@@ -511,6 +560,7 @@ export function UsersPage() {
         if (!c) {
           setItems(res.items);
           setNext(res.nextCursor);
+          if (res.totalCount != null) setTotalCount(res.totalCount);
         }
       })
       .catch((e) => {
@@ -570,6 +620,11 @@ export function UsersPage() {
   return (
     <AdminShell title="Users">
       {error && <p className="admin-crm-error">{error}</p>}
+      {totalCount != null && (
+        <p className="admin-crm-muted" style={{ marginBottom: 8 }}>
+          {totalCount} registered user{totalCount === 1 ? '' : 's'} in DynamoDB (matches dashboard Total Users).
+        </p>
+      )}
       <div className="admin-crm-toolbar" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <input
           className="admin-crm-input admin-crm-input-inline"
@@ -1073,30 +1128,37 @@ export function OrdersPage() {
               <table className="admin-crm-table admin-crm-table-sticky">
                 <thead>
                   <tr>
-                    <th>Classification</th>
+                    <th>Created</th>
                     <th>Email</th>
-                    <th>User</th>
-                    <th>Product</th>
                     <th>Amount</th>
                     <th>Status</th>
-                    <th>Mode</th>
+                    <th>Livemode</th>
                     <th>Stripe session</th>
-                    <th>Created</th>
-                    <th>Paid</th>
+                    <th>Entitlement</th>
+                    <th>Source</th>
+                    <th>Notes</th>
+                    <th>User</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody>
                   {filteredOrders.map((o) => {
-                    const m = orderClassificationMeta(o.classification);
-                    const rowTone =
-                      m.kind === 'info' ? 'admin-crm-row-muted' : o.userId ? '' : 'admin-crm-row-warn';
+                    const rowTone = o.userId ? '' : 'admin-crm-row-warn';
                     return (
                       <tr key={o.paymentId} className={rowTone}>
-                        <td>
-                          <Badge kind={m.kind}>{m.label}</Badge>
-                        </td>
+                        <td className="admin-crm-nowrap">{formatDt(o.createdAt)}</td>
                         <td>{o.accountEmail || o.stripeEmail || '—'}</td>
+                        <td>{formatMoney(o.amount, o.currency)}</td>
+                        <td>{o.status}</td>
+                        <td>
+                          <Badge kind={o.mode === 'live' ? 'ok' : 'info'}>{o.mode === 'live' ? 'live' : 'test'}</Badge>
+                        </td>
+                        <td>
+                          <code className="admin-crm-mono">{o.stripeCheckoutSessionId.slice(0, 12)}…</code>
+                        </td>
+                        <td>{o.entitlementGranted ? <Badge kind="ok">yes</Badge> : <span className="admin-crm-muted">no</span>}</td>
+                        <td>{o.source || 'stripe'}</td>
+                        <td style={{ maxWidth: 160 }}>{o.statusNote || '—'}</td>
                         <td>
                           {o.userId ? (
                             <Link to={`/admin/user/${encodeURIComponent(o.userId)}`}>{o.userId.slice(0, 8)}…</Link>
@@ -1104,17 +1166,6 @@ export function OrdersPage() {
                             <span className="admin-crm-muted">unmatched</span>
                           )}
                         </td>
-                        <td>{o.planCode}</td>
-                        <td>{formatMoney(o.amount, o.currency)}</td>
-                        <td>{o.status}</td>
-                        <td>
-                          <Badge kind={o.mode === 'live' ? 'ok' : 'info'}>{o.mode}</Badge>
-                        </td>
-                        <td>
-                          <code className="admin-crm-mono">{o.stripeCheckoutSessionId.slice(0, 12)}…</code>
-                        </td>
-                        <td className="admin-crm-nowrap">{formatDt(o.createdAt)}</td>
-                        <td className="admin-crm-nowrap">{o.paidAt ? formatDt(o.paidAt) : '—'}</td>
                         <td>
                           <button type="button" className="admin-crm-btn admin-crm-btn-tiny" onClick={() => copyText(o.stripeCheckoutSessionId)}>
                             Copy session
@@ -1760,3 +1811,105 @@ export function ActivityLogsPage() {
 }
 
 export const SystemLogsPage = ActivityLogsPage;
+
+export function DiagnosticsPage() {
+  const [rows, setRows] = useState<AdminDiagnosticRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [backfillMsg, setBackfillMsg] = useState('');
+  const [backfilling, setBackfilling] = useState(false);
+  const [range, setRange] = useState('30d');
+
+  useEffect(() => {
+    let c = false;
+    setLoading(true);
+    adminApi
+      .crmDiagnostics(range)
+      .then((res) => {
+        if (!c) setRows(res);
+      })
+      .catch((e) => {
+        if (!c) setError(e instanceof Error ? e.message : 'Failed to load diagnostics');
+      })
+      .finally(() => {
+        if (!c) setLoading(false);
+      });
+    return () => {
+      c = true;
+    };
+  }, [range]);
+
+  return (
+    <AdminShell title="Diagnostics">
+      {error && <p className="admin-crm-error">{error}</p>}
+      <div className="admin-crm-toolbar" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        {(['today', '7d', '30d', 'all'] as const).map((r) => (
+          <button
+            key={r}
+            type="button"
+            className={`admin-crm-seg ${range === r ? 'admin-crm-seg-active' : ''}`}
+            onClick={() => setRange(r)}
+          >
+            {r === 'all' ? 'All time' : r}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="admin-crm-btn admin-crm-btn-primary"
+          disabled={backfilling}
+          onClick={async () => {
+            setBackfilling(true);
+            setBackfillMsg('');
+            try {
+              const res = await adminApi.crmBackfillPaymentLivemode();
+              setBackfillMsg(
+                `Backfill: scanned ${res.scanned}, updated ${res.updated}, assumed test ${res.assumedTest}, confirmed live ${res.confirmedLive}, confirmed test ${res.confirmedTest}.`
+              );
+              const fresh = await adminApi.crmDiagnostics(range);
+              setRows(fresh);
+            } catch (e) {
+              setBackfillMsg(e instanceof Error ? e.message : 'Backfill failed');
+            } finally {
+              setBackfilling(false);
+            }
+          }}
+        >
+          {backfilling ? 'Backfilling…' : 'Backfill payment livemode'}
+        </button>
+      </div>
+      {backfillMsg && <p className="admin-crm-muted" style={{ marginBottom: 12 }}>{backfillMsg}</p>}
+      {loading ? (
+        <p style={{ color: '#64748b' }}>Loading…</p>
+      ) : rows.length === 0 ? (
+        <div className="admin-crm-panel admin-crm-empty">No diagnostics available.</div>
+      ) : (
+        <div className="admin-crm-table-wrap">
+          <table className="admin-crm-table admin-crm-table-sticky">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Data source</th>
+                <th>Filters</th>
+                <th>Last updated</th>
+                <th>Warning</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.metric}>
+                  <td>{r.metric}</td>
+                  <td>{r.value}</td>
+                  <td style={{ maxWidth: 200 }}>{r.dataSource}</td>
+                  <td style={{ maxWidth: 180 }}>{r.filters}</td>
+                  <td className="admin-crm-nowrap">{formatDt(r.lastUpdated)}</td>
+                  <td>{r.warning ? <Badge kind="warn">{r.warning}</Badge> : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </AdminShell>
+  );
+}

@@ -4,6 +4,7 @@ import type {
   AdminActivityEventRow,
   AdminDemoAuditRow,
   AdminListResponse,
+  AdminDiagnosticRow,
   AdminOperationalDashboard,
   AdminOrderRow,
   AdminPurchaseRow,
@@ -76,6 +77,20 @@ async function fetchJsonAuthed<T>(path: string, token: string, init?: RequestIni
 }
 
 export const publicApi = {
+  async trackFunnelEvent(
+    eventName: string,
+    scope?: string,
+    metadata?: Record<string, string | null | undefined>
+  ): Promise<void> {
+    try {
+      await fetchJson('/api/public/analytics/event', {
+        method: 'POST',
+        body: JSON.stringify({ eventName, scope: scope ?? null, metadata: metadata ?? null })
+      });
+    } catch {
+      /* non-blocking */
+    }
+  },
   async runDemo(channelInput: string): Promise<DemoPreview> {
     const data = await fetchJson<DemoPreview & { gatedInsights?: string[] }>('/api/public/demo', {
       method: 'POST',
@@ -359,6 +374,20 @@ export const adminApi = {
   async crmDashboard(range = '30d'): Promise<AdminOperationalDashboard> {
     const q = new URLSearchParams({ range });
     return fetchJson<AdminOperationalDashboard>(`/api/admin/crm/dashboard?${q}`);
+  },
+  async crmDiagnostics(range = '30d'): Promise<AdminDiagnosticRow[]> {
+    const q = new URLSearchParams({ range });
+    return fetchJson<AdminDiagnosticRow[]>(`/api/admin/crm/diagnostics?${q}`);
+  },
+  async crmBackfillPaymentLivemode(): Promise<{
+    scanned: number;
+    updated: number;
+    assumedTest: number;
+    confirmedLive: number;
+    confirmedTest: number;
+    notes: string[];
+  }> {
+    return fetchJson('/api/admin/crm/migrations/backfill-payment-livemode', { method: 'POST' });
   },
   async crmOrders(limit = 50, cursor?: string | null): Promise<AdminListResponse<AdminOrderRow>> {
     const q = new URLSearchParams({ limit: String(limit) });

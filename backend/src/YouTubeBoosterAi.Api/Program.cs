@@ -218,6 +218,29 @@ publicApi.MapGet("/pricing", async (IAppSettingsProvider appSettingsProvider, Ca
     var amount = s.OneTimePrice.ToString("F2", CultureInfo.InvariantCulture);
     return Results.Ok(new { oneTimePrice = amount, currency = s.Currency });
 });
+publicApi.MapPost("/analytics/event", async (PublicAnalyticsEventRequest request, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+  var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+  {
+    "landing_page_view",
+    "audit_url_entered",
+    "demo_started",
+    "signup_started",
+    "signup_completed",
+    "login_completed",
+    "checkout_abandoned"
+  };
+  if (string.IsNullOrWhiteSpace(request.EventName) || !allowed.Contains(request.EventName))
+  {
+    return Results.BadRequest(new { error = "invalid_event" });
+  }
+
+  var scope = string.IsNullOrWhiteSpace(request.Scope) ? "/" : request.Scope.Trim();
+  var metadata = request.Metadata ?? new Dictionary<string, string?>();
+  await appDataStore.TrackEventAsync(request.EventName, scope, metadata, cancellationToken);
+  return Results.Ok(new { ok = true });
+});
+
 publicApi.MapPost("/demo", async (DemoAnalysisRequest request, IDemoAnalysisService service, CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.ChannelInput))
@@ -430,12 +453,12 @@ meApi.MapGet("/access-status", async (HttpContext httpContext, IAppDataStore app
         string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase));
 
     var hasActiveDashboardAccessEntitlement = entitlements.Any(e =>
-        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now));
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now) && BusinessAnalytics.IsProductionEntitlementSource(e.Source));
 
     // Legacy fallback: if the user has premium (from old stripe entitlements) but we don't have any
     // dashboard_access entitlement yet, treat it as granted and migrate so admin can revoke it later.
     var hasLegacyPremium =
-        entitlements.Any(e => IsActive(e, now) && (
+        entitlements.Any(e => IsActive(e, now) && BusinessAnalytics.IsProductionEntitlementSource(e.Source) && (
             string.Equals(e.AccessType, "premium", StringComparison.OrdinalIgnoreCase)
             || string.Equals(e.AccessType, "lifetime", StringComparison.OrdinalIgnoreCase)
         ))
@@ -592,10 +615,10 @@ premiumApi.AddEndpointFilter(async (context, next) =>
         string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase));
 
     var hasActiveDashboardAccessEntitlement = entitlements.Any(e =>
-        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now));
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now) && BusinessAnalytics.IsProductionEntitlementSource(e.Source));
 
     var hasLegacyPremium =
-        entitlements.Any(e => IsActive(e, now) && (
+        entitlements.Any(e => IsActive(e, now) && BusinessAnalytics.IsProductionEntitlementSource(e.Source) && (
             string.Equals(e.AccessType, "premium", StringComparison.OrdinalIgnoreCase)
             || string.Equals(e.AccessType, "lifetime", StringComparison.OrdinalIgnoreCase)
         ))
@@ -688,10 +711,10 @@ aiApi.MapPost("/generate", async (
         string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase));
 
     var hasActiveDashboardAccessEntitlement = entitlements.Any(e =>
-        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now));
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now) && BusinessAnalytics.IsProductionEntitlementSource(e.Source));
 
     var hasLegacyPremium =
-        entitlements.Any(e => IsActive(e, now) && (
+        entitlements.Any(e => IsActive(e, now) && BusinessAnalytics.IsProductionEntitlementSource(e.Source) && (
             string.Equals(e.AccessType, "premium", StringComparison.OrdinalIgnoreCase)
             || string.Equals(e.AccessType, "lifetime", StringComparison.OrdinalIgnoreCase)
         ))
@@ -887,6 +910,10 @@ authApi.MapPost("/cognito/ensure", async (
     {
         ["email"] = user.Email
     }, cancellationToken);
+    await appDataStore.TrackEventAsync("signup_completed", user.UserId, new Dictionary<string, string?>
+    {
+        ["source"] = "cognito_ensure"
+    }, cancellationToken);
 
     return Results.Ok(new { ok = true, created = true });
 });
@@ -982,10 +1009,10 @@ userApi.MapGet("/dashboard/overview", async (HttpContext httpContext, IAppDataSt
         string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase));
 
     var hasActiveDashboardAccessEntitlement = entitlements.Any(e =>
-        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now));
+        string.Equals(e.AccessType, "dashboard_access", StringComparison.OrdinalIgnoreCase) && IsActive(e, now) && BusinessAnalytics.IsProductionEntitlementSource(e.Source));
 
     var hasLegacyPremium =
-        entitlements.Any(e => IsActive(e, now) && (
+        entitlements.Any(e => IsActive(e, now) && BusinessAnalytics.IsProductionEntitlementSource(e.Source) && (
             string.Equals(e.AccessType, "premium", StringComparison.OrdinalIgnoreCase)
             || string.Equals(e.AccessType, "lifetime", StringComparison.OrdinalIgnoreCase)
         ))
@@ -1339,6 +1366,20 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/link-user", async (
 adminProtectedApi.MapGet("/crm/dashboard", async (string? range, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
 {
     var result = await appDataStore.GetOperationalDashboardAsync(string.IsNullOrWhiteSpace(range) ? "30d" : range!, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapGet("/crm/diagnostics", async (string? range, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+{
+    var result = await appDataStore.GetAdminDiagnosticsAsync(string.IsNullOrWhiteSpace(range) ? "30d" : range!, cancellationToken);
+    return Results.Ok(result);
+});
+
+adminProtectedApi.MapPost("/crm/migrations/backfill-payment-livemode", async (
+    PaymentBackfillService backfillService,
+    CancellationToken cancellationToken) =>
+{
+    var result = await backfillService.BackfillPaymentLiveModesAsync(cancellationToken);
     return Results.Ok(result);
 });
 

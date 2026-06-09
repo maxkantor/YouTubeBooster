@@ -155,7 +155,9 @@ public sealed class StripeCheckoutService : ICheckoutService
         {
             ["email"] = request.Email,
             ["sessionId"] = session.Id,
-            ["mode"] = "stripe"
+            ["source"] = "stripe",
+            ["livemode"] = session.Livemode ? "true" : "false",
+            ["environment"] = session.Livemode ? "live" : "test"
         }, cancellationToken);
 
         return new CheckoutSessionResponse(
@@ -190,6 +192,7 @@ public sealed class StripeCheckoutService : ICheckoutService
         }
 
         Stripe.Checkout.Session? completedSession = null;
+        string? stripeEventId = null;
         if (!string.IsNullOrWhiteSpace(signatureHeader))
         {
             try
@@ -200,6 +203,16 @@ public sealed class StripeCheckoutService : ICheckoutService
                     return;
                 }
 
+                if (!await _appDataStore.TryMarkStripeWebhookEventProcessedAsync(stripeEvent.Id, cancellationToken))
+                {
+                    await _appDataStore.TrackEventAsync("stripe_webhook_duplicate_ignored", stripeEvent.Id, new Dictionary<string, string?>
+                    {
+                        ["eventType"] = stripeEvent.Type
+                    }, cancellationToken);
+                    return;
+                }
+
+                stripeEventId = stripeEvent.Id;
                 completedSession = stripeEvent.Data.Object as Stripe.Checkout.Session;
             }
             catch (Exception ex)
@@ -229,7 +242,7 @@ public sealed class StripeCheckoutService : ICheckoutService
             return;
         }
 
-        await ProcessCompletedCheckoutSessionAsync(session, cancellationToken);
+        await ProcessCompletedCheckoutSessionAsync(session, stripeEventId, cancellationToken);
     }
 
     public async Task<bool> ReconcileCheckoutSessionAsync(
@@ -298,7 +311,7 @@ public sealed class StripeCheckoutService : ICheckoutService
         metadata["accountEmail"] = currentAccountEmail;
         session.Metadata = metadata;
 
-        await ProcessCompletedCheckoutSessionAsync(session, cancellationToken);
+        await ProcessCompletedCheckoutSessionAsync(session, stripeEventId: null, cancellationToken);
 
         await _appDataStore.TrackEventAsync("stripe_reconcile_completed", sessionId, new Dictionary<string, string?>
         {
@@ -356,7 +369,7 @@ public sealed class StripeCheckoutService : ICheckoutService
         return await sessionService.GetAsync(sessionId, options: null, cancellationToken: cancellationToken);
     }
 
-    private async Task ProcessCompletedCheckoutSessionAsync(Stripe.Checkout.Session session, CancellationToken cancellationToken)
+    private async Task ProcessCompletedCheckoutSessionAsync(Stripe.Checkout.Session session, string? stripeEventId, CancellationToken cancellationToken)
     {
         var amountDollars = (session.AmountTotal ?? 0) / 100m;
         if (amountDollars <= 0m)
@@ -428,72 +441,98 @@ public sealed class StripeCheckoutService : ICheckoutService
             }, cancellationToken);
         }
 
-        // Idempotency: skip if payment already recorded.
+        // Idempotency: skip entire flow if payment already recorded (prevents duplicate revenue/entitlements).
         var existingPayment = await _appDataStore.GetPaymentByCheckoutSessionIdAsync(session.Id, cancellationToken);
-        if (existingPayment is null)
+        if (existingPayment is not null)
         {
-            var payment = new PaymentRecord(
-                PaymentId: $"pay_{Guid.NewGuid():N}",
-                UserId: user.UserId,
-                AccountEmail: user.Email,
-                StripeCustomerId: session.CustomerId,
-                StripeCheckoutSessionId: session.Id,
-                StripePaymentIntentId: session.PaymentIntentId,
-                StripeSubscriptionId: null,
-                StripeEmail: stripeEmail,
-                Amount: (session.AmountTotal ?? 0) / 100m,
-                Currency: (session.Currency ?? "usd").ToUpperInvariant(),
-                Status: "completed",
-                PlanCode: metadata.GetValueOrDefault("planCode") ?? "premium",
-                PaymentMethodBrand: null,
-                PaymentMethodLast4: null,
-                BillingCountry: session.CustomerDetails?.Address?.Country,
-                BillingName: session.CustomerDetails?.Name,
-                ReceiptUrl: null,
-                CreatedAt: DateTimeOffset.UtcNow,
-                UpdatedAt: DateTimeOffset.UtcNow,
-                Mode: session.Livemode ? "live" : "test",
-                PaidAt: DateTimeOffset.UtcNow
-            );
-            await _appDataStore.SavePaymentAsync(payment, cancellationToken);
+            return;
+        }
 
-            try
+        var isLive = session.Livemode;
+        var mode = isLive ? "live" : "test";
+        var payment = new PaymentRecord(
+            PaymentId: $"pay_{Guid.NewGuid():N}",
+            UserId: user.UserId,
+            AccountEmail: user.Email,
+            StripeCustomerId: session.CustomerId,
+            StripeCheckoutSessionId: session.Id,
+            StripePaymentIntentId: session.PaymentIntentId,
+            StripeSubscriptionId: null,
+            StripeEmail: stripeEmail,
+            Amount: (session.AmountTotal ?? 0) / 100m,
+            Currency: (session.Currency ?? "usd").ToUpperInvariant(),
+            Status: "completed",
+            PlanCode: metadata.GetValueOrDefault("planCode") ?? "premium",
+            PaymentMethodBrand: null,
+            PaymentMethodLast4: null,
+            BillingCountry: session.CustomerDetails?.Address?.Country,
+            BillingName: session.CustomerDetails?.Name,
+            ReceiptUrl: null,
+            CreatedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow,
+            Mode: mode,
+            PaidAt: DateTimeOffset.UtcNow,
+            Source: "stripe",
+            StripeEventId: stripeEventId,
+            StatusNote: null,
+            EntitlementGranted: false
+        );
+        await _appDataStore.SavePaymentAsync(payment, cancellationToken);
+
+        await _appDataStore.TrackEventAsync(
+            isLive ? "payment_succeeded_live" : "payment_succeeded_test",
+            user.UserId,
+            new Dictionary<string, string?>
             {
-                await _paymentAdminNotifier.NotifySuccessfulPaymentAsync(
-                    payment,
-                    user,
-                    session.Id,
-                    session.PaymentIntentId,
-                    metadata.GetValueOrDefault("planCode") ?? "premium",
-                    cancellationToken);
-                await _paymentCustomerNotifier.NotifyCustomerPaymentAsync(
-                    payment,
-                    user,
-                    session.Id,
-                    session.PaymentIntentId,
-                    metadata.GetValueOrDefault("planCode") ?? "premium",
-                    cancellationToken);
-                await _appDataStore.TrackEventAsync("payment_notifications_sent", session.Id, new Dictionary<string, string?>
-                {
-                    ["userId"] = user.UserId,
-                    ["amount"] = payment.Amount.ToString("F2", CultureInfo.InvariantCulture)
-                }, cancellationToken);
-            }
-            catch (Exception ex)
+                ["checkoutSessionId"] = session.Id,
+                ["amount"] = payment.Amount.ToString("F2", CultureInfo.InvariantCulture),
+                ["livemode"] = isLive ? "true" : "false",
+                ["currency"] = payment.Currency
+            },
+            cancellationToken);
+
+        if (!isLive)
+        {
+            return;
+        }
+
+        try
+        {
+            await _paymentAdminNotifier.NotifySuccessfulPaymentAsync(
+                payment,
+                user,
+                session.Id,
+                session.PaymentIntentId,
+                metadata.GetValueOrDefault("planCode") ?? "premium",
+                cancellationToken);
+            await _paymentCustomerNotifier.NotifyCustomerPaymentAsync(
+                payment,
+                user,
+                session.Id,
+                session.PaymentIntentId,
+                metadata.GetValueOrDefault("planCode") ?? "premium",
+                cancellationToken);
+            await _appDataStore.TrackEventAsync("payment_notifications_sent", session.Id, new Dictionary<string, string?>
             {
-                await _appDataStore.TrackEventAsync("payment_notification_failed", session.Id, new Dictionary<string, string?>
-                {
-                    ["error"] = ex.Message
-                }, cancellationToken);
-            }
+                ["userId"] = user.UserId,
+                ["amount"] = payment.Amount.ToString("F2", CultureInfo.InvariantCulture),
+                ["livemode"] = "true"
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            await _appDataStore.TrackEventAsync("payment_notification_failed", session.Id, new Dictionary<string, string?>
+            {
+                ["error"] = ex.Message
+            }, cancellationToken);
         }
 
         var record = new PurchaseRecord(
             PurchaseId: session.Id,
             UserId: user.UserId,
             Email: user.Email,
-            Amount: (session.AmountTotal ?? 0) / 100m,
-            Currency: (session.Currency ?? "usd").ToUpperInvariant(),
+            Amount: payment.Amount,
+            Currency: payment.Currency,
             Status: "completed",
             PriceVersion: session.Metadata?.GetValueOrDefault("priceVersion") ?? "default",
             PurchasedAt: DateTimeOffset.UtcNow
@@ -501,12 +540,13 @@ public sealed class StripeCheckoutService : ICheckoutService
 
         await _appDataStore.SavePurchaseAsync(record, cancellationToken);
 
+        var entitlementSource = BusinessAnalytics.ProductionEntitlementLivePayment;
         var entitlement = new EntitlementRecord(
             EntitlementId: $"ent_{session.Id}",
             UserId: user.UserId,
             AccessType: "premium",
             Status: "active",
-            Source: "stripe",
+            Source: entitlementSource,
             GrantedAt: DateTimeOffset.UtcNow,
             ExpiresAt: null,
             PaymentId: session.Id,
@@ -519,13 +559,12 @@ public sealed class StripeCheckoutService : ICheckoutService
         );
         await _appDataStore.SaveEntitlementAsync(entitlement, cancellationToken);
 
-        // Full content dashboard access entitlement (admins can revoke this explicitly).
         var dashEntitlement = new EntitlementRecord(
             EntitlementId: $"ent_{session.Id}_dash",
             UserId: user.UserId,
             AccessType: "dashboard_access",
             Status: "active",
-            Source: "stripe",
+            Source: entitlementSource,
             GrantedAt: DateTimeOffset.UtcNow,
             ExpiresAt: null,
             PaymentId: session.Id,
@@ -537,6 +576,14 @@ public sealed class StripeCheckoutService : ICheckoutService
             RevokedAt: null
         );
         await _appDataStore.SaveEntitlementAsync(dashEntitlement, cancellationToken);
+
+        await _appDataStore.SavePaymentAsync(payment with { EntitlementGranted = true, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken);
+        await _appDataStore.TrackEventAsync("entitlement_granted", user.UserId, new Dictionary<string, string?>
+        {
+            ["checkoutSessionId"] = session.Id,
+            ["source"] = entitlementSource,
+            ["livemode"] = "true"
+        }, cancellationToken);
     }
 }
 

@@ -77,6 +77,12 @@ public interface IAppDataStore
     Task LinkPaymentToUserAsync(string stripeCheckoutSessionId, string userId, string adminEmail, CancellationToken cancellationToken);
 
     Task UpdateSupportTicketStatusAsync(string ticketId, AdminSupportTicketPatchRequest request, string adminEmail, CancellationToken cancellationToken);
+
+    Task<bool> TryMarkStripeWebhookEventProcessedAsync(string stripeEventId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PaymentRecord>> ListAllPaymentRecordsAsync(int limit, CancellationToken cancellationToken);
+
+    Task<AdminDiagnosticsResponse> GetAdminDiagnosticsAsync(string range, CancellationToken cancellationToken);
 }
 
 public sealed record AdminDataSnapshot(
@@ -1055,6 +1061,10 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         {
             ["when"] = when.ToString("O")
         }, cancellationToken);
+        await TrackEventAsync("login_completed", userId, new Dictionary<string, string?>
+        {
+            ["when"] = when.ToString("O")
+        }, cancellationToken);
     }
 
     public async Task SavePaymentAsync(PaymentRecord payment, CancellationToken cancellationToken)
@@ -1083,8 +1093,12 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             ["receiptUrl"] = StringValue(payment.ReceiptUrl ?? string.Empty),
             ["createdAt"] = StringValue(payment.CreatedAt.ToString("O")),
             ["updatedAt"] = StringValue(payment.UpdatedAt.ToString("O")),
-            ["mode"] = StringValue(string.IsNullOrWhiteSpace(payment.Mode) ? "live" : payment.Mode),
-            ["paidAt"] = StringValue(payment.PaidAt?.ToString("O") ?? string.Empty)
+            ["mode"] = StringValue(BusinessAnalytics.NormalizePaymentMode(payment.Mode)),
+            ["paidAt"] = StringValue(payment.PaidAt?.ToString("O") ?? string.Empty),
+            ["source"] = StringValue(string.IsNullOrWhiteSpace(payment.Source) ? "stripe" : payment.Source),
+            ["stripeEventId"] = StringValue(payment.StripeEventId ?? string.Empty),
+            ["statusNote"] = StringValue(payment.StatusNote ?? string.Empty),
+            ["entitlementGranted"] = new AttributeValue { BOOL = payment.EntitlementGranted }
         };
 
         await PutItemAsync(tableName, item, cancellationToken);
@@ -1093,8 +1107,54 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             ["checkoutSessionId"] = payment.StripeCheckoutSessionId,
             ["planCode"] = payment.PlanCode,
             ["stripeEmail"] = payment.StripeEmail,
-            ["accountEmail"] = payment.AccountEmail
+            ["accountEmail"] = payment.AccountEmail,
+            ["mode"] = BusinessAnalytics.NormalizePaymentMode(payment.Mode),
+            ["livemode"] = BusinessAnalytics.IsLiveMode(payment.Mode) ? "true" : "false"
         }, cancellationToken);
+    }
+
+    public async Task<bool> TryMarkStripeWebhookEventProcessedAsync(string stripeEventId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(stripeEventId)) return true;
+
+        var tableName = GetTableName("Storage:PaymentsTable", GetTableName("Storage:PurchasesTable", "ybai-purchases"));
+        try
+        {
+            await _dynamoDb.PutItemAsync(new PutItemRequest
+            {
+                TableName = tableName,
+                Item = new Dictionary<string, AttributeValue>
+                {
+                    ["pk"] = StringValue($"STRIPE_EVENT#{stripeEventId}"),
+                    ["sk"] = StringValue("PROCESSED"),
+                    ["createdAt"] = StringValue(DateTimeOffset.UtcNow.ToString("O"))
+                },
+                ConditionExpression = "attribute_not_exists(pk)"
+            }, cancellationToken);
+            return true;
+        }
+        catch (ConditionalCheckFailedException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<PaymentRecord>> ListAllPaymentRecordsAsync(int limit, CancellationToken cancellationToken)
+    {
+        var tableName = GetTableName("Storage:PaymentsTable", GetTableName("Storage:PurchasesTable", "ybai-purchases"));
+        var response = await _dynamoDb.ScanAsync(new ScanRequest
+        {
+            TableName = tableName,
+            FilterExpression = "begins_with(pk, :p) AND sk = :sk",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":p"] = StringValue("PAYMENT#"),
+                [":sk"] = StringValue("DETAILS")
+            },
+            Limit = Math.Max(1, Math.Min(limit, 5000))
+        }, cancellationToken);
+
+        return response.Items.Select(ReadPayment).OrderByDescending(p => p.CreatedAt).ToArray();
     }
 
     public async Task<PaymentRecord?> GetPaymentByCheckoutSessionIdAsync(string stripeCheckoutSessionId, CancellationToken cancellationToken)
@@ -1604,7 +1664,8 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             .OrderByDescending(u => u.CreatedAt)
             .ToArray();
 
-        return new AdminListResponse<AdminUserDto>(items, EncodeCursor(response.LastEvaluatedKey));
+        var totalUsers = await CountItemsBySortKeyAsync(tableName, "PROFILE", cancellationToken);
+        return new AdminListResponse<AdminUserDto>(items, EncodeCursor(response.LastEvaluatedKey), totalUsers);
     }
 
     public async Task<AdminUserDetailResponse?> GetUserDetailAsync(string userId, CancellationToken cancellationToken)
@@ -2089,8 +2150,12 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             ReceiptUrl: EmptyToNull(item.GetValueOrDefault("receiptUrl")?.S),
             CreatedAt: ParseDate(item.GetValueOrDefault("createdAt")?.S),
             UpdatedAt: ParseDate(item.GetValueOrDefault("updatedAt")?.S),
-            Mode: string.IsNullOrWhiteSpace(item.GetValueOrDefault("mode")?.S) ? "live" : item.GetValueOrDefault("mode")!.S,
-            PaidAt: ParseNullableDate(item.GetValueOrDefault("paidAt")?.S)
+            Mode: BusinessAnalytics.NormalizePaymentMode(item.GetValueOrDefault("mode")?.S),
+            PaidAt: ParseNullableDate(item.GetValueOrDefault("paidAt")?.S),
+            Source: item.GetValueOrDefault("source")?.S ?? "stripe",
+            StripeEventId: EmptyToNull(item.GetValueOrDefault("stripeEventId")?.S),
+            StatusNote: EmptyToNull(item.GetValueOrDefault("statusNote")?.S),
+            EntitlementGranted: item.GetValueOrDefault("entitlementGranted")?.BOOL ?? false
         );
     }
 

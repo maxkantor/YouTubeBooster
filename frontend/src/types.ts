@@ -187,6 +187,7 @@ export type AdminSummary = {
 export type AdminListResponse<T> = {
   items: T[];
   nextCursor: string | null;
+  totalCount?: number | null;
 };
 
 export type AdminUserRow = {
@@ -341,13 +342,39 @@ export type AdminDemoAuditRow = {
 export type AdminOperationalKpis = {
   totalUsers: number;
   activeEntitledUsers: number;
+  activeLiveEntitledUsers: number;
   totalDemos: number;
   paidLiveOrders: number;
   revenueLiveUsd: number;
+  paidTestOrders: number;
+  revenueTestUsd: number;
   demoToPaidConversionPct: number;
   failedOrUnpaidCheckouts: number;
   openSupportTickets: number;
   unmatchedPayments: number;
+};
+
+export type AdminFunnelStep = {
+  eventKey: string;
+  label: string;
+  count: number;
+  conversionFromPreviousPct: number | null;
+  dropOffFromPreviousPct: number | null;
+};
+
+export type AdminFunnel = {
+  range: string;
+  steps: AdminFunnelStep[];
+  notes: string;
+};
+
+export type AdminDiagnosticRow = {
+  metric: string;
+  value: string;
+  dataSource: string;
+  filters: string;
+  lastUpdated: string;
+  warning: string | null;
 };
 
 export type AdminOrderRow = {
@@ -364,6 +391,9 @@ export type AdminOrderRow = {
   classification: string;
   createdAt: string;
   paidAt: string | null;
+  source?: string;
+  entitlementGranted?: boolean;
+  statusNote?: string | null;
 };
 
 export type AdminAttentionItem = {
@@ -381,6 +411,8 @@ export type AdminOperationalDashboard = {
   recentlyEntitledUsers: AdminUserRow[];
   recentAuditIssues: AdminDemoAuditRow[];
   attentionRequired: AdminAttentionItem[];
+  funnel: AdminFunnel;
+  diagnostics: AdminDiagnosticRow[];
 };
 
 export type AdminActivityEventRow = {

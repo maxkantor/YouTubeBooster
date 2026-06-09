@@ -12,9 +12,7 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
 
         var ents = await ListEntitlementsByUserAsync(userId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var hasActive = ents.Any(e =>
-            string.Equals(e.Status, "active", StringComparison.OrdinalIgnoreCase) &&
-            (e.ExpiresAt is null || e.ExpiresAt > now));
+        var hasActive = ents.Any(e => BusinessAnalytics.IsProductionEntitlement(e, now));
 
         await SaveUserProfileAsync(user with
         {
@@ -64,21 +62,8 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         }, cancellationToken);
 
         var payments = payScan.Items.Select(ReadPayment).ToArray();
-        var livePaid = payments.Where(p =>
-            string.Equals(p.Status, "completed", StringComparison.OrdinalIgnoreCase) &&
-            p.Amount > 0 &&
-            string.Equals(p.Mode, "live", StringComparison.OrdinalIgnoreCase)).ToArray();
-        var revenue = livePaid.Sum(p => p.Amount);
-        var unmatched = payments.Count(p => string.IsNullOrWhiteSpace(p.UserId)) +
-            payments.Count(p => string.Equals(p.Status, "completed", StringComparison.OrdinalIgnoreCase) && p.Amount == 0 && string.Equals(p.Mode, "live", StringComparison.OrdinalIgnoreCase)) / 2;
-
-        var failed = payments.Count(p =>
-            string.Equals(p.Status, "failed", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(p.Status, "unpaid", StringComparison.OrdinalIgnoreCase));
-
-        var demoToPaid = snapshot.TotalDemos == 0
-            ? 0d
-            : Math.Min(100d, livePaid.Length / (double)Math.Max(1, snapshot.TotalDemos) * 100d);
+        var paymentSummary = BusinessAnalytics.SummarizePayments(payments);
+        var demoToPaid = BusinessAnalytics.DemoToLivePaidConversionPct(snapshot.TotalDemos, paymentSummary.LivePaidOrderCount);
 
         var usersSnap = await _dynamoDb.ScanAsync(new ScanRequest
         {
@@ -88,9 +73,25 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             Limit = 5000
         }, cancellationToken);
         var profiles = usersSnap.Items.Select(ReadUserAccount).ToArray();
-        var entitledActive = profiles.Count(u =>
+        var now = DateTimeOffset.UtcNow;
+        var entitledActivePurchasedFlag = profiles.Count(u =>
             u.Purchased &&
             string.Equals(string.IsNullOrWhiteSpace(u.UserStatus) ? "active" : u.UserStatus, "active", StringComparison.OrdinalIgnoreCase));
+
+        var activeLiveEntitled = 0;
+        foreach (var profile in profiles)
+        {
+            if (!string.Equals(string.IsNullOrWhiteSpace(profile.UserStatus) ? "active" : profile.UserStatus, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var ents = await ListEntitlementsByUserAsync(profile.UserId, cancellationToken);
+            if (ents.Any(e => BusinessAnalytics.IsProductionEntitlement(e, now)))
+            {
+                activeLiveEntitled++;
+            }
+        }
 
         var supportTickets = await ListSupportTicketsAsync(200, null, cancellationToken);
         var openTickets = supportTickets.Items.Count(t =>
@@ -99,35 +100,35 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
 
         var recent = await GetRecentActivityAsync(cancellationToken);
         var attention = new List<AdminAttentionItemDto>();
-        if (unmatched > 0)
+        if (paymentSummary.UnmatchedCount > 0)
             attention.Add(new AdminAttentionItemDto("unmatched", "Payments or orders with missing user linkage or zero-amount live completions.", null));
-        if (failed > 0)
-            attention.Add(new AdminAttentionItemDto("failed_payments", $"{failed} failed/unpaid payment rows.", null));
+        if (paymentSummary.FailedOrUnpaidCount > 0)
+            attention.Add(new AdminAttentionItemDto("failed_payments", $"{paymentSummary.FailedOrUnpaidCount} failed/unpaid payment rows.", null));
+        if (paymentSummary.TestPaidOrderCount > 0 && paymentSummary.LivePaidOrderCount == 0)
+            attention.Add(new AdminAttentionItemDto("test_only_revenue", "All paid orders are Stripe test mode. Live revenue is $0.", null));
 
         var ordersAttention = payments
             .Where(p => string.IsNullOrWhiteSpace(p.UserId) || p.Amount == 0 || string.Equals(p.Status, "failed", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(p => p.CreatedAt)
             .Take(50)
-            .Select(p => new AdminOrderRowDto(
-                p.PaymentId,
-                p.StripeCheckoutSessionId,
-                string.IsNullOrWhiteSpace(p.UserId) ? null : p.UserId,
-                p.AccountEmail,
-                p.StripeEmail,
-                p.Amount,
-                p.Currency,
-                p.Status,
-                p.Mode,
-                p.PlanCode,
-                ClassifyPayment(p),
-                p.CreatedAt,
-                p.PaidAt))
+            .Select(p => ToAdminOrderRow(p))
             .ToArray();
 
         var supportQueue = supportTickets.Items
             .Where(t => !string.Equals(t.Status, "closed", StringComparison.OrdinalIgnoreCase))
             .Take(25)
             .ToArray();
+
+        var activityForFunnel = await ListActivityEventsAsync(2000, null, cancellationToken);
+        var funnel = BusinessAnalytics.BuildFunnel(activityForFunnel.Items, range);
+        var diagnostics = BusinessAnalytics.BuildDiagnostics(
+            range,
+            paymentSummary,
+            snapshot.TotalDemos,
+            snapshot.TotalUsers,
+            profiles.Length,
+            activeLiveEntitled,
+            entitledActivePurchasedFlag);
 
         var entitledUsers = profiles
             .Where(u => u.Purchased)
@@ -156,28 +157,59 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             range,
             new AdminOperationalKpis(
                 snapshot.TotalUsers,
-                entitledActive,
+                entitledActivePurchasedFlag,
+                activeLiveEntitled,
                 snapshot.TotalDemos,
-                livePaid.Length,
-                revenue,
+                paymentSummary.LivePaidOrderCount,
+                paymentSummary.LiveRevenueUsd,
+                paymentSummary.TestPaidOrderCount,
+                paymentSummary.TestRevenueUsd,
                 demoToPaid,
-                failed,
+                paymentSummary.FailedOrUnpaidCount,
                 openTickets,
-                payments.Count(p => string.IsNullOrWhiteSpace(p.UserId))),
+                paymentSummary.UnmatchedCount),
             recent,
             ordersAttention,
             supportQueue,
             entitledUsers,
             audits.Items.Take(15).ToArray(),
-            attention.ToArray());
+            attention.ToArray(),
+            funnel,
+            diagnostics);
     }
+
+    public async Task<AdminDiagnosticsResponse> GetAdminDiagnosticsAsync(string range, CancellationToken cancellationToken)
+    {
+        var dashboard = await GetOperationalDashboardAsync(range, cancellationToken);
+        return new AdminDiagnosticsResponse(range, dashboard.Diagnostics, dashboard.Funnel);
+    }
+
+    private static AdminOrderRowDto ToAdminOrderRow(PaymentRecord p) => new(
+        p.PaymentId,
+        p.StripeCheckoutSessionId,
+        string.IsNullOrWhiteSpace(p.UserId) ? null : p.UserId,
+        p.AccountEmail,
+        p.StripeEmail,
+        p.Amount,
+        p.Currency,
+        p.Status,
+        BusinessAnalytics.NormalizePaymentMode(p.Mode),
+        p.PlanCode,
+        ClassifyPayment(p),
+        p.CreatedAt,
+        p.PaidAt,
+        p.Source,
+        p.EntitlementGranted,
+        p.StatusNote);
 
     private static string ClassifyPayment(PaymentRecord p)
     {
-        if (string.Equals(p.Mode, "test", StringComparison.OrdinalIgnoreCase)) return "test";
+        if (BusinessAnalytics.IsTestPaidOrder(p)) return "test";
+        if (BusinessAnalytics.IsLivePaidOrder(p)) return "live_paid";
         if (string.IsNullOrWhiteSpace(p.UserId)) return "unmatched_user";
         if (p.Amount <= 0 && string.Equals(p.Status, "completed", StringComparison.OrdinalIgnoreCase)) return "zero_or_free";
-        if (string.Equals(p.Status, "completed", StringComparison.OrdinalIgnoreCase) && p.Amount > 0 && string.Equals(p.Mode, "live", StringComparison.OrdinalIgnoreCase)) return "live_paid";
+        if (string.Equals(p.Status, "failed", StringComparison.OrdinalIgnoreCase)) return "failed";
+        if (string.Equals(p.Status, "unpaid", StringComparison.OrdinalIgnoreCase)) return "unpaid";
         return p.Status;
     }
 
@@ -199,20 +231,7 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
 
         var items = response.Items
             .Select(ReadPayment)
-            .Select(p => new AdminOrderRowDto(
-                p.PaymentId,
-                p.StripeCheckoutSessionId,
-                string.IsNullOrWhiteSpace(p.UserId) ? null : p.UserId,
-                p.AccountEmail,
-                p.StripeEmail,
-                p.Amount,
-                p.Currency,
-                p.Status,
-                p.Mode,
-                p.PlanCode,
-                ClassifyPayment(p),
-                p.CreatedAt,
-                p.PaidAt))
+            .Select(ToAdminOrderRow)
             .OrderByDescending(p => p.CreatedAt)
             .ToArray();
 
@@ -286,7 +305,7 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
             UserId: userId,
             AccessType: request.AccessType,
             Status: "active",
-            Source: "manual",
+            Source: BusinessAnalytics.ProductionEntitlementAdminGrant,
             GrantedAt: now,
             ExpiresAt: request.ExpiresAt,
             PaymentId: null,
@@ -386,14 +405,26 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
     {
         return Task.FromResult(new AdminOperationalDashboardResponse(
             range,
-            new AdminOperationalKpis(0, 0, 0, 0, 0, 0, 0, 0, 0),
+            new AdminOperationalKpis(0, 0, 0, 0, 0, 0m, 0, 0m, 0, 0, 0, 0),
             Array.Empty<ActivityFeedItem>(),
             Array.Empty<AdminOrderRowDto>(),
             Array.Empty<AdminSupportTicketDto>(),
             Array.Empty<AdminUserDto>(),
             Array.Empty<AdminDemoAuditDto>(),
-            Array.Empty<AdminAttentionItemDto>()));
+            Array.Empty<AdminAttentionItemDto>(),
+            new AdminFunnelResponse(range, Array.Empty<AdminFunnelStepDto>(), string.Empty),
+            Array.Empty<AdminDiagnosticRowDto>()));
     }
+
+    public Task<AdminDiagnosticsResponse> GetAdminDiagnosticsAsync(string range, CancellationToken cancellationToken) =>
+        Task.FromResult(new AdminDiagnosticsResponse(range, Array.Empty<AdminDiagnosticRowDto>(), new AdminFunnelResponse(range, Array.Empty<AdminFunnelStepDto>(), string.Empty)));
+
+    public Task<bool> TryMarkStripeWebhookEventProcessedAsync(string stripeEventId, CancellationToken cancellationToken) =>
+        Task.FromResult(true);
+
+    public Task<IReadOnlyList<PaymentRecord>> ListAllPaymentRecordsAsync(int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PaymentRecord>>(Array.Empty<PaymentRecord>());
+
 
     public Task<AdminListResponse<AdminOrderRowDto>> ListPaymentOrdersAsync(int limit, string? cursor, CancellationToken cancellationToken) =>
         Task.FromResult(new AdminListResponse<AdminOrderRowDto>(Array.Empty<AdminOrderRowDto>(), null));

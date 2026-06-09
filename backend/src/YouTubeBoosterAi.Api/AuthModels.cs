@@ -57,8 +57,12 @@ public sealed record PaymentRecord(
     string? ReceiptUrl,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    string Mode = "live",
-    DateTimeOffset? PaidAt = null
+    string Mode = "test",
+    DateTimeOffset? PaidAt = null,
+    string Source = "stripe",
+    string? StripeEventId = null,
+    string? StatusNote = null,
+    bool EntitlementGranted = false
 );
 
 public sealed record MagicLinkTokenRecord(

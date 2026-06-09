@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmSignUp, forgotPassword, signIn, signUp, confirmForgotPassword } from './lib/auth';
 import { useAuth } from './AuthContext';
 import { authApi } from './lib/api';
+import { analytics } from './lib/analytics';
 import type { UserSessionStatus } from './types';
 
 function readCachedEmail(): string {
@@ -139,6 +140,7 @@ export function SignInPage({
 
               const session = await signIn(emailTrimmed, passwordVal);
               await authApi.cognitoLogin(session.idToken);
+              void analytics.loginCompleted(session.sub ?? undefined, emailTrimmed);
               // Hard navigation to fully re-run route guards after backend sets cookies.
               // IMPORTANT: Avoid hard-refreshing deep SPA routes on Amplify (can 404 if rewrite rules miss).
               // We hard-refresh to `/` and then let the app redirect client-side after sessions restore.
@@ -471,6 +473,7 @@ export function SignUpPage({
               setError('');
               try {
                 if (step === 'signup') {
+                  analytics.signupStarted(email);
                   await signUp(email, password);
                   setStep('confirm');
                 } else {
@@ -484,6 +487,7 @@ export function SignUpPage({
                   } catch (err) {
                     console.warn('cognitoLogin failed after verify (suppressed):', err);
                   }
+                  void analytics.signupCompleted(session.sub ?? undefined, email);
                   await refresh();
                   nav('/', { replace: true });
                 }
