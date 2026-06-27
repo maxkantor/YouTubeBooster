@@ -216,6 +216,8 @@ export function UnifiedDashboard({
   const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
   const [trafficLoaded, setTrafficLoaded] = useState(false);
   const [runnerLoaded, setRunnerLoaded] = useState(false);
+  /** Synced when videos load so Start can play before React commits runnerLoaded. */
+  const runnerLoadedRef = useRef(false);
   const [runnerIndex, setRunnerIndex] = useState(0);
   const [runnerLog, setRunnerLog] = useState<string[]>([]);
   const [runnerSpeed, setRunnerSpeed] = useState(10);
@@ -396,10 +398,12 @@ export function UnifiedDashboard({
       const videos = await publicApi.listVideos(input, maxResults);
       const list = (videos ?? []).filter((v) => v?.video_id);
       runnerVideosRef.current = list;
+      runnerLoadedRef.current = list.length > 0;
       setPyVideos(videos ?? []);
       return list;
     } catch (err) {
       runnerVideosRef.current = [];
+      runnerLoadedRef.current = false;
       setPyVideos(null);
       setPyError(err instanceof Error ? err.message : 'Could not load videos.');
       return null;
@@ -620,8 +624,19 @@ export function UnifiedDashboard({
     }
   }
 
+  function runnerDestroyYouTubePlayer() {
+    try {
+      const ref = (globalThis as any).__ybPlayerRef;
+      const player = ref?.player;
+      if (player && typeof player.destroy === 'function') player.destroy();
+      if (ref) ref.player = null;
+    } catch {
+      // ignore
+    }
+  }
+
   function runnerCurrentVideo() {
-    if (!runnerLoaded) return null;
+    if (!runnerLoadedRef.current && !runnerLoaded) return null;
     const list = getRunnerVideos();
     const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
     const idx = order.length ? order[Math.min(runnerIndex, order.length - 1)] : -1;
@@ -766,13 +781,7 @@ export function UnifiedDashboard({
     runnerWatchLimitFiredRef.current = false;
     setRunnerWatchStartPos(null);
     setRunnerWatchLimitFired(false);
-    try {
-      const player = (globalThis as any).__ybPlayerRef?.player;
-      if (player && typeof player.stopVideo === 'function') player.stopVideo();
-      if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
-    } catch {
-      // ignore
-    }
+    runnerDestroyYouTubePlayer();
     try {
       runnerYouTubeWindowRef.current?.close();
     } catch {
@@ -2049,9 +2058,11 @@ export function UnifiedDashboard({
                     const v = await loadVideos(200);
                     if (!v?.length) {
                       appendRunnerLog('No videos found for this channel. Check URL/handle and try again.');
+                      runnerLoadedRef.current = false;
                       setRunnerLoaded(false);
                       return;
                     }
+                    runnerLoadedRef.current = true;
                     setRunnerLoaded(true);
                     setRunnerIndex(0);
                   runnerPlayOrderRef.current = buildPlayOrder();
@@ -2080,6 +2091,7 @@ export function UnifiedDashboard({
                       return;
                     }
                     if (startToken !== runnerStartTokenRef.current) return;
+                    runnerLoadedRef.current = true;
                     setRunnerLoaded(true);
                     suppressRunnerIndexEffectRef.current = true;
                     setRunnerIndex(0);
