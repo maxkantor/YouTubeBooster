@@ -10,7 +10,7 @@ import { UnifiedDashboard } from './UnifiedDashboard';
 function PaidRouteLoading() {
   return (
     <div className="page narrow-page">
-      <div className="surface">
+      <div className="surface surface-static">
         <h1>Checking subscription</h1>
         <p>Loading full channel analysis…</p>
       </div>

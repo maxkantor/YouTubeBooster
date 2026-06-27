@@ -1,0 +1,193 @@
+/* Cinematic background — single environment for the entire app */
+
+.cinematic-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+
+.cinematic-bg__layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+/* Layer 1 — solid near-black */
+.cinematic-bg__base {
+  background: #050507;
+}
+
+/* Layer 2 — soft radial glows */
+.cinematic-bg__glow {
+  border-radius: 50%;
+  filter: blur(320px);
+  opacity: 0.12;
+}
+
+.cinematic-bg__glow--purple {
+  top: -28%;
+  right: -18%;
+  width: min(920px, 88vw);
+  height: min(920px, 88vw);
+  background: radial-gradient(circle, rgba(36, 22, 62, 0.95) 0%, rgba(36, 22, 62, 0.35) 42%, transparent 72%);
+  animation: cinematic-glow-purple 28s ease-in-out infinite alternate;
+}
+
+.cinematic-bg__glow--blue {
+  bottom: -32%;
+  left: -22%;
+  width: min(880px, 86vw);
+  height: min(880px, 86vw);
+  background: radial-gradient(circle, rgba(36, 59, 124, 0.9) 0%, rgba(11, 16, 32, 0.4) 45%, transparent 74%);
+  opacity: 0.1;
+  animation: cinematic-glow-blue 32s ease-in-out infinite alternate;
+}
+
+/* Layer 3 — mesh gradient */
+.cinematic-bg__mesh {
+  inset: -45%;
+  background:
+    radial-gradient(ellipse 55% 45% at 22% 28%, rgba(36, 22, 62, 0.22), transparent 58%),
+    radial-gradient(ellipse 50% 42% at 78% 68%, rgba(11, 16, 32, 0.35), transparent 60%),
+    radial-gradient(ellipse 40% 35% at 52% 48%, rgba(36, 59, 124, 0.12), transparent 62%);
+  opacity: 0.55;
+  animation: cinematic-mesh-drift 26s ease-in-out infinite alternate;
+}
+
+/* Layer 4 — faint diagonal rays */
+.cinematic-bg__rays {
+  opacity: 0.028;
+  background:
+    repeating-linear-gradient(
+      112deg,
+      transparent 0,
+      transparent 118px,
+      rgba(248, 250, 252, 0.14) 118px,
+      rgba(248, 250, 252, 0.14) 119px
+    ),
+    repeating-linear-gradient(
+      68deg,
+      transparent 0,
+      transparent 164px,
+      rgba(36, 59, 124, 0.12) 164px,
+      rgba(36, 59, 124, 0.12) 165px
+    );
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, black 20%, transparent 78%);
+}
+
+/* Layer 5 — particles */
+.cinematic-bg__particles {
+  inset: 0;
+}
+
+.cinematic-bg__particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(248, 250, 252, 0.85);
+  box-shadow: 0 0 6px rgba(109, 93, 246, 0.15);
+  animation: cinematic-particle-float var(--cinematic-duration, 42s) ease-in-out infinite;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Layer 6 — vignette */
+.cinematic-bg__vignette {
+  background: radial-gradient(
+    ellipse 72% 68% at 50% 42%,
+    transparent 0%,
+    transparent 48%,
+    rgba(0, 0, 0, 0.35) 78%,
+    rgba(0, 0, 0, 0.62) 100%
+  );
+}
+
+/* Layer 7 — noise */
+.cinematic-bg__noise {
+  opacity: 0.022;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+@keyframes cinematic-glow-purple {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(-2%, 1.5%, 0) scale(1.04);
+  }
+}
+
+@keyframes cinematic-glow-blue {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(2.5%, -2%, 0) scale(1.05);
+  }
+}
+
+@keyframes cinematic-mesh-drift {
+  0% {
+    transform: translate3d(-1.5%, -1%, 0) rotate(0deg) scale(1);
+  }
+  100% {
+    transform: translate3d(1.5%, 1.2%, 0) rotate(1.2deg) scale(1.03);
+  }
+}
+
+@keyframes cinematic-particle-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(var(--cinematic-drift-x, 8px), var(--cinematic-drift-y, -6px), 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinematic-bg__glow--purple,
+  .cinematic-bg__glow--blue,
+  .cinematic-bg__mesh,
+  .cinematic-bg__particle {
+    animation: none !important;
+  }
+}
+
+/* Ambient lighting utilities — local glows on key UI, not page backgrounds */
+.ambient-glow {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(72px);
+  z-index: 0;
+}
+
+.ambient-glow--hero {
+  width: min(640px, 82vw);
+  height: min(380px, 48vh);
+  top: 6%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse, rgba(109, 93, 246, 0.14), transparent 72%);
+}
+
+.ambient-glow--pricing {
+  width: min(520px, 70vw);
+  height: min(320px, 40vh);
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse, rgba(109, 93, 246, 0.1), transparent 70%);
+}
+
+.ambient-glow--dialog {
+  width: 120%;
+  height: 120%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse, rgba(109, 93, 246, 0.08), transparent 65%);
+}

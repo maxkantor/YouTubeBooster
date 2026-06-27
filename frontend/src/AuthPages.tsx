@@ -91,7 +91,7 @@ export function SignInPage({
   if (sessionLoading) {
     return (
       <div className="page narrow-page">
-        <div className="surface">
+        <div className="surface surface-static">
           <div className="auth-header">
             <div className="auth-badge">Premium Access</div>
             <h1 className="auth-title">Sign in</h1>
@@ -108,7 +108,7 @@ export function SignInPage({
 
   return (
     <div className="page narrow-page">
-      <div className="surface">
+      <div className="surface surface-static">
         <div className="auth-header">
           <div className="auth-badge">Premium Access</div>
           <h1 className="auth-title">Sign in</h1>
@@ -334,7 +334,7 @@ export function SignUpPage({
   if (sessionLoading) {
     return (
       <div className="page narrow-page">
-        <div className="surface">
+        <div className="surface surface-static">
           <div className="auth-header">
             <div className="auth-badge">Create Account</div>
             <h1 className="auth-title">Create account</h1>
@@ -351,7 +351,7 @@ export function SignUpPage({
 
   return (
     <div className="page narrow-page">
-      <div className="surface">
+      <div className="surface surface-static">
         <div className="auth-header">
           <div className="auth-badge">{step === 'signup' ? 'Create Account' : 'Verify Email'}</div>
           <h1 className="auth-title">{step === 'signup' ? 'Create account' : 'Verify email'}</h1>
@@ -563,7 +563,7 @@ export function ForgotPasswordPage({
   if (sessionLoading) {
     return (
       <div className="page narrow-page">
-        <div className="surface">
+        <div className="surface surface-static">
           <h1>Reset password</h1>
           <p className="muted">Checking your session…</p>
         </div>
@@ -577,7 +577,7 @@ export function ForgotPasswordPage({
 
   return (
     <div className="page narrow-page">
-      <div className="surface">
+      <div className="surface surface-static">
         <h1>Reset password</h1>
         <p className="muted">{step === 'request' ? 'Send a reset code to your email.' : 'Enter your code and new password.'}</p>
         <div className="input-stack" style={{ marginTop: 14 }}>

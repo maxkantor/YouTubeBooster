@@ -1,0 +1,76 @@
+import { useMemo, type CSSProperties } from 'react';
+import './cinematic-background.css';
+
+type Particle = {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  opacity: number;
+  duration: number;
+  delay: number;
+  driftX: number;
+  driftY: number;
+};
+
+function mulberry32(seed: number) {
+  return () => {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildParticles(count: number): Particle[] {
+  const rand = mulberry32(0x9e3779b9);
+  return Array.from({ length: count }, (_, id) => ({
+    id,
+    x: rand() * 100,
+    y: rand() * 100,
+    size: 1 + rand() * 2,
+    opacity: 0.02 + rand() * 0.04,
+    duration: 38 + rand() * 24,
+    delay: rand() * -30,
+    driftX: (rand() - 0.5) * 28,
+    driftY: (rand() - 0.5) * 22
+  }));
+}
+
+/** Fixed viewport backdrop — one cinematic environment for every route. */
+export function CinematicBackground() {
+  const particles = useMemo(() => buildParticles(48), []);
+
+  return (
+    <div className="cinematic-bg" aria-hidden>
+      <div className="cinematic-bg__layer cinematic-bg__base" />
+      <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--purple" />
+      <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--blue" />
+      <div className="cinematic-bg__layer cinematic-bg__mesh" />
+      <div className="cinematic-bg__layer cinematic-bg__rays" />
+      <div className="cinematic-bg__layer cinematic-bg__particles">
+        {particles.map((p) => (
+          <span
+            key={p.id}
+            className="cinematic-bg__particle"
+            style={
+              {
+                left: `${p.x}%`,
+                top: `${p.y}%`,
+                width: `${p.size}px`,
+                height: `${p.size}px`,
+                opacity: p.opacity,
+                ['--cinematic-drift-x' as string]: `${p.driftX}px`,
+                ['--cinematic-drift-y' as string]: `${p.driftY}px`,
+                ['--cinematic-duration' as string]: `${p.duration}s`,
+                animationDelay: `${p.delay}s`
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
+      <div className="cinematic-bg__layer cinematic-bg__vignette" />
+      <div className="cinematic-bg__layer cinematic-bg__noise" />
+    </div>
+  );
+}

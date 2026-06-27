@@ -108,7 +108,7 @@ function AppEntryRedirect() {
 function LoadingSurface({ title, detail }: { title: string; detail?: string }) {
   return (
     <div className="page narrow-page">
-      <div className="surface">
+      <div className="surface surface-static">
         <h1>{title}</h1>
         {detail && <p>{detail}</p>}
       </div>
@@ -247,7 +247,7 @@ function CheckoutSuccessPage({
 
   return (
     <div className="page narrow-page">
-      <div className="surface">
+      <div className="surface surface-static">
         <div className="locked-label">Checkout</div>
         <h1>Confirming your access…</h1>
         <p className="muted">
@@ -418,7 +418,7 @@ function AdminLoginPage({
       className="page narrow-page admin-login-page"
       style={{ minHeight: '100vh', color: '#e5e7eb', position: 'relative', zIndex: 2 }}
     >
-      <div className="surface">
+      <div className="surface surface-static">
         <h1>Admin CRM Login</h1>
         {sessionLoading ? (
           <p className="admin-login-lead">Checking admin session…</p>

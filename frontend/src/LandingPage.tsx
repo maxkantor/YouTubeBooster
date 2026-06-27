@@ -825,24 +825,7 @@ export function LandingPage() {
       <main id="main-content" className="landing-main">
       {/* 2. Hero */}
       <section className="landing-hero" aria-labelledby="hero-heading">
-        <div className="landing-hero-bg" aria-hidden>
-          <div className="landing-hero-bg-vignette" />
-          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-1" />
-          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-2" />
-          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-3" />
-          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-4" />
-          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-5" />
-          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-6" />
-          <div className="landing-hero-bg-ribbon landing-hero-bg-ribbon-7" />
-          <div className="landing-hero-bg-glow-red" />
-          <div className="landing-hero-bg-lines">
-            <span className="landing-hero-bg-line landing-hero-bg-line-1" />
-            <span className="landing-hero-bg-line landing-hero-bg-line-2" />
-            <span className="landing-hero-bg-line landing-hero-bg-line-3" />
-          </div>
-          <div className="landing-hero-bg-content-overlay" />
-          <div className="landing-hero-bg-audit-overlay" />
-        </div>
+        <div className="ambient-glow ambient-glow--hero" aria-hidden />
         <div className="landing-hero-headline-row">
           <div className="container">
             <h1 className="landing-hero-title landing-hero-brand-h1" id="hero-heading">
@@ -1162,6 +1145,7 @@ export function LandingPage() {
 
       {/* 6. Pricing */}
       <section className="landing-section landing-pricing-section" id="pricing" aria-labelledby="pricing-heading">
+        <div className="ambient-glow ambient-glow--pricing" aria-hidden />
         <div className="container landing-container landing-pricing-inner">
           <span className="landing-section-eyebrow">One-time · no subscription</span>
           <h2 className="landing-section-title landing-pricing-headline landing-heading-display" id="pricing-heading">
