@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties } from 'react';
 import './cinematic-background.css';
 
-type Particle = { id: number; x: number; y: number; size: number; opacity: number; duration: number; delay: number; driftY: number };
+type Particle = { id: number; x: number; y: number; size: number; opacity: number; duration: number; delay: number };
 
 function mulberry32(seed: number) {
   return () => {
@@ -18,26 +18,25 @@ function buildParticles(count: number): Particle[] {
     id,
     x: rand() * 100,
     y: rand() * 100,
-    size: 1 + rand() * 1.5,
-    opacity: 0.02 + rand() * 0.03,
-    duration: 50 + rand() * 30,
-    delay: rand() * -40,
-    driftY: (rand() - 0.5) * 12
+    size: 1 + rand() * 1.2,
+    opacity: 0.02 + rand() * 0.025,
+    duration: 55 + rand() * 25,
+    delay: rand() * -35
   }));
 }
 
-/** One fixed premium backdrop — pure CSS + light dust (desktop only). */
+/** Single premium backdrop for every route — no page-level gradient stacks. */
 export function CinematicBackground() {
-  const particles = useMemo(() => buildParticles(18), []);
+  const particles = useMemo(() => buildParticles(14), []);
 
   return (
     <div className="cinematic-bg" aria-hidden>
       <div className="cinematic-bg__layer cinematic-bg__base" />
-      <div className="cinematic-bg__layer cinematic-bg__grid" />
+      <div className="cinematic-bg__layer cinematic-bg__aurora" />
+      <div className="cinematic-bg__layer cinematic-bg__mesh" />
       <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--purple" />
       <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--blue" />
-      <div className="cinematic-bg__layer cinematic-bg__spotlight" />
-      <div className="cinematic-bg__layer cinematic-bg__particles cinematic-bg__particles--desktop">
+      <div className="cinematic-bg__layer cinematic-bg__particles">
         {particles.map((p) => (
           <span
             key={p.id}
@@ -49,7 +48,6 @@ export function CinematicBackground() {
                 width: `${p.size}px`,
                 height: `${p.size}px`,
                 opacity: p.opacity,
-                ['--cinematic-drift-y' as string]: `${p.driftY}px`,
                 ['--cinematic-duration' as string]: `${p.duration}s`,
                 animationDelay: `${p.delay}s`
               } as CSSProperties

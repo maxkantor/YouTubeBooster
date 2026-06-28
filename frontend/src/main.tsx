@@ -6,6 +6,7 @@ import { PricingProvider } from './PricingContext';
 import { CinematicBackground } from './components/CinematicBackground';
 import './styles.css';
 import './mobile-premium.css';
+import './landing-premium.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

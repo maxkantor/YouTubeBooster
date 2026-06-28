@@ -825,7 +825,6 @@ export function LandingPage() {
       <main id="main-content" className="landing-main">
       {/* 2. Hero */}
       <section className="landing-hero" aria-labelledby="hero-heading">
-        <div className="ambient-glow ambient-glow--hero" aria-hidden />
         <div className="landing-hero-headline-row">
           <div className="container">
             <h1 className="landing-hero-title landing-hero-brand-h1" id="hero-heading">
@@ -841,9 +840,6 @@ export function LandingPage() {
             <p className="landing-hero-sub">
               {BRAND.heroSubtitle}
             </p>
-            <p className="landing-hero-trust-copy">
-              Built for small YouTube creators who need clear fixes -- not generic advice.
-            </p>
             <div className="landing-hero-buttons">
               <a href="#audit" className="btn btn-lg landing-hero-cta-primary landing-cta-premium">
                 Analyze Your Channel
@@ -858,20 +854,6 @@ export function LandingPage() {
               <span><strong>No subscription</strong> or recurring tool stack</span>
               <span><strong>CTR, SEO, retention</strong> in one channel audit</span>
             </div>
-            <ul className="landing-hero-trust" aria-label="Trust">
-              <li>
-                <span className="landing-trust-check" aria-hidden />
-                <span>Spot weak YouTube CTR and thumbnail optimization issues</span>
-              </li>
-              <li>
-                <span className="landing-trust-check" aria-hidden />
-                <span>Fix titles, video packaging, and YouTube SEO faster</span>
-              </li>
-              <li>
-                <span className="landing-trust-check" aria-hidden />
-                <span>See retention leaks and missed small creator growth opportunities</span>
-              </li>
-            </ul>
           </div>
           <div className="landing-hero-preview" aria-hidden>
             <div className="landing-hero-insight-panel landing-insight-glass">
@@ -972,7 +954,6 @@ export function LandingPage() {
 
       {/* 4. Product Dashboard Preview */}
       <section className="landing-section landing-section-alt" id="product">
-        <div className="ambient-glow ambient-glow--section" aria-hidden />
         <div className="container landing-container">
           <span className="landing-section-eyebrow">Dashboard</span>
           <h2 className="landing-section-title">Product dashboard preview</h2>
@@ -1146,7 +1127,6 @@ export function LandingPage() {
 
       {/* 6. Pricing */}
       <section className="landing-section landing-pricing-section" id="pricing" aria-labelledby="pricing-heading">
-        <div className="ambient-glow ambient-glow--pricing" aria-hidden />
         <div className="container landing-container landing-pricing-inner">
           <span className="landing-section-eyebrow">One-time · no subscription</span>
           <h2 className="landing-section-title landing-pricing-headline landing-heading-display" id="pricing-heading">

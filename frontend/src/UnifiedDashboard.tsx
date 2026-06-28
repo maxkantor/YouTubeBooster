@@ -1021,7 +1021,6 @@ export function UnifiedDashboard({
 
   return (
     <div className="page dashboard-page">
-      <div className="ambient-glow ambient-glow--dashboard" aria-hidden />
       <header className="dashboard-header">
         <h1 className="dashboard-title">{isDemo ? `${BRAND.name} Dashboard` : dashboardTitle}</h1>
 
