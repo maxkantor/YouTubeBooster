@@ -1,0 +1,325 @@
+/* Aggressive mobile + touch polish — profit-focused readability */
+
+@media (max-width: 1023px) {
+  .landing-hero-grid {
+    grid-template-columns: 1fr !important;
+    gap: 28px !important;
+  }
+
+  .landing-hero-preview {
+    order: -1;
+    max-width: 100%;
+    margin-inline: auto;
+  }
+
+  .landing-insight-glass.landing-hero-insight-panel {
+    transform: none !important;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --app-max-width: 100%;
+    --dashboard-max-width: 100%;
+    --section-pad-y: 48px;
+    --hero-pad-top: 52px;
+    --hero-pad-bottom: 44px;
+    --nav-height: 60px;
+    --glass-blur: blur(14px);
+    --card-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    --card-hover-lift: none;
+  }
+
+  .container {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .page {
+    padding: 20px max(16px, env(safe-area-inset-right, 0px)) 56px max(16px, env(safe-area-inset-left, 0px));
+  }
+
+  .page.dashboard-page {
+    padding-top: 16px;
+  }
+
+  .landing-hero {
+    padding-top: max(48px, calc(env(safe-area-inset-top, 0px) + 24px)) !important;
+    padding-bottom: 40px !important;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
+  }
+
+  .landing-section {
+    padding: 48px max(16px, env(safe-area-inset-left, 0px)) !important;
+  }
+
+  .landing-hero-brand-h1 {
+    font-size: clamp(1.65rem, 5.5vw, 2.25rem);
+    line-height: 1.12;
+  }
+
+  .landing-hero-tagline-h2 {
+    font-size: clamp(0.95rem, 3.8vw, 1.15rem);
+    margin-bottom: 12px;
+  }
+
+  .landing-hero-sub,
+  .landing-hero-trust-copy {
+    font-size: 0.95rem;
+    line-height: 1.55;
+    max-width: 100%;
+  }
+
+  .landing-hero-proof-strip {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .landing-hero-proof-strip span {
+    width: 100%;
+    justify-content: flex-start;
+    font-size: 0.75rem;
+    padding: 8px 10px;
+  }
+
+  .landing-hero-trust {
+    text-align: left;
+  }
+
+  .landing-hero-trust li {
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
+
+  .landing-hero-content::before {
+    display: none;
+  }
+
+  /* Compact header — logo left, actions right; nav scrolls */
+  .landing-header-inner {
+    flex-wrap: nowrap !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: max(10px, env(safe-area-inset-top, 0px)) 16px 10px !important;
+    gap: 8px !important;
+  }
+
+  .landing-logo-premium {
+    order: 0 !important;
+    flex: 0 1 auto !important;
+    width: auto !important;
+    justify-content: flex-start !important;
+    font-size: 1rem !important;
+  }
+
+  .landing-nav-actions {
+    order: 1 !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    justify-content: flex-end !important;
+    gap: 4px !important;
+  }
+
+  .landing-nav-center {
+    order: 2 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0 16px !important;
+    padding: 6px 0 2px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    mask-image: linear-gradient(90deg, transparent, black 8px, black calc(100% - 8px), transparent);
+  }
+
+  .landing-nav-center::-webkit-scrollbar {
+    display: none;
+  }
+
+  .landing-nav-link {
+    flex-shrink: 0;
+    font-size: 0.7rem !important;
+    padding: 8px 4px !important;
+    min-height: 36px !important;
+    letter-spacing: 0.04em !important;
+  }
+
+  .landing-nav-auth {
+    display: none !important;
+  }
+
+  .landing-nav-cta-primary,
+  .landing-nav-cta {
+    padding: 8px 12px !important;
+    font-size: 0.72rem !important;
+    min-height: 36px !important;
+    white-space: nowrap;
+  }
+
+  .landing-nav-user {
+    display: none !important;
+  }
+
+  .landing-nav-signout {
+    font-size: 0.72rem !important;
+    padding: 8px !important;
+  }
+
+  /* Dashboard */
+  .dashboard-title {
+    font-size: 1.25rem;
+    line-height: 1.25;
+  }
+
+  .dashboard-header {
+    margin-bottom: 16px;
+  }
+
+  .dashboard-channel-context {
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .dashboard-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 6px;
+    margin-bottom: 20px;
+    padding-bottom: 4px;
+    mask-image: linear-gradient(90deg, transparent, black 12px, black calc(100% - 12px), transparent);
+  }
+
+  .dashboard-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    flex-shrink: 0;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .surface,
+  .hero-input-card,
+  .metric-tile,
+  .landing-dashboard-preview,
+  .landing-pricing-card {
+    padding: 20px 16px !important;
+    border-radius: 16px;
+  }
+
+  .landing-pricing-card {
+    margin-top: 20px;
+    padding: 24px 18px !important;
+  }
+
+  .landing-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .landing-metric-card {
+    padding: 14px 12px !important;
+  }
+
+  .landing-metric-value {
+    font-size: 1.45rem;
+  }
+
+  .btn,
+  .btn-lg {
+    min-height: 48px;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .landing-hero-buttons {
+    max-width: 100% !important;
+  }
+
+  .input-row {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  .pill-row {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .pill-row .btn,
+  .pill-row label {
+    width: 100%;
+  }
+
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .modal-content {
+    max-height: 92dvh;
+    border-radius: 20px 20px 16px 16px;
+    padding: 22px 18px;
+  }
+
+  .top-nav {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .nav-shell {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .marketing-static-surface {
+    padding: 20px 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .landing-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-logo-premium {
+    font-size: 0.92rem !important;
+  }
+}
+
+/* No hover lift on touch — feels broken on phones */
+@media (hover: none) {
+  .glass-card:hover,
+  .metric-tile:hover,
+  .landing-metric-card:hover,
+  .paywall-card:hover,
+  .status-card:hover,
+  .landing-dashboard-preview:hover,
+  .landing-pricing-card:hover,
+  .stat-card:hover,
+  .video-card:hover {
+    transform: none !important;
+  }
+}

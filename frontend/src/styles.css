@@ -1,35 +1,33 @@
 :root {
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --app-max-width: 1280px;
-  --app-gutter: max(28px, calc((100vw - var(--app-max-width)) / 2));
+  --app-max-width: 1320px;
+  --dashboard-max-width: 1440px;
+  --app-gutter: max(20px, calc((100vw - var(--app-max-width)) / 2));
   --space-deep: #050507;
-  --space-navy: #0b1020;
-  --space-purple-tint: #24163e;
-  --space-blue-accent: #243b7c;
+  --space-navy: #090b14;
+  --space-slate: #101425;
   --text-bright: #f8fafc;
   --text-secondary: #a6aec8;
   --text-muted: #6f7690;
   --brand-base: #050507;
-  --brand-surface: rgba(15, 15, 25, 0.55);
-  --brand-surface-elevated: rgba(18, 18, 30, 0.62);
+  --brand-surface: rgba(10, 12, 20, 0.72);
   --brand-primary-start: #6d5df6;
-  --brand-primary-end: #8e5cff;
-  --brand-primary-mid: #7d66fa;
+  --brand-primary-end: #7f5cff;
+  --brand-primary-mid: #7468f8;
+  --brand-accent-blue: #3b82f6;
   --brand-accent-red: #dc2626;
-  --brand-accent-red-muted: rgba(220, 38, 38, 0.15);
-  --landing-bg: transparent;
-  --landing-bg-elevated: rgba(15, 15, 25, 0.55);
   --landing-accent: #6d5df6;
-  --landing-accent-light: #8e5cff;
-  --glass-bg: rgba(15, 15, 25, 0.55);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(10, 12, 20, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.07);
   --glass-blur: blur(20px);
-  --card-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-  --card-hover-shadow: 0 28px 72px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --card-hover-lift: translateY(-3px) scale(1.01);
-  --nav-height: 72px;
+  --card-shadow: 0 20px 64px rgba(0, 0, 0, 0.5);
+  --card-hover-shadow: 0 24px 72px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --card-hover-lift: translateY(-3px);
+  --nav-height: 64px;
   --section-pad-y: 64px;
+  --hero-pad-top: 72px;
+  --hero-pad-bottom: 64px;
   color: var(--text-bright);
 }
 
@@ -220,7 +218,13 @@ a {
 .page {
   max-width: var(--app-max-width);
   margin: 0 auto;
-  padding: 48px 28px 96px;
+  padding: 40px max(24px, env(safe-area-inset-right, 0px)) 72px max(24px, env(safe-area-inset-left, 0px));
+}
+
+.page.dashboard-page {
+  max-width: var(--dashboard-max-width);
+  padding-left: max(24px, env(safe-area-inset-left, 0px));
+  padding-right: max(24px, env(safe-area-inset-right, 0px));
 }
 
 .narrow-page {
@@ -297,8 +301,8 @@ a {
 
 .hero-input-card,
 .surface {
-  padding: 28px;
-  border-radius: 22px;
+  padding: 32px;
+  border-radius: 20px;
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -324,8 +328,8 @@ a {
 .paywall-card:hover,
 .status-card:hover {
   transform: var(--card-hover-lift);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: var(--card-hover-shadow);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: var(--card-hover-shadow), 0 0 32px rgba(109, 93, 246, 0.06);
 }
 
 .surface-static:hover,
@@ -706,7 +710,9 @@ textarea {
 
 /* Unified dashboard */
 .dashboard-page {
+  position: relative;
   padding-bottom: 0;
+  overflow: hidden;
 }
 
 .dashboard-header {
@@ -1853,25 +1859,25 @@ textarea {
 
 @media (max-width: 520px) {
   .landing-header-inner {
-    justify-content: center;
+    justify-content: space-between;
   }
 
   .landing-logo-premium {
-    order: 1;
-    flex: 1 1 100%;
-    width: 100%;
-    justify-content: center;
+    order: 0;
+    flex: 0 1 auto;
+    width: auto;
+    justify-content: flex-start;
   }
 
   .landing-nav-actions {
-    order: 2;
-    flex: 1 1 100%;
-    width: 100%;
-    justify-content: center;
+    order: 1;
+    flex: 0 0 auto;
+    width: auto;
+    justify-content: flex-end;
   }
 
   .landing-nav-center {
-    order: 3;
+    order: 2;
   }
 }
 
@@ -2003,8 +2009,8 @@ textarea {
 /* Hero */
 .landing-hero {
   position: relative;
-  padding-top: max(74px, calc(env(safe-area-inset-top, 0px) + 44px));
-  padding-bottom: max(52px, env(safe-area-inset-bottom, 0px));
+  padding-top: max(var(--hero-pad-top), calc(env(safe-area-inset-top, 0px) + 56px));
+  padding-bottom: max(var(--hero-pad-bottom), env(safe-area-inset-bottom, 0px));
   padding-left: max(var(--app-gutter), env(safe-area-inset-left, 0px));
   padding-right: max(var(--app-gutter), env(safe-area-inset-right, 0px));
   overflow: hidden;
@@ -2231,15 +2237,15 @@ textarea {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(460px, 520px);
-  gap: clamp(34px, 4.5vw, 52px);
+  grid-template-columns: 1fr;
+  gap: clamp(28px, 4vw, 40px);
   align-items: center;
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   .landing-hero-grid {
-    gap: clamp(40px, 4vw, 56px);
-    grid-template-columns: minmax(0, 1.05fr) minmax(420px, 500px);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
+    gap: clamp(32px, 3.5vw, 48px);
   }
 }
 
@@ -3077,6 +3083,7 @@ textarea {
 .landing-section {
   padding: var(--section-pad-y) var(--app-gutter);
   position: relative;
+  overflow: hidden;
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
 
@@ -3090,36 +3097,24 @@ textarea {
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 100%;
-  max-width: var(--app-max-width);
+  width: min(100%, var(--app-max-width));
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
   pointer-events: none;
 }
 
-.landing-section::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.dashboard-page > *:not(.ambient-glow) {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-section > .ambient-glow {
   z-index: 0;
-  opacity: 0.68;
-  background:
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cline x1='0' y1='20' x2='200' y2='20' stroke='rgba(148%2C163%2C184%2C0.08)' stroke-width='1' stroke-dasharray='4 8'/%3E%3Ccircle cx='24' cy='20' r='3' fill='rgba(220%2C38%2C38%2C0.18)'/%3E%3Ccircle cx='72' cy='20' r='3' fill='rgba(129%2C140%2C248%2C0.16)'/%3E%3Ccircle cx='128' cy='20' r='3' fill='rgba(148%2C163%2C184%2C0.14)'/%3E%3Ccircle cx='176' cy='20' r='3' fill='rgba(56%2C189%2C248%2C0.14)'/%3E%3C/svg%3E") center bottom 8% / min(280px, 60vw) auto no-repeat,
-    radial-gradient(ellipse 70% 60% at 12% 18%, rgba(79, 70, 229, 0.055), transparent 60%),
-    radial-gradient(ellipse 55% 45% at 92% 26%, rgba(220, 38, 38, 0.022), transparent 62%),
-    linear-gradient(120deg, transparent 0%, rgba(220, 38, 38, 0.02) 20%, transparent 44%),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0,
-      transparent 118px,
-      rgba(148, 163, 184, 0.012) 118px,
-      rgba(148, 163, 184, 0.012) 119px
-    );
 }
 
 .landing-section > .container,
-.landing-section > .landing-container {
+.landing-section > .landing-container,
+.landing-section > .landing-pricing-inner {
   position: relative;
   z-index: 1;
 }
@@ -3313,24 +3308,27 @@ textarea {
 }
 
 .landing-container {
-  max-width: 1120px;
+  max-width: var(--app-max-width);
   margin: 0 auto;
 }
 
 /* Dashboard preview */
 .landing-dashboard-preview {
-  margin-top: 24px;
-  padding: 28px;
+  margin-top: 20px;
+  padding: 32px;
   border-radius: 20px;
-  background:
-    linear-gradient(165deg, rgba(14, 18, 30, 0.92), rgba(8, 12, 22, 0.88));
-  backdrop-filter: blur(20px) saturate(1.15);
-  -webkit-backdrop-filter: blur(20px) saturate(1.15);
-  border: 1px solid rgba(129, 140, 248, 0.18);
-  box-shadow:
-    0 22px 52px rgba(0, 0, 0, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.35s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-dashboard-preview:hover {
+  transform: var(--card-hover-lift);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .landing-dashboard-top {

@@ -1,17 +1,7 @@
 import { useMemo, type CSSProperties } from 'react';
 import './cinematic-background.css';
 
-type Particle = {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-  opacity: number;
-  duration: number;
-  delay: number;
-  driftX: number;
-  driftY: number;
-};
+type Particle = { id: number; x: number; y: number; size: number; opacity: number; duration: number; delay: number; driftY: number };
 
 function mulberry32(seed: number) {
   return () => {
@@ -23,32 +13,31 @@ function mulberry32(seed: number) {
 }
 
 function buildParticles(count: number): Particle[] {
-  const rand = mulberry32(0x9e3779b9);
+  const rand = mulberry32(0x51a9f00d);
   return Array.from({ length: count }, (_, id) => ({
     id,
     x: rand() * 100,
     y: rand() * 100,
-    size: 1 + rand() * 2,
-    opacity: 0.02 + rand() * 0.04,
-    duration: 38 + rand() * 24,
-    delay: rand() * -30,
-    driftX: (rand() - 0.5) * 28,
-    driftY: (rand() - 0.5) * 22
+    size: 1 + rand() * 1.5,
+    opacity: 0.02 + rand() * 0.03,
+    duration: 50 + rand() * 30,
+    delay: rand() * -40,
+    driftY: (rand() - 0.5) * 12
   }));
 }
 
-/** Fixed viewport backdrop — one cinematic environment for every route. */
+/** One fixed premium backdrop — pure CSS + light dust (desktop only). */
 export function CinematicBackground() {
-  const particles = useMemo(() => buildParticles(48), []);
+  const particles = useMemo(() => buildParticles(18), []);
 
   return (
     <div className="cinematic-bg" aria-hidden>
       <div className="cinematic-bg__layer cinematic-bg__base" />
+      <div className="cinematic-bg__layer cinematic-bg__grid" />
       <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--purple" />
       <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--blue" />
-      <div className="cinematic-bg__layer cinematic-bg__mesh" />
-      <div className="cinematic-bg__layer cinematic-bg__rays" />
-      <div className="cinematic-bg__layer cinematic-bg__particles">
+      <div className="cinematic-bg__layer cinematic-bg__spotlight" />
+      <div className="cinematic-bg__layer cinematic-bg__particles cinematic-bg__particles--desktop">
         {particles.map((p) => (
           <span
             key={p.id}
@@ -60,7 +49,6 @@ export function CinematicBackground() {
                 width: `${p.size}px`,
                 height: `${p.size}px`,
                 opacity: p.opacity,
-                ['--cinematic-drift-x' as string]: `${p.driftX}px`,
                 ['--cinematic-drift-y' as string]: `${p.driftY}px`,
                 ['--cinematic-duration' as string]: `${p.duration}s`,
                 animationDelay: `${p.delay}s`

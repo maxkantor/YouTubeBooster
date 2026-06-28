@@ -1,4 +1,4 @@
-/* Cinematic background — single environment for the entire app */
+/* Premium backdrop — Linear / Vercel inspired. CSS-only, mobile-safe. */
 
 .cinematic-bg {
   position: fixed;
@@ -6,157 +6,138 @@
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  contain: strict;
+  background: #050507;
 }
 
 .cinematic-bg__layer {
   position: absolute;
   inset: 0;
+}
+
+/* Layer 1 — near-black with subtle depth */
+.cinematic-bg__base {
+  background:
+    radial-gradient(ellipse 100% 80% at 50% -30%, rgba(16, 20, 37, 0.9) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 50% 100%, rgba(9, 11, 20, 0.85) 0%, transparent 50%),
+    linear-gradient(180deg, #050507 0%, #070910 45%, #050507 100%);
+}
+
+/* Layer 2 — precision grid (felt, not seen) */
+.cinematic-bg__grid {
+  opacity: 0.028;
+  background-image:
+    linear-gradient(rgba(248, 250, 252, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(248, 250, 252, 0.06) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 42%, black 15%, transparent 72%);
+}
+
+/* Layer 3 — cinematic blooms */
+.cinematic-bg__glow {
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.09;
+  animation: cinematic-glow-drift 48s ease-in-out infinite alternate;
   will-change: transform;
 }
 
-/* Layer 1 — solid near-black */
-.cinematic-bg__base {
-  background: #050507;
-}
-
-/* Layer 2 — soft radial glows */
-.cinematic-bg__glow {
-  border-radius: 50%;
-  filter: blur(320px);
-  opacity: 0.12;
-}
-
 .cinematic-bg__glow--purple {
-  top: -28%;
-  right: -18%;
-  width: min(920px, 88vw);
-  height: min(920px, 88vw);
-  background: radial-gradient(circle, rgba(36, 22, 62, 0.95) 0%, rgba(36, 22, 62, 0.35) 42%, transparent 72%);
-  animation: cinematic-glow-purple 28s ease-in-out infinite alternate;
+  top: -20%;
+  right: -10%;
+  width: min(720px, 85vw);
+  height: min(720px, 85vw);
+  background: radial-gradient(circle, rgba(109, 93, 246, 0.5) 0%, transparent 68%);
 }
 
 .cinematic-bg__glow--blue {
-  bottom: -32%;
-  left: -22%;
-  width: min(880px, 86vw);
-  height: min(880px, 86vw);
-  background: radial-gradient(circle, rgba(36, 59, 124, 0.9) 0%, rgba(11, 16, 32, 0.4) 45%, transparent 74%);
-  opacity: 0.1;
-  animation: cinematic-glow-blue 32s ease-in-out infinite alternate;
+  bottom: -25%;
+  left: -15%;
+  width: min(680px, 82vw);
+  height: min(680px, 82vw);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.35) 0%, transparent 70%);
+  opacity: 0.07;
+  animation-duration: 56s;
 }
 
-/* Layer 3 — mesh gradient */
-.cinematic-bg__mesh {
-  inset: -45%;
-  background:
-    radial-gradient(ellipse 55% 45% at 22% 28%, rgba(36, 22, 62, 0.22), transparent 58%),
-    radial-gradient(ellipse 50% 42% at 78% 68%, rgba(11, 16, 32, 0.35), transparent 60%),
-    radial-gradient(ellipse 40% 35% at 52% 48%, rgba(36, 59, 124, 0.12), transparent 62%);
-  opacity: 0.55;
-  animation: cinematic-mesh-drift 26s ease-in-out infinite alternate;
+/* Layer 4 — hero spotlight */
+.cinematic-bg__spotlight {
+  background: radial-gradient(ellipse 55% 42% at 50% 0%, rgba(127, 92, 255, 0.06) 0%, transparent 68%);
 }
 
-/* Layer 4 — faint diagonal rays */
-.cinematic-bg__rays {
-  opacity: 0.028;
-  background:
-    repeating-linear-gradient(
-      112deg,
-      transparent 0,
-      transparent 118px,
-      rgba(248, 250, 252, 0.14) 118px,
-      rgba(248, 250, 252, 0.14) 119px
-    ),
-    repeating-linear-gradient(
-      68deg,
-      transparent 0,
-      transparent 164px,
-      rgba(36, 59, 124, 0.12) 164px,
-      rgba(36, 59, 124, 0.12) 165px
-    );
-  mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, black 20%, transparent 78%);
-}
-
-/* Layer 5 — particles */
-.cinematic-bg__particles {
+/* Layer 5 — dust (desktop only) */
+.cinematic-bg__particles--desktop {
   inset: 0;
 }
 
 .cinematic-bg__particle {
   position: absolute;
   border-radius: 50%;
-  background: rgba(248, 250, 252, 0.85);
-  box-shadow: 0 0 6px rgba(109, 93, 246, 0.15);
-  animation: cinematic-particle-float var(--cinematic-duration, 42s) ease-in-out infinite;
+  background: rgba(248, 250, 252, 0.4);
+  animation: cinematic-dust var(--cinematic-duration, 55s) ease-in-out infinite;
   transform: translate3d(0, 0, 0);
 }
 
 /* Layer 6 — vignette */
 .cinematic-bg__vignette {
   background: radial-gradient(
-    ellipse 72% 68% at 50% 42%,
+    ellipse 76% 70% at 50% 44%,
     transparent 0%,
-    transparent 48%,
-    rgba(0, 0, 0, 0.35) 78%,
-    rgba(0, 0, 0, 0.62) 100%
+    transparent 50%,
+    rgba(0, 0, 0, 0.35) 82%,
+    rgba(0, 0, 0, 0.72) 100%
   );
 }
 
-/* Layer 7 — noise */
+/* Film grain */
 .cinematic-bg__noise {
-  opacity: 0.022;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
   background-size: 200px 200px;
 }
 
-@keyframes cinematic-glow-purple {
+@keyframes cinematic-glow-drift {
   0% {
     transform: translate3d(0, 0, 0) scale(1);
   }
   100% {
-    transform: translate3d(-2%, 1.5%, 0) scale(1.04);
+    transform: translate3d(-1.5%, 1%, 0) scale(1.04);
   }
 }
 
-@keyframes cinematic-glow-blue {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  100% {
-    transform: translate3d(2.5%, -2%, 0) scale(1.05);
-  }
-}
-
-@keyframes cinematic-mesh-drift {
-  0% {
-    transform: translate3d(-1.5%, -1%, 0) rotate(0deg) scale(1);
-  }
-  100% {
-    transform: translate3d(1.5%, 1.2%, 0) rotate(1.2deg) scale(1.03);
-  }
-}
-
-@keyframes cinematic-particle-float {
+@keyframes cinematic-dust {
   0%,
   100% {
     transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translate3d(var(--cinematic-drift-x, 8px), var(--cinematic-drift-y, -6px), 0);
+    transform: translate3d(0, var(--cinematic-drift-y, -6px), 0);
+  }
+}
+
+@media (max-width: 768px) {
+  .cinematic-bg__particles--desktop {
+    display: none;
+  }
+
+  .cinematic-bg__glow {
+    filter: blur(56px);
+    opacity: 0.06;
+  }
+
+  .cinematic-bg__grid {
+    opacity: 0.018;
+    background-size: 48px 48px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cinematic-bg__glow--purple,
-  .cinematic-bg__glow--blue,
-  .cinematic-bg__mesh,
+  .cinematic-bg__glow,
   .cinematic-bg__particle {
     animation: none !important;
   }
 }
 
-/* Ambient lighting utilities — local glows on key UI, not page backgrounds */
+/* Section ambient light — subtle, off on small screens */
 .ambient-glow {
   position: absolute;
   pointer-events: none;
@@ -166,21 +147,39 @@
 }
 
 .ambient-glow--hero {
-  width: min(640px, 82vw);
-  height: min(380px, 48vh);
-  top: 6%;
+  width: min(680px, 92vw);
+  height: min(360px, 44vh);
+  top: 0;
   left: 50%;
   transform: translateX(-50%);
-  background: radial-gradient(ellipse, rgba(109, 93, 246, 0.14), transparent 72%);
+  background: radial-gradient(ellipse, rgba(109, 93, 246, 0.11), transparent 72%);
 }
 
 .ambient-glow--pricing {
-  width: min(520px, 70vw);
-  height: min(320px, 40vh);
-  top: 20%;
+  width: min(520px, 88vw);
+  height: min(280px, 36vh);
+  top: 8%;
   left: 50%;
   transform: translateX(-50%);
-  background: radial-gradient(ellipse, rgba(109, 93, 246, 0.1), transparent 70%);
+  background: radial-gradient(ellipse, rgba(127, 92, 255, 0.08), transparent 70%);
+}
+
+.ambient-glow--dashboard {
+  width: min(720px, 96vw);
+  height: min(280px, 32vh);
+  top: -2%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse, rgba(59, 130, 246, 0.07), transparent 72%);
+}
+
+.ambient-glow--section {
+  width: min(560px, 90vw);
+  height: min(220px, 28vh);
+  top: 6%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse, rgba(109, 93, 246, 0.06), transparent 68%);
 }
 
 .ambient-glow--dialog {
@@ -190,4 +189,10 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: radial-gradient(ellipse, rgba(109, 93, 246, 0.08), transparent 65%);
+}
+
+@media (max-width: 768px) {
+  .ambient-glow {
+    display: none;
+  }
 }

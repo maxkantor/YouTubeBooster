@@ -972,6 +972,7 @@ export function LandingPage() {
 
       {/* 4. Product Dashboard Preview */}
       <section className="landing-section landing-section-alt" id="product">
+        <div className="ambient-glow ambient-glow--section" aria-hidden />
         <div className="container landing-container">
           <span className="landing-section-eyebrow">Dashboard</span>
           <h2 className="landing-section-title">Product dashboard preview</h2>
