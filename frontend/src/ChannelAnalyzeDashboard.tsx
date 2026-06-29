@@ -4,6 +4,7 @@ import { analytics } from './lib/analytics';
 import { billingApi, meApi, publicApi } from './lib/api';
 import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
 import { useAuth } from './AuthContext';
+import { DemoAnalysisLoadingPanel } from './components/DemoAnalysisLoadingPanel';
 import type { DemoPreview } from './types';
 import { UnifiedDashboard } from './UnifiedDashboard';
 
@@ -11,8 +12,7 @@ function PaidRouteLoading() {
   return (
     <div className="page narrow-page">
       <div className="surface surface-static">
-        <h1>Checking subscription</h1>
-        <p>Loading full channel analysis…</p>
+        <DemoAnalysisLoadingPanel />
       </div>
     </div>
   );

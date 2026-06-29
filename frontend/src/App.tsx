@@ -749,7 +749,7 @@ function AppInner() {
                       Sign out
                     </button>
                     <a
-                      href="https://youtubeboosterai.com/#audit"
+                      href="/#audit"
                       className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
                       title="Analyze Channel"
                     >
@@ -771,7 +771,7 @@ function AppInner() {
                       Sign Up
                     </Link>
                     <a
-                      href="https://youtubeboosterai.com/#audit"
+                      href="/#audit"
                       className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
                       title="Analyze Channel"
                     >

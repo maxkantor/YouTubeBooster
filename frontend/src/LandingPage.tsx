@@ -48,6 +48,21 @@ const UNLOCK_FEATURES = [
   'Save your report and track progress'
 ];
 
+const FREE_PREVIEW_INCLUDES = [
+  'Public channel stats snapshot',
+  'Real findings from your audit',
+  'Sample growth recommendations',
+  'AI Studio preview output'
+];
+
+const FULL_UNLOCK_FALLBACK_MODULES = [
+  'Full title rewrites',
+  'Complete keyword set',
+  'Thumbnail strategy',
+  'AI Growth Studio on AWS Bedrock',
+  'Saved full report'
+];
+
 const DEFAULT_EXAMPLE_PREVIEW_CHANNEL = '@MaxKantorCooking';
 
 type OpportunityId = 'titles' | 'description' | 'pattern' | 'ctr';
@@ -76,6 +91,7 @@ type AuditPreviewData = {
     subsTo: number;
   };
   opportunities: OpportunityPreview[];
+  apiBacked?: boolean;
 };
 
 type FullGrowthPlanUserState = 'demo' | 'loggedIn' | 'paid';
@@ -269,10 +285,43 @@ function heroInsightsFromDemo(demo: DemoPreview | null): HeroInsightLine[] {
 
 function mergeAuditPreviewWithDemo(base: AuditPreviewData, demo: DemoPreview | null): AuditPreviewData {
   if (!demo) return base;
+  const findings = (demo.findings ?? []).filter(Boolean);
+  const recommendations = (demo.previewRecommendations ?? []).filter(Boolean);
+  const topVideoTitle = demo.topVideos?.[0]?.title?.trim();
+  const titleCandidates = recommendations.filter((line) => /title|ctr|thumbnail|hook|packaging/i.test(line));
+  const titleOutput =
+    titleCandidates.length >= 2
+      ? titleCandidates.slice(0, 3)
+      : (base.opportunities.find((item) => item.id === 'titles')?.output ?? [base.titleOptimized]);
+  const keywordCandidates = recommendations.filter((line) => /keyword|seo|search|topic/i.test(line));
+  const keywords =
+    keywordCandidates.length >= 2
+      ? keywordCandidates.slice(0, 3)
+      : recommendations.length >= 3
+        ? recommendations.slice(0, 3)
+        : base.keywords;
+  const opportunities = base.opportunities.map((opportunity) => {
+    if (opportunity.id === 'titles' && titleOutput.length > 0) {
+      return { ...opportunity, output: titleOutput };
+    }
+    if (opportunity.id === 'description' && findings.length > 0) {
+      return { ...opportunity, output: findings.slice(0, 3) };
+    }
+    if (opportunity.id === 'pattern' && recommendations.length > 0) {
+      return { ...opportunity, output: recommendations.slice(0, 3) };
+    }
+    return opportunity;
+  });
+
   return {
     ...base,
     channelLabel: demo.channelHandle?.trim() ? normalizeChannelLabel(demo.channelHandle) : base.channelLabel,
-    score: demo.healthScore > 0 ? demo.healthScore : base.score
+    score: demo.healthScore > 0 ? demo.healthScore : base.score,
+    titleOriginal: topVideoTitle || base.titleOriginal,
+    titleOptimized: titleOutput[0] ?? base.titleOptimized,
+    keywords,
+    opportunities,
+    apiBacked: true
   };
 }
 
@@ -408,6 +457,9 @@ function FullGrowthPlanSection({
               <span>See the free preview before you pay</span>
               <span>One-time unlock. No subscription.</span>
             </div>
+            {!auditPreview.apiBacked && (
+              <p className="landing-growth-plan-soft-note muted">Illustrative preview — run your audit for personalized output.</p>
+            )}
             <p className="landing-growth-plan-urgency">Unlock once to save the full report and full recommendation set.</p>
           </>
         ) : (
@@ -421,8 +473,8 @@ function FullGrowthPlanSection({
 export function LandingPage() {
   const navigate = useNavigate();
   const { oneTimePriceLabel } = usePricing();
-  const faqLeftColumn = useMemo(() => HOMEPAGE_FAQS.slice(0, 3), []);
-  const faqRightColumn = useMemo(() => HOMEPAGE_FAQS.slice(3), []);
+  const faqLeftColumn = useMemo(() => HOMEPAGE_FAQS.slice(0, 4), []);
+  const faqRightColumn = useMemo(() => HOMEPAGE_FAQS.slice(4), []);
   const { session: authSession, signOut: authSignOut } = useAuth();
   const [demoInput, setDemoInput] = useState('');
   const [demoError, setDemoError] = useState('');
@@ -437,6 +489,14 @@ export function LandingPage() {
   const [productPreviewError, setProductPreviewError] = useState('');
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
+  const [auditInView, setAuditInView] = useState(false);
+
+  const enteredChannelValid = useMemo(() => {
+    const entered = demoInput.trim();
+    if (!entered) return null;
+    const validated = validateYouTubeChannelInput(entered);
+    return validated.ok ? validated.normalized : null;
+  }, [demoInput]);
 
   const previewChannelInput = demoInput.trim() || getStoredDemoChannel() || DEFAULT_DEMO_CHANNEL;
   const baseAuditPreview = useMemo(() => buildAuditPreview(previewChannelInput), [previewChannelInput]);
@@ -484,6 +544,8 @@ export function LandingPage() {
       : productPreviewData
         ? computeChannelHealthScore(productPreviewData)
         : null;
+  const pricingUnlockModules =
+    (productDemo ?? heroDemo)?.gatedModules?.filter(Boolean) ?? FULL_UNLOCK_FALLBACK_MODULES;
 
   useEffect(() => {
     analytics.landingPageView();
@@ -494,6 +556,17 @@ export function LandingPage() {
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    const el = document.getElementById('audit');
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setAuditInView(!!entry?.isIntersecting),
+      { threshold: 0.2 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
   }, []);
 
   useEffect(() => {
@@ -821,19 +894,38 @@ export function LandingPage() {
             <p className="landing-hero-sub">
               {BRAND.heroSubtitle}
             </p>
+            <p className="landing-hero-outcome muted">
+              See what&apos;s limiting CTR, retention, and search visibility — from public YouTube data.
+            </p>
             <div className="landing-hero-buttons">
-              <a href="#audit" className="btn btn-lg landing-hero-cta-primary landing-cta-premium">
+              <a
+                href="#audit"
+                className="btn btn-lg landing-hero-cta-primary landing-cta-premium"
+                aria-describedby="hero-cta-hint"
+              >
                 Analyze Your Channel
               </a>
-              <button type="button" className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium" onClick={handleOpenInstantDemo}>
+              <button
+                type="button"
+                className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium"
+                onClick={handleOpenInstantDemo}
+                aria-describedby="hero-cta-hint"
+              >
                 See Instant Demo
               </button>
             </div>
-            <p className="landing-hero-micro">Free preview • ~60 seconds • No signup required</p>
+            <p className="landing-hero-cta-hint muted" id="hero-cta-hint">
+              Primary path: audit your channel. Instant demo shows the full product on{' '}
+              <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
+                {heroChannelLabel}
+              </a>
+              .
+            </p>
             <div className="landing-hero-proof-strip" aria-label="Trust signals">
               <span><strong>Free preview</strong> before you unlock the full report</span>
-              <span><strong>No subscription</strong> or recurring tool stack</span>
-              <span><strong>CTR, SEO, retention</strong> in one channel audit</span>
+              <span><strong>Public YouTube data</strong> — no Studio login</span>
+              <span><strong>Secure checkout</strong> via Stripe</span>
+              <span><strong>One-time payment</strong> — no subscription</span>
             </div>
           </div>
           <div className="landing-hero-preview">
@@ -895,6 +987,13 @@ export function LandingPage() {
           <h2 className="landing-section-title">Run your free channel audit now</h2>
           <p className="landing-section-sub landing-nowrap-desktop">
             Paste your channel URL or @handle to get an AI growth breakdown with your highest-impact next steps.
+          </p>
+          <p className="landing-audit-demo-hint muted">
+            New here? Try the live demo on{' '}
+            <button type="button" className="landing-audit-demo-link-inline" onClick={handleOpenInstantDemo}>
+              {heroChannelLabel}
+            </button>{' '}
+            first.
           </p>
 
           <div className="landing-audit-single-panel">
@@ -1011,6 +1110,18 @@ export function LandingPage() {
                       ))}
                     </ul>
                   </div>
+                  {enteredChannelValid && !hasPremium && productPreviewData && (
+                    <div className="landing-dashboard-open-report">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={handleAnalyzeUserChannel}
+                        disabled={auditSubmitting}
+                      >
+                        {auditSubmitting ? 'Opening report…' : 'Open full report →'}
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : null}
             </div>
@@ -1104,7 +1215,11 @@ export function LandingPage() {
         <div className="container landing-container">
           <h2 className="landing-section-title">Built by a Real Creator, for Real YouTube Growth</h2>
           <p className="landing-section-sub">
-            YouTubeBooster AI is designed for creators who are tired of guessing. It reviews your channel like a growth consultant and gives you practical fixes for titles, thumbnails, SEO, packaging, and content strategy.
+            YouTubeBooster AI is designed for creators who are tired of guessing. It reviews your channel like a growth consultant and gives you practical fixes for titles, thumbnails, SEO, packaging, and content strategy.{' '}
+            <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
+              See the same audit flow on the creator&apos;s public channel ({heroChannelLabel})
+            </a>
+            .
           </p>
           <div className="landing-why-grid">
             <div className="landing-why-card">
@@ -1150,6 +1265,24 @@ export function LandingPage() {
                 <li key={i}>{f}</li>
               ))}
             </ul>
+            <div className="landing-pricing-tier-compare" aria-label="Free preview versus full unlock">
+              <div className="landing-pricing-tier-col">
+                <h3 className="landing-pricing-tier-title">Free preview</h3>
+                <ul className="landing-pricing-tier-list">
+                  {FREE_PREVIEW_INCLUDES.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="landing-pricing-tier-col">
+                <h3 className="landing-pricing-tier-title">Full unlock adds</h3>
+                <ul className="landing-pricing-tier-list">
+                  {pricingUnlockModules.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
             <div className="landing-pricing-form">
               {!authSession && (
                 <p className="muted" style={{ margin: 0 }}>
@@ -1174,6 +1307,8 @@ export function LandingPage() {
                 <li>No subscription</li>
                 <li>Instant access</li>
                 <li>Free preview before you pay</li>
+                <li>Public YouTube data only</li>
+                <li>Secure checkout via Stripe</li>
               </ul>
               <p className="landing-pricing-microcopy">Unlock the full report after the free preview when you are ready.</p>
             </div>
@@ -1264,6 +1399,11 @@ export function LandingPage() {
       {/* 8. Growth guides gateway + primary CTA */}
       <section className="landing-section landing-growth-guides-section" aria-labelledby="growth-guides-heading">
         <div className="container landing-container landing-growth-guides-inner">
+          <p className="landing-growth-guides-skip">
+            <a href="#pricing" className="landing-growth-guides-skip-link">
+              Skip to pricing
+            </a>
+          </p>
           <h2 className="landing-growth-guides-title landing-heading-display" id="growth-guides-heading">
             Explore Growth Guides, Audit Topics, and Comparisons
           </h2>
@@ -1304,7 +1444,7 @@ export function LandingPage() {
       </section>
       </main>
 
-      <div className="landing-mobile-sticky-cta">
+      <div className={`landing-mobile-sticky-cta${auditInView ? ' is-hidden' : ''}`}>
         <a href="#audit" className="btn btn-primary btn-lg landing-mobile-sticky-cta-btn">
           Analyze Your Channel
         </a>

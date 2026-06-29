@@ -76,7 +76,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
         if (!idToken) {
           setClientOnly(true);
           setTeaserLocked(true);
-          setAiNotes('Sign in and upgrade for live AI powered by AWS Bedrock — preview below is static.');
+          setAiNotes('Preview generated from your audit context. Upgrade for live AI on AWS Bedrock.');
           setAiItems(buildClientPreviewItems(action, auditPreview));
           return;
         }
@@ -228,6 +228,11 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
                     </button>
                   )}
                 </div>
+                {(teaserLocked || clientOnly) && aiItems.length > 1 && (
+                  <p className="landing-ai-unlock-hint muted">
+                    {aiItems.length - 1} more {aiAction === 'rewrite_titles' ? 'title rewrites' : 'results'} in full unlock
+                  </p>
+                )}
               </>
             ) : (
               <p className="muted">Choose an action to generate your first result set.</p>

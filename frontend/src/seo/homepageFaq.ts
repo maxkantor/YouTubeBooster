@@ -34,4 +34,9 @@ export const HOMEPAGE_FAQS: HomepageFaqItem[] = [
     answer:
       'No. You do not need to connect your YouTube login just to try the free preview or understand whether the product is relevant for your channel. The experience is designed to reduce setup friction so creators can test the audit quickly and decide whether the recommendations are useful before doing anything more. That is especially important for people who are skeptical of tools, protective of account access, or simply do not want another complicated onboarding flow. The point of the product is to make channel analysis simpler, not more technical. You should be able to review likely issues around YouTube SEO, titles, thumbnail optimization, retention, and video packaging without feeling like you are starting a software integration project. For many creators, that lighter approach is what makes it easier to get value from a channel audit in the first place.',
   },
+  {
+    question: 'What data does YouTubeBooster AI use?',
+    answer:
+      'The audit uses public YouTube channel and video metadata that is available without signing into YouTube Studio — things like channel stats, video titles, view counts, and engagement signals that help explain packaging and discoverability. It does not require your YouTube password or private Studio analytics access for the free preview. That keeps setup light while still giving you a useful read on likely growth blockers such as CTR, titles, thumbnails, SEO alignment, and retention patterns. When you unlock the full report, the product applies the same analysis approach with more complete recommendations and dashboard modules. The goal is practical growth guidance from public-facing signals, not invasive account access.',
+  },
 ];

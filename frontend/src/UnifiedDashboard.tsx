@@ -36,6 +36,7 @@ function isBuiltInShowcaseChannel(channelInput: string): boolean {
 }
 import { publicApi } from './lib/api';
 import { PaywallModal } from './PaywallModal';
+import { DemoAnalysisLoadingPanel } from './components/DemoAnalysisLoadingPanel';
 import type { CheckoutSession } from './types';
 import type { DemoPreview } from './types';
 import type { DashboardOverview } from './types';
@@ -479,6 +480,18 @@ export function UnifiedDashboard({
     : demoData?.previewRecommendations?.length
       ? [...demoData.previewRecommendations]
       : ['Growth opportunities will appear after analysis completes.'];
+  const previewRecommendationItems = isPreviewMode
+    ? demoData?.previewRecommendations?.length
+      ? [...demoData.previewRecommendations]
+      : isEmbeddedProductDemo
+        ? [...demoRecommendations]
+        : []
+    : [];
+  const visiblePreviewRecommendations = previewRecommendationItems.slice(0, 2);
+  const lockedPreviewRecommendations = previewRecommendationItems.slice(2);
+  const visiblePreviewOpportunities = isPreviewMode ? whyOpportunitiesList.slice(0, 2) : [];
+  const lockedPreviewOpportunities = isPreviewMode ? whyOpportunitiesList.slice(2) : [];
+  const previewGatedModules = demoData?.gatedModules?.filter(Boolean) ?? [];
 
   const paidMetrics = dashboardOverview?.metrics ?? [];
   const statCards = isDemo
@@ -1081,6 +1094,11 @@ export function UnifiedDashboard({
                   <p className="dashboard-preview-banner-text">
                     Unlock the full dashboard to see your real channel analytics and AI recommendations.
                   </p>
+                  {previewGatedModules.length > 0 && (
+                    <p className="dashboard-gated-modules-hint">
+                      Full unlock adds: {previewGatedModules.join(' · ')}
+                    </p>
+                  )}
                   <button type="button" className="btn btn-primary" onClick={() => setPaywallFeature('Overview')}>
                     Unlock Full Analysis
                   </button>
@@ -1124,6 +1142,10 @@ export function UnifiedDashboard({
           <p className="dashboard-demo-error">{pyError}</p>
         )}
       </header>
+
+      {isDemo && channelContextAnalyzing && (
+        <DemoAnalysisLoadingPanel channelLabel={contextDisplayName} compact />
+      )}
 
       <div className="dashboard-tabs">
         {TABS.map((tab) => (
@@ -1300,37 +1322,49 @@ export function UnifiedDashboard({
             <section className="dashboard-section why-score-section">
               <h2>Why this score</h2>
               {isPreviewMode ? (
-                <div className="preview-blur-wrap preview-why-full-blur">
-                  <div className="preview-growth-blur-inner">
-                    <div className="ai-insights-grid">
-                      <div className="ai-insights-column">
-                        <h3 className="dashboard-section-h3">Detected problems</h3>
-                        <ul className="feature-list">
-                          {whyProblemsList.map((item, i) => (
-                            <li key={i}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="ai-insights-column">
-                        <h3 className="dashboard-section-h3">Top opportunities</h3>
-                        <ul className="feature-list">
-                          {whyOpportunitiesList.map((item, i) => (
-                            <li key={i}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
+                <>
+                  <div className="ai-insights-grid preview-insights-unlocked">
+                    <div className="ai-insights-column">
+                      <h3 className="dashboard-section-h3">Detected problems</h3>
+                      <ul className="feature-list">
+                        {whyProblemsList.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="ai-insights-column">
+                      <h3 className="dashboard-section-h3">Top opportunities</h3>
+                      <ul className="feature-list">
+                        {visiblePreviewOpportunities.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
-                  <div
-                    className="preview-blur-overlay"
-                    onClick={() => setPaywallFeature('Overview')}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}
-                  >
-                    <span className="preview-blur-copy">Unlock your channel&apos;s problems &amp; opportunities</span>
-                  </div>
-                </div>
+                  {lockedPreviewOpportunities.length > 0 && (
+                    <div className="preview-blur-wrap preview-partial-blur">
+                      <ul className="feature-list preview-growth-blur-inner">
+                        {lockedPreviewOpportunities.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                      <div
+                        className="preview-blur-overlay"
+                        onClick={() => setPaywallFeature('Overview')}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}
+                      >
+                        <span className="preview-blur-copy">Unlock more opportunities</span>
+                      </div>
+                    </div>
+                  )}
+                  {previewGatedModules.length > 0 && (
+                    <p className="muted dashboard-gated-modules-footnote">
+                      Premium modules: {previewGatedModules.join(' · ')}
+                    </p>
+                  )}
+                </>
               ) : (
                 <div className="ai-insights-grid">
                   <div className="ai-insights-column">
@@ -1373,22 +1407,35 @@ export function UnifiedDashboard({
         <section className="dashboard-section">
           <h2>Recommendations</h2>
           {isPreviewMode ? (
-            <div className="preview-blur-wrap preview-recommendations-blur">
-              <ul className="feature-list preview-growth-blur-inner">
-                {(isEmbeddedProductDemo ? demoRecommendations : ['Recommendations for your channel unlock after purchase.']).map((item, i) => (
-                  <li key={i}>{item}</li>
-                ))}
-              </ul>
-              <div
-                className="preview-blur-overlay"
-                onClick={() => setPaywallFeature('Overview')}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}
-              >
-                <span className="preview-blur-copy">Unlock recommendations tailored to your channel</span>
-              </div>
-            </div>
+            <>
+              {visiblePreviewRecommendations.length > 0 ? (
+                <ul className="feature-list preview-recommendations-visible">
+                  {visiblePreviewRecommendations.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">Recommendations for your channel unlock after purchase.</p>
+              )}
+              {lockedPreviewRecommendations.length > 0 && (
+                <div className="preview-blur-wrap preview-partial-blur">
+                  <ul className="feature-list preview-growth-blur-inner">
+                    {lockedPreviewRecommendations.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                  <div
+                    className="preview-blur-overlay"
+                    onClick={() => setPaywallFeature('Overview')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && setPaywallFeature('Overview')}
+                  >
+                    <span className="preview-blur-copy">Unlock recommendations tailored to your channel</span>
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <ul className="feature-list">
               {recommendations.map((item, i) => (
