@@ -2,6 +2,7 @@ import { useMemo, type CSSProperties } from 'react';
 import { useLocation } from 'react-router-dom';
 import { resolveCinematicScene } from './cinematicScene';
 import { CreatorStudioFragments } from './CreatorStudioFragments';
+import { CinematicGlassOrbs } from './CinematicGlassOrbs';
 import './cinematic-background.css';
 
 type Particle = { id: number; x: number; y: number; size: number; opacity: number; duration: number; delay: number };
@@ -41,16 +42,22 @@ export function CinematicBackground() {
     <div className={`cinematic-bg cinematic-bg--${scene}`} aria-hidden data-scene={scene}>
       <div className="cinematic-bg__layer cinematic-bg__base" />
       <div className="cinematic-bg__layer cinematic-bg__stage" />
+      <div className="cinematic-bg__layer cinematic-bg__hub" />
       <div className="cinematic-bg__layer cinematic-bg__horizon" />
+      <div className="cinematic-bg__layer cinematic-bg__floor" />
       <div className="cinematic-bg__layer cinematic-bg__aurora" />
       <div className="cinematic-bg__layer cinematic-bg__mesh" />
       <div className="cinematic-bg__layer cinematic-bg__flares" />
       <div className="cinematic-bg__layer cinematic-bg__fragments">
         <CreatorStudioFragments scene={scene} />
       </div>
+      <div className="cinematic-bg__layer cinematic-bg__orbs">
+        <CinematicGlassOrbs />
+      </div>
       <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--purple" />
       <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--blue" />
       <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--warm" />
+      <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--warm-floor" />
       <div className="cinematic-bg__layer cinematic-bg__volumetric" />
       <div className="cinematic-bg__layer cinematic-bg__particles">
         {particles.map((p) => (

@@ -1,4 +1,4 @@
-/* Evolved cinematic backdrop — aurora + horizon depth, ultra-subtle creator fragments */
+/* Premium cinematic backdrop — aurora depth + frosted glass orbs + studio fragments */
 
 .cinematic-bg {
   position: fixed;
@@ -6,7 +6,7 @@
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background: #050507;
+  background: #040406;
   contain: strict;
 }
 
@@ -16,49 +16,77 @@
   transform: translate3d(0, 0, 0);
 }
 
-/* Layer 1 — deep black base */
+/* Layer 1 — rich midnight purple base */
 .cinematic-bg__base {
   background:
-    radial-gradient(ellipse 95% 75% at 50% 26%, #14102a 0%, transparent 58%),
-    radial-gradient(ellipse 100% 85% at 50% -18%, #101425 0%, transparent 52%),
-    radial-gradient(ellipse 85% 58% at 50% 108%, #090b14 0%, transparent 48%),
-    #050507;
+    radial-gradient(ellipse 100% 80% at 50% 22%, #1a1238 0%, transparent 52%),
+    radial-gradient(ellipse 90% 70% at 50% 30%, #14102a 0%, transparent 58%),
+    radial-gradient(ellipse 100% 85% at 50% -15%, #0e1020 0%, transparent 50%),
+    radial-gradient(ellipse 88% 60% at 50% 108%, #080a12 0%, transparent 48%),
+    #040406;
 }
 
 /* Layer 2 — center stage wash */
 .cinematic-bg__stage {
   background: radial-gradient(
-    ellipse 58% 48% at 50% 20%,
-    rgba(109, 93, 246, 0.16) 0%,
-    rgba(59, 130, 246, 0.06) 36%,
-    transparent 68%
+    ellipse 62% 52% at 50% 18%,
+    rgba(127, 92, 255, 0.2) 0%,
+    rgba(109, 93, 246, 0.1) 32%,
+    rgba(59, 130, 246, 0.05) 48%,
+    transparent 70%
   );
+}
+
+/* Layer 2b — headline hub (competitor-grade center bloom) */
+.cinematic-bg__hub {
+  background: radial-gradient(
+    ellipse 48% 42% at 50% 16%,
+    rgba(127, 92, 255, 0.14) 0%,
+    rgba(109, 93, 246, 0.06) 45%,
+    transparent 72%
+  );
+  animation: cinematic-hub-pulse 56s ease-in-out infinite alternate;
 }
 
 /* Layer 3 — horizon bloom */
 .cinematic-bg__horizon {
   top: auto;
-  height: 74%;
+  height: 78%;
   bottom: 0;
   background: radial-gradient(
-    ellipse 78% 58% at 50% 100%,
-    rgba(127, 92, 255, 0.22) 0%,
-    rgba(109, 93, 246, 0.09) 30%,
-    rgba(59, 130, 246, 0.05) 50%,
-    transparent 72%
+    ellipse 82% 62% at 50% 100%,
+    rgba(127, 92, 255, 0.28) 0%,
+    rgba(109, 93, 246, 0.12) 28%,
+    rgba(59, 130, 246, 0.06) 48%,
+    transparent 74%
   );
   animation: cinematic-horizon 52s ease-in-out infinite alternate;
 }
 
+/* Layer 3b — floor backlight behind dashboard zone */
+.cinematic-bg__floor {
+  top: auto;
+  height: 55%;
+  bottom: 0;
+  background: radial-gradient(
+    ellipse 70% 48% at 50% 100%,
+    rgba(168, 85, 247, 0.12) 0%,
+    rgba(127, 92, 255, 0.06) 40%,
+    transparent 68%
+  );
+  animation: cinematic-floor 50s ease-in-out infinite alternate;
+}
+
 /* Layer 4 — aurora */
 .cinematic-bg__aurora {
-  inset: -32%;
-  opacity: 0.68;
-  filter: blur(84px) saturate(1.22);
+  inset: -34%;
+  opacity: 0.76;
+  filter: blur(88px) saturate(1.28);
   background:
-    radial-gradient(ellipse 46% 42% at 80% 12%, rgba(127, 92, 255, 0.26) 0%, transparent 68%),
-    radial-gradient(ellipse 42% 38% at 12% 66%, rgba(59, 130, 246, 0.18) 0%, transparent 65%),
-    radial-gradient(ellipse 38% 32% at 50% 46%, rgba(109, 93, 246, 0.11) 0%, transparent 62%);
+    radial-gradient(ellipse 48% 44% at 82% 10%, rgba(127, 92, 255, 0.32) 0%, transparent 66%),
+    radial-gradient(ellipse 44% 40% at 10% 62%, rgba(59, 130, 246, 0.22) 0%, transparent 64%),
+    radial-gradient(ellipse 40% 34% at 50% 44%, rgba(109, 93, 246, 0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 36% 30% at 28% 18%, rgba(236, 72, 153, 0.06) 0%, transparent 58%);
   animation: cinematic-aurora 56s ease-in-out infinite alternate;
 }
 
@@ -77,13 +105,13 @@
 
 /* Layer 6 — lens flares */
 .cinematic-bg__flares {
-  opacity: 0.58;
+  opacity: 0.72;
   background:
+    linear-gradient(118deg, rgba(251, 146, 60, 0.09) 0%, rgba(239, 68, 68, 0.04) 12%, transparent 30%),
     linear-gradient(125deg, rgba(251, 146, 60, 0.05) 0%, transparent 26%),
-    linear-gradient(128deg, rgba(236, 72, 153, 0.04) 0%, transparent 28%),
-    linear-gradient(232deg, rgba(127, 92, 255, 0.08) 0%, transparent 26%),
-    linear-gradient(315deg, rgba(59, 130, 246, 0.06) 82%, transparent 100%);
-  mask-image: radial-gradient(ellipse 92% 88% at 50% 44%, black 28%, transparent 78%);
+    linear-gradient(232deg, rgba(127, 92, 255, 0.1) 0%, transparent 24%),
+    linear-gradient(315deg, rgba(59, 130, 246, 0.08) 78%, transparent 100%);
+  mask-image: radial-gradient(ellipse 94% 90% at 50% 42%, black 26%, transparent 76%);
 }
 
 /* Layer 7 — ultra-subtle creator fragments (2–8% effective visibility) */
@@ -185,10 +213,70 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 15% 68%, rgba(127, 92, 255, 0.08) 0%, transparent 7%),
-    radial-gradient(circle at 88% 22%, rgba(59, 130, 246, 0.07) 0%, transparent 6%),
-    radial-gradient(circle at 42% 88%, rgba(251, 146, 60, 0.05) 0%, transparent 8%);
+    radial-gradient(circle at 12% 22%, rgba(251, 146, 60, 0.06) 0%, transparent 9%),
+    radial-gradient(circle at 8% 68%, rgba(127, 92, 255, 0.1) 0%, transparent 8%),
+    radial-gradient(circle at 92% 18%, rgba(59, 130, 246, 0.09) 0%, transparent 7%),
+    radial-gradient(circle at 88% 72%, rgba(127, 92, 255, 0.07) 0%, transparent 8%),
+    radial-gradient(circle at 48% 92%, rgba(168, 85, 247, 0.06) 0%, transparent 10%);
   animation: cinematic-bokeh 60s ease-in-out infinite alternate;
+}
+
+/* Layer 7b — frosted glass depth orbs */
+.cinematic-bg__orbs {
+  inset: 0;
+  overflow: hidden;
+}
+
+.cinematic-glass-orbs {
+  position: absolute;
+  inset: 0;
+}
+
+.cinematic-glass-orbs__orb {
+  position: absolute;
+  opacity: 0.42;
+  filter: blur(0.4px);
+  animation: cinematic-orb-float var(--orb-dur, 54s) ease-in-out infinite;
+  animation-delay: var(--orb-delay, 0s);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.cinematic-glass-orbs__orb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 12px 40px rgba(109, 93, 246, 0.18));
+}
+
+.cinematic-glass-orbs__orb--tile {
+  top: 6%;
+  left: 3%;
+  width: min(128px, 14vw);
+  height: min(128px, 14vw);
+}
+
+.cinematic-glass-orbs__orb--chart {
+  top: 4%;
+  right: 4%;
+  width: min(118px, 13vw);
+  height: min(118px, 13vw);
+}
+
+.cinematic-glass-orbs__orb--spark {
+  top: 36%;
+  right: 7%;
+  width: min(96px, 11vw);
+  height: min(96px, 11vw);
+  opacity: 0.36;
+}
+
+.cinematic-glass-orbs__orb--grid {
+  bottom: 16%;
+  left: 5%;
+  width: min(148px, 16vw);
+  height: min(110px, 12vw);
+  opacity: 0.32;
 }
 
 /* Scene emphasis */
@@ -202,7 +290,14 @@
 
 .cinematic-bg--neural .creator-fragments__neural { opacity: 0.14 !important; }
 
-.cinematic-bg--pricing .cinematic-bg__fragments { opacity: 0.35; filter: blur(52px); }
+.cinematic-bg--pricing .cinematic-bg__fragments,
+.cinematic-bg--pricing .cinematic-bg__orbs {
+  opacity: 0.4;
+}
+
+.cinematic-bg--pricing .cinematic-bg__fragments {
+  filter: blur(52px);
+}
 .cinematic-bg--pricing .cinematic-bg__aurora { opacity: 0.5; }
 
 .cinematic-bg--infra .creator-fragments__analytics { opacity: 0.12 !important; }
@@ -216,36 +311,44 @@
 }
 
 .cinematic-bg__glow--purple {
-  top: -14%;
-  right: -5%;
-  width: min(720px, 84vw);
-  height: min(720px, 84vw);
-  opacity: 0.13;
-  background: radial-gradient(circle, rgba(127, 92, 255, 0.58) 0%, transparent 68%);
+  top: -16%;
+  right: -4%;
+  width: min(780px, 88vw);
+  height: min(780px, 88vw);
+  opacity: 0.16;
+  background: radial-gradient(circle, rgba(127, 92, 255, 0.65) 0%, transparent 66%);
 }
 
 .cinematic-bg__glow--blue {
-  top: -6%;
-  left: -12%;
-  width: min(640px, 72vw);
-  height: min(640px, 72vw);
-  opacity: 0.1;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.42) 0%, transparent 70%);
+  top: -8%;
+  left: -14%;
+  width: min(700px, 76vw);
+  height: min(700px, 76vw);
+  opacity: 0.12;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.48) 0%, transparent 68%);
   animation-duration: 52s;
 }
 
 .cinematic-bg__glow--warm {
-  bottom: -12%;
-  left: 30%;
-  width: min(760px, 78vw);
-  height: min(380px, 38vh);
-  border-radius: 50%;
-  opacity: 0.08;
-  background: radial-gradient(ellipse, rgba(251, 146, 60, 0.14) 0%, transparent 72%);
-  animation-duration: 50s;
+  top: 2%;
+  left: -6%;
+  width: min(520px, 55vw);
+  height: min(520px, 55vw);
+  opacity: 0.07;
+  background: radial-gradient(circle, rgba(251, 146, 60, 0.22) 0%, transparent 70%);
+  animation-duration: 54s;
 }
 
-/* Volumetric rays */
+.cinematic-bg__glow--warm-floor {
+  bottom: -14%;
+  left: 22%;
+  width: min(840px, 86vw);
+  height: min(420px, 42vh);
+  border-radius: 50%;
+  opacity: 0.1;
+  background: radial-gradient(ellipse, rgba(251, 146, 60, 0.12) 0%, rgba(127, 92, 255, 0.08) 42%, transparent 72%);
+  animation-duration: 50s;
+}
 .cinematic-bg__volumetric {
   opacity: 0.32;
   background:
@@ -290,6 +393,22 @@
   opacity: 0.014;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
   background-size: 200px 200px;
+}
+
+@keyframes cinematic-hub-pulse {
+  0% { opacity: 0.88; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes cinematic-floor {
+  0% { opacity: 0.85; transform: translate3d(0, 0, 0); }
+  100% { opacity: 1; transform: translate3d(0, -1.2%, 0); }
+}
+
+@keyframes cinematic-orb-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  33% { transform: translate3d(8px, -12px, 0) rotate(1.8deg); }
+  66% { transform: translate3d(-6px, 10px, 0) rotate(-1.2deg); }
 }
 
 @keyframes cinematic-aurora {
@@ -378,12 +497,42 @@
   .creator-fragments__filmstrip {
     display: none;
   }
+
+  .cinematic-glass-orbs__orb--grid,
+  .cinematic-glass-orbs__orb--spark {
+    opacity: 0.28;
+  }
 }
 
 @media (max-width: 768px) {
   .cinematic-bg__fragments {
-    opacity: 0.4;
-    filter: blur(28px);
+    opacity: 0.38;
+    filter: blur(24px);
+  }
+
+  .cinematic-bg__orbs {
+    opacity: 0.55;
+  }
+
+  .cinematic-glass-orbs__orb--grid,
+  .cinematic-glass-orbs__orb--spark {
+    display: none;
+  }
+
+  .cinematic-glass-orbs__orb--tile {
+    top: 3%;
+    left: -2%;
+    width: 80px;
+    height: 80px;
+    opacity: 0.3;
+  }
+
+  .cinematic-glass-orbs__orb--chart {
+    top: 2%;
+    right: -2%;
+    width: 76px;
+    height: 76px;
+    opacity: 0.28;
   }
 
   .creator-fragments__waveform {
@@ -419,13 +568,17 @@
   .cinematic-bg__aurora,
   .cinematic-bg__mesh,
   .cinematic-bg__horizon,
+  .cinematic-bg__floor,
+  .cinematic-bg__hub,
   .cinematic-bg__glow,
   .cinematic-bg__fragments,
+  .cinematic-bg__orbs,
   .cinematic-bg__volumetric,
   .cinematic-bg__fog,
   .cinematic-bg__particle,
   .creator-fragments svg,
-  .creator-fragments__bokeh {
+  .creator-fragments__bokeh,
+  .cinematic-glass-orbs__orb {
     animation: none !important;
   }
 }
