@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { aiApi } from '../lib/api';
 import type { AiGenerateAction } from '../types';
 
@@ -114,6 +114,16 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
     },
     [auditPreview, hasPremium, idToken]
   );
+
+  const autoRunDone = useRef(false);
+  useEffect(() => {
+    if (autoRunDone.current) return;
+    autoRunDone.current = true;
+    const timer = window.setTimeout(() => {
+      void runGeneration('rewrite_titles');
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [runGeneration]);
 
   const showBlurOnIndex = (index: number) => {
     if (!teaserLocked && hasPremium && !clientOnly) return false;

@@ -3,7 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { MarketingFooter } from './components/MarketingFooter';
 import { analytics } from './lib/analytics';
-import { DEFAULT_DEMO_CHANNEL, getStoredDemoChannel, setStoredDemoChannel } from './lib/demo';
+import {
+  buildYoutubeChannelCanonicalUrl,
+  DEFAULT_DEMO_CHANNEL,
+  getStoredDemoChannel,
+  setStoredDemoChannel
+} from './lib/demo';
+import type { DemoPreview } from './types';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
 import { billingApi, meApi, publicApi } from './lib/api';
 import { useAuth } from './AuthContext';
@@ -22,26 +28,6 @@ type ProductPreviewMetrics = {
   engagementRate: number;
   topVideos: Array<{ id: string; title: string; views: number }>;
 };
-
-function mapAnalyzeResponseToProductPreview(
-  overview: Awaited<ReturnType<typeof publicApi.analyzeChannel>>
-): ProductPreviewMetrics {
-  const topVideos = (overview.video_performance?.top_videos_by_views ?? [])
-    .slice(0, 4)
-    .map((v) => ({
-      id: v.video_id,
-      title: v.title,
-      views: Number(v.view_count ?? 0),
-    }));
-
-  return {
-    subscribers: Number(overview.channel_info?.subscriber_count ?? 0),
-    totalViews: Number(overview.channel_info?.view_count ?? 0),
-    videos: Number(overview.channel_info?.video_count ?? 0),
-    engagementRate: Number(overview.video_performance?.avg_engagement_rate ?? 0),
-    topVideos,
-  };
-}
 
 function computeChannelHealthScore(metrics: {
   subscribers: number;
@@ -253,6 +239,43 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US').format(Math.max(0, Math.round(value)));
 }
 
+function mapDemoToProductPreview(demo: DemoPreview): ProductPreviewMetrics {
+  return {
+    subscribers: Number(demo.subscriberCount ?? 0),
+    totalViews: Number(demo.totalViews ?? 0),
+    videos: Number(demo.videoCount ?? 0),
+    engagementRate: Number(demo.avgEngagement ?? 0),
+    topVideos: (demo.topVideos ?? []).slice(0, 4).map((v) => ({
+      id: v.videoId,
+      title: v.title,
+      views: Number(v.viewCount ?? 0)
+    }))
+  };
+}
+
+type HeroInsightLine = { tag: string; text: string; tagVariant: 'leak' | 'bad' | 'opp' };
+
+function heroInsightsFromDemo(demo: DemoPreview | null): HeroInsightLine[] {
+  if (!demo) return [];
+  const lines = [...(demo.findings ?? []), ...(demo.previewRecommendations ?? [])].filter(Boolean).slice(0, 4);
+  const tags: HeroInsightLine['tag'][] = ['CTR', 'Title', 'SEO', 'Opportunity'];
+  const variants: HeroInsightLine['tagVariant'][] = ['leak', 'bad', 'opp', 'opp'];
+  return lines.map((text, i) => ({
+    tag: tags[i % tags.length],
+    text,
+    tagVariant: variants[i % variants.length]
+  }));
+}
+
+function mergeAuditPreviewWithDemo(base: AuditPreviewData, demo: DemoPreview | null): AuditPreviewData {
+  if (!demo) return base;
+  return {
+    ...base,
+    channelLabel: demo.channelHandle?.trim() ? normalizeChannelLabel(demo.channelHandle) : base.channelLabel,
+    score: demo.healthScore > 0 ? demo.healthScore : base.score
+  };
+}
+
 function FullGrowthPlanSection({
   userState,
   auditPreview,
@@ -403,30 +426,20 @@ export function LandingPage() {
   const { session: authSession, signOut: authSignOut } = useAuth();
   const [demoInput, setDemoInput] = useState('');
   const [demoError, setDemoError] = useState('');
+  const [auditSubmitting, setAuditSubmitting] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
   const [userChannelUrl, setUserChannelUrl] = useState('');
-  const [scoreDisplay, setScoreDisplay] = useState(0);
-  const [auditRevealed, setAuditRevealed] = useState(false);
-  const [opportunityStates, setOpportunityStates] = useState<Record<OpportunityId, 'idle' | 'showing' | 'locked'>>({
-    titles: 'idle',
-    description: 'idle',
-    pattern: 'idle',
-    ctr: 'idle'
-  });
-  const [fixCardsBlurred, setFixCardsBlurred] = useState([false, false, false, false]);
+  const [demoPreviewByChannel, setDemoPreviewByChannel] = useState<Record<string, DemoPreview>>({});
   const [productPreviewLoading, setProductPreviewLoading] = useState(false);
   const [productPreviewError, setProductPreviewError] = useState('');
-  const [productPreviewData, setProductPreviewData] = useState<ProductPreviewMetrics | null>(null);
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
-  const auditSectionRef = useRef<HTMLElement | null>(null);
-  const opportunityTimeoutsRef = useRef<Record<string, number>>({});
 
-  const previewChannelInput = demoInput.trim() || getStoredDemoChannel() || DEFAULT_EXAMPLE_PREVIEW_CHANNEL;
-  const auditPreview = useMemo(() => buildAuditPreview(previewChannelInput), [previewChannelInput]);
+  const previewChannelInput = demoInput.trim() || getStoredDemoChannel() || DEFAULT_DEMO_CHANNEL;
+  const baseAuditPreview = useMemo(() => buildAuditPreview(previewChannelInput), [previewChannelInput]);
   const paidPreviewChannelInput = useMemo(() => {
     const entered = demoInput.trim();
     if (entered) {
@@ -435,16 +448,42 @@ export function LandingPage() {
     }
     return userChannelUrl.trim();
   }, [demoInput, userChannelUrl]);
-  const productPreviewChannelInput = hasPremium ? paidPreviewChannelInput : DEFAULT_DEMO_CHANNEL;
+  const productPreviewChannelInput = useMemo(() => {
+    if (hasPremium) return paidPreviewChannelInput;
+    const entered = demoInput.trim();
+    if (entered) {
+      const validated = validateYouTubeChannelInput(entered);
+      if (validated.ok) return validated.normalized;
+    }
+    return DEFAULT_DEMO_CHANNEL;
+  }, [hasPremium, paidPreviewChannelInput, demoInput]);
+  const heroDemo = demoPreviewByChannel[DEFAULT_DEMO_CHANNEL] ?? null;
+  const productDemo = productPreviewChannelInput.trim()
+    ? demoPreviewByChannel[productPreviewChannelInput.trim()] ?? null
+    : null;
+  const auditPreview = useMemo(
+    () => mergeAuditPreviewWithDemo(baseAuditPreview, productDemo ?? heroDemo),
+    [baseAuditPreview, productDemo, heroDemo]
+  );
   const productPreviewLabel = normalizeChannelLabel(productPreviewChannelInput || DEFAULT_DEMO_CHANNEL);
+  const heroChannelLabel = normalizeChannelLabel(heroDemo?.channelHandle || DEFAULT_EXAMPLE_PREVIEW_CHANNEL);
+  const heroChannelUrl = buildYoutubeChannelCanonicalUrl(DEFAULT_DEMO_CHANNEL);
+  const heroInsights = useMemo(() => heroInsightsFromDemo(heroDemo), [heroDemo]);
+  const heroHealthScore = heroDemo?.healthScore ?? null;
+  const productPreviewData = productDemo ? mapDemoToProductPreview(productDemo) : null;
   const productPreviewSubtitle = hasPremium
     ? productPreviewChannelInput
       ? `Live snapshot for ${productPreviewLabel} using your paid channel data, channel audit signals, and real YouTube analytics.`
       : 'Paid account detected. Add a valid channel URL above to load your real YouTube analytics, packaging insights, and top videos.'
-    : `Live preview for ${productPreviewLabel} using public YouTube analytics. Upgrade to analyze your own channel.`;
-  const channelHealthScore = productPreviewData
-    ? computeChannelHealthScore(productPreviewData)
-    : null;
+    : productPreviewChannelInput !== DEFAULT_DEMO_CHANNEL
+      ? `Live preview for ${productPreviewLabel} from public YouTube data. Unlock to save your full personalized report.`
+      : `Example preview for ${productPreviewLabel} using public YouTube analytics. Enter your channel above to preview yours.`;
+  const channelHealthScore =
+    productDemo?.healthScore && productDemo.healthScore > 0
+      ? productDemo.healthScore
+      : productPreviewData
+        ? computeChannelHealthScore(productPreviewData)
+        : null;
 
   useEffect(() => {
     analytics.landingPageView();
@@ -513,59 +552,9 @@ export function LandingPage() {
   }, []);
 
   useEffect(() => {
-    const el = auditSectionRef.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          setAuditRevealed(true);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.25 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!auditRevealed) return;
-    let frame = 0;
-    const target = Math.max(0, Math.min(100, auditPreview.score));
-    const step = Math.max(1, Math.ceil(target / 36));
-    const timer = window.setInterval(() => {
-      frame += step;
-      setScoreDisplay((prev) => {
-        const next = Math.max(prev, frame);
-        return next >= target ? target : next;
-      });
-      if (frame >= target) window.clearInterval(timer);
-    }, 24);
-    return () => window.clearInterval(timer);
-  }, [auditRevealed, auditPreview.score]);
-
-  useEffect(() => {
-    if (!auditRevealed) return;
-    setFixCardsBlurred([false, false, false, false]);
-    const timers = [
-      window.setTimeout(() => setFixCardsBlurred((prev) => [true, prev[1], prev[2], prev[3]]), 2200),
-      window.setTimeout(() => setFixCardsBlurred((prev) => [prev[0], true, prev[2], prev[3]]), 3000),
-      window.setTimeout(() => setFixCardsBlurred((prev) => [prev[0], prev[1], true, prev[3]]), 3800),
-      window.setTimeout(() => setFixCardsBlurred((prev) => [prev[0], prev[1], prev[2], true]), 4600)
-    ];
-    return () => timers.forEach((id) => window.clearTimeout(id));
-  }, [auditRevealed]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(opportunityTimeoutsRef.current).forEach((id) => window.clearTimeout(id));
-    };
-  }, []);
-
-  useEffect(() => {
-    const channel = productPreviewChannelInput.trim();
-    if (!channel) {
-      setProductPreviewData(null);
+    const productChannel = productPreviewChannelInput.trim();
+    const channels = Array.from(new Set([DEFAULT_DEMO_CHANNEL, productChannel].filter(Boolean)));
+    if (!productChannel) {
       setProductPreviewError('');
       setProductPreviewLoading(false);
       return;
@@ -575,16 +564,17 @@ export function LandingPage() {
     setProductPreviewLoading(true);
     setProductPreviewError('');
 
-    (async () => {
+    void (async () => {
       try {
-        const overview = await publicApi.analyzeChannel(channel, 30);
-
+        const results = await Promise.all(channels.map((channel) => publicApi.runDemo(channel)));
         if (cancelled) return;
-
-        setProductPreviewData(mapAnalyzeResponseToProductPreview(overview));
+        const next: Record<string, DemoPreview> = {};
+        channels.forEach((channel, index) => {
+          next[channel] = results[index];
+        });
+        setDemoPreviewByChannel((prev) => ({ ...prev, ...next }));
       } catch (err) {
         if (cancelled) return;
-        setProductPreviewData(null);
         setProductPreviewError(err instanceof Error ? err.message : 'Could not load live dashboard preview data.');
       } finally {
         if (!cancelled) setProductPreviewLoading(false);
@@ -595,15 +585,6 @@ export function LandingPage() {
       cancelled = true;
     };
   }, [productPreviewChannelInput]);
-
-  function handleTryAIFix(id: OpportunityId) {
-    const current = opportunityTimeoutsRef.current[id];
-    if (current) window.clearTimeout(current);
-    setOpportunityStates((prev) => ({ ...prev, [id]: 'showing' }));
-    opportunityTimeoutsRef.current[id] = window.setTimeout(() => {
-      setOpportunityStates((prev) => ({ ...prev, [id]: 'locked' }));
-    }, 2000);
-  }
 
   function handleOpenInstantDemo() {
     setStoredDemoChannel(DEFAULT_DEMO_CHANNEL);
@@ -624,6 +605,7 @@ export function LandingPage() {
       return;
     }
     const normalized = validated.normalized;
+    setAuditSubmitting(true);
     analytics.auditUrlEntered(normalized);
     analytics.channelAuditStarted(normalized);
     setStoredDemoChannel(normalized);
@@ -635,6 +617,7 @@ export function LandingPage() {
     } else {
       navigate(`/demo?channel=${encodeURIComponent(normalized)}`, { replace: true, state: { channelInput: normalized } });
     }
+    setAuditSubmitting(false);
   }
 
   async function handleUnlockReport() {
@@ -653,10 +636,12 @@ export function LandingPage() {
       if (!channelInput && storedDemo) channelInput = storedDemo;
 
       if (!authSession) {
-        // Never allow purchase when not authenticated. Redirect to signup and let the user unlock
-        // again after authentication.
+        const entered = demoInput.trim();
+        const enteredValid = entered ? validateYouTubeChannelInput(entered) : null;
+        const signupChannel =
+          enteredValid?.ok ? enteredValid.normalized : storedDemo || getStoredDemoChannel() || '';
         navigate(
-          `/auth/signup?returnTo=${encodeURIComponent('/#pricing')}&channel=${encodeURIComponent('')}&plan=premium`
+          `/auth/signup?returnTo=${encodeURIComponent('/#pricing')}&channel=${encodeURIComponent(signupChannel)}&plan=premium`
         );
         return;
       }
@@ -793,7 +778,7 @@ export function LandingPage() {
                   Sign out
                 </button>
                 <a
-                  href="https://youtubeboosterai.com/#audit"
+                  href="#audit"
                   className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
                   title="Analyze Channel"
                 >
@@ -809,7 +794,7 @@ export function LandingPage() {
                   Sign Up
                 </Link>
                 <a
-                  href="https://youtubeboosterai.com/#audit"
+                  href="#audit"
                   className="landing-nav-link landing-nav-cta landing-nav-cta-primary"
                   title="Analyze Channel"
                 >
@@ -851,7 +836,7 @@ export function LandingPage() {
               <span><strong>CTR, SEO, retention</strong> in one channel audit</span>
             </div>
           </div>
-          <div className="landing-hero-preview" aria-hidden>
+          <div className="landing-hero-preview">
             <div className="landing-hero-insight-panel landing-insight-glass">
               <div className="landing-insight-panel-top">
                 <div className="landing-insight-panel-chrome" aria-hidden>
@@ -861,41 +846,43 @@ export function LandingPage() {
                 </div>
                 <span className="landing-insight-pulse" aria-hidden />
                 <span className="landing-insight-panel-label-single">Live Channel Audit</span>
-                <span className="landing-insight-panel-status">Scanning</span>
+                <span className="landing-insight-panel-status">{heroDemo ? 'Live preview' : 'Loading'}</span>
               </div>
-              <div className="landing-insight-health-row" aria-hidden>
-                <div className="landing-insight-health-ring">
-                  <span>{channelHealthScore ?? '…'}</span>
+              <div className="landing-insight-health-row">
+                <div className="landing-insight-health-ring" aria-label={heroHealthScore != null ? `Channel health score ${heroHealthScore}` : 'Channel health score loading'}>
+                  <span>{heroHealthScore ?? '…'}</span>
                 </div>
                 <div className="landing-insight-health-meta">
                   <span className="landing-insight-health-label">Channel Health</span>
-                  <span className="landing-insight-health-track">
+                  <span className="landing-insight-health-track" aria-hidden>
                     <span
                       className="landing-insight-health-fill"
-                      style={{ width: `${channelHealthScore ?? 0}%` }}
+                      style={{ width: `${heroHealthScore ?? 0}%` }}
                     />
                   </span>
                 </div>
               </div>
               <ul className="landing-insight-list">
-                <li className="landing-insight-item landing-insight-item-pulse">
-                  <span className="landing-insight-tag landing-insight-tag-leak">CTR</span>
-                  <span className="landing-insight-text">Low CTR (2.1%) — below your niche average</span>
-                </li>
-                <li className="landing-insight-item">
-                  <span className="landing-insight-tag landing-insight-tag-bad">Title</span>
-                  <span className="landing-insight-text">Title not optimized for search</span>
-                </li>
-                <li className="landing-insight-item">
-                  <span className="landing-insight-tag landing-insight-tag-opp">SEO</span>
-                  <span className="landing-insight-text">Missed high-volume keyword</span>
-                </li>
-                <li className="landing-insight-item">
-                  <span className="landing-insight-tag landing-insight-tag-opp">Opportunity</span>
-                  <span className="landing-insight-text">Video with breakout potential</span>
-                </li>
+                {heroInsights.length > 0 ? (
+                  heroInsights.map((insight) => (
+                    <li key={`${insight.tag}-${insight.text}`} className="landing-insight-item landing-insight-item-pulse">
+                      <span className={`landing-insight-tag landing-insight-tag-${insight.tagVariant}`}>{insight.tag}</span>
+                      <span className="landing-insight-text">{insight.text}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="landing-insight-item">
+                    <span className="landing-insight-text muted">Loading channel insights…</span>
+                  </li>
+                )}
               </ul>
-              <p className="landing-insight-footer">Analyze your channel to see your results.</p>
+              <p className="landing-insight-footer">
+                Example:{' '}
+                <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
+                  {heroChannelLabel}
+                </a>
+                . Paste your channel above for your results.
+              </p>
             </div>
           </div>
         </div>
@@ -930,8 +917,9 @@ export function LandingPage() {
               type="button"
               className="btn btn-primary btn-lg landing-audit-cta"
               onClick={handleAnalyzeUserChannel}
+              disabled={auditSubmitting}
             >
-              Analyze My Channel
+              {auditSubmitting ? 'Starting audit…' : 'Analyze My Channel'}
             </button>
             {demoError && (
               <p id="audit-channel-error" className="landing-demo-error" role="alert">
@@ -1094,6 +1082,23 @@ export function LandingPage() {
         onUnlock={handleUnlockReport}
       />
 
+      <section className="landing-section landing-section-alt" id="growth-plan">
+        <div className="container landing-container">
+          <span className="landing-section-eyebrow">Growth plan</span>
+          <h2 className="landing-section-title">Your personalized growth plan</h2>
+          <p className="landing-section-sub">
+            Preview what unlocks after your free audit — titles, keywords, and thumbnail strategy tailored to your channel.
+          </p>
+          <FullGrowthPlanSection
+            userState={fullGrowthPlanUserState}
+            auditPreview={auditPreview}
+            pricingLoading={pricingLoading}
+            onUnlock={handleUnlockReport}
+            onViewFullReport={handleViewFullReport}
+          />
+        </div>
+      </section>
+
       {/* 5. Why Creators Buy */}
       <section className="landing-section landing-section-alt landing-why-section">
         <div className="container landing-container">
@@ -1168,6 +1173,7 @@ export function LandingPage() {
                 <li>One-time payment</li>
                 <li>No subscription</li>
                 <li>Instant access</li>
+                <li>Free preview before you pay</li>
               </ul>
               <p className="landing-pricing-microcopy">Unlock the full report after the free preview when you are ready.</p>
             </div>
@@ -1297,6 +1303,12 @@ export function LandingPage() {
         </div>
       </section>
       </main>
+
+      <div className="landing-mobile-sticky-cta">
+        <a href="#audit" className="btn btn-primary btn-lg landing-mobile-sticky-cta-btn">
+          Analyze Your Channel
+        </a>
+      </div>
 
       <MarketingFooter showFinalCta />
     </div>
