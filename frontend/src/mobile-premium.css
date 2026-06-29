@@ -3,7 +3,7 @@
 @media (max-width: 1023px) {
   .landing-hero-grid {
     grid-template-columns: 1fr !important;
-    gap: 28px !important;
+    gap: 18px !important;
   }
 
   .landing-hero-preview {
@@ -22,10 +22,10 @@
   :root {
     --app-max-width: 100%;
     --dashboard-max-width: 100%;
-    --section-pad-y: 48px;
-    --hero-pad-top: 52px;
-    --hero-pad-bottom: 44px;
-    --nav-height: 60px;
+    --section-pad-y: 36px;
+    --hero-pad-top: 16px;
+    --hero-pad-bottom: 16px;
+    --nav-height: 56px;
     --glass-blur: blur(14px);
     --card-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
     --card-hover-lift: none;
@@ -37,22 +37,22 @@
   }
 
   .page {
-    padding: 20px max(16px, env(safe-area-inset-right, 0px)) 56px max(16px, env(safe-area-inset-left, 0px));
+    padding: 16px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px));
   }
 
   .page.dashboard-page {
-    padding-top: 16px;
+    padding-top: 12px;
   }
 
   .landing-hero {
-    padding-top: max(48px, calc(env(safe-area-inset-top, 0px) + 24px)) !important;
-    padding-bottom: 40px !important;
-    padding-left: max(16px, env(safe-area-inset-left, 0px)) !important;
-    padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
   }
 
   .landing-section {
-    padding: 48px max(16px, env(safe-area-inset-left, 0px)) !important;
+    padding: 32px max(16px, env(safe-area-inset-left, 0px)) !important;
   }
 
   .landing-hero-brand-h1 {
@@ -62,7 +62,7 @@
 
   .landing-hero-tagline-h2 {
     font-size: clamp(0.95rem, 3.8vw, 1.15rem);
-    margin-bottom: 12px;
+    margin-bottom: 8px;
   }
 
   .landing-hero-sub,
@@ -103,8 +103,9 @@
     flex-wrap: nowrap !important;
     justify-content: space-between !important;
     align-items: center !important;
-    padding: max(10px, env(safe-area-inset-top, 0px)) 16px 10px !important;
+    padding: 8px 16px !important;
     gap: 8px !important;
+    min-height: var(--nav-height);
   }
 
   .landing-logo-premium {

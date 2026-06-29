@@ -1,4 +1,4 @@
-/* Premium cinematic backdrop — one environment, zero horizontal banding */
+/* Premium cinematic backdrop — competitor-grade depth, zero banding */
 
 .cinematic-bg {
   position: fixed;
@@ -14,67 +14,161 @@
   inset: 0;
 }
 
-/* Layer 1 — deep base */
+/* Layer 1 — deep base with rich center */
 .cinematic-bg__base {
   background:
-    radial-gradient(ellipse 120% 80% at 50% -40%, #101425 0%, transparent 55%),
-    radial-gradient(ellipse 90% 60% at 50% 110%, #090b14 0%, transparent 50%),
+    radial-gradient(ellipse 90% 70% at 50% 28%, #14102a 0%, transparent 58%),
+    radial-gradient(ellipse 100% 80% at 50% -20%, #101425 0%, transparent 52%),
+    radial-gradient(ellipse 80% 55% at 50% 105%, #090b14 0%, transparent 48%),
     #050507;
 }
 
-/* Layer 2 — soft aurora (large ellipses only — never stripes) */
+/* Layer 2 — center stage wash (headline zone) */
+.cinematic-bg__stage {
+  background: radial-gradient(
+    ellipse 55% 45% at 50% 22%,
+    rgba(109, 93, 246, 0.14) 0%,
+    rgba(59, 130, 246, 0.05) 38%,
+    transparent 68%
+  );
+}
+
+/* Layer 3 — horizon bloom behind dashboard / lower content */
+.cinematic-bg__horizon {
+  top: auto;
+  height: 72%;
+  bottom: 0;
+  background: radial-gradient(
+    ellipse 75% 55% at 50% 100%,
+    rgba(127, 92, 255, 0.2) 0%,
+    rgba(109, 93, 246, 0.08) 32%,
+    rgba(59, 130, 246, 0.04) 52%,
+    transparent 72%
+  );
+  animation: cinematic-horizon 50s ease-in-out infinite alternate;
+}
+
+/* Layer 4 — aurora fields */
 .cinematic-bg__aurora {
-  inset: -35%;
-  opacity: 0.55;
-  filter: blur(72px) saturate(1.15);
+  inset: -30%;
+  opacity: 0.62;
+  filter: blur(80px) saturate(1.2);
   background:
-    radial-gradient(ellipse 42% 38% at 72% 18%, rgba(109, 93, 246, 0.22) 0%, transparent 68%),
-    radial-gradient(ellipse 38% 34% at 18% 72%, rgba(59, 130, 246, 0.14) 0%, transparent 65%),
-    radial-gradient(ellipse 32% 28% at 48% 42%, rgba(127, 92, 255, 0.08) 0%, transparent 62%);
-  animation: cinematic-aurora 52s ease-in-out infinite alternate;
+    radial-gradient(ellipse 44% 40% at 78% 14%, rgba(127, 92, 255, 0.24) 0%, transparent 68%),
+    radial-gradient(ellipse 40% 36% at 14% 68%, rgba(59, 130, 246, 0.16) 0%, transparent 65%),
+    radial-gradient(ellipse 36% 30% at 50% 48%, rgba(109, 93, 246, 0.1) 0%, transparent 62%);
+  animation: cinematic-aurora 54s ease-in-out infinite alternate;
   transform: translate3d(0, 0, 0);
 }
 
-/* Layer 3 — mesh color fields */
+/* Layer 5 — color mesh */
 .cinematic-bg__mesh {
-  inset: -20%;
-  opacity: 0.35;
-  filter: blur(48px);
+  inset: -18%;
+  opacity: 0.4;
+  filter: blur(52px);
   background:
-    radial-gradient(at 20% 25%, rgba(109, 93, 246, 0.12) 0, transparent 52%),
-    radial-gradient(at 82% 12%, rgba(59, 130, 246, 0.1) 0, transparent 48%),
-    radial-gradient(at 64% 78%, rgba(16, 20, 37, 0.35) 0, transparent 55%),
-    radial-gradient(at 8% 82%, rgba(109, 93, 246, 0.07) 0, transparent 50%);
-  animation: cinematic-mesh 44s ease-in-out infinite alternate;
+    radial-gradient(at 22% 22%, rgba(109, 93, 246, 0.14) 0, transparent 50%),
+    radial-gradient(at 84% 10%, rgba(59, 130, 246, 0.12) 0, transparent 48%),
+    radial-gradient(at 70% 82%, rgba(20, 16, 40, 0.4) 0, transparent 55%),
+    radial-gradient(at 10% 78%, rgba(109, 93, 246, 0.08) 0, transparent 50%);
+  animation: cinematic-mesh 46s ease-in-out infinite alternate;
 }
 
-/* Layer 4 — accent blooms */
+/* Layer 6 — corner lens flares (not stripes) */
+.cinematic-bg__flares {
+  opacity: 0.55;
+  background:
+    linear-gradient(128deg, rgba(236, 72, 153, 0.06) 0%, transparent 28%),
+    linear-gradient(232deg, rgba(127, 92, 255, 0.07) 0%, transparent 26%),
+    linear-gradient(315deg, rgba(59, 130, 246, 0.05) 82%, transparent 100%);
+  mask-image: radial-gradient(ellipse 90% 85% at 50% 45%, black 30%, transparent 78%);
+}
+
+/* Layer 7 — floating glass creator shapes */
+.cinematic-bg__shapes {
+  inset: 0;
+  overflow: hidden;
+}
+
+.cinematic-bg__shapes-inner {
+  position: absolute;
+  inset: 0;
+  filter: blur(0.5px);
+}
+
+.cinematic-bg__glass {
+  position: absolute;
+  opacity: 0.55;
+  animation: cinematic-glass-float var(--glass-dur, 56s) ease-in-out infinite;
+  animation-delay: var(--glass-delay, 0s);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.cinematic-bg__glass svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 32px rgba(109, 93, 246, 0.15));
+}
+
+.cinematic-bg__glass--play {
+  top: 8%;
+  left: 4%;
+  width: min(120px, 14vw);
+  height: min(120px, 14vw);
+}
+
+.cinematic-bg__glass--chart {
+  top: 6%;
+  right: 5%;
+  width: min(110px, 13vw);
+  height: min(110px, 13vw);
+}
+
+.cinematic-bg__glass--spark {
+  top: 38%;
+  right: 8%;
+  width: min(88px, 11vw);
+  height: min(88px, 11vw);
+  opacity: 0.45;
+}
+
+.cinematic-bg__glass--grid {
+  bottom: 18%;
+  left: 6%;
+  width: min(140px, 16vw);
+  height: min(105px, 12vw);
+  opacity: 0.4;
+}
+
+/* Layer 8 — accent blooms */
 .cinematic-bg__glow {
   border-radius: 50%;
-  filter: blur(96px);
-  opacity: 0.1;
-  animation: cinematic-bloom 40s ease-in-out infinite alternate;
+  filter: blur(100px);
+  opacity: 0.12;
+  animation: cinematic-bloom 42s ease-in-out infinite alternate;
 }
 
 .cinematic-bg__glow--purple {
-  top: -18%;
-  right: -8%;
-  width: min(640px, 78vw);
-  height: min(640px, 78vw);
-  background: radial-gradient(circle, rgba(127, 92, 255, 0.45) 0%, transparent 70%);
+  top: -15%;
+  right: -6%;
+  width: min(700px, 82vw);
+  height: min(700px, 82vw);
+  background: radial-gradient(circle, rgba(127, 92, 255, 0.55) 0%, transparent 68%);
 }
 
 .cinematic-bg__glow--blue {
-  bottom: -22%;
-  left: -12%;
-  width: min(600px, 75vw);
-  height: min(600px, 75vw);
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.32) 0%, transparent 72%);
-  opacity: 0.08;
-  animation-duration: 48s;
+  bottom: -18%;
+  left: -10%;
+  width: min(660px, 78vw);
+  height: min(660px, 78vw);
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.38) 0%, transparent 70%);
+  opacity: 0.09;
+  animation-duration: 50s;
 }
 
-/* Layer 5 — dust */
+/* Layer 9 — dust */
 .cinematic-bg__particles {
   inset: 0;
 }
@@ -82,44 +176,56 @@
 .cinematic-bg__particle {
   position: absolute;
   border-radius: 50%;
-  background: rgba(248, 250, 252, 0.5);
-  animation: cinematic-dust var(--cinematic-duration, 60s) ease-in-out infinite;
+  background: rgba(248, 250, 252, 0.55);
+  box-shadow: 0 0 6px rgba(127, 92, 255, 0.12);
+  animation: cinematic-dust var(--cinematic-duration, 58s) ease-in-out infinite;
   transform: translate3d(0, 0, 0);
 }
 
-/* Layer 6 — vignette */
+/* Layer 10 — vignette */
 .cinematic-bg__vignette {
   background: radial-gradient(
-    ellipse 74% 68% at 50% 42%,
+    ellipse 76% 72% at 50% 44%,
     transparent 0%,
-    transparent 52%,
-    rgba(0, 0, 0, 0.38) 84%,
-    rgba(0, 0, 0, 0.75) 100%
+    transparent 48%,
+    rgba(0, 0, 0, 0.32) 82%,
+    rgba(0, 0, 0, 0.78) 100%
   );
 }
 
-/* Layer 7 — grain */
+/* Layer 11 — grain */
 .cinematic-bg__noise {
-  opacity: 0.012;
+  opacity: 0.014;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
-  background-size: 220px 220px;
+  background-size: 200px 200px;
 }
 
 @keyframes cinematic-aurora {
   0% {
-    transform: translate3d(-1%, -0.5%, 0) scale(1);
+    transform: translate3d(-1%, -0.6%, 0) scale(1);
   }
   100% {
-    transform: translate3d(1.2%, 1%, 0) scale(1.03);
+    transform: translate3d(1.4%, 1.2%, 0) scale(1.04);
   }
 }
 
 @keyframes cinematic-mesh {
   0% {
-    transform: translate3d(0.5%, 0, 0) scale(1);
+    transform: translate3d(0.6%, 0, 0) scale(1);
   }
   100% {
-    transform: translate3d(-0.8%, -0.6%, 0) scale(1.02);
+    transform: translate3d(-1%, -0.8%, 0) scale(1.025);
+  }
+}
+
+@keyframes cinematic-horizon {
+  0% {
+    opacity: 0.92;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, -1.5%, 0) scale(1.03);
   }
 }
 
@@ -128,7 +234,20 @@
     transform: translate3d(0, 0, 0);
   }
   100% {
-    transform: translate3d(-1.5%, 1%, 0);
+    transform: translate3d(-2%, 1.2%, 0);
+  }
+}
+
+@keyframes cinematic-glass-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  33% {
+    transform: translate3d(6px, -10px, 0) rotate(1.5deg);
+  }
+  66% {
+    transform: translate3d(-4px, 8px, 0) rotate(-1deg);
   }
 }
 
@@ -136,34 +255,79 @@
   0%,
   100% {
     transform: translate3d(0, 0, 0);
-    opacity: var(--particle-o, 0.03);
   }
   50% {
-    transform: translate3d(0, -8px, 0);
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+@media (max-width: 1024px) {
+  .cinematic-bg__glass--play,
+  .cinematic-bg__glass--grid {
+    opacity: 0.35;
+  }
+
+  .cinematic-bg__glass--chart,
+  .cinematic-bg__glass--spark {
+    opacity: 0.3;
   }
 }
 
 @media (max-width: 768px) {
+  .cinematic-bg__shapes {
+    opacity: 0.45;
+  }
+
+  .cinematic-bg__glass--play {
+    top: 4%;
+    left: -2%;
+    width: 72px;
+    height: 72px;
+  }
+
+  .cinematic-bg__glass--chart {
+    top: 3%;
+    right: -2%;
+    width: 68px;
+    height: 68px;
+  }
+
+  .cinematic-bg__glass--spark,
+  .cinematic-bg__glass--grid {
+    display: none;
+  }
+
   .cinematic-bg__particles {
     display: none;
   }
 
+  .cinematic-bg__horizon {
+    height: 55%;
+    background: radial-gradient(
+      ellipse 90% 50% at 50% 100%,
+      rgba(127, 92, 255, 0.14) 0%,
+      transparent 65%
+    );
+  }
+
   .cinematic-bg__aurora,
   .cinematic-bg__mesh {
-    filter: blur(56px);
-    opacity: 0.4;
+    filter: blur(48px);
+    opacity: 0.45;
   }
 
   .cinematic-bg__glow {
-    filter: blur(64px);
-    opacity: 0.07;
+    filter: blur(56px);
+    opacity: 0.08;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .cinematic-bg__aurora,
   .cinematic-bg__mesh,
+  .cinematic-bg__horizon,
   .cinematic-bg__glow,
+  .cinematic-bg__glass,
   .cinematic-bg__particle {
     animation: none !important;
   }

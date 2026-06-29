@@ -25,9 +25,9 @@
   --card-hover-shadow: 0 24px 72px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.05);
   --card-hover-lift: translateY(-3px);
   --nav-height: 64px;
-  --section-pad-y: 64px;
-  --hero-pad-top: 72px;
-  --hero-pad-bottom: 64px;
+  --section-pad-y: 48px;
+  --hero-pad-top: 28px;
+  --hero-pad-bottom: 24px;
   color: var(--text-bright);
 }
 
@@ -2009,10 +2009,10 @@ textarea {
 /* Hero */
 .landing-hero {
   position: relative;
-  padding-top: max(var(--hero-pad-top), calc(env(safe-area-inset-top, 0px) + 56px));
-  padding-bottom: max(var(--hero-pad-bottom), env(safe-area-inset-bottom, 0px));
-  padding-left: max(var(--app-gutter), env(safe-area-inset-left, 0px));
-  padding-right: max(var(--app-gutter), env(safe-area-inset-right, 0px));
+  padding-top: var(--hero-pad-top);
+  padding-bottom: var(--hero-pad-bottom);
+  padding-left: 0;
+  padding-right: 0;
   overflow: hidden;
   background: transparent;
 }
@@ -2226,7 +2226,7 @@ textarea {
   position: relative;
   z-index: 1;
   width: 100%;
-  margin-bottom: clamp(18px, 2.8vw, 30px);
+  margin-bottom: clamp(12px, 2vw, 20px);
 }
 
 .landing-hero-headline-row .landing-hero-title {
@@ -2238,14 +2238,14 @@ textarea {
   z-index: 1;
   display: grid;
   grid-template-columns: 1fr;
-  gap: clamp(28px, 4vw, 40px);
+  gap: clamp(18px, 3vw, 28px);
   align-items: center;
 }
 
 @media (min-width: 1024px) {
   .landing-hero-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
-    gap: clamp(32px, 3.5vw, 48px);
+    gap: clamp(24px, 2.5vw, 36px);
   }
 }
 
@@ -2849,7 +2849,7 @@ textarea {
 
 /* Live Demo Entry */
 .landing-demo-entry {
-  padding: 48px var(--app-gutter) 44px;
+  padding: 36px var(--app-gutter) 32px;
   position: relative;
   background: transparent;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
@@ -4967,7 +4967,7 @@ textarea {
 /* Final CTA */
 .landing-cta-section {
   position: relative;
-  padding: 48px 24px 44px;
+  padding: 40px 24px 36px;
   background: linear-gradient(180deg, rgba(79, 70, 229, 0.12) 0%, rgba(12, 14, 24, 0.92) 100%);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   text-align: center;
@@ -5021,7 +5021,7 @@ textarea {
 /* Homepage — growth guides gateway */
 .landing-growth-guides-section {
   position: relative;
-  padding: 48px 28px 40px;
+  padding: 40px 28px 32px;
   background: transparent;
   border-top: none;
   text-align: center;
@@ -6078,18 +6078,18 @@ textarea {
   }
 
   .landing-header-inner {
-    padding-top: max(14px, env(safe-area-inset-top, 0px));
+    padding-top: 10px;
     padding-left: max(16px, env(safe-area-inset-left, 0px)) !important;
     padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
-    padding-bottom: 14px !important;
+    padding-bottom: 10px !important;
     gap: 12px;
   }
 
   .landing-hero {
-    padding-top: max(48px, calc(env(safe-area-inset-top, 0px) + 28px));
-    padding-bottom: max(56px, env(safe-area-inset-bottom, 0px));
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-top: 20px;
+    padding-bottom: 20px;
+    padding-left: 0;
+    padding-right: 0;
   }
 
   .landing-demo-input-wrap {
@@ -6105,7 +6105,7 @@ textarea {
   }
 
   .landing-section {
-    padding: 48px max(16px, env(safe-area-inset-left, 0px)) 48px max(16px, env(safe-area-inset-right, 0px));
+    padding: 36px max(16px, env(safe-area-inset-left, 0px)) 36px max(16px, env(safe-area-inset-right, 0px));
   }
 
   .landing-metrics-grid,
