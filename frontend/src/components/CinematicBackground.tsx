@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties } from 'react';
 import { useLocation } from 'react-router-dom';
 import { resolveCinematicScene } from './cinematicScene';
-import { StudioAtmosphere } from './StudioAtmosphere';
+import { CreatorStudioFragments } from './CreatorStudioFragments';
 import './cinematic-background.css';
 
 type Particle = { id: number; x: number; y: number; size: number; opacity: number; duration: number; delay: number };
@@ -21,39 +21,37 @@ function buildParticles(count: number): Particle[] {
     id,
     x: rand() * 100,
     y: rand() * 100,
-    size: 0.8 + rand() * 1.2,
-    opacity: 0.02 + rand() * 0.035,
-    duration: 42 + rand() * 24,
-    delay: rand() * -50
+    size: 0.9 + rand() * 1.3,
+    opacity: 0.022 + rand() * 0.028,
+    duration: 48 + rand() * 20,
+    delay: rand() * -45
   }));
 }
 
 /**
- * Eight-layer cinematic creator studio — page-aware atmosphere, GPU-friendly CSS motion.
+ * Evolved cinematic environment — aurora, horizon, depth, subtle creator fragments.
+ * Page-aware scenes; GPU-friendly 40–60s motion loops.
  */
 export function CinematicBackground() {
   const { pathname } = useLocation();
   const scene = resolveCinematicScene(pathname);
-  const particles = useMemo(() => buildParticles(28), []);
+  const particles = useMemo(() => buildParticles(24), []);
 
   return (
     <div className={`cinematic-bg cinematic-bg--${scene}`} aria-hidden data-scene={scene}>
-      {/* 1 — deep black base */}
       <div className="cinematic-bg__layer cinematic-bg__base" />
-
-      {/* 2–5 — studio fragments (silhouettes, analytics, thumbnails, neural, timeline) */}
-      <div className="cinematic-bg__layer cinematic-bg__studio">
-        <StudioAtmosphere scene={scene} />
+      <div className="cinematic-bg__layer cinematic-bg__stage" />
+      <div className="cinematic-bg__layer cinematic-bg__horizon" />
+      <div className="cinematic-bg__layer cinematic-bg__aurora" />
+      <div className="cinematic-bg__layer cinematic-bg__mesh" />
+      <div className="cinematic-bg__layer cinematic-bg__flares" />
+      <div className="cinematic-bg__layer cinematic-bg__fragments">
+        <CreatorStudioFragments scene={scene} />
       </div>
-
-      {/* 6 — Hollywood lighting */}
-      <div className="cinematic-bg__layer cinematic-bg__light cinematic-bg__light--blue" />
-      <div className="cinematic-bg__layer cinematic-bg__light cinematic-bg__light--purple" />
-      <div className="cinematic-bg__layer cinematic-bg__light cinematic-bg__light--warm" />
+      <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--purple" />
+      <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--blue" />
+      <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--warm" />
       <div className="cinematic-bg__layer cinematic-bg__volumetric" />
-      <div className="cinematic-bg__layer cinematic-bg__flare" />
-
-      {/* 7 — dust particles */}
       <div className="cinematic-bg__layer cinematic-bg__particles">
         {particles.map((p) => (
           <span
@@ -73,8 +71,6 @@ export function CinematicBackground() {
           />
         ))}
       </div>
-
-      {/* 8 — atmospheric fog + vignette + grain */}
       <div className="cinematic-bg__layer cinematic-bg__fog" />
       <div className="cinematic-bg__layer cinematic-bg__vignette" />
       <div className="cinematic-bg__layer cinematic-bg__noise" />

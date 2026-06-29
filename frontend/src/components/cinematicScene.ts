@@ -27,5 +27,7 @@ export function resolveCinematicScene(pathname: string): CinematicScene {
   }
   if (p.includes('blog') || p.includes('ai-studio')) return 'neural';
 
+  if (p.startsWith('/auth') || p.startsWith('/signin') || p.startsWith('/signup')) return 'studio';
+
   return 'studio';
 }
