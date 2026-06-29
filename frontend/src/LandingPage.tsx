@@ -491,6 +491,7 @@ export function LandingPage() {
   const [checkoutEmail, setCheckoutEmail] = useState('');
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
+  const navScrolledRef = useRef(false);
   const [auditInView, setAuditInView] = useState(false);
 
   const enteredChannelValid = useMemo(() => {
@@ -554,7 +555,13 @@ export function LandingPage() {
   }, []);
 
   useEffect(() => {
-    const onScroll = () => setNavScrolled(window.scrollY > 16);
+    const onScroll = () => {
+      const v = window.scrollY > 16;
+      if (v !== navScrolledRef.current) {
+        navScrolledRef.current = v;
+        setNavScrolled(v);
+      }
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener('scroll', onScroll);

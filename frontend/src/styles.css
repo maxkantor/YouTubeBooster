@@ -1809,6 +1809,11 @@ textarea {
   transition: box-shadow 0.3s ease, background 0.3s ease;
 }
 
+html.is-scrolling .landing-header {
+  backdrop-filter: blur(12px) saturate(1.05);
+  -webkit-backdrop-filter: blur(12px) saturate(1.05);
+}
+
 .landing-header,
 .top-nav {
   margin-top: env(safe-area-inset-top, 0px);
@@ -3232,6 +3237,13 @@ textarea {
   position: relative;
   overflow: hidden;
   transition: opacity 0.4s ease, transform 0.4s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 520px;
+}
+
+.landing-hero,
+.landing-demo-entry {
+  content-visibility: visible;
 }
 
 .landing-section-alt {

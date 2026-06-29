@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { usePageTracking } from './hooks/usePageTracking';
+import { useScrollPerformance } from './hooks/useScrollPerformance';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
 import { startPremiumCheckout } from './lib/startCheckout';
@@ -499,6 +500,7 @@ function AdminLoginPage({
 
 function AppInner() {
   usePageTracking();
+  useScrollPerformance();
 
   const [userSession, setUserSession] = useState<UserSessionStatus>({ authenticated: false, user: null });
   const [adminSession, setAdminSession] = useState<AdminSessionStatus>({ authenticated: false, email: null });
