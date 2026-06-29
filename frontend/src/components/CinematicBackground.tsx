@@ -1,5 +1,7 @@
 import { useMemo, type CSSProperties } from 'react';
-import { PremiumBackdropArt } from './PremiumBackdropArt';
+import { useLocation } from 'react-router-dom';
+import { resolveCinematicScene } from './cinematicScene';
+import { StudioAtmosphere } from './StudioAtmosphere';
 import './cinematic-background.css';
 
 type Particle = { id: number; x: number; y: number; size: number; opacity: number; duration: number; delay: number };
@@ -19,33 +21,39 @@ function buildParticles(count: number): Particle[] {
     id,
     x: rand() * 100,
     y: rand() * 100,
-    size: 1 + rand() * 1.4,
-    opacity: 0.025 + rand() * 0.03,
-    duration: 50 + rand() * 30,
-    delay: rand() * -40
+    size: 0.8 + rand() * 1.2,
+    opacity: 0.02 + rand() * 0.035,
+    duration: 42 + rand() * 24,
+    delay: rand() * -50
   }));
 }
 
 /**
- * Premium cinematic environment — competitor-grade depth without page-level gradient stacks.
- * Center-stage purple bloom, floating glass creator icons, lens flares, aurora mesh.
+ * Eight-layer cinematic creator studio — page-aware atmosphere, GPU-friendly CSS motion.
  */
 export function CinematicBackground() {
-  const particles = useMemo(() => buildParticles(20), []);
+  const { pathname } = useLocation();
+  const scene = resolveCinematicScene(pathname);
+  const particles = useMemo(() => buildParticles(28), []);
 
   return (
-    <div className="cinematic-bg" aria-hidden>
+    <div className={`cinematic-bg cinematic-bg--${scene}`} aria-hidden data-scene={scene}>
+      {/* 1 — deep black base */}
       <div className="cinematic-bg__layer cinematic-bg__base" />
-      <div className="cinematic-bg__layer cinematic-bg__stage" />
-      <div className="cinematic-bg__layer cinematic-bg__horizon" />
-      <div className="cinematic-bg__layer cinematic-bg__aurora" />
-      <div className="cinematic-bg__layer cinematic-bg__mesh" />
-      <div className="cinematic-bg__layer cinematic-bg__flares" />
-      <div className="cinematic-bg__layer cinematic-bg__shapes">
-        <PremiumBackdropArt />
+
+      {/* 2–5 — studio fragments (silhouettes, analytics, thumbnails, neural, timeline) */}
+      <div className="cinematic-bg__layer cinematic-bg__studio">
+        <StudioAtmosphere scene={scene} />
       </div>
-      <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--purple" />
-      <div className="cinematic-bg__layer cinematic-bg__glow cinematic-bg__glow--blue" />
+
+      {/* 6 — Hollywood lighting */}
+      <div className="cinematic-bg__layer cinematic-bg__light cinematic-bg__light--blue" />
+      <div className="cinematic-bg__layer cinematic-bg__light cinematic-bg__light--purple" />
+      <div className="cinematic-bg__layer cinematic-bg__light cinematic-bg__light--warm" />
+      <div className="cinematic-bg__layer cinematic-bg__volumetric" />
+      <div className="cinematic-bg__layer cinematic-bg__flare" />
+
+      {/* 7 — dust particles */}
       <div className="cinematic-bg__layer cinematic-bg__particles">
         {particles.map((p) => (
           <span
@@ -65,6 +73,9 @@ export function CinematicBackground() {
           />
         ))}
       </div>
+
+      {/* 8 — atmospheric fog + vignette + grain */}
+      <div className="cinematic-bg__layer cinematic-bg__fog" />
       <div className="cinematic-bg__layer cinematic-bg__vignette" />
       <div className="cinematic-bg__layer cinematic-bg__noise" />
     </div>

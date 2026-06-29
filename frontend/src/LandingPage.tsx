@@ -825,18 +825,14 @@ export function LandingPage() {
       <main id="main-content" className="landing-main">
       {/* 2. Hero */}
       <section className="landing-hero" aria-labelledby="hero-heading">
-        <div className="landing-hero-headline-row">
-          <div className="container">
+        <div className="container landing-hero-grid">
+          <div className="landing-hero-content">
             <h1 className="landing-hero-title landing-hero-brand-h1" id="hero-heading">
               {BRAND.name}
             </h1>
             <h2 className="landing-hero-tagline-h2">
               AI-Powered YouTube Channel Audit &amp; Growth Platform
             </h2>
-          </div>
-        </div>
-        <div className="container landing-hero-grid">
-          <div className="landing-hero-content">
             <p className="landing-hero-sub">
               {BRAND.heroSubtitle}
             </p>

@@ -22,12 +22,13 @@
   :root {
     --app-max-width: 100%;
     --dashboard-max-width: 100%;
-    --section-pad-y: 36px;
-    --hero-pad-top: 16px;
-    --hero-pad-bottom: 16px;
+    --results-max-width: 100%;
+    --section-pad-y: 44px;
+    --hero-pad-top: 48px;
+    --hero-pad-bottom: 40px;
     --nav-height: 56px;
-    --glass-blur: blur(14px);
-    --card-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    --glass-blur: blur(16px);
+    --card-shadow: 0 20px 56px rgba(0, 0, 0, 0.48);
     --card-hover-lift: none;
   }
 
@@ -45,14 +46,14 @@
   }
 
   .landing-hero {
-    padding-top: 16px !important;
-    padding-bottom: 16px !important;
+    padding-top: var(--hero-pad-top) !important;
+    padding-bottom: var(--hero-pad-bottom) !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
 
   .landing-section {
-    padding: 32px max(16px, env(safe-area-inset-left, 0px)) !important;
+    padding: var(--section-pad-y) max(16px, env(safe-area-inset-left, 0px)) !important;
   }
 
   .landing-hero-brand-h1 {

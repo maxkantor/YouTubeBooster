@@ -1,8 +1,9 @@
 :root {
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --app-max-width: 1320px;
-  --dashboard-max-width: 1440px;
+  --app-max-width: 1500px;
+  --dashboard-max-width: 1600px;
+  --results-max-width: 1700px;
   --app-gutter: max(20px, calc((100vw - var(--app-max-width)) / 2));
   --space-deep: #050507;
   --space-navy: #090b14;
@@ -18,16 +19,17 @@
   --brand-accent-blue: #3b82f6;
   --brand-accent-red: #dc2626;
   --landing-accent: #6d5df6;
-  --glass-bg: rgba(10, 12, 20, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.07);
-  --glass-blur: blur(20px);
-  --card-shadow: 0 20px 64px rgba(0, 0, 0, 0.5);
-  --card-hover-shadow: 0 24px 72px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  --card-hover-lift: translateY(-3px);
+  --glass-bg: rgba(12, 14, 22, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-blur: blur(24px);
+  --card-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+  --card-hover-shadow: 0 36px 100px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --card-hover-lift: translateY(-4px);
+  --card-gap: 32px;
   --nav-height: 64px;
-  --section-pad-y: 48px;
-  --hero-pad-top: 28px;
-  --hero-pad-bottom: 24px;
+  --section-pad-y: 64px;
+  --hero-pad-top: 80px;
+  --hero-pad-bottom: 70px;
   color: var(--text-bright);
 }
 
@@ -225,6 +227,10 @@ a {
   max-width: var(--dashboard-max-width);
   padding-left: max(24px, env(safe-area-inset-left, 0px));
   padding-right: max(24px, env(safe-area-inset-right, 0px));
+}
+
+.page.results-page {
+  max-width: var(--results-max-width);
 }
 
 .narrow-page {
@@ -1023,8 +1029,8 @@ textarea {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 32px;
+  gap: var(--card-gap);
+  margin-bottom: var(--card-gap);
 }
 
 .stat-card {
@@ -2244,8 +2250,9 @@ textarea {
 
 @media (min-width: 1024px) {
   .landing-hero-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
-    gap: clamp(24px, 2.5vw, 36px);
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 520px);
+    gap: clamp(28px, 3vw, 48px);
+    align-items: center;
   }
 }
 
@@ -2518,16 +2525,23 @@ textarea {
 
 .landing-insight-glass.landing-hero-insight-panel {
   width: 100%;
-  max-width: 660px;
+  max-width: 792px;
   padding: 0;
-  border-radius: 22px;
+  border-radius: 24px;
   overflow: hidden;
-  transform: perspective(1200px) rotateY(-1.5deg) translateZ(0);
+  transform: perspective(1400px) rotateY(-2deg) translateZ(0);
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
   box-shadow: var(--card-shadow);
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s ease, border-color 0.4s ease;
+}
+
+.landing-insight-glass.landing-hero-insight-panel:hover {
+  transform: perspective(1400px) rotateY(-1deg) translateY(-4px) translateZ(0);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .landing-insight-panel-top {
@@ -3142,26 +3156,26 @@ textarea {
 }
 
 .landing-hero-brand-h1 {
-  margin: 0 0 10px;
-  text-align: center;
-  font-size: clamp(2rem, 1.2rem + 3.8vw, 3.35rem);
+  margin: 0 0 12px;
+  text-align: left;
+  font-size: clamp(2.25rem, 1.2rem + 4.2vw, 4.5rem);
   font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.08;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
   color: #f8fafc;
 }
 
 .landing-hero-tagline-h2 {
-  margin: 0 0 18px;
-  text-align: center;
+  margin: 0 0 20px;
+  text-align: left;
   font-size: clamp(1rem, 0.55rem + 1.8vw, 1.45rem);
   font-weight: 600;
   line-height: 1.35;
   letter-spacing: -0.02em;
-  color: #cbd5e1;
+  color: #e2e8f0;
   text-wrap: balance;
-  max-width: 52rem;
-  margin-inline: auto;
+  max-width: 36rem;
+  margin-inline: 0;
 }
 
 .landing-comparison-links {

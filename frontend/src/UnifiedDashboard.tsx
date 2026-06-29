@@ -1020,7 +1020,7 @@ export function UnifiedDashboard({
   }
 
   return (
-    <div className="page dashboard-page">
+    <div className={`page ${isDemo ? 'results-page' : 'dashboard-page'}`}>
       <header className="dashboard-header">
         <h1 className="dashboard-title">{isDemo ? `${BRAND.name} Dashboard` : dashboardTitle}</h1>
 
