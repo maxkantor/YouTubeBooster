@@ -119,6 +119,9 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
   useEffect(() => {
     if (autoRunDone.current) return;
     autoRunDone.current = true;
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
     const timer = window.setTimeout(() => {
       void runGeneration('rewrite_titles');
     }, 120);

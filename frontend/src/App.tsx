@@ -5,6 +5,7 @@ import { BRAND } from './config/brand';
 import { usePageTracking } from './hooks/usePageTracking';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
+import { startPremiumCheckout } from './lib/startCheckout';
 import { MarketingFooter } from './components/MarketingFooter';
 import { StructuredData } from './components/StructuredData';
 import { SeoHead } from './SeoHead';
@@ -362,11 +363,10 @@ function DashboardPage({
       dashboardOverview={overview ?? null}
       channelInput={userSession.user?.channelUrl ?? overview?.channelTitle ?? ''}
       userEmail={userSession.user?.email}
-      onCreateCheckout={async (ch, _email) => {
+      onCreateCheckout={async (ch, email) => {
         const channel = ch || userSession.user?.channelUrl || channelTitle;
         if (!authSession) {
-          navigate(`/auth/signup?returnTo=${encodeURIComponent('/dashboard')}&channel=${encodeURIComponent(channel)}&plan=premium`);
-          return { checkoutUrl: '/auth/signup', sessionId: 'auth_required', amount: 0, currency: 'USD' };
+          return startPremiumCheckout({ channelInput: channel, email });
         }
         return billingApi.createCheckoutSession(authSession.idToken, channel, 'premium');
       }}

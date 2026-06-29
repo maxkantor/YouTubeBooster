@@ -453,6 +453,11 @@ public sealed class StripeCheckoutService : ICheckoutService
             // Recovery path: do NOT rely on Stripe email for entitlements in normal flow.
             user = await _appDataStore.GetUserByEmailAsync(accountEmail, cancellationToken);
         }
+        if (user is null && !string.IsNullOrWhiteSpace(accountEmail) && EmailAddressHelpers.LooksLikeEmail(accountEmail))
+        {
+            var channelInput = metadata.GetValueOrDefault("channelInput");
+            user = await _appDataStore.UpsertPurchasedUserAsync(accountEmail.Trim(), channelInput, cancellationToken);
+        }
         if (user is null)
         {
             await _appDataStore.TrackEventAsync("stripe_webhook_user_unresolved", session.Id, new Dictionary<string, string?>

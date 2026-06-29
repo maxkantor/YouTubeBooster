@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { analytics } from './lib/analytics';
 import { billingApi, meApi, publicApi } from './lib/api';
+import { startPremiumCheckout } from './lib/startCheckout';
 import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
 import { useAuth } from './AuthContext';
 import { DemoAnalysisLoadingPanel } from './components/DemoAnalysisLoadingPanel';
@@ -24,7 +25,6 @@ function PaidRouteLoading() {
  */
 export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'paid' }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const { session: authSession } = useAuth();
   const searchParams = new URLSearchParams(location.search);
   const channelFromState = (location.state as { channelInput?: string } | null)?.channelInput;
@@ -162,15 +162,10 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
       userEmail={authSession?.email ?? undefined}
       demoLoading={demoLoading}
       demoError={demoError}
-      onCreateCheckout={async (ch, _email) => {
+      onCreateCheckout={async (ch, email) => {
         const channel = ch || channelInput;
         if (!authSession) {
-          const returnPath =
-            variant === 'paid'
-              ? `/dashboard/channel?channel=${encodeURIComponent(channel)}`
-              : `/demo?channel=${encodeURIComponent(channel)}`;
-          navigate(`/auth/signup?returnTo=${encodeURIComponent(returnPath)}&channel=${encodeURIComponent(channel)}&plan=premium`);
-          return { checkoutUrl: '/auth/signup', sessionId: 'auth_required', amount: 0, currency: 'USD' };
+          return startPremiumCheckout({ channelInput: channel, email });
         }
         return billingApi.createCheckoutSession(authSession.idToken, channel, 'premium');
       }}

@@ -163,7 +163,9 @@ export const publicApi = {
         email,
         channelInput,
         successUrl: `${window.location.origin}/?checkout=success`,
-        cancelUrl: `${window.location.origin}/dashboard`
+        cancelUrl: `${window.location.origin}/#pricing`,
+        planCode: 'premium',
+        priceKey: 'premium'
       })
     });
   },

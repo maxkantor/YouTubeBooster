@@ -12,6 +12,7 @@ import {
 import type { DemoPreview } from './types';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
 import { billingApi, meApi, publicApi } from './lib/api';
+import { isCheckoutEmailValid, startPremiumCheckout } from './lib/startCheckout';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
 import { AiGrowthStudio } from './components/AiGrowthStudio';
@@ -487,6 +488,7 @@ export function LandingPage() {
   const [demoPreviewByChannel, setDemoPreviewByChannel] = useState<Record<string, DemoPreview>>({});
   const [productPreviewLoading, setProductPreviewLoading] = useState(false);
   const [productPreviewError, setProductPreviewError] = useState('');
+  const [checkoutEmail, setCheckoutEmail] = useState('');
   const pricingViewedRef = useRef(false);
   const [navScrolled, setNavScrolled] = useState(false);
   const [auditInView, setAuditInView] = useState(false);
@@ -660,6 +662,7 @@ export function LandingPage() {
   }, [productPreviewChannelInput]);
 
   function handleOpenInstantDemo() {
+    analytics.heroInstantDemoClicked();
     setStoredDemoChannel(DEFAULT_DEMO_CHANNEL);
     analytics.channelAuditStarted(DEFAULT_DEMO_CHANNEL);
     navigate('/demo', { replace: true, state: { channelInput: DEFAULT_DEMO_CHANNEL } });
@@ -707,15 +710,21 @@ export function LandingPage() {
         }
       }
       if (!channelInput && storedDemo) channelInput = storedDemo;
+      const entered = demoInput.trim();
+      const enteredValid = entered ? validateYouTubeChannelInput(entered) : null;
+      const checkoutChannel =
+        enteredValid?.ok ? enteredValid.normalized : channelInput || getStoredDemoChannel() || 'account';
 
       if (!authSession) {
-        const entered = demoInput.trim();
-        const enteredValid = entered ? validateYouTubeChannelInput(entered) : null;
-        const signupChannel =
-          enteredValid?.ok ? enteredValid.normalized : storedDemo || getStoredDemoChannel() || '';
-        navigate(
-          `/auth/signup?returnTo=${encodeURIComponent('/#pricing')}&channel=${encodeURIComponent(signupChannel)}&plan=premium`
-        );
+        if (!isCheckoutEmailValid(checkoutEmail)) {
+          setPricingError('Enter your email to continue to secure checkout.');
+          return;
+        }
+        setPricingLoading(true);
+        setPricingError('');
+        analytics.checkoutStarted(checkoutChannel);
+        const checkout = await startPremiumCheckout({ channelInput: checkoutChannel, email: checkoutEmail });
+        window.location.href = checkout.checkoutUrl;
         return;
       }
 
@@ -724,13 +733,15 @@ export function LandingPage() {
         return;
       }
 
-      // Channel is optional for purchase. If missing, send a safe placeholder.
-      // Backend uses it for metadata only; user can connect their channel later.
-      if (!channelInput) channelInput = 'account';
+      if (!channelInput) channelInput = checkoutChannel;
 
       setPricingLoading(true);
       setPricingError('');
-      const checkout = await billingApi.createCheckoutSession(authSession.idToken, channelInput, 'premium');
+      analytics.checkoutStarted(channelInput);
+      const checkout = await startPremiumCheckout({
+        channelInput,
+        idToken: authSession.idToken
+      });
       window.location.href = checkout.checkoutUrl;
     } catch (err) {
       setPricingError(err instanceof Error ? err.message : 'Could not start checkout.');
@@ -902,6 +913,7 @@ export function LandingPage() {
                 href="#audit"
                 className="btn btn-lg landing-hero-cta-primary landing-cta-premium"
                 aria-describedby="hero-cta-hint"
+                onClick={() => analytics.heroAuditCtaClicked()}
               >
                 Analyze Your Channel
               </a>
@@ -1285,9 +1297,26 @@ export function LandingPage() {
             </div>
             <div className="landing-pricing-form">
               {!authSession && (
-                <p className="muted" style={{ margin: 0 }}>
-                  Sign up to check out. We’ll bring you back here to pay.
-                </p>
+                <>
+                  <label className="field-label" htmlFor="landing-checkout-email">
+                    Email for checkout
+                  </label>
+                  <input
+                    id="landing-checkout-email"
+                    type="email"
+                    className="landing-demo-input"
+                    placeholder="you@example.com"
+                    value={checkoutEmail}
+                    onChange={(e) => {
+                      setCheckoutEmail(e.target.value);
+                      setPricingError('');
+                    }}
+                    autoComplete="email"
+                  />
+                  <p className="muted" style={{ margin: 0 }}>
+                    Pay with Stripe first, then sign up with the same email to access your full report.
+                  </p>
+                </>
               )}
               {pricingError && <p className="landing-pricing-error">{pricingError}</p>}
               <button

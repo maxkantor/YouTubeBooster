@@ -101,6 +101,14 @@ export const analytics = {
     trackFunnel('checkout_return_success', sessionId ?? 'checkout', { route: '/checkout/success' }),
   checkoutReturnCancel: () => trackFunnel('checkout_return_cancel', 'checkout', { route: '/checkout/cancel' }),
   checkoutAbandoned: (channel?: string) => trackFunnel('checkout_abandoned', channel, { channel }),
+  heroAuditCtaClicked: () => {
+    void trackFunnel('hero_audit_cta_clicked', '/');
+    trackEvent('hero_audit_cta_clicked');
+  },
+  heroInstantDemoClicked: () => {
+    void trackFunnel('hero_instant_demo_clicked', '/');
+    trackEvent('hero_instant_demo_clicked');
+  },
   paymentFailed: (userId?: string) => trackFunnel('payment_failed', userId, { userId }),
   /** GA4 only; live/test payment funnel events are recorded server-side via Stripe webhooks. */
   purchaseCompleted: () => trackEvent('purchase_completed'),

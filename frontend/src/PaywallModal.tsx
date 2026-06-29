@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { analytics } from './lib/analytics';
 import { useAuth } from './AuthContext';
 import { billingApi, meApi } from './lib/api';
 import { getSession as cognitoGetSession } from './lib/auth';
+import { isCheckoutEmailValid, startPremiumCheckout } from './lib/startCheckout';
 import type { CheckoutSession } from './types';
 import { usePricing } from './PricingContext';
 
@@ -16,24 +16,23 @@ const BENEFITS = [
 ];
 
 export function PaywallModal({
-  featureName,
+  featureName: _featureName,
   channelInput,
   onClose,
   onCreateCheckout,
   isLoading
 }: {
-  featureName: string;
+  featureName?: string;
   channelInput?: string;
   onClose: () => void;
   onCreateCheckout: (channelInput: string, email: string) => Promise<CheckoutSession>;
   isLoading: boolean;
 }) {
-  const navigate = useNavigate();
-  const location = useLocation();
   const { oneTimePriceLabel } = usePricing();
   const { session: authSession } = useAuth();
   const [error, setError] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
+  const [checkoutEmail, setCheckoutEmail] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -55,38 +54,38 @@ export function PaywallModal({
   }, [authSession?.idToken]);
 
   async function handleUnlock() {
-    if (!authSession) {
-      const returnTo = `${location.pathname}${location.search}`;
-      navigate(`/auth/signup?returnTo=${encodeURIComponent(returnTo)}&channel=${encodeURIComponent(channelInput ?? '')}&plan=premium`);
-      onClose();
-      return;
-    }
     if (hasPremium) {
       setError('You already have premium access.');
       return;
     }
+
+    const channel = channelInput?.trim() ? channelInput : 'account';
     setError('');
+
     try {
-      analytics.checkoutStarted();
-      const session = await onCreateCheckout(channelInput?.trim() ? channelInput : 'account', '');
+      if (!authSession) {
+        if (!isCheckoutEmailValid(checkoutEmail)) {
+          setError('Enter a valid email to continue to secure checkout.');
+          return;
+        }
+        analytics.checkoutStarted(channel);
+        const session = await startPremiumCheckout({ channelInput: channel, email: checkoutEmail });
+        window.location.href = session.checkoutUrl;
+        return;
+      }
+
+      analytics.checkoutStarted(channel);
+      const session = await onCreateCheckout(channel, authSession.email ?? '');
       window.location.href = session.checkoutUrl;
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
 
-      // If we got a 401, the JWT we used for the request can be expired/invalid.
-      // Retry once using a fresh Cognito session token so the user sees the Stripe redirect.
-      const shouldRetry401 = msg.includes('401') || msg.toLowerCase().includes('unauthorized');
+      const shouldRetry401 = authSession && (msg.includes('401') || msg.toLowerCase().includes('unauthorized'));
       if (shouldRetry401) {
-        // Debug visibility: lets us confirm retry code runs.
-        // eslint-disable-next-line no-console
-        console.log('[PaywallModal] checkout 401; retrying with fresh Cognito session');
         try {
           const fresh = await cognitoGetSession();
           if (fresh?.idToken) {
-            // eslint-disable-next-line no-console
-            console.log('[PaywallModal] fresh idToken present; retry create-checkout-session');
-            const retryChannel = channelInput?.trim() ? channelInput : 'account';
-            const retrySession = await billingApi.createCheckoutSession(fresh.idToken, retryChannel, 'premium');
+            const retrySession = await billingApi.createCheckoutSession(fresh.idToken, channel, 'premium');
             window.location.href = retrySession.checkoutUrl;
             return;
           }
@@ -121,18 +120,47 @@ export function PaywallModal({
           <span className="paywall-price-note">one-time</span>
         </p>
         <div className="input-stack">
-          <p className="muted" style={{ margin: 0 }}>
-            Your purchase unlocks the account you’re signed into (works across all devices).
-          </p>
+          {authSession ? (
+            <p className="muted" style={{ margin: 0 }}>
+              Your purchase unlocks the account you’re signed into (works across all devices).
+            </p>
+          ) : (
+            <>
+              <label className="field-label" htmlFor="paywall-checkout-email">
+                Email for checkout and account access
+              </label>
+              <input
+                id="paywall-checkout-email"
+                type="email"
+                className="landing-demo-input"
+                placeholder="you@example.com"
+                value={checkoutEmail}
+                onChange={(e) => {
+                  setCheckoutEmail(e.target.value);
+                  setError('');
+                }}
+                autoComplete="email"
+              />
+              <p className="muted" style={{ margin: 0 }}>
+                Pay with Stripe, then create your account with the same email to unlock your report.
+              </p>
+            </>
+          )}
           {error && <p className="error-text">{error}</p>}
           <button type="button" className="btn btn-primary" onClick={handleUnlock} disabled={isLoading || hasPremium}>
-            {authSession ? (hasPremium ? 'Already unlocked' : (isLoading ? 'Starting checkout…' : `Get My Full Growth Fix — ${oneTimePriceLabel}`)) : 'Sign in to unlock'}
+            {hasPremium
+              ? 'Already unlocked'
+              : isLoading
+                ? 'Starting checkout…'
+                : authSession
+                  ? `Get My Full Growth Fix — ${oneTimePriceLabel}`
+                  : `Continue to Secure Checkout — ${oneTimePriceLabel}`}
           </button>
         </div>
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>
           Continue Demo
         </button>
-        <p className="paywall-reassurance">One-time payment. No subscription. Instant access.</p>
+        <p className="paywall-reassurance">One-time payment. No subscription. Secure checkout via Stripe.</p>
       </div>
     </div>
   );
