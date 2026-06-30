@@ -3,7 +3,8 @@ import { publicApi } from './api';
 
 const GA4_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID as string | undefined;
 
-if (typeof window !== 'undefined' && GA4_ID) {
+/** Only bootstrap when index.html did not already define gtag (local dev without index snippet). */
+if (typeof window !== 'undefined' && GA4_ID && typeof window.gtag !== 'function') {
   window.dataLayer = window.dataLayer || [];
   const gtag = (...args: unknown[]) => window.dataLayer?.push(args);
   window.gtag = gtag;
@@ -46,9 +47,14 @@ export function mapAiToolForGa4(action: AiGenerateAction): Ga4AiTool {
 
 /** GA4 custom events via gtag.js (index.html or env bootstrap). */
 export function trackEvent(eventName: string, params?: Record<string, unknown>) {
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag('event', eventName, params || {});
+  const payload = params ?? {};
+  if (typeof window === 'undefined') return;
+  if (typeof window.gtag !== 'function') {
+    console.warn('GA4 EVENT skipped — window.gtag is not a function', eventName, payload);
+    return;
   }
+  console.log('GA4 EVENT', eventName, payload);
+  window.gtag('event', eventName, payload);
 }
 
 export function getAnonymousId(): string {
