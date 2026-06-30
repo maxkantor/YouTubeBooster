@@ -228,10 +228,15 @@ publicApi.MapPost("/analytics/event", async (PublicAnalyticsEventRequest request
     "signup_started",
     "signup_completed",
     "login_completed",
+    "checkout_started",
     "checkout_abandoned",
     "checkout_return_success",
     "checkout_return_cancel",
-    "pricing_viewed"
+    "pricing_viewed",
+    "hero_audit_cta_clicked",
+    "hero_instant_demo_clicked",
+    "payment_failed",
+    "contact_submitted"
   };
   if (string.IsNullOrWhiteSpace(request.EventName) || !allowed.Contains(request.EventName))
   {
