@@ -33,10 +33,17 @@ function buildParticles(count: number): Particle[] {
  * Evolved cinematic environment — aurora, horizon, depth, subtle creator fragments.
  * Page-aware scenes; GPU-friendly 40–60s motion loops.
  */
+function particleCountForViewport() {
+  if (typeof window === 'undefined') return 24;
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const narrow = window.matchMedia('(max-width: 900px)').matches;
+  return coarse || narrow ? 10 : 18;
+}
+
 export function CinematicBackground() {
   const { pathname } = useLocation();
   const scene = resolveCinematicScene(pathname);
-  const particles = useMemo(() => buildParticles(24), []);
+  const particles = useMemo(() => buildParticles(particleCountForViewport()), []);
 
   return (
     <div className={`cinematic-bg cinematic-bg--${scene}`} aria-hidden data-scene={scene}>

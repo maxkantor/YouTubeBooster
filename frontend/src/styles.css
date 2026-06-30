@@ -1809,9 +1809,32 @@ textarea {
   transition: box-shadow 0.3s ease, background 0.3s ease;
 }
 
+/* Scroll perf: backdrop-filter on sticky/fixed UI repaints the full viewport each frame. */
 html.is-scrolling .landing-header {
-  backdrop-filter: blur(12px) saturate(1.05);
-  -webkit-backdrop-filter: blur(12px) saturate(1.05);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(5, 5, 7, 0.96);
+  transition: none !important;
+}
+
+html.is-scrolling .landing-insight-glass,
+html.is-scrolling .landing-dashboard-preview,
+html.is-scrolling .landing-audit-single-panel,
+html.is-scrolling .landing-pricing-card,
+html.is-scrolling .landing-cta-secondary-premium {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(12, 14, 22, 0.94);
+  transition: none !important;
+}
+
+html.is-scrolling .landing-insight-glass.landing-hero-insight-panel {
+  transform: none;
+  filter: none;
+}
+
+html.is-scrolling .landing-section {
+  transition: none !important;
 }
 
 .landing-header,

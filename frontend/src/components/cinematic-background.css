@@ -564,28 +564,25 @@
   }
 }
 
-/* Pause expensive backdrop motion while scrolling (class toggled in useScrollPerformance). */
+/* Scroll perf: hide filter-heavy layers (fixed + blur repaints every frame). */
 html.is-scrolling .cinematic-bg__aurora,
 html.is-scrolling .cinematic-bg__mesh,
-html.is-scrolling .cinematic-bg__horizon,
-html.is-scrolling .cinematic-bg__floor,
-html.is-scrolling .cinematic-bg__hub,
 html.is-scrolling .cinematic-bg__glow,
+html.is-scrolling .cinematic-bg__flares,
 html.is-scrolling .cinematic-bg__fragments,
 html.is-scrolling .cinematic-bg__orbs,
 html.is-scrolling .cinematic-bg__volumetric,
 html.is-scrolling .cinematic-bg__fog,
-html.is-scrolling .cinematic-bg__particle,
-html.is-scrolling .creator-fragments svg,
-html.is-scrolling .creator-fragments__bokeh,
-html.is-scrolling .cinematic-glass-orbs__orb {
+html.is-scrolling .cinematic-bg__particles {
+  visibility: hidden !important;
+  opacity: 0 !important;
   animation-play-state: paused !important;
 }
 
-html.is-scrolling .cinematic-bg__aurora,
-html.is-scrolling .cinematic-bg__mesh,
-html.is-scrolling .cinematic-bg__fragments {
-  filter: blur(40px) saturate(1.05);
+html.is-scrolling .cinematic-bg__horizon,
+html.is-scrolling .cinematic-bg__floor,
+html.is-scrolling .cinematic-bg__hub {
+  animation-play-state: paused !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
