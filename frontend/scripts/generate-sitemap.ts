@@ -76,7 +76,7 @@ Disallow: /payment-success
 Disallow: /payment-cancel
 
 # Sitemap
-Sitemap: https://youtubeboosterai.com/sitemap.xml
+Sitemap: ${base}/sitemap.xml
 `;
 
 fs.writeFileSync(path.join(pub, 'robots.txt'), robots, 'utf8');

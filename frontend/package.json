@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build:seo": "tsx scripts/generate-sitemap.ts",
-    "build": "npm run build:seo && tsc -b && vite build",
+    "build": "npm run build:seo && tsc -b && vite build && tsx scripts/generate-static-route-html.ts",
     "preview": "vite preview",
     "optimize-og": "node scripts/optimize-og-image.mjs"
   },
