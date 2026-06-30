@@ -56,7 +56,8 @@ export function CreatorStudioFragments({ scene }: Props) {
       {/* Waveform audio */}
       <svg className="creator-fragments__waveform" viewBox="0 0 400 80">
         {Array.from({ length: 60 }, (_, i) => {
-          const h = 8 + Math.sin(i * 0.4) * 22 + Math.cos(i * 0.15) * 10;
+          const raw = 8 + Math.sin(i * 0.4) * 22 + Math.cos(i * 0.15) * 10;
+          const h = Math.max(2, raw);
           return (
             <rect key={i} x={i * 6.5} y={40 - h / 2} width={4} height={h} rx={2} fill="rgba(109,93,246,0.28)" />
           );
