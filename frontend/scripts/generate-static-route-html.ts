@@ -16,7 +16,8 @@ import blogPosts from '../src/seo/data/blogPosts.json';
 import guides from '../src/seo/data/guides.json';
 import solutions from '../src/seo/data/solutions.json';
 import { getComparisonByPath } from '../src/seo/comparisonPageData';
-import { getGrowthGuideByPath } from '../src/seo/growthGuides';
+import { getGrowthGuideByPath, HOMEPAGE_GUIDE_GROUPS } from '../src/seo/growthGuides';
+import { HOMEPAGE_FAQS } from '../src/seo/homepageFaq';
 import { allProgrammaticAndBlogPaths } from '../src/seo/registry';
 import { resolveSeoForPath } from '../src/seo/resolveSeo';
 
@@ -45,6 +46,11 @@ const distDir = path.join(__dirname, '..', 'dist');
 const distIndexPath = path.join(distDir, 'index.html');
 const site = getSiteUrl();
 const ogImage = `${site}/og-image.jpg`;
+
+const HOME_COMPARISON_LINKS = [
+  { href: '/compare/tubebuddy-vs-youtubebooster-ai', label: 'TubeBuddy vs YouTubeBooster AI' },
+  { href: '/compare/vidiq-vs-youtubebooster-ai', label: 'vidIQ vs YouTubeBooster AI' }
+];
 
 function escapeHtml(value: string): string {
   return value
@@ -114,15 +120,78 @@ function coreContent(pathname: string): {
     case '/':
       return {
         h1: BRAND.name,
-        lead: BRAND.seoHomeDescription,
+        lead: BRAND.heroSubtitle,
         sections: [
           {
             h2: BRAND.tagline,
             body:
-              'Run a free AI-powered YouTube channel audit, review growth opportunities, and identify practical fixes for titles, thumbnails, CTR, retention, SEO, and content positioning.'
+              "See what's limiting CTR, retention, and search visibility — from public YouTube data. Analyze Your Channel. See Instant Demo. Primary path: audit your channel. Instant demo shows the full product on MaxKantorCooking. Free preview before you unlock the full report. Public YouTube data — no Studio login. Secure checkout via Stripe. One-time payment — no subscription."
+          },
+          {
+            h2: 'Run your free channel audit now',
+            body:
+              'Paste your channel URL or @handle to get an AI growth breakdown with your highest-impact next steps. New here? Try the live demo on MaxKantorCooking first. Examples: https://youtube.com/@channelname or @channelname. Want a quick sample first? Open the instant demo.'
+          },
+          {
+            h2: 'Product dashboard preview',
+            body:
+              'Add your channel URL in the audit section above to load your live dashboard preview. The dashboard preview includes a Channel Health Score, CTR, retention and SEO signal composite, subscribers, total views, videos, engagement rate, and top performing videos when channel data is available.'
+          },
+          {
+            h2: 'Real Creator Growth Problems We Analyze',
+            body:
+              'Examples of the actual issues preventing small YouTube channels from growing. Low CTR: your videos appear in search and browse, but thumbnails and titles are not earning clicks. Weak Retention: people click but leave early because intros, pacing, or packaging lose attention. Search Visibility: your content may be targeting topics with low discoverability or poor keyword alignment.'
+          },
+          {
+            h2: 'AI Growth Studio on AWS Bedrock',
+            body:
+              'AI Growth Studio helps turn your audit into creator-ready recommendations. It supports title ideas, keyword direction, thumbnail strategy, packaging review, and a practical growth plan after the free audit preview.'
+          },
+          {
+            h2: 'Your personalized growth plan',
+            body:
+              'Preview what unlocks after your free audit — titles, keywords, and thumbnail strategy tailored to your channel. The full report can include title rewrites, keyword opportunities, thumbnail strategy, AI Growth Studio guidance, and saved report access.'
+          },
+          {
+            h2: 'Built by a Real Creator, for Real YouTube Growth',
+            body:
+              'YouTubeBooster AI is designed for creators who are tired of guessing. It reviews your channel like a growth consultant and gives you practical fixes for titles, thumbnails, SEO, packaging, and content strategy. Real Channel Audit uses your channel data to identify growth blockers. Creator-Friendly Fixes are simple recommendations you can apply without being a YouTube expert. One-time unlock means no monthly subscription. Pay once and get your full report.'
+          },
+          {
+            h2: 'Professional Channel Growth Audit',
+            body:
+              'Unlock personalized recommendations, growth opportunities, and channel insights. See why your growth is stalled before you waste more uploads on guesswork. Free preview first. Upgrade only if you want the full fix. One-time payment. No subscription. Instant access. Public YouTube data only. Secure checkout via Stripe. Unlock the full report after the free preview when you are ready.'
+          },
+          {
+            h2: 'FAQ',
+            body:
+              "Most creators don't grow because they're guessing. Here's how this tool fixes that."
+          },
+          {
+            h2: 'Explore Growth Guides, Audit Topics, and Comparisons',
+            body:
+              'Indexable, useful resources for creators who want practical answers on CTR, titles, thumbnails, SEO, retention, and better publishing decisions.'
+          },
+          {
+            h2: 'Footer',
+            body:
+              'YouTubeBooster AI helps creators improve CTR, SEO, thumbnails, retention, and discover growth opportunities using AI-powered channel analysis. Footer navigation includes growth pages, audit topics, comparison pages, platform information, about, contact, pricing, FAQ, privacy, and disclaimer.'
           }
         ],
-        links: commonLinks
+        faq: HOMEPAGE_FAQS,
+        links: [
+          ...commonLinks,
+          { href: '/audit', label: 'Audit topics' },
+          { href: '/platform', label: 'Platform' },
+          { href: '/about', label: 'About' },
+          { href: '/contact', label: 'Contact' },
+          { href: '/privacy', label: 'Privacy Policy' },
+          { href: '/disclaimer', label: 'Disclaimer' },
+          ...HOME_COMPARISON_LINKS,
+          ...HOMEPAGE_GUIDE_GROUPS.flatMap((group) =>
+            group.pages.map((page) => ({ href: page.path, label: page.cardTitle }))
+          )
+        ]
       };
     case '/pricing':
       return {
@@ -393,7 +462,6 @@ function seoHeadTags(pathname: string): string {
 function fallbackMarkup(pathname: string): string {
   const content = routeContent(pathname);
   const sections = content.sections
-    .slice(0, 8)
     .map(
       (section) => `        <section>
           <h2>${escapeHtml(section.h2)}</h2>
@@ -406,7 +474,6 @@ function fallbackMarkup(pathname: string): string {
           <h2>FAQ</h2>
           <dl>
 ${content.faq
-  .slice(0, 6)
   .map(
     (item) => `            <dt>${escapeHtml(item.question)}</dt>
             <dd>${escapeHtml(item.answer)}</dd>`
@@ -415,8 +482,14 @@ ${content.faq
           </dl>
         </section>`
     : '';
+  const seenLinks = new Set<string>();
   const links = content.links
-    .slice(0, 20)
+    .filter((link) => {
+      const key = `${link.href}::${link.label}`;
+      if (seenLinks.has(key)) return false;
+      seenLinks.add(key);
+      return true;
+    })
     .map((link) => `            <li><a href="${escapeAttr(urlFor(link.href))}">${escapeHtml(link.label)}</a></li>`)
     .join('\n');
 
