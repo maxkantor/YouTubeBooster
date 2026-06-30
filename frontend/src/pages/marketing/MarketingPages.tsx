@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { BRAND } from '../../config/brand';
+import { FAQ_PAGE_ITEMS, PRICING_PAGE_SECTIONS } from '../../seo/marketingPageContent';
 import { MarketingStaticPage } from './MarketingStaticPage';
 import { useAuth } from '../../AuthContext';
 import { publicApi } from '../../lib/api';
@@ -275,6 +276,7 @@ export function PricingPage() {
     <MarketingStaticPage
       title="Pricing"
       description="See YouTubeBooster AI pricing: run a free preview first, then unlock the full AI YouTube channel audit and growth report with a one-time payment."
+      showFunnelCta
     >
       <p>
         YouTubeBooster AI is built around a simple pricing promise: preview the channel
@@ -282,36 +284,12 @@ export function PricingPage() {
         subscription is required for the core audit experience.
       </p>
 
-      <h2 className="marketing-static-h2">Free preview first</h2>
-      <p>
-        Start with the free channel preview to see how the audit reads your titles,
-        channel positioning, SEO opportunities, retention signals, and packaging issues.
-        The preview is designed to show whether the product can identify useful growth
-        problems before you pay.
-      </p>
-
-      <h2 className="marketing-static-h2">One-time full report unlock</h2>
-      <p>
-        The paid unlock gives you the full dashboard experience, deeper recommendations,
-        AI growth guidance, and a clearer next-step plan for improving clicks, watch
-        time, and discoverability. Pricing details shown in the app are the source of
-        truth for the current offer.
-      </p>
-
-      <h2 className="marketing-static-h2">Who it is for</h2>
-      <p>
-        The audit is meant for creators who want a practical read on what is holding a
-        channel back: weak titles, unclear thumbnails, poor search fit, inconsistent
-        positioning, or videos that do not confirm the click quickly enough.
-      </p>
-
-      <div className="marketing-static-cta">
-        <h2 className="marketing-static-h2">Start with your channel</h2>
-        <p>
-          <Link to="/#audit">Run the free audit preview</Link>, then unlock the full
-          report if you want the detailed growth fix.
-        </p>
-      </div>
+      {PRICING_PAGE_SECTIONS.map((section) => (
+        <section key={section.h2}>
+          <h2 className="marketing-static-h2">{section.h2}</h2>
+          <p>{section.body}</p>
+        </section>
+      ))}
     </MarketingStaticPage>
   );
 }
@@ -321,41 +299,25 @@ export function FaqPage() {
     <MarketingStaticPage
       title="FAQ"
       description="Answers to common YouTubeBooster AI questions about channel audits, YouTube SEO, pricing, privacy, and what the AI growth report can and cannot do."
+      showFunnelCta
     >
-      <h2 className="marketing-static-h2">What does YouTubeBooster AI analyze?</h2>
-      <p>
-        It looks at the public channel or video context you provide and organizes growth
-        issues around titles, SEO, packaging, content positioning, retention risk, and
-        practical recommendations for the next upload.
-      </p>
-
-      <h2 className="marketing-static-h2">Is the preview free?</h2>
-      <p>
-        Yes. You can run the free preview before deciding whether the full report is
-        worth unlocking. The preview is intentionally useful enough to show the type of
-        diagnosis the product provides.
-      </p>
-
-      <h2 className="marketing-static-h2">Does this guarantee more views?</h2>
-      <p>
-        No tool can guarantee YouTube views, subscribers, rankings, or revenue. The goal
-        is to find likely growth blockers and give you clearer fixes so your next videos
-        have a better chance to earn clicks and keep viewers.
-      </p>
-
-      <h2 className="marketing-static-h2">Is this affiliated with YouTube?</h2>
-      <p>
-        No. YouTubeBooster AI is an independent product and is not affiliated with,
-        endorsed by, or sponsored by YouTube or Google.
-      </p>
-
-      <h2 className="marketing-static-h2">Where should I start?</h2>
-      <p>
-        Start with the <Link to="/#audit">free channel audit</Link>. If you want more
-        background first, read <Link to="/why-your-channel-gets-no-views">why your
-        channel gets no views</Link> or <Link to="/youtube-seo-for-small-channels">YouTube
-        SEO for small channels</Link>.
-      </p>
+      {FAQ_PAGE_ITEMS.map((item) => (
+        <section key={item.question}>
+          <h2 className="marketing-static-h2">{item.question}</h2>
+          <p>
+            {item.question === 'Where should I start?' ? (
+              <>
+                Start with the <Link to="/#audit">free channel audit</Link>. If you want more
+                background first, read{' '}
+                <Link to="/why-your-channel-gets-no-views">why your channel gets no views</Link> or{' '}
+                <Link to="/youtube-seo-for-small-channels">YouTube SEO for small channels</Link>.
+              </>
+            ) : (
+              item.answer
+            )}
+          </p>
+        </section>
+      ))}
     </MarketingStaticPage>
   );
 }

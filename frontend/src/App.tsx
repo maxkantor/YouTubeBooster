@@ -74,6 +74,11 @@ function AdminContactToSupportTicketRedirect() {
   return <Navigate to={`/admin/contacts/${encodeURIComponent(ticketId ?? '')}`} replace />;
 }
 
+function AuditTopicsRedirect() {
+  const { slug = '' } = useParams<{ slug: string }>();
+  return <Navigate to={slug ? `/audit/${encodeURIComponent(slug)}` : '/audit'} replace />;
+}
+
 const AuditHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.AuditHubPage })));
 const SolutionsHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.SolutionsHubPage })));
 const GuidesHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.GuidesHubPage })));
@@ -854,6 +859,8 @@ function AppInner() {
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/audit" element={<AuditHubPage />} />
         <Route path="/audit/:slug" element={<AuditArticleRoute />} />
+        <Route path="/audit-topics" element={<Navigate to="/audit" replace />} />
+        <Route path="/audit-topics/:slug" element={<AuditTopicsRedirect />} />
         <Route path="/solutions" element={<SolutionsHubPage />} />
         <Route path="/solutions/:slug" element={<SolutionArticleRoute />} />
         <Route path="/guides" element={<GuidesHubPage />} />

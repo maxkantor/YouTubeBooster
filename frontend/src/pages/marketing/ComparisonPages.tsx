@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 
+import { SeoFunnelCta } from '../../components/SeoFunnelCta';
 import { BRAND } from '../../config/brand';
 import { getComparisonByPath, type ComparisonPageDef } from '../../seo/comparisonPageData';
 
@@ -140,24 +141,7 @@ function ComparisonShell({ page }: { page: ComparisonPageDef }) {
             </dl>
           </section>
 
-          <div className="growth-guide-cta-panel comparison-cta-panel">
-            <h2 className="growth-guide-related-title">Run a free channel audit</h2>
-            <p className="growth-guide-cta-lead">
-              See how {BRAND.name} analyzes your channel before you choose a long-term tool stack. Free preview,
-              one-time unlock only if you want the full report.
-            </p>
-            <div className="growth-guide-cta-actions">
-              <Link to="/demo" className="btn btn-primary">
-                Run Free Channel Audit
-              </Link>
-              <Link to="/" className="btn btn-secondary growth-guide-cta-secondary">
-                {BRAND.name} Home
-              </Link>
-              <Link to="/pricing" className="btn btn-secondary growth-guide-cta-secondary">
-                Pricing
-              </Link>
-            </div>
-          </div>
+          <SeoFunnelCta />
         </article>
       </main>
     </div>

@@ -1,6 +1,7 @@
 import { Link, Navigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 
+import { SeoFunnelCta } from '../../components/SeoFunnelCta';
 import { BRAND } from '../../config/brand';
 
 export type ProgrammaticSection = { h2: string; body: string };
@@ -87,6 +88,7 @@ export function SeoProgrammaticArticlePage({
         )}
 
         <footer className="seo-article-footer">
+          <SeoFunnelCta />
           <p className="muted">
             <Link to={basePath}>← Back to {hubLabel}</Link>
           </p>

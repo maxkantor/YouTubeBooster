@@ -1,6 +1,7 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 
+import { SeoFunnelCta } from '../../components/SeoFunnelCta';
 import blogPosts from '../../seo/data/blogPosts.json';
 
 type Post = {
@@ -69,6 +70,7 @@ export function BlogPostPage() {
           </section>
         )}
 
+        <SeoFunnelCta />
         <p className="seo-article-footer">
           <Link to="/blog">← Back to blog</Link>
         </p>

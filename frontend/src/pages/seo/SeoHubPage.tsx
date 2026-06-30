@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 
+import { SeoFunnelCta } from '../../components/SeoFunnelCta';
 import { BRAND } from '../../config/brand';
 
 export type HubItem = { slug: string; title: string; description: string };
@@ -41,6 +42,7 @@ export function SeoHubPage({
           </li>
         ))}
       </ul>
+      <SeoFunnelCta />
     </main>
   );
 }

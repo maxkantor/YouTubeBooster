@@ -20,6 +20,12 @@ import { getGrowthGuideByPath, HOMEPAGE_GUIDE_GROUPS } from '../src/seo/growthGu
 import { HOMEPAGE_FAQS } from '../src/seo/homepageFaq';
 import { allProgrammaticAndBlogPaths } from '../src/seo/registry';
 import { resolveSeoForPath } from '../src/seo/resolveSeo';
+import {
+  comparisonToSections,
+  faqRouteContent,
+  hubArticleSections,
+  pricingRouteContent
+} from '../src/seo/staticRouteContent';
 
 type SeoSection = { h2: string; body: string };
 type SeoFaq = { question: string; answer: string };
@@ -194,19 +200,7 @@ function coreContent(pathname: string): {
         ]
       };
     case '/pricing':
-      return {
-        h1: 'Pricing',
-        lead:
-          'Preview your channel audit for free, then unlock the complete growth report when you want the full set of recommendations.',
-        sections: [
-          {
-            h2: 'Free preview before unlock',
-            body:
-              'YouTubeBooster AI lets creators review a preview before deciding whether the full audit report is useful for their channel.'
-          }
-        ],
-        links: commonLinks
-      };
+      return { ...pricingRouteContent(), links: commonLinks };
     case '/demo':
       return {
         h1: 'Analyze Your YouTube Channel',
@@ -222,31 +216,13 @@ function coreContent(pathname: string): {
         links: commonLinks
       };
     case '/faq':
-      return {
-        h1: 'FAQ',
-        lead:
-          'Answers to common questions about YouTubeBooster AI, channel audits, YouTube SEO, privacy, pricing, and growth recommendations.',
-        sections: [
-          {
-            h2: 'Common product questions',
-            body:
-              'The audit focuses on public channel signals and practical recommendations. It does not guarantee views, subscribers, revenue, or rankings.'
-          }
-        ],
-        faq: [
-          {
-            question: 'Is YouTubeBooster AI affiliated with YouTube?',
-            answer: 'No. YouTubeBooster AI is independent and is not affiliated with YouTube or Google.'
-          }
-        ],
-        links: commonLinks
-      };
+      return { ...faqRouteContent(), links: commonLinks };
     case '/guides':
       return {
         h1: 'YouTube Guides',
         lead:
           'Long-form YouTube growth guides covering SEO, topic planning, retention, content calendars, and practical publishing workflows.',
-        sections: [{ h2: 'Creator education', body: 'Browse practical guides for improving YouTube discoverability and channel growth decisions.' }],
+        sections: hubArticleSections(guides as { title: string; description: string }[]),
         links: commonLinks
       };
     case '/blog':
@@ -254,7 +230,7 @@ function coreContent(pathname: string): {
         h1: 'YouTube SEO & Growth Blog',
         lead:
           'Articles on YouTube SEO, AI channel audits, metadata, measurement, and sustainable creator growth.',
-        sections: [{ h2: 'Latest resources', body: 'Read practical articles about improving YouTube channel performance without fake shortcuts.' }],
+        sections: hubArticleSections(blogPosts as { title: string; description: string }[]),
         links: commonLinks
       };
     case '/platform':
@@ -302,7 +278,7 @@ function coreContent(pathname: string): {
         h1: 'YouTube Audit Topics',
         lead:
           'Browse AI-assisted YouTube audit topics for SEO, channel growth, CTR, metadata, thumbnails, and retention improvement.',
-        sections: [{ h2: 'Audit resources', body: 'Use these pages to understand common channel growth problems and how an audit can prioritize fixes.' }],
+        sections: hubArticleSections(audits as { title: string; description: string }[]),
         links: commonLinks
       };
     case '/solutions':
@@ -310,7 +286,7 @@ function coreContent(pathname: string): {
         h1: 'YouTube Growth Solutions',
         lead:
           'Problem-focused resources for YouTube CTR, retention, traffic leaks, content positioning, and conversion issues.',
-        sections: [{ h2: 'Growth bottlenecks', body: 'Find practical explanations for common problems that stop YouTube channels from growing.' }],
+        sections: hubArticleSections(solutions as { title: string; description: string }[]),
         links: commonLinks
       };
     case '/site-map':
@@ -323,9 +299,14 @@ function coreContent(pathname: string): {
       };
     default:
       return {
-        h1: BRAND.name,
+        h1: pathname === '/' ? BRAND.name : `${BRAND.name} — ${pathname.replace(/^\//, '').replace(/-/g, ' ')}`,
         lead: BRAND.seoHomeDescription,
-        sections: [],
+        sections: [
+          {
+            h2: 'Page',
+            body: `Indexable content for ${pathname}. Open this URL with JavaScript enabled for the full interactive experience.`
+          }
+        ],
         links: commonLinks
       };
   }
@@ -361,15 +342,13 @@ function routeContent(pathname: string): {
     return {
       h1: comparison.h1,
       lead: comparison.lead,
-      sections: [
-        { h2: 'Executive summary', body: comparison.executiveSummary },
-        ...comparison.sections
-      ],
+      sections: comparisonToSections(comparison),
       faq: comparison.faq,
       links: [
         { href: '/', label: 'Home' },
+        { href: '/#audit', label: 'Run free channel audit' },
         { href: '/pricing', label: 'Pricing' },
-        { href: '/demo', label: 'Run free channel audit' },
+        { href: '/demo', label: 'Instant demo (MaxKantorCooking)' },
         { href: '/guides', label: 'Guides' }
       ]
     };
@@ -511,20 +490,23 @@ ${links}
 
 function replaceHeadSeo(html: string, pathname: string): string {
   const cleaned = html
-    .replace(/    <title>[\s\S]*?<\/title>\n?/g, '')
-    .replace(/    <meta name="description"[\s\S]*?\/>\n?/g, '')
-    .replace(/    <meta name="robots"[\s\S]*?\/>\n?/g, '')
-    .replace(/    <meta name="keywords"[\s\S]*?\/>\n?/g, '')
-    .replace(/    <link rel="canonical"[\s\S]*?\/>\n?/g, '')
-    .replace(/    <meta property="og:[^"]+"[\s\S]*?\/>\n?/g, '')
-    .replace(/    <meta name="twitter:[^"]+"[\s\S]*?\/>\n?/g, '')
-    .replace(/    <meta property="article:[^"]+"[\s\S]*?\/>\n?/g, '')
-    .replace(/    <script type="application\/ld\+json">[\s\S]*?<\/script>\n?/g, '');
+    .replace(/    <title>[\s\S]*?<\/title>\r?\n?/g, '')
+    .replace(/    <meta name="description"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <meta name="robots"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <meta name="keywords"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <link rel="canonical"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <meta property="og:[^"]+"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <meta name="twitter:[^"]+"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <meta property="article:[^"]+"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <script type="application\/ld\+json">[\s\S]*?<\/script>\r?\n?/g, '');
 
-  return cleaned.replace(
-    /(\s*<meta name="viewport"[^>]*\/>\n)/,
-    `$1${seoHeadTags(pathname)}\n`
+  const tags = seoHeadTags(pathname);
+  const afterViewport = cleaned.replace(
+    /(\s*<meta name="viewport"[^>]*\/>\r?\n)/,
+    `$1${tags}\n`
   );
+  if (afterViewport !== cleaned) return afterViewport;
+  return cleaned.replace('</head>', `${tags}\n  </head>`);
 }
 
 function replaceFallback(html: string, pathname: string): string {

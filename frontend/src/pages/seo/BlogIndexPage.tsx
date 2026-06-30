@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 
+import { SeoFunnelCta } from '../../components/SeoFunnelCta';
 import { BRAND } from '../../config/brand';
 import blogPosts from '../../seo/data/blogPosts.json';
 
@@ -32,6 +33,7 @@ export function BlogIndexPage() {
           </li>
         ))}
       </ul>
+      <SeoFunnelCta />
     </main>
   );
 }
