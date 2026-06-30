@@ -35,6 +35,7 @@ function isBuiltInShowcaseChannel(channelInput: string): boolean {
   );
 }
 import { publicApi } from './lib/api';
+import { analytics } from './lib/analytics';
 import { PaywallModal } from './PaywallModal';
 import { DemoAnalysisLoadingPanel } from './components/DemoAnalysisLoadingPanel';
 import type { CheckoutSession } from './types';
@@ -254,6 +255,22 @@ export function UnifiedDashboard({
   const suppressRunnerIndexEffectRef = useRef(false);
   /** Cancel token for async Start flow (Start can await server/payer before playing). */
   const runnerStartTokenRef = useRef(0);
+  const reportUnlockedTrackedRef = useRef(false);
+
+  useEffect(() => {
+    if (reportUnlockedTrackedRef.current) return;
+    if (demoLoading) return;
+
+    const paidReportReady =
+      (paidChannelAudit && demoData != null) ||
+      (premiumUnlocked && !isFullDemo && demoData != null) ||
+      (!isDemo && dashboardOverview != null);
+
+    if (!paidReportReady) return;
+
+    reportUnlockedTrackedRef.current = true;
+    analytics.reportUnlocked();
+  }, [paidChannelAudit, premiumUnlocked, isFullDemo, isDemo, demoData, dashboardOverview, demoLoading]);
 
   // YouTube iframe API player (kept out of React state)
   const playerRef = (globalThis as any).__ybPlayerRef as { player: any | null } | undefined;

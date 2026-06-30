@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { analytics } from './lib/analytics';
 import { billingApi, meApi, publicApi } from './lib/api';
@@ -59,10 +59,14 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
   const [apiDemoData, setApiDemoData] = useState<DemoPreview | null>(null);
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
+  const auditCompletedForRef = useRef<string | null>(null);
+  const demoOpenedTrackedRef = useRef(false);
 
   useEffect(() => {
-    analytics.demoDashboardViewed();
-  }, []);
+    if (variant !== 'marketing' || !isDefaultChannelDemo || demoOpenedTrackedRef.current) return;
+    demoOpenedTrackedRef.current = true;
+    analytics.demoOpenedOnDemoRoute();
+  }, [variant, isDefaultChannelDemo]);
 
   const refreshPremium = useCallback(async () => {
     if (!authSession?.idToken) {
@@ -122,6 +126,10 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
         if (!cancelled) {
           setApiDemoData(data);
           setDemoError(null);
+          if (auditCompletedForRef.current !== raw) {
+            auditCompletedForRef.current = raw;
+            analytics.auditCompleted();
+          }
         }
       })
       .catch((err: unknown) => {

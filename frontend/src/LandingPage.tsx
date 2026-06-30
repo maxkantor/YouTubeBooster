@@ -549,6 +549,7 @@ export function LandingPage() {
         : null;
   const pricingUnlockModules =
     (productDemo ?? heroDemo)?.gatedModules?.filter(Boolean) ?? FULL_UNLOCK_FALLBACK_MODULES;
+  const purchaseCompletedTrackedRef = useRef(false);
 
   useEffect(() => {
     analytics.landingPageView();
@@ -599,6 +600,37 @@ export function LandingPage() {
         }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.idToken]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout') !== 'success') return;
+    if (!authSession?.idToken) return;
+    if (purchaseCompletedTrackedRef.current) return;
+
+    let cancelled = false;
+    (async () => {
+      const start = Date.now();
+      while (!cancelled && Date.now() - start < 30_000) {
+        try {
+          const data = await meApi.getAccessStatus(authSession.idToken);
+          if (data.premium) {
+            if (!purchaseCompletedTrackedRef.current) {
+              purchaseCompletedTrackedRef.current = true;
+              analytics.purchaseCompleted();
+            }
+            return;
+          }
+        } catch {
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -670,8 +702,9 @@ export function LandingPage() {
 
   function handleOpenInstantDemo() {
     analytics.heroInstantDemoClicked();
+    analytics.demoOpenedFromHomepage();
     setStoredDemoChannel(DEFAULT_DEMO_CHANNEL);
-    analytics.channelAuditStarted(DEFAULT_DEMO_CHANNEL);
+    analytics.channelAuditStarted();
     navigate('/demo', { replace: true, state: { channelInput: DEFAULT_DEMO_CHANNEL } });
   }
 
@@ -690,7 +723,8 @@ export function LandingPage() {
     const normalized = validated.normalized;
     setAuditSubmitting(true);
     analytics.auditUrlEntered(normalized);
-    analytics.channelAuditStarted(normalized);
+    analytics.auditStarted();
+    analytics.channelAuditStarted();
     setStoredDemoChannel(normalized);
     if (hasPremium) {
       navigate(`/dashboard/channel?channel=${encodeURIComponent(normalized)}`, {

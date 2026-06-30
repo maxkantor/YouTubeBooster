@@ -159,6 +159,7 @@ function CheckoutSuccessPage({
   const { session: authSession } = useAuth();
   const [status, setStatus] = useState<'idle' | 'checking' | 'active' | 'error'>('idle');
   const [error, setError] = useState('');
+  const purchaseCompletedTrackedRef = useRef(false);
   const sessionId = searchParams.get('session_id');
   const checkoutReturnPath = sessionId
     ? searchParams.toString()
@@ -226,8 +227,11 @@ function CheckoutSuccessPage({
 
           const data = await meApi.getAccessStatus(token);
           if (data.premium) {
-            analytics.checkoutReturnSuccess(sessionId ?? undefined);
-            analytics.purchaseCompleted();
+            if (!purchaseCompletedTrackedRef.current) {
+              purchaseCompletedTrackedRef.current = true;
+              analytics.checkoutReturnSuccess(sessionId ?? undefined);
+              analytics.purchaseCompleted();
+            }
             setStatus('active');
             navigate('/dashboard', { replace: true });
             return;

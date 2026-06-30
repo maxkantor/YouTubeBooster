@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { aiApi } from '../lib/api';
+import { analytics } from '../lib/analytics';
 import type { AiGenerateAction } from '../types';
 
 type AuditContext = {
@@ -63,7 +64,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
   const submittingRef = useRef(false);
 
   const runGeneration = useCallback(
-    async (action: AiGenerateAction) => {
+    async (action: AiGenerateAction, options?: { trackUsage?: boolean }) => {
       if (submittingRef.current) return;
       submittingRef.current = true;
       setAiAction(action);
@@ -71,6 +72,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
       setAiLoading(true);
 
       const input = buildRequestInput(auditPreview);
+      const trackUsage = options?.trackUsage === true;
 
       try {
         if (!idToken) {
@@ -78,6 +80,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
           setTeaserLocked(true);
           setAiNotes('Preview generated from your audit context. Upgrade for live AI on AWS Bedrock.');
           setAiItems(buildClientPreviewItems(action, auditPreview));
+          if (trackUsage) analytics.aiToolUsed(action);
           return;
         }
 
@@ -87,6 +90,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
         setAiNotes(response.notes);
         setAiItems(response.items ?? []);
         setTeaserLocked(!!(response.preview && response.locked));
+        if (trackUsage) analytics.aiToolUsed(action);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Request failed.';
         const isAuth = /401|unauthorized/i.test(message);
@@ -106,6 +110,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
           setTeaserLocked(true);
           setAiNotes('Could not reach AI services. Showing local preview.');
           setAiItems(buildClientPreviewItems(action, auditPreview));
+          if (trackUsage) analytics.aiToolUsed(action);
         }
       } finally {
         setAiLoading(false);
@@ -163,7 +168,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
                 type="button"
                 className={`landing-ai-studio-tab btn btn-secondary${aiAction === key ? ' is-active' : ''}`}
                 disabled={aiLoading}
-                onClick={() => runGeneration(key)}
+                onClick={() => runGeneration(key, { trackUsage: true })}
               >
                 {label}
               </button>
@@ -187,7 +192,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
                   {aiError}
                 </p>
                 {hasPremium && (
-                  <button type="button" className="btn btn-primary" onClick={() => runGeneration(aiAction)}>
+                  <button type="button" className="btn btn-primary" onClick={() => runGeneration(aiAction, { trackUsage: true })}>
                     Retry
                   </button>
                 )}
@@ -221,7 +226,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
                     type="button"
                     className="btn btn-secondary"
                     disabled={aiLoading}
-                    onClick={() => runGeneration(aiAction)}
+                    onClick={() => runGeneration(aiAction, { trackUsage: true })}
                   >
                     Regenerate
                   </button>
