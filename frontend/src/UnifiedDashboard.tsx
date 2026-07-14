@@ -222,7 +222,7 @@ export function UnifiedDashboard({
   const runnerLoadedRef = useRef(false);
   const [runnerIndex, setRunnerIndex] = useState(0);
   const [runnerLog, setRunnerLog] = useState<string[]>([]);
-  const [runnerSpeed, setRunnerSpeed] = useState(10);
+  const [runnerSpeed, setRunnerSpeed] = useState(2);
   const [runnerWatchSeconds, setRunnerWatchSeconds] = useState(30);
   const [runnerShuffle, setRunnerShuffle] = useState(false);
   const [runnerRunning, setRunnerRunning] = useState(false);
@@ -248,6 +248,13 @@ export function UnifiedDashboard({
   const runnerWatchWallStartRef = useRef<number | null>(null);
   const runnerYouTubeWindowRef = useRef<Window | null>(null);
   const runnerYouTubeWatchTimerRef = useRef<number | null>(null);
+  const runnerRunningRef = useRef(false);
+  const runnerSpeedRef = useRef(runnerSpeed);
+  const runnerWatchSecondsRef = useRef(runnerWatchSeconds);
+  const runnerPlayOnYouTubeRef = useRef(runnerPlayOnYouTube);
+  const runnerSpeedClampLoggedRef = useRef(false);
+  const runnerResumeTimerRef = useRef<number | null>(null);
+  const runnerLoadSessionRef = useRef(0);
 
   /** Synced inside loadVideos so runner can use list immediately after await (React state is async). */
   const runnerVideosRef = useRef<PublicVideo[]>([]);
@@ -255,6 +262,20 @@ export function UnifiedDashboard({
   const suppressRunnerIndexEffectRef = useRef(false);
   /** Cancel token for async Start flow (Start can await server/payer before playing). */
   const runnerStartTokenRef = useRef(0);
+
+  useEffect(() => {
+    runnerRunningRef.current = runnerRunning;
+  }, [runnerRunning]);
+  useEffect(() => {
+    runnerSpeedRef.current = runnerSpeed;
+    runnerSpeedClampLoggedRef.current = false;
+  }, [runnerSpeed]);
+  useEffect(() => {
+    runnerWatchSecondsRef.current = runnerWatchSeconds;
+  }, [runnerWatchSeconds]);
+  useEffect(() => {
+    runnerPlayOnYouTubeRef.current = runnerPlayOnYouTube;
+  }, [runnerPlayOnYouTube]);
   const reportUnlockedTrackedRef = useRef(false);
 
   useEffect(() => {
@@ -659,7 +680,12 @@ export function UnifiedDashboard({
       const ref = (globalThis as any).__ybPlayerRef;
       const player = ref?.player;
       if (player && typeof player.destroy === 'function') player.destroy();
-      if (ref) ref.player = null;
+      if (ref) {
+        ref.player = null;
+        ref.creating = false;
+        ref.videoId = null;
+        ref.playToken = null;
+      }
     } catch {
       // ignore
     }
@@ -681,10 +707,12 @@ export function UnifiedDashboard({
     setRunnerWatchLimitFired(false);
   }
 
+  /** Start wall-clock once per clip. Do not reset on every PLAYING (rate changes / buffer cause replay events). */
   function runnerMarkWatchStarted() {
-    runnerWatchWallStartRef.current = Date.now();
+    if (runnerWatchWallStartRef.current == null) {
+      runnerWatchWallStartRef.current = Date.now();
+    }
     runnerWatchStartPosRef.current = 0;
-    runnerWatchLimitFiredRef.current = false;
     setRunnerWatchStartPos(0);
     setRunnerWatchLimitFired(false);
   }
@@ -693,6 +721,13 @@ export function UnifiedDashboard({
     if (runnerYouTubeWatchTimerRef.current != null) {
       window.clearTimeout(runnerYouTubeWatchTimerRef.current);
       runnerYouTubeWatchTimerRef.current = null;
+    }
+  }
+
+  function runnerClearResumeTimer() {
+    if (runnerResumeTimerRef.current != null) {
+      window.clearTimeout(runnerResumeTimerRef.current);
+      runnerResumeTimerRef.current = null;
     }
   }
 
@@ -708,8 +743,24 @@ export function UnifiedDashboard({
     setRunnerWatchStartPos(0);
   }
 
+  function runnerPickPlaybackRate(player: any, desired: number): number {
+    let rates: number[] = [1];
+    try {
+      if (typeof player.getAvailablePlaybackRates === 'function') {
+        const available = player.getAvailablePlaybackRates();
+        if (Array.isArray(available) && available.length) {
+          rates = available.filter((r: unknown) => typeof r === 'number' && r > 0) as number[];
+        }
+      }
+    } catch {
+      // ignore
+    }
+    if (!rates.length) rates = [1];
+    return rates.reduce((best, r) => (Math.abs(r - desired) < Math.abs(best - desired) ? r : best), rates[0]);
+  }
+
   function runnerApplySpeed() {
-    if (runnerPlayOnYouTube) {
+    if (runnerPlayOnYouTubeRef.current) {
       setRunnerDesiredSpeed(1);
       setRunnerActualSpeed(1);
       return;
@@ -717,12 +768,21 @@ export function UnifiedDashboard({
     try {
       const player = (globalThis as any).__ybPlayerRef?.player;
       if (!player) return;
-      if (typeof player.setPlaybackRate === 'function') {
-        player.setPlaybackRate(runnerSpeed);
+      const desired = runnerSpeedRef.current;
+      const clamped = runnerPickPlaybackRate(player, desired);
+      if (clamped !== desired && !runnerSpeedClampLoggedRef.current) {
+        runnerSpeedClampLoggedRef.current = true;
+        appendRunnerLog(
+          `Playback rate ${desired}× not available for this video; using ${clamped}× (YouTube/embed limit).`
+        );
       }
-      const actual = typeof player.getPlaybackRate === 'function' ? player.getPlaybackRate() : null;
-      setRunnerDesiredSpeed(runnerSpeed);
-      setRunnerActualSpeed(typeof actual === 'number' ? actual : null);
+      const current = typeof player.getPlaybackRate === 'function' ? player.getPlaybackRate() : null;
+      if (typeof player.setPlaybackRate === 'function' && current !== clamped) {
+        player.setPlaybackRate(clamped);
+      }
+      const actual = typeof player.getPlaybackRate === 'function' ? player.getPlaybackRate() : clamped;
+      setRunnerDesiredSpeed(desired);
+      setRunnerActualSpeed(typeof actual === 'number' ? actual : clamped);
     } catch {
       // ignore
     }
@@ -735,8 +795,10 @@ export function UnifiedDashboard({
     setRunnerSessionEnded((v) => v + 1);
     const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
     const action = order.length <= 1 ? 'Restarting' : 'Advancing';
-    appendRunnerLog(`Watch limit reached (${runnerWatchSeconds}s). ${action}.`);
-    if (!runnerPlayOnYouTube) {
+    const limit = runnerWatchSecondsRef.current;
+    appendRunnerLog(`Watch limit reached (${limit}s). ${action}.`);
+    runnerClearResumeTimer();
+    if (!runnerPlayOnYouTubeRef.current) {
       try {
         const player = (globalThis as any).__ybPlayerRef?.player;
         if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
@@ -748,22 +810,24 @@ export function UnifiedDashboard({
   }
 
   function runnerMaybeApplyWatchLimit() {
-    if (runnerWatchSeconds <= 0 || runnerWatchLimitFiredRef.current) return;
+    const limit = runnerWatchSecondsRef.current;
+    if (limit <= 0 || runnerWatchLimitFiredRef.current) return;
     if (runnerWatchWallStartRef.current == null) return;
     const elapsed = (Date.now() - runnerWatchWallStartRef.current) / 1000;
-    if (elapsed >= runnerWatchSeconds) {
+    if (elapsed >= limit) {
       runnerFinishWatchLimit();
     }
   }
 
   function runnerScheduleYouTubeWatchLimit() {
     runnerClearYouTubeWatchTimer();
-    if (runnerWatchSeconds <= 0 || runnerWatchLimitFiredRef.current) return;
+    const limit = runnerWatchSecondsRef.current;
+    if (limit <= 0 || runnerWatchLimitFiredRef.current) return;
     runnerYouTubeWatchTimerRef.current = window.setTimeout(() => {
       runnerYouTubeWatchTimerRef.current = null;
-      if (!runnerRunning) return;
+      if (!runnerRunningRef.current) return;
       runnerFinishWatchLimit();
-    }, runnerWatchSeconds * 1000);
+    }, limit * 1000);
   }
 
   function runnerOpenOnYouTube(videoId: string, userGesture = false): Window | null {
@@ -805,13 +869,24 @@ export function UnifiedDashboard({
   function runnerStopInternal() {
     runnerStartTokenRef.current += 1; // cancel any in-flight Start
     runnerClearYouTubeWatchTimer();
+    runnerClearResumeTimer();
     setRunnerRunning(false);
+    runnerRunningRef.current = false;
     setRunnerStatus('STOPPED');
     runnerWatchStartPosRef.current = 0;
     runnerWatchLimitFiredRef.current = false;
     setRunnerWatchStartPos(null);
     setRunnerWatchLimitFired(false);
     runnerDestroyYouTubePlayer();
+    try {
+      const ref = (globalThis as any).__ybPlayerRef;
+      if (ref) {
+        ref.videoId = null;
+        ref.playToken = null;
+      }
+    } catch {
+      // ignore
+    }
     try {
       runnerYouTubeWindowRef.current?.close();
     } catch {
@@ -851,7 +926,10 @@ export function UnifiedDashboard({
     const playToken = runnerStartTokenRef.current;
     appendRunnerLog(`Playing ${video.title} (${videoId})`);
     setRunnerSessionStarted((v) => v + 1);
+    runnerClearResumeTimer();
     runnerResetWatchTracking();
+    // New play session — allow reloading the same videoId (watch-limit loop).
+    const loadSession = ++runnerLoadSessionRef.current;
 
     if (runnerPlayOnYouTube) {
       const needsPopup = !runnerYouTubeWindowRef.current || runnerYouTubeWindowRef.current.closed;
@@ -860,12 +938,14 @@ export function UnifiedDashboard({
         if (needsPopup) {
           setRunnerStatus('ERROR');
           setRunnerRunning(false);
+          runnerRunningRef.current = false;
           return;
         }
         appendRunnerLog(`Could not switch YouTube tab for ${videoId}.`);
         return;
       }
       appendRunnerLog(`Opened on YouTube.com (${videoId}). Watch at 1× for Analytics credit.`);
+      runnerMarkWatchStarted();
       runnerScheduleYouTubeWatchLimit();
       setRunnerDesiredSpeed(1);
       setRunnerActualSpeed(1);
@@ -887,8 +967,21 @@ export function UnifiedDashboard({
 
     const load = () => {
       if (playToken !== runnerStartTokenRef.current) return; // Start/Stop cancellation
-      const ref = (globalThis as any).__ybPlayerRef;
+      const ref = (globalThis as any).__ybPlayerRef as {
+        player: any | null;
+        videoId?: string | null;
+        playToken?: number | null;
+        creating?: boolean;
+        loadSession?: number;
+      };
       const existingPlayer = ref?.player;
+
+      // Idempotent per playCurrent call — retries must not reload / seek mid-watch.
+      if (ref.loadSession === loadSession) return;
+      ref.loadSession = loadSession;
+      ref.playToken = playToken;
+      ref.videoId = videoId;
+
       if (existingPlayer && typeof existingPlayer.loadVideoById === 'function') {
         try {
           existingPlayer.loadVideoById({ videoId, startSeconds: 0 });
@@ -897,6 +990,7 @@ export function UnifiedDashboard({
             existingPlayer.loadVideoById(videoId, 0);
           } catch {
             appendRunnerLog('loadVideoById failed; try Stop then Start.');
+            ref.loadSession = undefined;
           }
         }
         setTimeout(() => {
@@ -916,14 +1010,19 @@ export function UnifiedDashboard({
 
       if (!(w.YT && w.YT.Player)) {
         appendRunnerLog('YouTube IFrame API not ready yet.');
+        ref.loadSession = undefined;
         return;
       }
 
       const host = document.getElementById('runner-player');
       if (!host) {
         appendRunnerLog('Player container #runner-player not in DOM.');
+        ref.loadSession = undefined;
         return;
       }
+
+      if (ref.creating) return;
+      ref.creating = true;
 
       ref.player = new w.YT.Player('runner-player', {
         width: '100%',
@@ -932,25 +1031,51 @@ export function UnifiedDashboard({
         playerVars,
         events: {
           onReady: () => {
+            ref.creating = false;
             if (playToken !== runnerStartTokenRef.current) return;
-            runnerApplySpeed();
             runnerSeekVideoToStart(ref.player);
+            try {
+              if (typeof ref.player.playVideo === 'function') ref.player.playVideo();
+            } catch {
+              // autoplay may block
+            }
+            runnerApplySpeed();
           },
           onStateChange: (e: any) => {
             if (playToken !== runnerStartTokenRef.current) return;
+            const state = e?.data;
             // PLAYING
-            if (e?.data === w.YT.PlayerState.PLAYING) {
+            if (state === w.YT.PlayerState.PLAYING) {
               setRunnerStatus('RUNNING');
               runnerMarkWatchStarted();
               runnerApplySpeed();
+              return;
             }
             // ENDED
-            if (e?.data === w.YT.PlayerState.ENDED) {
+            if (state === w.YT.PlayerState.ENDED) {
               setRunnerSessionEnded((v: number) => v + 1);
               runnerAdvance();
+              return;
+            }
+            // Unexpected pause while runner is active — resume (rate/buffer quirks).
+            if (state === w.YT.PlayerState.PAUSED) {
+              if (!runnerRunningRef.current || runnerWatchLimitFiredRef.current) return;
+              runnerClearResumeTimer();
+              runnerResumeTimerRef.current = window.setTimeout(() => {
+                runnerResumeTimerRef.current = null;
+                if (playToken !== runnerStartTokenRef.current) return;
+                if (!runnerRunningRef.current || runnerWatchLimitFiredRef.current) return;
+                try {
+                  const p = (globalThis as any).__ybPlayerRef?.player;
+                  if (p && typeof p.playVideo === 'function') p.playVideo();
+                } catch {
+                  // ignore
+                }
+              }, 300);
             }
           },
           onError: (e: any) => {
+            ref.creating = false;
             if (playToken !== runnerStartTokenRef.current) return;
             appendRunnerLog(`Player error code ${e?.data ?? 'unknown'} on ${videoId}. Skipping.`);
             runnerAdvance();
@@ -960,8 +1085,23 @@ export function UnifiedDashboard({
     };
 
     load();
-    setTimeout(load, 800);
-    setTimeout(load, 2200);
+    // Only retry until a player exists — never re-call load once playback has started.
+    window.setTimeout(() => {
+      if (playToken !== runnerStartTokenRef.current) return;
+      const ref = (globalThis as any).__ybPlayerRef;
+      if (!ref?.player) {
+        ref.loadSession = undefined;
+        load();
+      }
+    }, 800);
+    window.setTimeout(() => {
+      if (playToken !== runnerStartTokenRef.current) return;
+      const ref = (globalThis as any).__ybPlayerRef;
+      if (!ref?.player) {
+        ref.loadSession = undefined;
+        load();
+      }
+    }, 2200);
   }
 
   // Runner ticking: wall-time + watch-seconds limit + position updates
@@ -976,14 +1116,14 @@ export function UnifiedDashboard({
         setRunnerSessionWallSeconds((v) => v + dt);
       }
 
-      if (!runnerPlayOnYouTube) {
+      if (!runnerPlayOnYouTubeRef.current) {
         runnerUpdatePosition();
         runnerApplySpeed();
         runnerMaybeApplyWatchLimit();
       }
     }, 500);
     return () => window.clearInterval(id);
-  }, [runnerRunning, runnerSpeed, runnerWatchSeconds, runnerPlayOnYouTube]);
+  }, [runnerRunning]);
 
   // When index changes while running, play next (Start handles first play with suppress flag)
   useEffect(() => {
@@ -2086,15 +2226,15 @@ export function UnifiedDashboard({
                   Play on YouTube.com (opens new tab)
                 </label>
                 <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                  Speed (1–20)
+                  Speed (embed max usually 2×)
                   <input
                     type="number"
-                    min={1}
-                    max={20}
+                    min={0.25}
+                    max={2}
                     step={0.25}
                     value={runnerPlayOnYouTube ? 1 : runnerSpeed}
                     disabled={runnerPlayOnYouTube}
-                    onChange={(e) => setRunnerSpeed(Number(e.target.value) || 10)}
+                    onChange={(e) => setRunnerSpeed(Math.min(2, Math.max(0.25, Number(e.target.value) || 1)))}
                     style={{ width: 90 }}
                   />
                 </label>
@@ -2170,6 +2310,7 @@ export function UnifiedDashboard({
                     }
                     if (startToken !== runnerStartTokenRef.current) return;
                     setRunnerRunning(true);
+                    runnerRunningRef.current = true;
                     await runnerTestServer();
                     if (startToken !== runnerStartTokenRef.current) return;
                     runnerPlayCurrent();
