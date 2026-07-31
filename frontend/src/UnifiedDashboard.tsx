@@ -241,8 +241,11 @@ export function UnifiedDashboard({
   const runnerPlayOrderRef = useRef<number[]>([]);
   const [runnerWatchStartPos, setRunnerWatchStartPos] = useState<number | null>(null);
   const [runnerWatchLimitFired, setRunnerWatchLimitFired] = useState(false);
-  /** Play on youtube.com in a dedicated window — eligible for public Analytics vs embedded iframe. */
+  /** Play on YouTube player tabs (autoplay). Browser allows 1 popup/click unless popups are allowed. */
   const [runnerPlayOnYouTube, setRunnerPlayOnYouTube] = useState(false);
+  type RunnerYtQueueItem = { videoId: string; title: string; status: 'pending' | 'opened' | 'blocked' };
+  const [runnerYtQueue, setRunnerYtQueue] = useState<RunnerYtQueueItem[]>([]);
+  const runnerYtQueueRef = useRef<RunnerYtQueueItem[]>([]);
   const runnerWatchStartPosRef = useRef(0);
   const runnerWatchLimitFiredRef = useRef(false);
   const runnerWatchWallStartRef = useRef<number | null>(null);
@@ -851,52 +854,108 @@ export function UnifiedDashboard({
     runnerYouTubeWindowsRef.current = [];
   }
 
-  /** Open every video in the play order in its own YouTube tab (must run sync from a user click). */
-  function runnerOpenAllSelectedOnYouTube(): number {
+  function runnerYouTubePlayUrl(videoId: string): string {
+    // Same-origin helper: muted autoplay then unmute (youtube.com/watch blocks autoplay from other sites).
+    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${base}/runner-yt-play.html?v=${encodeURIComponent(videoId)}`;
+  }
+
+  function runnerMarkYtQueueItem(videoId: string, status: RunnerYtQueueItem['status']) {
+    const next = runnerYtQueueRef.current.map((item) =>
+      item.videoId === videoId ? { ...item, status } : item
+    );
+    runnerYtQueueRef.current = next;
+    setRunnerYtQueue(next);
+  }
+
+  /** Open one player tab. Must run directly from a user click (popup gesture). */
+  function runnerOpenOneYouTubeTab(videoId: string, title: string): Window | null {
+    const url = runnerYouTubePlayUrl(videoId);
+    const win = window.open(url, `yb_runner_${videoId}`);
+    if (!win) {
+      runnerMarkYtQueueItem(videoId, 'blocked');
+      appendRunnerLog(`Popup blocked for "${title}". Click "Open next tab" (one click per video), or allow popups.`);
+      return null;
+    }
+    runnerYouTubeWindowsRef.current = [...runnerYouTubeWindowsRef.current, win];
+    runnerMarkYtQueueItem(videoId, 'opened');
+    appendRunnerLog(`Opened player tab: ${title} (${videoId})`);
+    try {
+      win.focus();
+    } catch {
+      // ignore
+    }
+    return win;
+  }
+
+  /**
+   * Build queue + try to open every selected video.
+   * Chrome allows only ~1 window.open per click unless the site is allowed to show popups —
+   * remaining items stay pending for "Open next tab".
+   */
+  function runnerBeginYouTubeQueue(): { opened: number; remaining: number; total: number } {
     const list = getRunnerVideos();
     const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
-    if (!order.length) {
-      appendRunnerLog('No videos selected to open.');
-      return 0;
-    }
-
-    runnerCloseAllYouTubeWindows();
-    const opened: Window[] = [];
-    let blocked = 0;
-
+    const queue: RunnerYtQueueItem[] = [];
     for (const idx of order) {
       const video = list[idx];
       if (!video?.video_id) continue;
-      const videoId = video.video_id;
-      // autoplay=1 — browsers allow unmute play when window.open is from the Start click.
-      const url = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&autoplay=1`;
-      const win = window.open(url, `yb_runner_${videoId}`);
-      if (!win) {
-        blocked += 1;
-        appendRunnerLog(`Popup blocked for "${video.title}". Allow popups for this site, then Start again.`);
-        continue;
-      }
-      opened.push(win);
-      appendRunnerLog(`Opened YouTube tab: ${video.title} (${videoId})`);
+      queue.push({ videoId: video.video_id, title: video.title || video.video_id, status: 'pending' });
+    }
+    if (!queue.length) {
+      appendRunnerLog('No videos selected to open.');
+      runnerYtQueueRef.current = [];
+      setRunnerYtQueue([]);
+      return { opened: 0, remaining: 0, total: 0 };
     }
 
-    runnerYouTubeWindowsRef.current = opened;
-    if (opened.length) {
-      setRunnerSessionStarted(opened.length);
-      setRunnerDesiredSpeed(1);
-      setRunnerActualSpeed(1);
-      setRunnerPosition(0);
-      setRunnerIndex(0);
-      runnerMarkWatchStarted();
-      runnerScheduleYouTubeWatchLimit();
-      appendRunnerLog(
-        `Opened ${opened.length} YouTube tab${opened.length === 1 ? '' : 's'} with autoplay.` +
-          (blocked ? ` ${blocked} blocked by the browser.` : '')
-      );
-    } else if (blocked) {
-      appendRunnerLog('All YouTube tabs were blocked. Allow popups for youtubeboosterai.com, then click Start again.');
+    runnerCloseAllYouTubeWindows();
+    runnerYtQueueRef.current = queue.map((q) => ({ ...q }));
+    setRunnerYtQueue(runnerYtQueueRef.current);
+
+    let opened = 0;
+    for (const item of queue) {
+      const win = runnerOpenOneYouTubeTab(item.videoId, item.title);
+      if (win) opened += 1;
+      // After the first failure, stop batching — further opens need a fresh user click.
+      if (!win) break;
     }
-    return opened.length;
+
+    const remaining = runnerYtQueueRef.current.filter((q) => q.status !== 'opened').length;
+    setRunnerSessionStarted(opened);
+    setRunnerDesiredSpeed(1);
+    setRunnerActualSpeed(1);
+    setRunnerPosition(0);
+    setRunnerIndex(0);
+    runnerMarkWatchStarted();
+    runnerScheduleYouTubeWatchLimit();
+
+    if (opened && !remaining) {
+      appendRunnerLog(`Opened all ${opened} player tabs with autoplay.`);
+    } else if (opened && remaining) {
+      appendRunnerLog(
+        `Opened ${opened}/${queue.length} tabs. Browser blocked the rest — click "Open next tab" ${remaining} more time${remaining === 1 ? '' : 's'}.`
+      );
+    } else {
+      appendRunnerLog(
+        `Browser blocked popups. Click "Open next tab" for each of the ${queue.length} videos (required unless popups are allowed for this site).`
+      );
+    }
+    return { opened, remaining, total: queue.length };
+  }
+
+  /** Open the next pending/blocked video — call only from a button click. */
+  function runnerOpenNextYouTubeTab(): boolean {
+    const next = runnerYtQueueRef.current.find((q) => q.status !== 'opened');
+    if (!next) {
+      appendRunnerLog('All selected videos already have a tab open.');
+      return false;
+    }
+    const win = runnerOpenOneYouTubeTab(next.videoId, next.title);
+    if (win) {
+      setRunnerSessionStarted(runnerYtQueueRef.current.filter((q) => q.status === 'opened').length);
+    }
+    return !!win;
   }
 
   function runnerUpdatePosition() {
@@ -932,11 +991,18 @@ export function UnifiedDashboard({
       // ignore
     }
     runnerCloseAllYouTubeWindows();
+    runnerYtQueueRef.current = [];
+    setRunnerYtQueue([]);
   }
 
   function runnerAdvance() {
     if (runnerPlayOnYouTubeRef.current) {
-      appendRunnerLog('Skip: YouTube.com mode already opened all selected videos in tabs.');
+      const remaining = runnerYtQueueRef.current.filter((q) => q.status !== 'opened').length;
+      if (remaining > 0) {
+        appendRunnerLog(`Use "Open next tab" for the remaining ${remaining} video${remaining === 1 ? '' : 's'}.`);
+      } else {
+        appendRunnerLog('Skip: all selected YouTube player tabs are already open.');
+      }
       return;
     }
     const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
@@ -2232,10 +2298,10 @@ export function UnifiedDashboard({
               Review and test your content — play through videos, use speed/shuffle to scan, and mark issues.
             </p>
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-              <strong>Views &amp; watch time:</strong> By default, videos play in the embedded player below. YouTube
-              usually does not count embedded playback toward public watch hours. Enable{' '}
-              <strong>Play on YouTube.com</strong> and click Start to open every selected video in its own YouTube tab
-              with autoplay (allow popups for this site).
+              <strong>Views &amp; watch time:</strong> By default, videos play in the embedded player below. Enable{' '}
+              <strong>Play on YouTube tabs</strong> and click Start — each selected video opens in its own tab and
+              autoplays. Chrome only allows one new tab per click unless you allow popups; use{' '}
+              <strong>Open next tab</strong> for the rest (one click each).
             </p>
             <div className="surface" style={{ padding: 18, marginTop: 14 }}>
               <div className="pill-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
@@ -2248,7 +2314,7 @@ export function UnifiedDashboard({
                       if (e.target.checked) setRunnerSpeed(1);
                     }}
                   />
-                  Play on YouTube.com (opens all selected in new tabs)
+                  Play on YouTube tabs (autoplay each selected)
                 </label>
                 <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                   Speed (embed max usually 2×)
@@ -2323,7 +2389,7 @@ export function UnifiedDashboard({
                     if (runnerPlayOnYouTube) {
                       if (!v.length) {
                         appendRunnerLog(
-                          'Load Videos first, then click Start. (Tabs must open on the click — allow popups for this site.)'
+                          'Load Videos first, then click Start. (Each tab needs a click unless popups are allowed.)'
                         );
                         setRunnerStatus('IDLE');
                         return;
@@ -2335,9 +2401,9 @@ export function UnifiedDashboard({
                       runnerPlayOrderRef.current = buildPlayOrder();
                       setRunnerPlayOrder(runnerPlayOrderRef.current);
 
-                      // Open all tabs immediately — before any await (popup blockers).
-                      const opened = runnerOpenAllSelectedOnYouTube();
-                      if (!opened) {
+                      // Open tabs immediately — before any await (popup gesture).
+                      const { total } = runnerBeginYouTubeQueue();
+                      if (!total) {
                         setRunnerStatus('ERROR');
                         setRunnerRunning(false);
                         runnerRunningRef.current = false;
@@ -2383,6 +2449,18 @@ export function UnifiedDashboard({
                 <button type="button" className="btn btn-secondary" disabled={!runnerRunning} onClick={runnerStopInternal}>
                   ⏹ Stop
                 </button>
+                {runnerPlayOnYouTube && runnerYtQueue.some((q) => q.status !== 'opened') ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => {
+                      runnerOpenNextYouTubeTab();
+                    }}
+                  >
+                    ▶ Open next tab (
+                    {runnerYtQueue.filter((q) => q.status !== 'opened').length} left)
+                  </button>
+                ) : null}
                 <button type="button" className="btn btn-secondary" disabled={!runnerRunning} onClick={runnerAdvance}>
                   ⏭ Skip
                 </button>
@@ -2390,6 +2468,45 @@ export function UnifiedDashboard({
                   🔌 Test Server
                 </button>
               </div>
+
+              {runnerPlayOnYouTube && runnerYtQueue.length > 0 ? (
+                <div
+                  className="status-card"
+                  style={{ marginTop: 12, borderColor: 'rgba(167, 139, 250, 0.45)' }}
+                >
+                  <strong>YouTube tabs</strong>
+                  <p className="muted" style={{ margin: '6px 0 10px', fontSize: 13 }}>
+                    {runnerYtQueue.filter((q) => q.status === 'opened').length}/{runnerYtQueue.length} open.
+                    {runnerYtQueue.some((q) => q.status !== 'opened')
+                      ? ' Chrome blocks multiple tabs from one click — press Open next tab once per remaining video.'
+                      : ' All selected tabs are open and should be autoplaying.'}
+                  </p>
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, display: 'grid', gap: 4 }}>
+                    {runnerYtQueue.map((q) => (
+                      <li key={q.videoId}>
+                        <span style={{ opacity: 0.75 }}>
+                          {q.status === 'opened' ? '✓' : q.status === 'blocked' ? '✕' : '•'}
+                        </span>{' '}
+                        {q.title}{' '}
+                        <span className="muted">({q.status})</span>
+                        {q.status !== 'opened' ? (
+                          <>
+                            {' '}
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '2px 8px', fontSize: 12, marginLeft: 6 }}
+                              onClick={() => runnerOpenOneYouTubeTab(q.videoId, q.title)}
+                            >
+                              Open
+                            </button>
+                          </>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               <div className="status-card">
                 <strong>Status:</strong> {runnerRunning ? 'Running' : runnerStatus === 'STOPPED' ? 'Stopped' : 'Idle'}

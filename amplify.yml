@@ -114,6 +114,10 @@ applications:
       - source: '/blog/<*>'
         target: '/blog/<*>/index.html'
         status: '200'
+      # Static Continuous Runner autoplay helper (must not fall through to SPA index.html).
+      - source: '/runner-yt-play.html'
+        target: '/runner-yt-play.html'
+        status: '200'
       - source: '/<*>'
         target: '/index.html'
         status: '200'

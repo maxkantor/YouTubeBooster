@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YouTubeBooster Runner</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      #player {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      #hint {
+        display: none;
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 12px;
+        color: #fff;
+        font-family: system-ui, sans-serif;
+        background: rgba(0, 0, 0, 0.72);
+        text-align: center;
+        padding: 24px;
+      }
+      #hint.show {
+        display: flex;
+      }
+      #hint button {
+        cursor: pointer;
+        border: 0;
+        border-radius: 8px;
+        padding: 12px 20px;
+        font-size: 16px;
+        font-weight: 600;
+        background: #ff0033;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="player"></div>
+    <div id="hint">
+      <div>Click Play to start (browser blocked autoplay).</div>
+      <button type="button" id="playBtn">Play</button>
+    </div>
+    <script>
+      var params = new URLSearchParams(location.search);
+      var videoId = (params.get('v') || '').trim();
+      var player = null;
+
+      function showHint() {
+        document.getElementById('hint').classList.add('show');
+      }
+
+      function hideHint() {
+        document.getElementById('hint').classList.remove('show');
+      }
+
+      function tryPlay(p) {
+        if (!p) return;
+        try {
+          p.mute();
+          p.playVideo();
+          setTimeout(function () {
+            try {
+              p.unMute();
+              p.setVolume(100);
+              if (p.getPlayerState && p.getPlayerState() !== 1) {
+                p.playVideo();
+              }
+            } catch (e) {}
+          }, 400);
+        } catch (e) {
+          showHint();
+        }
+      }
+
+      document.getElementById('playBtn').onclick = function () {
+        hideHint();
+        tryPlay(player);
+      };
+
+      if (!videoId) {
+        document.body.innerHTML =
+          '<p style="color:#fff;font-family:system-ui;padding:24px">Missing video id (?v=…)</p>';
+      } else {
+        window.onYouTubeIframeAPIReady = function () {
+          player = new YT.Player('player', {
+            width: '100%',
+            height: '100%',
+            videoId: videoId,
+            playerVars: {
+              autoplay: 1,
+              rel: 0,
+              modestbranding: 1,
+              playsinline: 1,
+              fs: 1
+            },
+            events: {
+              onReady: function (e) {
+                tryPlay(e.target);
+              },
+              onStateChange: function (e) {
+                if (e.data === YT.PlayerState.PLAYING) hideHint();
+                if (e.data === YT.PlayerState.UNSTARTED || e.data === YT.PlayerState.CUED) {
+                  setTimeout(function () {
+                    if (player && player.getPlayerState && player.getPlayerState() !== 1) {
+                      showHint();
+                    }
+                  }, 1500);
+                }
+              },
+              onError: function () {
+                showHint();
+              }
+            }
+          });
+        };
+        var tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        document.head.appendChild(tag);
+      }
+    </script>
+  </body>
+</html>
