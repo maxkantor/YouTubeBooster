@@ -246,7 +246,7 @@ export function UnifiedDashboard({
   const runnerWatchStartPosRef = useRef(0);
   const runnerWatchLimitFiredRef = useRef(false);
   const runnerWatchWallStartRef = useRef<number | null>(null);
-  const runnerYouTubeWindowRef = useRef<Window | null>(null);
+  const runnerYouTubeWindowsRef = useRef<Window[]>([]);
   const runnerYouTubeWatchTimerRef = useRef<number | null>(null);
   const runnerRunningRef = useRef(false);
   const runnerSpeedRef = useRef(runnerSpeed);
@@ -793,18 +793,28 @@ export function UnifiedDashboard({
     runnerWatchLimitFiredRef.current = true;
     setRunnerWatchLimitFired(true);
     setRunnerSessionEnded((v) => v + 1);
+    const limit = runnerWatchSecondsRef.current;
+    runnerClearResumeTimer();
+
+    // YouTube.com multi-tab: tabs stay open; just end the runner session timer.
+    if (runnerPlayOnYouTubeRef.current) {
+      appendRunnerLog(
+        `Watch limit reached (${limit}s). YouTube tabs stay open — close them when done, or click Stop.`
+      );
+      setRunnerRunning(false);
+      runnerRunningRef.current = false;
+      setRunnerStatus('STOPPED');
+      return;
+    }
+
     const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
     const action = order.length <= 1 ? 'Restarting' : 'Advancing';
-    const limit = runnerWatchSecondsRef.current;
     appendRunnerLog(`Watch limit reached (${limit}s). ${action}.`);
-    runnerClearResumeTimer();
-    if (!runnerPlayOnYouTubeRef.current) {
-      try {
-        const player = (globalThis as any).__ybPlayerRef?.player;
-        if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
-      } catch {
-        // ignore
-      }
+    try {
+      const player = (globalThis as any).__ybPlayerRef?.player;
+      if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
+    } catch {
+      // ignore
     }
     runnerAdvance();
   }
@@ -830,29 +840,63 @@ export function UnifiedDashboard({
     }, limit * 1000);
   }
 
-  function runnerOpenOnYouTube(videoId: string, userGesture = false): Window | null {
-    const url = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
-    const features = 'noopener,noreferrer';
-    let win = runnerYouTubeWindowRef.current;
-    if (win && !win.closed) {
+  function runnerCloseAllYouTubeWindows() {
+    for (const win of runnerYouTubeWindowsRef.current) {
       try {
-        win.location.href = url;
-        win.focus();
-        return win;
+        if (win && !win.closed) win.close();
       } catch {
-        runnerYouTubeWindowRef.current = null;
+        // ignore
       }
     }
-    win = userGesture ? window.open(url, 'yb_runner_youtube', features) : null;
-    if (!win && userGesture) {
-      appendRunnerLog('Popup blocked. Allow popups for this site, or uncheck "Play on YouTube.com".');
-      return null;
+    runnerYouTubeWindowsRef.current = [];
+  }
+
+  /** Open every video in the play order in its own YouTube tab (must run sync from a user click). */
+  function runnerOpenAllSelectedOnYouTube(): number {
+    const list = getRunnerVideos();
+    const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
+    if (!order.length) {
+      appendRunnerLog('No videos selected to open.');
+      return 0;
     }
-    if (win) {
-      runnerYouTubeWindowRef.current = win;
-      win.focus();
+
+    runnerCloseAllYouTubeWindows();
+    const opened: Window[] = [];
+    let blocked = 0;
+
+    for (const idx of order) {
+      const video = list[idx];
+      if (!video?.video_id) continue;
+      const videoId = video.video_id;
+      // autoplay=1 — browsers allow unmute play when window.open is from the Start click.
+      const url = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&autoplay=1`;
+      const win = window.open(url, `yb_runner_${videoId}`);
+      if (!win) {
+        blocked += 1;
+        appendRunnerLog(`Popup blocked for "${video.title}". Allow popups for this site, then Start again.`);
+        continue;
+      }
+      opened.push(win);
+      appendRunnerLog(`Opened YouTube tab: ${video.title} (${videoId})`);
     }
-    return win;
+
+    runnerYouTubeWindowsRef.current = opened;
+    if (opened.length) {
+      setRunnerSessionStarted(opened.length);
+      setRunnerDesiredSpeed(1);
+      setRunnerActualSpeed(1);
+      setRunnerPosition(0);
+      setRunnerIndex(0);
+      runnerMarkWatchStarted();
+      runnerScheduleYouTubeWatchLimit();
+      appendRunnerLog(
+        `Opened ${opened.length} YouTube tab${opened.length === 1 ? '' : 's'} with autoplay.` +
+          (blocked ? ` ${blocked} blocked by the browser.` : '')
+      );
+    } else if (blocked) {
+      appendRunnerLog('All YouTube tabs were blocked. Allow popups for youtubeboosterai.com, then click Start again.');
+    }
+    return opened.length;
   }
 
   function runnerUpdatePosition() {
@@ -887,15 +931,14 @@ export function UnifiedDashboard({
     } catch {
       // ignore
     }
-    try {
-      runnerYouTubeWindowRef.current?.close();
-    } catch {
-      // ignore
-    }
-    runnerYouTubeWindowRef.current = null;
+    runnerCloseAllYouTubeWindows();
   }
 
   function runnerAdvance() {
+    if (runnerPlayOnYouTubeRef.current) {
+      appendRunnerLog('Skip: YouTube.com mode already opened all selected videos in tabs.');
+      return;
+    }
     const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
     if (!order.length) return;
 
@@ -931,26 +974,8 @@ export function UnifiedDashboard({
     // New play session — allow reloading the same videoId (watch-limit loop).
     const loadSession = ++runnerLoadSessionRef.current;
 
-    if (runnerPlayOnYouTube) {
-      const needsPopup = !runnerYouTubeWindowRef.current || runnerYouTubeWindowRef.current.closed;
-      const win = runnerOpenOnYouTube(videoId, needsPopup);
-      if (!win) {
-        if (needsPopup) {
-          setRunnerStatus('ERROR');
-          setRunnerRunning(false);
-          runnerRunningRef.current = false;
-          return;
-        }
-        appendRunnerLog(`Could not switch YouTube tab for ${videoId}.`);
-        return;
-      }
-      appendRunnerLog(`Opened on YouTube.com (${videoId}). Watch at 1× for Analytics credit.`);
-      runnerMarkWatchStarted();
-      runnerScheduleYouTubeWatchLimit();
-      setRunnerDesiredSpeed(1);
-      setRunnerActualSpeed(1);
-      setRunnerPosition(0);
-      setRunnerStatus('RUNNING');
+    // YouTube.com multi-tab mode is started via runnerOpenAllSelectedOnYouTube() from Start.
+    if (runnerPlayOnYouTubeRef.current) {
       return;
     }
 
@@ -2208,9 +2233,9 @@ export function UnifiedDashboard({
             </p>
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
               <strong>Views &amp; watch time:</strong> By default, videos play in the embedded player below. YouTube
-              usually does not count embedded playback toward public watch hours. Optionally enable{' '}
-              <strong>Play on YouTube.com</strong> to open each clip in a YouTube tab at 1× speed if you want
-              Analytics-eligible playback.
+              usually does not count embedded playback toward public watch hours. Enable{' '}
+              <strong>Play on YouTube.com</strong> and click Start to open every selected video in its own YouTube tab
+              with autoplay (allow popups for this site).
             </p>
             <div className="surface" style={{ padding: 18, marginTop: 14 }}>
               <div className="pill-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
@@ -2223,7 +2248,7 @@ export function UnifiedDashboard({
                       if (e.target.checked) setRunnerSpeed(1);
                     }}
                   />
-                  Play on YouTube.com (opens new tab)
+                  Play on YouTube.com (opens all selected in new tabs)
                 </label>
                 <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                   Speed (embed max usually 2×)
@@ -2282,12 +2307,50 @@ export function UnifiedDashboard({
                   disabled={runnerRunning}
                   onClick={async () => {
                     const startToken = ++runnerStartTokenRef.current;
-                    ensureYouTubeIframeApi();
                     setRunnerStatus('RUNNING');
                     setRunnerSessionStarted(0);
                     setRunnerSessionEnded(0);
                     setRunnerSessionWallSeconds(0);
+                    setRunnerServerStatus('—');
+
+                    // Prefer already-loaded list so YouTube.com tabs can open sync (user-gesture).
                     let v = runnerVideosRef.current;
+                    if (!v.length) {
+                      v = (pyVideos ?? []).filter((vid) => vid && vid.video_id);
+                      if (v.length) runnerVideosRef.current = v;
+                    }
+
+                    if (runnerPlayOnYouTube) {
+                      if (!v.length) {
+                        appendRunnerLog(
+                          'Load Videos first, then click Start. (Tabs must open on the click — allow popups for this site.)'
+                        );
+                        setRunnerStatus('IDLE');
+                        return;
+                      }
+                      runnerLoadedRef.current = true;
+                      setRunnerLoaded(true);
+                      suppressRunnerIndexEffectRef.current = true;
+                      setRunnerIndex(0);
+                      runnerPlayOrderRef.current = buildPlayOrder();
+                      setRunnerPlayOrder(runnerPlayOrderRef.current);
+
+                      // Open all tabs immediately — before any await (popup blockers).
+                      const opened = runnerOpenAllSelectedOnYouTube();
+                      if (!opened) {
+                        setRunnerStatus('ERROR');
+                        setRunnerRunning(false);
+                        runnerRunningRef.current = false;
+                        return;
+                      }
+                      setRunnerRunning(true);
+                      runnerRunningRef.current = true;
+                      setRunnerStatus('RUNNING');
+                      void runnerTestServer();
+                      return;
+                    }
+
+                    ensureYouTubeIframeApi();
                     if (!v.length) v = (await loadVideos(200)) ?? [];
                     if (!v.length) {
                       appendRunnerLog('No videos to play. Click Load Videos first.');
@@ -2301,7 +2364,6 @@ export function UnifiedDashboard({
                     setRunnerIndex(0);
                     runnerPlayOrderRef.current = buildPlayOrder();
                     setRunnerPlayOrder(runnerPlayOrderRef.current);
-                    setRunnerServerStatus('—');
                     const ytOk = await waitForYouTubePlayerCtor(20000);
                     if (!ytOk) {
                       appendRunnerLog('YouTube IFrame API did not load in time. Refresh the page and try again.');
