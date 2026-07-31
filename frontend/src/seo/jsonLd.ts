@@ -8,6 +8,10 @@ const BRAND_ALTERNATE_NAMES = [
   'YouTube Booster AI',
   'youtube booster ai',
   'YouTubeBooster',
+  'youtubeboosterai',
+  'youtubebooster ai',
+  'youtubeboosterai.com',
+  'YouTubeBoosterAI',
   BRAND.tagline
 ];
 
@@ -15,6 +19,7 @@ export function organizationSchema(): Record<string, unknown> {
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
+    '@id': `${getSiteUrl()}/#organization`,
     name: BRAND.name,
     alternateName: BRAND_ALTERNATE_NAMES,
     url: absoluteUrl('/'),
@@ -31,7 +36,9 @@ export function webSiteSchema(): Record<string, unknown> {
     '@id': `${getSiteUrl()}/#website`,
     name: BRAND.name,
     alternateName: BRAND_ALTERNATE_NAMES,
-    url: absoluteUrl('/')
+    url: absoluteUrl('/'),
+    description: BRAND.seoHomeDescription,
+    publisher: { '@id': `${getSiteUrl()}/#organization` }
   };
 }
 
@@ -41,11 +48,19 @@ export function homeWebPageSchema(): Record<string, unknown> {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
     '@id': absoluteUrl('/'),
-    name: `${BRAND.name} — AI-Powered YouTube Channel Audit & Growth Platform`,
+    name: `${BRAND.name} — Official Site`,
     url: absoluteUrl('/'),
     description: BRAND.seoHomeDescription,
     isPartOf: { '@id': `${getSiteUrl()}/#website` },
-    about: { '@type': 'Organization', name: BRAND.name }
+    about: {
+      '@type': 'SoftwareApplication',
+      name: BRAND.name,
+      alternateName: BRAND_ALTERNATE_NAMES,
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      url: absoluteUrl('/')
+    },
+    primaryImageOfPage: absoluteUrl('/og-image.jpg')
   };
 }
 

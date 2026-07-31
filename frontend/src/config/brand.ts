@@ -15,7 +15,7 @@ export const BRAND = {
   defaultTitle: 'YouTubeBooster AI | AI-Powered YouTube Channel Audit & Growth Platform',
   /** Home page meta description (SEO + OG) */
   seoHomeDescription:
-    'Get an AI-powered YouTube channel audit in minutes. Discover growth opportunities, improve CTR, optimize thumbnails, and increase views with actionable recommendations from YouTubeBooster AI.',
+    'YouTubeBooster AI (youtubeboosterai.com) — official AI YouTube channel audit and growth platform. Improve CTR, thumbnails, retention, and views with actionable recommendations.',
   /** Core positioning — use in footer and trust copy */
   corePositioning:
     'YouTubeBooster AI helps creators understand why their channels are not growing and provides actionable recommendations to improve views, subscribers, click-through rate, retention, and overall channel performance.',
