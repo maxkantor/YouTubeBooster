@@ -855,8 +855,7 @@ export function UnifiedDashboard({
   }
 
   function runnerYouTubePlayUrl(videoId: string): string {
-    // youtube.com/watch ignores autoplay from other sites. Embed + mute autoplays reliably;
-    // Open next tab (one click each) bypasses Chrome's one-popup-per-click limit.
+    // youtube.com/watch ignores autoplay from other sites. Embed + mute autoplays reliably.
     return (
       `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` +
       '?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1'
@@ -871,30 +870,53 @@ export function UnifiedDashboard({
     setRunnerYtQueue(next);
   }
 
+  /**
+   * Open many player tabs in one user click.
+   * Chrome/Edge block every window.open after the first unless this site is allowed to show popups.
+   * Technique: reserve about:blank windows first (same gesture), then navigate — works for ALL
+   * tabs once popups are allowed for youtubeboosterai.com.
+   */
+  function runnerBatchOpenYouTubeTabs(items: RunnerYtQueueItem[]): number {
+    if (!items.length) return 0;
+
+    const slots = items.map((item) => ({
+      item,
+      win: window.open('about:blank', `yb_runner_${item.videoId}`)
+    }));
+
+    let opened = 0;
+    for (const { item, win } of slots) {
+      if (!win) {
+        runnerMarkYtQueueItem(item.videoId, 'blocked');
+        continue;
+      }
+      try {
+        win.location.replace(runnerYouTubePlayUrl(item.videoId));
+        runnerYouTubeWindowsRef.current = [...runnerYouTubeWindowsRef.current, win];
+        runnerMarkYtQueueItem(item.videoId, 'opened');
+        opened += 1;
+        appendRunnerLog(`Opened player tab: ${item.title} (${item.videoId})`);
+      } catch {
+        runnerMarkYtQueueItem(item.videoId, 'blocked');
+        try {
+          win.close();
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return opened;
+  }
+
   /** Open one player tab. Must run directly from a user click (popup gesture). */
   function runnerOpenOneYouTubeTab(videoId: string, title: string): Window | null {
-    const url = runnerYouTubePlayUrl(videoId);
-    const win = window.open(url, `yb_runner_${videoId}`);
-    if (!win) {
-      runnerMarkYtQueueItem(videoId, 'blocked');
-      appendRunnerLog(`Popup blocked for "${title}". Click "Open next tab" (one click per video), or allow popups.`);
-      return null;
-    }
-    runnerYouTubeWindowsRef.current = [...runnerYouTubeWindowsRef.current, win];
-    runnerMarkYtQueueItem(videoId, 'opened');
-    appendRunnerLog(`Opened player tab: ${title} (${videoId})`);
-    try {
-      win.focus();
-    } catch {
-      // ignore
-    }
-    return win;
+    const opened = runnerBatchOpenYouTubeTabs([{ videoId, title, status: 'pending' }]);
+    return opened > 0 ? runnerYouTubeWindowsRef.current[runnerYouTubeWindowsRef.current.length - 1] ?? null : null;
   }
 
   /**
-   * Build queue + try to open every selected video.
-   * Chrome allows only ~1 window.open per click unless the site is allowed to show popups —
-   * remaining items stay pending for "Open next tab".
+   * Build queue + try to open every selected video in this same click.
+   * If the browser blocks popups, only the first tab opens until the user allows popups.
    */
   function runnerBeginYouTubeQueue(): { opened: number; remaining: number; total: number } {
     const list = getRunnerVideos();
@@ -916,14 +938,7 @@ export function UnifiedDashboard({
     runnerYtQueueRef.current = queue.map((q) => ({ ...q }));
     setRunnerYtQueue(runnerYtQueueRef.current);
 
-    let opened = 0;
-    for (const item of queue) {
-      const win = runnerOpenOneYouTubeTab(item.videoId, item.title);
-      if (win) opened += 1;
-      // After the first failure, stop batching — further opens need a fresh user click.
-      if (!win) break;
-    }
-
+    const opened = runnerBatchOpenYouTubeTabs(queue);
     const remaining = runnerYtQueueRef.current.filter((q) => q.status !== 'opened').length;
     setRunnerSessionStarted(opened);
     setRunnerDesiredSpeed(1);
@@ -935,19 +950,35 @@ export function UnifiedDashboard({
 
     if (opened && !remaining) {
       appendRunnerLog(`Opened all ${opened} player tabs with autoplay.`);
-    } else if (opened && remaining) {
+    } else if (remaining) {
       appendRunnerLog(
-        `Opened ${opened}/${queue.length} tabs. Browser blocked the rest — click "Open next tab" ${remaining} more time${remaining === 1 ? '' : 's'}.`
-      );
-    } else {
-      appendRunnerLog(
-        `Browser blocked popups. Click "Open next tab" for each of the ${queue.length} videos (required unless popups are allowed for this site).`
+        `Opened ${opened}/${queue.length}. Browser blocked the rest. Allow popups for this site (address bar → Popups → Always allow), then click "Open ALL tabs".`
       );
     }
     return { opened, remaining, total: queue.length };
   }
 
-  /** Open the next pending/blocked video — call only from a button click. */
+  /** Open every still-pending/blocked video in one click (needs popups allowed). */
+  function runnerOpenAllRemainingYouTubeTabs(): number {
+    const pending = runnerYtQueueRef.current.filter((q) => q.status !== 'opened');
+    if (!pending.length) {
+      appendRunnerLog('All selected videos already have a tab open.');
+      return 0;
+    }
+    const opened = runnerBatchOpenYouTubeTabs(pending);
+    setRunnerSessionStarted(runnerYtQueueRef.current.filter((q) => q.status === 'opened').length);
+    const remaining = runnerYtQueueRef.current.filter((q) => q.status !== 'opened').length;
+    if (opened && !remaining) {
+      appendRunnerLog(`Opened all remaining tabs (${opened}).`);
+    } else if (remaining) {
+      appendRunnerLog(
+        `Still blocked ${remaining} tab(s). In Chrome: click the pop-up blocked icon in the address bar → Always allow popups for youtubeboosterai.com → click Open ALL tabs again.`
+      );
+    }
+    return opened;
+  }
+
+  /** Open the next pending/blocked video — fallback if user prefers one-at-a-time. */
   function runnerOpenNextYouTubeTab(): boolean {
     const next = runnerYtQueueRef.current.find((q) => q.status !== 'opened');
     if (!next) {
@@ -1002,7 +1033,9 @@ export function UnifiedDashboard({
     if (runnerPlayOnYouTubeRef.current) {
       const remaining = runnerYtQueueRef.current.filter((q) => q.status !== 'opened').length;
       if (remaining > 0) {
-        appendRunnerLog(`Use "Open next tab" for the remaining ${remaining} video${remaining === 1 ? '' : 's'}.`);
+        appendRunnerLog(
+          `${remaining} tab(s) still blocked. Allow popups for this site, then click "Open ALL tabs".`
+        );
       } else {
         appendRunnerLog('Skip: all selected YouTube player tabs are already open.');
       }
@@ -2301,10 +2334,9 @@ export function UnifiedDashboard({
               Review and test your content — play through videos, use speed/shuffle to scan, and mark issues.
             </p>
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-              <strong>Views &amp; watch time:</strong> By default, videos play in the embedded player below. Enable{' '}
-              <strong>Play on YouTube tabs</strong> and click Start — each selected video opens in its own tab and
-              autoplays (starts muted; click unmute for sound). Chrome only allows one new tab per click unless you
-              allow popups; use <strong>Open next tab</strong> for the rest (one click each).
+              <strong>Views &amp; watch time:</strong> Enable <strong>Play on YouTube tabs</strong> and click Start to
+              open every selected video in its own tab (autoplay muted). Browsers block multiple new tabs from one click
+              until you <strong>allow popups</strong> for this site — then Start / Open ALL tabs opens them all at once.
             </p>
             <div className="surface" style={{ padding: 18, marginTop: 14 }}>
               <div className="pill-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
@@ -2457,10 +2489,10 @@ export function UnifiedDashboard({
                     type="button"
                     className="btn btn-primary"
                     onClick={() => {
-                      runnerOpenNextYouTubeTab();
+                      runnerOpenAllRemainingYouTubeTabs();
                     }}
                   >
-                    ▶ Open next tab (
+                    ▶ Open ALL tabs (
                     {runnerYtQueue.filter((q) => q.status !== 'opened').length} left)
                   </button>
                 ) : null}
@@ -2480,9 +2512,16 @@ export function UnifiedDashboard({
                   <strong>YouTube tabs</strong>
                   <p className="muted" style={{ margin: '6px 0 10px', fontSize: 13 }}>
                     {runnerYtQueue.filter((q) => q.status === 'opened').length}/{runnerYtQueue.length} open.
-                    {runnerYtQueue.some((q) => q.status !== 'opened')
-                      ? ' Chrome blocks multiple tabs from one click — press Open next tab once per remaining video.'
-                      : ' All selected tabs are open and should be autoplaying.'}
+                    {runnerYtQueue.some((q) => q.status !== 'opened') ? (
+                      <>
+                        {' '}
+                        To open the rest <strong>in one click</strong>: look for the pop-up blocked icon in Chrome’s
+                        address bar → <strong>Always allow popups</strong> for youtubeboosterai.com → click{' '}
+                        <strong>Open ALL tabs</strong>.
+                      </>
+                    ) : (
+                      ' All selected tabs are open and should be autoplaying.'
+                    )}
                   </p>
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, display: 'grid', gap: 4 }}>
                     {runnerYtQueue.map((q) => (
