@@ -855,9 +855,12 @@ export function UnifiedDashboard({
   }
 
   function runnerYouTubePlayUrl(videoId: string): string {
-    // Same-origin helper: muted autoplay then unmute (youtube.com/watch blocks autoplay from other sites).
-    const base = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${base}/runner-yt-play.html?v=${encodeURIComponent(videoId)}`;
+    // youtube.com/watch ignores autoplay from other sites. Embed + mute autoplays reliably;
+    // Open next tab (one click each) bypasses Chrome's one-popup-per-click limit.
+    return (
+      `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` +
+      '?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1'
+    );
   }
 
   function runnerMarkYtQueueItem(videoId: string, status: RunnerYtQueueItem['status']) {
@@ -2300,8 +2303,8 @@ export function UnifiedDashboard({
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
               <strong>Views &amp; watch time:</strong> By default, videos play in the embedded player below. Enable{' '}
               <strong>Play on YouTube tabs</strong> and click Start — each selected video opens in its own tab and
-              autoplays. Chrome only allows one new tab per click unless you allow popups; use{' '}
-              <strong>Open next tab</strong> for the rest (one click each).
+              autoplays (starts muted; click unmute for sound). Chrome only allows one new tab per click unless you
+              allow popups; use <strong>Open next tab</strong> for the rest (one click each).
             </p>
             <div className="surface" style={{ padding: 18, marginTop: 14 }}>
               <div className="pill-row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
