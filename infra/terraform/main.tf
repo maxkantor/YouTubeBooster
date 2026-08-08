@@ -22,6 +22,49 @@ locals {
     Environment = "prod"
   }
 
+  amplify_seo_route_rules = [
+    # Canonical path redirects.
+    { source = "/audit-topics", target = "/audit", status = "301" },
+    { source = "/audit-topics/<*>", target = "/audit/<*>", status = "301" },
+    { source = "/privacy-policy", target = "/privacy", status = "301" },
+    { source = "/why-your-youtube-channel-gets-no-views", target = "/why-your-channel-gets-no-views", status = "301" },
+    { source = "/low-click-through-rate-youtube", target = "/low-ctr-on-youtube", status = "301" },
+    { source = "/how-to-increase-youtube-watch-time", target = "/increase-youtube-watch-time", status = "301" },
+
+    # Public SEO routes: serve generated static HTML before the SPA fallback.
+    { source = "/demo", target = "/demo/index.html", status = "200" },
+    { source = "/pricing", target = "/pricing/index.html", status = "200" },
+    { source = "/faq", target = "/faq/index.html", status = "200" },
+    { source = "/about", target = "/about/index.html", status = "200" },
+    { source = "/contact", target = "/contact/index.html", status = "200" },
+    { source = "/privacy", target = "/privacy/index.html", status = "200" },
+    { source = "/disclaimer", target = "/disclaimer/index.html", status = "200" },
+    { source = "/platform", target = "/platform/index.html", status = "200" },
+    { source = "/audit", target = "/audit/index.html", status = "200" },
+    { source = "/solutions", target = "/solutions/index.html", status = "200" },
+    { source = "/guides", target = "/guides/index.html", status = "200" },
+    { source = "/blog", target = "/blog/index.html", status = "200" },
+    { source = "/site-map", target = "/site-map/index.html", status = "200" },
+    { source = "/why-your-channel-gets-no-views", target = "/why-your-channel-gets-no-views/index.html", status = "200" },
+    { source = "/how-to-get-more-youtube-views", target = "/how-to-get-more-youtube-views/index.html", status = "200" },
+    { source = "/youtube-thumbnail-mistakes", target = "/youtube-thumbnail-mistakes/index.html", status = "200" },
+    { source = "/low-ctr-on-youtube", target = "/low-ctr-on-youtube/index.html", status = "200" },
+    { source = "/youtube-seo-for-small-channels", target = "/youtube-seo-for-small-channels/index.html", status = "200" },
+    { source = "/free-youtube-channel-audit", target = "/free-youtube-channel-audit/index.html", status = "200" },
+    { source = "/youtube-title-generator", target = "/youtube-title-generator/index.html", status = "200" },
+    { source = "/increase-youtube-watch-time", target = "/increase-youtube-watch-time/index.html", status = "200" },
+    { source = "/youtube-retention-analysis", target = "/youtube-retention-analysis/index.html", status = "200" },
+    { source = "/youtube-thumbnail-ctr", target = "/youtube-thumbnail-ctr/index.html", status = "200" },
+    { source = "/vidiq-alternative", target = "/vidiq-alternative/index.html", status = "200" },
+    { source = "/tubebuddy-alternative", target = "/tubebuddy-alternative/index.html", status = "200" },
+    { source = "/best-youtube-audit-tool", target = "/best-youtube-audit-tool/index.html", status = "200" },
+    { source = "/compare/<*>", target = "/compare/<*>/index.html", status = "200" },
+    { source = "/audit/<*>", target = "/audit/<*>/index.html", status = "200" },
+    { source = "/solutions/<*>", target = "/solutions/<*>/index.html", status = "200" },
+    { source = "/guides/<*>", target = "/guides/<*>/index.html", status = "200" },
+    { source = "/blog/<*>", target = "/blog/<*>/index.html", status = "200" }
+  ]
+
   ssm_parameters = {
     "${var.ssm_prefix}/ses/from-email" = {
       type        = "String"
@@ -608,7 +651,7 @@ resource "aws_lambda_function" "backend" {
       Features__DemoRateLimitPerHour = "10"
       PUBLIC_SITE_URL                = var.public_site_url
       # AI Growth Studio: Bedrock client uses BEDROCK_REGION then AWS_REGION (set by Lambda). Optional: BEDROCK_MODEL_ID overrides SSM bedrock/model.
-      BEDROCK_REGION                 = var.aws_region
+      BEDROCK_REGION = var.aws_region
     }
   }
 
@@ -715,6 +758,15 @@ resource "aws_amplify_app" "frontend" {
     source = "/index.html"
     status = "301"
     target = "/"
+  }
+  dynamic "custom_rule" {
+    for_each = local.amplify_seo_route_rules
+
+    content {
+      source = custom_rule.value.source
+      status = custom_rule.value.status
+      target = custom_rule.value.target
+    }
   }
   custom_rule {
     source = "/<*>"

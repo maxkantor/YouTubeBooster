@@ -74,7 +74,7 @@ variable "amplify_branch_name" {
 variable "cors_allowed_origins" {
   description = "CORS allowed origins (required when frontend uses credentials). Include your Amplify URLs, e.g. https://main.APPID.amplifyapp.com and https://APPID.amplifyapp.com."
   type        = list(string)
-  default     = [
+  default = [
     "https://youtubeboosterai.com",
     "https://www.youtubeboosterai.com",
     "https://main.d2s1ju1o5ef9dw.amplifyapp.com",

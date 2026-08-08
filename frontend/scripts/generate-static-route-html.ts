@@ -529,12 +529,20 @@ function writeRoute(baseHtml: string, pathname: string): void {
   fs.writeFileSync(out, html, 'utf8');
 }
 
+function writeNeutralSpaFallback(baseHtml: string): void {
+  // Amplify's catch-all can serve this document for unknown/deep SPA paths.
+  // Keep it crawlable, but do not bake in a homepage canonical for every URL.
+  fs.writeFileSync(distIndexPath, replaceFallback(baseHtml, '/'), 'utf8');
+}
+
 const baseHtml = fs.readFileSync(distIndexPath, 'utf8');
 const routes = allProgrammaticAndBlogPaths().map((entry) => normalizePath(entry.path));
 const uniqueRoutes = Array.from(new Set(routes));
 
-for (const route of uniqueRoutes) {
+writeNeutralSpaFallback(baseHtml);
+
+for (const route of uniqueRoutes.filter((route) => route !== '/')) {
   writeRoute(baseHtml, route);
 }
 
-console.log(`Wrote static route HTML for ${uniqueRoutes.length} routes`);
+console.log(`Wrote neutral SPA fallback plus static route HTML for ${uniqueRoutes.length - 1} routes`);
