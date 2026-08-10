@@ -29,8 +29,6 @@ function describe(name) {
       name,
       '--region',
       REGION,
-      '--query',
-      '{Name:Name,Type:Type,LastModified:LastModifiedDate}',
       '--output',
       'json'
     ],
@@ -40,8 +38,13 @@ function describe(name) {
     return { present: false, error: (r.stderr || r.stdout || 'missing').trim().slice(0, 120) };
   }
   try {
-    const j = JSON.parse(r.stdout);
-    return { present: true, type: j.Type, lastModified: j.LastModified };
+    const parsed = JSON.parse(r.stdout);
+    const p = parsed.Parameter || parsed;
+    return {
+      present: true,
+      type: p.Type ?? null,
+      lastModified: p.LastModifiedDate ?? null
+    };
   } catch {
     return { present: false, error: 'parse_error' };
   }
