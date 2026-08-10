@@ -4,7 +4,7 @@ Agents must append every experiment here. Do not delete history.
 
 ## Active
 
-_None yet — see 2026-08-10 experiment below after deploy._
+- **EXP-001** — Post-checkout guest activation (same-email signup). Deployed 2026-08-10 (`b26d7d0`, Amplify job 221). **Evaluation: 2026-08-17.** Do not start another conversion experiment on **post-purchase activation / signup attach** until EXP-001 completes or is rolled back.
 
 ## Log
 
