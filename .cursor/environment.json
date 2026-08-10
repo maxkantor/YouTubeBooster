@@ -1,0 +1,15 @@
+{
+  "name": "YouTubeBooster",
+  "install": "./.cursor/install.sh",
+  "terminals": [
+    {
+      "name": "backend-api",
+      "command": "./.cursor/run-backend.sh"
+    },
+    {
+      "name": "frontend-dev",
+      "command": "cd frontend && VITE_DEV_API_ORIGIN=http://127.0.0.1:5099 npm run dev"
+    }
+  ],
+  "ports": [5173, 5099]
+}

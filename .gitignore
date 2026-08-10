@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -54,6 +55,8 @@ Thumbs.db
 !tsconfig.json
 !**/tsconfig*.json
 !requirements.txt
+# Cloud Agent environment config (otherwise ignored by *.json above)
+!.cursor/environment.json
 # SEO programmatic content (otherwise ignored by *.json above)
 !frontend/src/seo/data/*.json
 results/
