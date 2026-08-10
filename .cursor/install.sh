@@ -18,7 +18,9 @@ fi
 
 # --- Frontend (Vite + React + TypeScript) ---
 echo "==> Frontend: npm ci"
-( cd frontend && npm ci )
+# Note: this repo tracks frontend/node_modules in git. A git checkout can strip
+# the execute bit from node_modules/.bin/*, so restore it after installing.
+( cd frontend && npm ci && chmod -R +x node_modules/.bin 2>/dev/null || true )
 
 # --- Backend (.NET 8 minimal API, Lambda-hosted; runs locally with in-memory storage) ---
 echo "==> Backend: dotnet restore + build (warms NuGet cache)"
