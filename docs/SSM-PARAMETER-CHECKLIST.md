@@ -86,6 +86,18 @@ Under your prefix (default `/youtubebooster`):
 - **`pricing/one-time-price` and `pricing/currency`:** Managed as dedicated `aws_ssm_parameter` resources with `lifecycle { ignore_changes = [value] }` so **Console edits are never overwritten** by `terraform apply`. The API and Stripe checkout read these values (no separate Stripe price object required for the amount).
 - **SecureStrings (value frozen after first apply):** `stripe/secret-key`, `stripe/webhook-secret`, `stripe/openai-api-key`, `admin/password`, `admin/google/credentials-json`, `admin/google/client-id`, `admin/google/client-secret`
 
+## Growth reporting secrets (agents / Automation)
+
+Not read by Lambda at runtime. Used by `scripts/growth/*` and Cursor Automation.
+
+| Parameter | Type |
+|-----------|------|
+| `/youtubebooster/growth/ga4-property-id` | String |
+| `/youtubebooster/growth/google-analytics-credentials-json` | SecureString |
+| `/youtubebooster/growth/stripe-restricted-read-key` | SecureString (`rk_…` only) |
+
+Setup: **`docs/growth/SECRETS-SETUP.md`**. Verify: `node scripts/growth/verify-ssm-secrets.mjs`.
+
 ## Bedrock AI runtime parameters
 
 Create these **String** parameters under your prefix (example uses `/youtubebooster`):

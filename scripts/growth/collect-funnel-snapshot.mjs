@@ -3,16 +3,23 @@
  * Collect 7d + 30d funnel/revenue snapshot for growth experiments.
  * Never prints secret values. Missing sources are reported, not invented.
  *
- * Env:
+ * Env (or load from SSM first via load-ssm-secrets-into-env.mjs):
  *   GA4_PROPERTY_ID
  *   GOOGLE_ANALYTICS_CREDENTIALS_JSON  (full service-account JSON string)
  *   STRIPE_RESTRICTED_READ_KEY         (rk_… read-only restricted key)
  */
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Best-effort SSM → env (no-op if AWS unavailable)
+spawnSync(process.execPath, [path.join(__dirname, 'load-ssm-secrets-into-env.mjs')], {
+  encoding: 'utf8',
+  stdio: ['ignore', 'pipe', 'pipe']
+});
 const outDir = path.join(__dirname, '../../docs/growth/snapshots');
 const now = new Date();
 const stamp = now.toISOString().slice(0, 10);

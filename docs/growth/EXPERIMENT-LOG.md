@@ -23,6 +23,7 @@ _None yet — see 2026-08-10 experiment below after deploy._
 | Evaluation date | 2026-08-17 |
 | Stop rule | If payment success rate falls or unlock complaints rise within 3 days → rollback |
 | Rollback | `git revert` the EXP-001 commit on `main` and push; Amplify redeploys |
+| Funnel stage | post-purchase activation / signup attach |
 | Commit | `b26d7d0` |
 | Amplify | job **221** SUCCEED (2026-08-10) |
 

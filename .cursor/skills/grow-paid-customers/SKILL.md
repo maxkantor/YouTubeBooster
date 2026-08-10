@@ -20,15 +20,17 @@ Preserve existing GA4 (`G-P02EPD7EDB` in `frontend/index.html` + `frontend/src/l
 1. Read experiment history: `docs/growth/EXPERIMENT-LOG.md`
 2. Collect funnel evidence (7d + 30d when secrets exist):
    ```bash
+   node scripts/growth/load-ssm-secrets-into-env.mjs   # optional: pull from AWS SSM
    node scripts/growth/collect-funnel-snapshot.mjs
    node scripts/growth/check-production-health.mjs
    ```
 3. Compute stage rates; pick the **largest meaningful leak** with enough volume.
-4. Skip experiments already `active`, `completed`, or `failed` unless new evidence justifies a retry.
-5. Choose **exactly one** action using:
+4. **Low-traffic rule:** If traffic is too low to evaluate conversion, prioritize **qualified customer acquisition**—high-intent SEO pages, creator partnerships, referral mechanics, lifecycle email, and tracked cross-promotion—**before** additional homepage optimization.
+5. Skip conversion experiments that would conflict with an `active` experiment on the **same funnel stage** (see concurrency rule below). Other experiment statuses: do not repeat `completed` / `failed` without new evidence.
+6. Choose **exactly one** production change using:
    `Priority = expected paid-customer impact × confidence × strategic fit ÷ effort`
-6. Define the experiment block (required fields below), implement, validate, deploy **one** change.
-7. Append the result to `docs/growth/EXPERIMENT-LOG.md`.
+7. Define the experiment block (required fields below), implement, validate, deploy.
+8. Append the result to `docs/growth/EXPERIMENT-LOG.md`.
 
 ## Funnel stages to measure
 
@@ -36,9 +38,17 @@ Landing sessions → traffic source → audit starts → audit completions → r
 
 Prefer Admin CRM activity + Stripe when GA4 API secrets are missing. Never invent baselines.
 
+## Experiment concurrency
+
+**Never run two simultaneous conversion experiments on the same funnel stage.**
+
+While an experiment is gathering data, the agent **may** implement independent **acquisition, SEO, reliability, tracking, or funnel-repair** improvements that do **not** invalidate the active experiment.
+
+Do **not** idle until the evaluation date if other high-value non-conflicting work exists.
+
 ## Allowed action types
 
-Landing positioning · free-audit activation · audit-result usefulness · paid-upgrade presentation · signup friction · checkout friction · trust · purchase-intent SEO · internal conversion CTAs · referral loops · lifecycle email · cross-promo attribution.
+Landing positioning · free-audit activation · audit-result usefulness · paid-upgrade presentation · signup friction · checkout friction · trust · purchase-intent SEO · internal conversion CTAs · referral loops · lifecycle email · cross-promo attribution · qualified acquisition (when volume is too low for CRO).
 
 ## Hard bans (never auto-change)
 
@@ -64,6 +74,7 @@ Product price · Stripe config · authentication system · AWS infra · privacy/
 | Evaluation date | Yes |
 | Stop rule | Yes |
 | Rollback procedure | Yes |
+| Funnel stage | Yes (for concurrency checks) |
 
 ## Deploy gate
 
@@ -71,13 +82,11 @@ Before push to `main`:
 
 1. Install deps; run available tests; lint if configured
 2. Full production frontend build (`frontend`: `npm ci` / `npm run build`)
-3. Inspect diff — one experiment only; reversible
+3. Inspect diff — one change set; reversible; does not invalidate an active same-stage experiment
 4. Commit + push `main`
 5. Monitor Amplify app `youtubebooster-ai-web` (`d2s1ju1o5ef9dw`)
 6. Verify production desktop + mobile; smoke audit → checkout path
 7. On failure: revert, record cause in the log
-
-Never ship a second experiment while the previous lacks enough data **unless** fixing a broken funnel.
 
 ## Scripts
 
@@ -86,12 +95,27 @@ Never ship a second experiment while the previous lacks enough data **unless** f
 | `scripts/growth/collect-funnel-snapshot.mjs` | GA4 + Stripe + notes gaps |
 | `scripts/growth/check-production-health.mjs` | Live `/health` + homepage + robots |
 | `scripts/growth/append-experiment.mjs` | Helper to append a log entry |
+| `scripts/growth/verify-ssm-secrets.mjs` | Confirm SSM params exist (no value dump) |
+| `scripts/growth/put-ssm-secrets.ps1` | One-time put of secrets from env → SSM |
+| `scripts/growth/load-ssm-secrets-into-env.mjs` | Load SSM into process env for collectors |
 
 ## Secrets (never commit)
 
+**Env / Cursor Automation names:**
+
 - `GA4_PROPERTY_ID`
 - `GOOGLE_ANALYTICS_CREDENTIALS_JSON` (service account JSON string)
-- `STRIPE_RESTRICTED_READ_KEY` (read-only restricted key)
+- `STRIPE_RESTRICTED_READ_KEY` (read-only restricted key — never full `sk_live`)
+
+**AWS SSM (prefix `/youtubebooster/growth/`):**
+
+| Env | SSM path | Type |
+|-----|----------|------|
+| `GA4_PROPERTY_ID` | `/youtubebooster/growth/ga4-property-id` | String |
+| `GOOGLE_ANALYTICS_CREDENTIALS_JSON` | `/youtubebooster/growth/google-analytics-credentials-json` | SecureString |
+| `STRIPE_RESTRICTED_READ_KEY` | `/youtubebooster/growth/stripe-restricted-read-key` | SecureString |
+
+Grant the Google service account **Viewer** on GA4 property `G-P02EPD7EDB` (Admin → Property access management). See `docs/growth/SECRETS-SETUP.md`.
 
 If missing, continue with health checks + code/CRM evidence and mark baselines `unknown`.
 
