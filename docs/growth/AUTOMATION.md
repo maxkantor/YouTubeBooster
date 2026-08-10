@@ -3,7 +3,7 @@
 **Name:** YouTubeBooster daily paid growth  
 **Schedule:** Monday–Friday **8:00 AM America/New_York** (prefer weekdays to cut cost; daily is OK)  
 **Repo:** `maxkantor/YouTubeBooster` · branch `main`  
-**Notify:** Email Admin after every run → `scripts/growth/notify-admin-email.mjs`  
+**Notify:** Full Admin email after every run → `scripts/growth/compose-and-send-growth-email.mjs`  
 **Cost:** Prefer cheapest capable model; measure+email most days; ship only when justified
 
 ---
@@ -62,9 +62,9 @@ If traffic is too low to evaluate conversion, prioritize qualified customer acqu
 
 When shipping: select one small reversible change most likely to increase verified paid customers. Implement it, validate it, deploy directly to main only when all checks pass, verify production, and record the result in docs/growth/EXPERIMENT-LOG.md.
 
-Always end the run by emailing Admin a plain-text summary via:
-node scripts/growth/notify-admin-email.mjs --subject "[YouTubeBoosterAI] Growth run — <date>" --body-file <summary.txt>
-Include what was reviewed, what shipped (or why nothing shipped), metrics/blockers, and next eval date. Do this even on skipped or no-op days.
+Always end the run by sending a FULL Admin email (not a one-line smoke note) via:
+node scripts/growth/compose-and-send-growth-email.mjs --notes "<what was reviewed; what shipped or why nothing shipped; blockers; next eval date>"
+That script includes GA4/Stripe snapshot windows, production health, and active experiments automatically. Do this even on skipped or no-op days.
 
 Load secrets from Automation env / SSM via scripts/growth/load-ssm-secrets-into-env.mjs (GA4_PROPERTY_ID, GOOGLE_ANALYTICS_CREDENTIALS_JSON, STRIPE_RESTRICTED_READ_KEY). Never commit credentials. Stripe key must remain read-only (rk_…). AWS credentials are required for SSM load and Admin email.
 ```

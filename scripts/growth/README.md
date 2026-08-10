@@ -6,7 +6,7 @@
 node scripts/growth/collect-funnel-snapshot.mjs
 node scripts/growth/check-production-health.mjs
 node scripts/growth/verify-ssm-secrets.mjs
-node scripts/growth/notify-admin-email.mjs --subject "[YouTubeBoosterAI] Growth run — test" --body "Smoke test"
+node scripts/growth/compose-and-send-growth-email.mjs --notes "Optional agent notes"
 ```
 
 GA4 client (once):

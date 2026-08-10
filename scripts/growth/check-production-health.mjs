@@ -15,6 +15,7 @@ await check('api_health', async () => {
   const candidates = [
     process.env.VITE_API_BASE_URL,
     process.env.YOUTUBEBOOSTER_API_BASE_URL,
+    'https://yri8sw6k1h.execute-api.us-east-1.amazonaws.com',
     'https://youtubeboosterai.com'
   ].filter(Boolean);
   let lastErr = 'no candidates';
