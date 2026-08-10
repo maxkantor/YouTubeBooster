@@ -493,6 +493,7 @@ export function LandingPage() {
   const [navScrolled, setNavScrolled] = useState(false);
   const navScrolledRef = useRef(false);
   const [auditInView, setAuditInView] = useState(false);
+  const [showCheckoutSuccessBanner, setShowCheckoutSuccessBanner] = useState(false);
 
   const enteredChannelValid = useMemo(() => {
     const entered = demoInput.trim();
@@ -608,7 +609,11 @@ export function LandingPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('checkout') !== 'success') return;
-    if (!authSession?.idToken) return;
+    // Guest buyers land on /?checkout=success — show activation CTA (Stripe success URL).
+    if (!authSession?.idToken) {
+      setShowCheckoutSuccessBanner(true);
+      return;
+    }
     if (purchaseCompletedTrackedRef.current) return;
 
     let cancelled = false;
@@ -622,6 +627,7 @@ export function LandingPage() {
               purchaseCompletedTrackedRef.current = true;
               analytics.purchaseCompleted();
             }
+            setShowCheckoutSuccessBanner(false);
             return;
           }
         } catch {
@@ -815,6 +821,32 @@ export function LandingPage() {
 
   return (
     <div className="landing landing-layout">
+      {showCheckoutSuccessBanner && !authSession ? (
+        <div
+          className="status-card"
+          role="status"
+          style={{
+            margin: '12px auto 0',
+            maxWidth: 920,
+            padding: '16px 18px',
+            borderColor: 'rgba(167, 139, 250, 0.5)'
+          }}
+        >
+          <strong>Payment received — finish unlocking your report</strong>
+          <p className="muted" style={{ marginTop: 8 }}>
+            Create your account with the <strong>same email</strong> you used at Stripe checkout. A different email
+            cannot attach this purchase.
+          </p>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+            <Link className="btn btn-primary" to="/auth/signup?returnTo=%2F%3Fcheckout%3Dsuccess">
+              Create account with checkout email
+            </Link>
+            <Link className="btn btn-secondary" to="/auth/signin?returnTo=%2F%3Fcheckout%3Dsuccess">
+              Already have an account? Sign in
+            </Link>
+          </div>
+        </div>
+      ) : null}
       {/* 1. Header */}
       <header className={`landing-header ${navScrolled ? 'landing-header-scrolled' : ''}`}>
         <div className="container landing-header-inner nav-shell">

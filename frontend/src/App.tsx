@@ -260,45 +260,59 @@ function CheckoutSuccessPage({
     <div className="page narrow-page">
       <div className="surface surface-static">
         <div className="locked-label">Checkout</div>
-        <h1>Confirming your access…</h1>
-        <p className="muted">
-          Your purchase unlocks the account you’re signed into. This page will update as soon as Stripe confirms payment.
-        </p>
+        <h1>{authSession ? 'Confirming your access…' : 'Payment received — finish unlocking'}</h1>
         {!authSession ? (
           <div className="status-card" style={{ marginTop: 16 }}>
-            <strong>Sign in to finish</strong>
+            <strong>Create your account to unlock the full report</strong>
             <p className="muted" style={{ marginTop: 8 }}>
-              You must be signed in to attach this purchase to your account.
+              Use the <strong>same email</strong> you entered at Stripe checkout. A different email cannot attach this
+              purchase to your account.
             </p>
             <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
               <Link
                 className="btn btn-primary"
-                to={`/auth/signin?returnTo=${encodeURIComponent(checkoutReturnPath)}`}
+                to={`/auth/signup?returnTo=${encodeURIComponent(checkoutReturnPath)}`}
               >
-                Sign in
+                Create account with checkout email
               </Link>
               <Link
                 className="btn btn-secondary"
-                to={`/auth/signup?returnTo=${encodeURIComponent(checkoutReturnPath)}`}
+                to={`/auth/signin?returnTo=${encodeURIComponent(checkoutReturnPath)}`}
               >
-                Create account
+                Already have an account? Sign in
               </Link>
             </div>
+            <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>
+              After you create the account or sign in, we confirm Stripe and unlock your report automatically.
+            </p>
           </div>
         ) : (
-          <div className="status-card" style={{ marginTop: 16 }}>
-            <strong>{status === 'active' ? 'Full access active' : status === 'checking' ? 'Checking Stripe confirmation…' : 'Waiting for confirmation'}</strong>
-            <p className="muted" style={{ marginTop: 8 }}>
-              Session: {sessionId ?? '—'}
+          <>
+            <p className="muted">
+              Your purchase unlocks the account you’re signed into. This page will update as soon as Stripe confirms
+              payment.
             </p>
-            {!sessionId && (
-              <p style={{ marginTop: 10 }}>
-                <span className="muted">
-                  No `session_id` was provided in the URL. If payment completed, access should still activate automatically.
-                </span>
+            <div className="status-card" style={{ marginTop: 16 }}>
+              <strong>
+                {status === 'active'
+                  ? 'Full access active'
+                  : status === 'checking'
+                    ? 'Checking Stripe confirmation…'
+                    : 'Waiting for confirmation'}
+              </strong>
+              <p className="muted" style={{ marginTop: 8 }}>
+                Session: {sessionId ?? '—'}
               </p>
-            )}
-          </div>
+              {!sessionId && (
+                <p style={{ marginTop: 10 }}>
+                  <span className="muted">
+                    No `session_id` was provided in the URL. If payment completed, access should still activate
+                    automatically.
+                  </span>
+                </p>
+              )}
+            </div>
+          </>
         )}
         {error && <p className="error-text" style={{ marginTop: 14 }}>{error}</p>}
       </div>
