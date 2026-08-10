@@ -17,6 +17,8 @@ Preserve existing GA4 (`G-P02EPD7EDB` in `frontend/index.html` + `frontend/src/l
 
 ## Daily workflow
 
+**Cost control:** Prefer the cheapest capable model. On most runs: collect metrics, health-check, note anything useful in the experiment log if needed, email Admin, and **stop**. Only implement/deploy when there is a clear leak, no same-stage conflict, and the change is tiny. Skip `npm ci` / full production builds unless shipping.
+
 1. Read experiment history: `docs/growth/EXPERIMENT-LOG.md`
 2. Collect funnel evidence (7d + 30d when secrets exist):
    ```bash
@@ -27,11 +29,12 @@ Preserve existing GA4 (`G-P02EPD7EDB` in `frontend/index.html` + `frontend/src/l
 3. Compute stage rates; pick the **largest meaningful leak** with enough volume.
 4. **Low-traffic rule:** If traffic is too low to evaluate conversion, prioritize **qualified customer acquisition**—high-intent SEO pages, creator partnerships, referral mechanics, lifecycle email, and tracked cross-promotion—**before** additional homepage optimization.
 5. Skip conversion experiments that would conflict with an `active` experiment on the **same funnel stage** (see concurrency rule below). Other experiment statuses: do not repeat `completed` / `failed` without new evidence.
-6. Choose **exactly one** production change using:
+6. If no clear, tiny ship candidate: email Admin and end the run (do not force a change).
+7. Otherwise choose **exactly one** production change using:
    `Priority = expected paid-customer impact × confidence × strategic fit ÷ effort`
-7. Define the experiment block (required fields below), implement, validate, deploy.
-8. Append the result to `docs/growth/EXPERIMENT-LOG.md`.
-9. **Email Admin** a run summary (required every weekday run, including no-op / skipped days):
+8. Define the experiment block (required fields below), implement, validate, deploy.
+9. Append the result to `docs/growth/EXPERIMENT-LOG.md`.
+10. **Email Admin** a run summary (required every run, including no-op / skipped days):
    ```bash
    node scripts/growth/notify-admin-email.mjs --subject "[YouTubeBoosterAI] Growth run — YYYY-MM-DD" --body-file /tmp/growth-run-summary.txt
    ```
