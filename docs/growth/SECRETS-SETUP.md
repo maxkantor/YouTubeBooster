@@ -43,7 +43,20 @@ node .\scripts\growth\verify-ssm-secrets.mjs
 
 ## Cursor Automation secrets
 
-Mirror the same three names as Automation secrets so weekday agents can run without AWS credentials, **or** grant the Automation role `ssm:GetParameter` on `/youtubebooster/growth/*` and use `load-ssm-secrets-into-env.mjs`.
+Mirror at least these three names as Automation secrets so weekday cloud agents can measure without SSM:
+
+- `GA4_PROPERTY_ID`
+- `GOOGLE_ANALYTICS_CREDENTIALS_JSON`
+- `STRIPE_RESTRICTED_READ_KEY`
+
+**Admin email** (`notify-admin-email.mjs`) needs AWS CLI credentials in the Automation environment (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=us-east-1`) with:
+
+- `ssm:GetParameter` on `/youtubebooster/growth/*`, `/youtubebooster/admin/email`, `/youtubebooster/ses/from-email`
+- `ses:SendEmail` from the verified `youtubeboosterai.com` identity
+
+Alternatively grant the Automation role the same SSM access and skip mirroring GA4/Stripe into Cursor secrets (load via `load-ssm-secrets-into-env.mjs`).
+
+Growth measurement params are already stored under `/youtubebooster/growth/*` (see verify script).
 
 ## Verify (safe)
 

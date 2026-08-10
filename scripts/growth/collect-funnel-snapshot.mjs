@@ -8,18 +8,15 @@
  *   GOOGLE_ANALYTICS_CREDENTIALS_JSON  (full service-account JSON string)
  *   STRIPE_RESTRICTED_READ_KEY         (rk_… read-only restricted key)
  */
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Best-effort SSM → env (no-op if AWS unavailable)
-spawnSync(process.execPath, [path.join(__dirname, 'load-ssm-secrets-into-env.mjs')], {
-  encoding: 'utf8',
-  stdio: ['ignore', 'pipe', 'pipe']
-});
+// Same-process SSM → env (child spawn cannot mutate parent env)
+const ssmLoad = loadSsmSecretsIntoEnv();
 const outDir = path.join(__dirname, '../../docs/growth/snapshots');
 const now = new Date();
 const stamp = now.toISOString().slice(0, 10);
@@ -37,6 +34,7 @@ const windows = [
 
 const report = {
   generatedAt: now.toISOString(),
+  ssm: ssmLoad,
   sources: { ga4: 'missing', stripe: 'missing' },
   windows: {},
   notes: []

@@ -31,6 +31,11 @@ Preserve existing GA4 (`G-P02EPD7EDB` in `frontend/index.html` + `frontend/src/l
    `Priority = expected paid-customer impact × confidence × strategic fit ÷ effort`
 7. Define the experiment block (required fields below), implement, validate, deploy.
 8. Append the result to `docs/growth/EXPERIMENT-LOG.md`.
+9. **Email Admin** a run summary (required every weekday run, including no-op / skipped days):
+   ```bash
+   node scripts/growth/notify-admin-email.mjs --subject "[YouTubeBoosterAI] Growth run — YYYY-MM-DD" --body-file /tmp/growth-run-summary.txt
+   ```
+   Summary must include: date, what was reviewed, experiment id/status (or why none shipped), deploy/Amplify result if any, next eval date, and any blockers. Recipient is SSM `/youtubebooster/admin/email` via SES (`scripts/growth/notify-admin-email.mjs`).
 
 ## Funnel stages to measure
 
@@ -98,6 +103,7 @@ Before push to `main`:
 | `scripts/growth/verify-ssm-secrets.mjs` | Confirm SSM params exist (no value dump) |
 | `scripts/growth/put-ssm-secrets.ps1` | One-time put of secrets from env → SSM |
 | `scripts/growth/load-ssm-secrets-into-env.mjs` | Load SSM into process env for collectors |
+| `scripts/growth/notify-admin-email.mjs` | SES email to Admin (`admin/email`) with run summary |
 
 ## Secrets (never commit)
 

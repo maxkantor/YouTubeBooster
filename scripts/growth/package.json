@@ -1,0 +1,9 @@
+{
+  "name": "youtubebooster-growth-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Local/CLI growth measurement helpers (GA4 + Stripe).",
+  "dependencies": {
+    "google-auth-library": "^10.1.0"
+  }
+}

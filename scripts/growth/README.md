@@ -6,14 +6,14 @@
 node scripts/growth/collect-funnel-snapshot.mjs
 node scripts/growth/check-production-health.mjs
 node scripts/growth/verify-ssm-secrets.mjs
+node scripts/growth/notify-admin-email.mjs --subject "[YouTubeBoosterAI] Growth run — test" --body "Smoke test"
 ```
 
-Optional GA4 client:
+GA4 client (once):
 
 ```bash
 cd scripts/growth
-npm init -y
-npm i google-auth-library
+npm ci
 ```
 
 ## Secrets

@@ -1,7 +1,8 @@
 # Cursor Automation — YouTubeBooster Daily Paid Customer Growth
 
 **Schedule:** Monday–Friday 8:00 AM America/New_York  
-**Repo:** `maxkantor/YouTubeBooster` · branch `main`
+**Repo:** `maxkantor/YouTubeBooster` · branch `main`  
+**Notify:** Email Admin after every run (`scripts/growth/notify-admin-email.mjs` → SSM `/youtubebooster/admin/email`)
 
 ## Prompt (paste into Automations)
 
@@ -16,9 +17,23 @@ If traffic is too low to evaluate conversion, prioritize qualified customer acqu
 
 Select one small reversible change most likely to increase verified paid customers. Implement it, validate it, deploy directly to main only when all checks pass, verify production, and record the result in docs/growth/EXPERIMENT-LOG.md.
 
-Load secrets via scripts/growth/load-ssm-secrets-into-env.mjs or Automation secrets (GA4_PROPERTY_ID, GOOGLE_ANALYTICS_CREDENTIALS_JSON, STRIPE_RESTRICTED_READ_KEY). Never commit credentials. Stripe key must remain read-only (rk_…).
+Always end the run by emailing Admin a plain-text summary via:
+node scripts/growth/notify-admin-email.mjs --subject "[YouTubeBoosterAI] Growth run — <date>" --body-file <summary.txt>
+Include what was reviewed, what shipped (or why nothing shipped), metrics/blockers, and next eval date. Do this even on skipped or no-op days.
+
+Load secrets via scripts/growth/load-ssm-secrets-into-env.mjs or Automation secrets (GA4_PROPERTY_ID, GOOGLE_ANALYTICS_CREDENTIALS_JSON, STRIPE_RESTRICTED_READ_KEY). Never commit credentials. Stripe key must remain read-only (rk_…). AWS credentials (or SSM access) are also required for the Admin email script.
 ```
 
 ## Secrets
 
-Prefer AWS SSM (`docs/growth/SECRETS-SETUP.md`) and/or Cursor Automation secrets with the same three names.
+**Already in AWS SSM** (preferred source for collectors + Admin email):
+
+| Env | SSM path |
+|-----|----------|
+| `GA4_PROPERTY_ID` | `/youtubebooster/growth/ga4-property-id` |
+| `GOOGLE_ANALYTICS_CREDENTIALS_JSON` | `/youtubebooster/growth/google-analytics-credentials-json` |
+| `STRIPE_RESTRICTED_READ_KEY` | `/youtubebooster/growth/stripe-restricted-read-key` |
+| Admin inbox | `/youtubebooster/admin/email` |
+| SES from | `/youtubebooster/ses/from-email` |
+
+Mirror the three growth names as Cursor Automation secrets if the cloud agent cannot call AWS SSM. See `docs/growth/SECRETS-SETUP.md`.
