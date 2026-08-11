@@ -4,7 +4,7 @@ Agents must append every experiment here. Do not delete history.
 
 ## Active
 
-_None yet — see 2026-08-10 experiment below after deploy._
+**EXP-001** — Post-checkout guest activation (same-email signup). Shipped 2026-08-10 (`b26d7d0`, Amplify job 221). Funnel stage: post-purchase activation / signup attach. **Evaluation date: 2026-08-17.** Do not ship same-stage CRO until complete. Full definition in log below.
 
 ## Log
 
