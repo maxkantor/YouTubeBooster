@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 
+import { SeoFunnelCta } from '../../components/SeoFunnelCta';
 import { BRAND } from '../../config/brand';
 import { getGrowthGuideByPath, GROWTH_GUIDE_PAGES, type GrowthGuidePageDef } from '../../seo/growthGuides';
 
@@ -51,6 +52,8 @@ function GrowthGuideShell({ guide }: { guide: GrowthGuidePageDef }) {
           <h1>{guide.h1}</h1>
           <p className="marketing-static-lead">{guide.lead}</p>
 
+          <SeoFunnelCta source={`growth_guide_top:${guide.path}`} />
+
           <div className="marketing-static-body growth-guide-body">
             {guide.sections.map((section) => (
               <section key={section.h2} className="seo-section">
@@ -98,26 +101,7 @@ function GrowthGuideShell({ guide }: { guide: GrowthGuidePageDef }) {
             </ul>
           </div>
 
-          <div className="growth-guide-cta-panel">
-            <h2 className="growth-guide-related-title">Ready to See What&apos;s Blocking Your Growth?</h2>
-            <p className="growth-guide-cta-lead">
-              No signup required for the preview. Upgrade only if you want the full fix.
-            </p>
-            <div className="growth-guide-cta-actions">
-              <Link to="/#audit" className="btn btn-primary">
-                Run Free Channel Audit
-              </Link>
-              <Link to="/" className="btn btn-secondary growth-guide-cta-secondary">
-                {BRAND.name} — official home
-              </Link>
-              <Link to="/pricing" className="btn btn-secondary growth-guide-cta-secondary">
-                See Pricing
-              </Link>
-              <Link to="/audit" className="btn btn-secondary growth-guide-cta-secondary">
-                Browse Audit Topics
-              </Link>
-            </div>
-          </div>
+          <SeoFunnelCta source={`growth_guide_bottom:${guide.path}`} />
         </article>
       </main>
     </div>

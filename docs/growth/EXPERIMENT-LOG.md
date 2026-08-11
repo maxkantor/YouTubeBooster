@@ -4,9 +4,29 @@ Agents must append every experiment here. Do not delete history.
 
 ## Active
 
-_None yet — see 2026-08-10 experiment below after deploy._
+- **EXP-001** — post-checkout guest activation (eval **2026-08-17**) — funnel stage: post-purchase activation
+- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (eval **2026-08-25**) — funnel stage: acquisition / SEO
 
 ## Log
+
+### 2026-08-11 — EXP-002 SEO audit entry form (start on page → /demo)
+
+| Field | Value |
+|-------|--------|
+| Status | active |
+| Evidence | ~12 sessions/7d; SEO growth guides promise “paste URL” but only linked to `/#audit` (homepage hop). EXP-001 locks post-purchase. Low-traffic rule → acquisition/SEO. |
+| Hypothesis | Putting a channel URL form above the fold on growth/compare SEO pages and routing to `/demo?channel=…` will increase audit starts from SEO sessions vs homepage detour. |
+| Exact change | `SeoAuditEntryForm` + `SeoFunnelCta` form; early + bottom placement on `GrowthGuidePages` and `ComparisonPages`. Files: `frontend/src/components/SeoAuditEntryForm.tsx`, `SeoFunnelCta.tsx`, `GrowthGuidePages.tsx`, `ComparisonPages.tsx`, `analytics.ts`, `styles.css`. |
+| Primary metric | `audit_started` / `audit_url_entered` from SEO sources; secondary: live Stripe purchases (directional). |
+| Guardrail | Demo error rate and homepage audit path must not worsen. |
+| Baseline | ~12 sessions/7d; SEO→audit conversion weak (link-only CTAs). |
+| Target | Directional ↑ audit starts from growth/SEO pages over 14 days. |
+| Evaluation date | 2026-08-25 |
+| Stop rule | Demo failures or bounce spike on those URLs within 3 days → rollback. |
+| Rollback | `git revert` the EXP-002 commit on `main` and push. |
+| Funnel stage | acquisition / SEO (SEO landing → audit start) |
+| Commit | (pending) |
+| Amplify | (pending) |
 
 ### 2026-08-10 — EXP-001 Post-checkout guest activation (same-email signup)
 

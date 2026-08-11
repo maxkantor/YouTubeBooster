@@ -5447,6 +5447,78 @@ html.is-scrolling .landing-section {
   border: 1px solid rgba(129, 140, 248, 0.22);
 }
 
+.seo-funnel-cta .seo-audit-entry {
+  margin: 0 0 14px;
+}
+
+.seo-audit-entry-label {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.seo-audit-entry-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.seo-audit-entry-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.85);
+  color: #f8fafc;
+  font-size: 0.98rem;
+}
+
+.seo-audit-entry-input:focus {
+  outline: 2px solid rgba(129, 140, 248, 0.55);
+  outline-offset: 1px;
+}
+
+.seo-audit-entry-submit {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.seo-audit-entry-error {
+  margin: 8px 0 0;
+  color: #fca5a5;
+  font-size: 0.9rem;
+}
+
+.seo-audit-entry-hint {
+  margin: 10px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
+.seo-audit-entry-demo-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #a5b4fc;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.seo-audit-entry-demo-link:hover {
+  color: #c7d2fe;
+}
+
+.seo-funnel-cta-secondary-row {
+  margin-top: 4px;
+}
+
 .growth-guide-cta-lead {
   margin: 0 0 16px;
   font-size: 0.98rem;

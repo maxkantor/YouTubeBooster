@@ -144,8 +144,8 @@ export const analytics = {
   auditUrlEntered: (channel: string) => trackFunnel('audit_url_entered', channel, { channel }),
 
   /** GA4: audit_started — no channel URL sent to GA4. */
-  auditStarted: () => {
-    trackEvent('audit_started', { source: 'homepage_or_audit_form', input_type: 'url_or_handle' });
+  auditStarted: (source = 'homepage_or_audit_form') => {
+    trackEvent('audit_started', { source, input_type: 'url_or_handle' });
   },
 
   /** GA4: audit_completed */

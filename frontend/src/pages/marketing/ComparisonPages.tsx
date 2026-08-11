@@ -55,6 +55,8 @@ function ComparisonShell({ page }: { page: ComparisonPageDef }) {
           <h1>{page.h1}</h1>
           <p className="marketing-static-lead">{page.lead}</p>
 
+          <SeoFunnelCta source={`comparison_top:${page.path}`} />
+
           <section className="comparison-summary-panel" aria-labelledby="comparison-summary-heading">
             <h2 id="comparison-summary-heading" className="growth-guide-h2">
               Executive summary
@@ -141,7 +143,7 @@ function ComparisonShell({ page }: { page: ComparisonPageDef }) {
             </dl>
           </section>
 
-          <SeoFunnelCta />
+          <SeoFunnelCta source={`comparison_bottom:${page.path}`} />
         </article>
       </main>
     </div>
