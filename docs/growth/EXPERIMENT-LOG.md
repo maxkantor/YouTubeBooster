@@ -4,7 +4,7 @@ Agents must append every experiment here. Do not delete history.
 
 ## Active
 
-_None yet — see 2026-08-10 experiment below after deploy._
+- **EXP-001** — Post-checkout guest activation (same-email signup). Eval **2026-08-17**. Stage: post-purchase activation / signup attach. Do not ship same-stage CRO until complete.
 
 ## Log
 
