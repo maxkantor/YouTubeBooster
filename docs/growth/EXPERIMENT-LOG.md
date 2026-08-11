@@ -26,7 +26,7 @@ Agents must append every experiment here. Do not delete history.
 | Rollback | `git revert` the EXP-002 commit on `main` and push. |
 | Funnel stage | acquisition / SEO (SEO landing → audit start) |
 | Commit | `5b4efc2` |
-| Amplify | (pending) |
+| Amplify | job **230** SUCCEED (2026-08-11) |
 
 ### 2026-08-10 — EXP-001 Post-checkout guest activation (same-email signup)
 
