@@ -41,24 +41,46 @@ node .\scripts\growth\verify-ssm-secrets.mjs
    - Role: **Viewer**
 4. Confirm Data API is enabled for the GCP project.
 
-## Cursor Automation secrets
+## Cursor Cloud Agent secrets (required for weekday Automation)
 
-Mirror at least these three names as Automation secrets so weekday cloud agents can measure without SSM:
+Secrets do **not** live on the Automations Settings page. They live here:
 
-- `GA4_PROPERTY_ID`
-- `GOOGLE_ANALYTICS_CREDENTIALS_JSON`
-- `STRIPE_RESTRICTED_READ_KEY`
+1. Open [cursor.com/dashboard/cloud-agents](https://cursor.com/dashboard/cloud-agents)
+2. Open the **Environment** for `maxkantor/YouTubeBooster` (must be **Ready**, not stuck in setup)
+3. **Secrets** → ensure these names exist (scope = this environment or All repositories):
 
-**Admin email** (`notify-admin-email.mjs`) needs AWS CLI credentials in the Automation environment (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=us-east-1`) with:
+| Name | Required |
+|------|----------|
+| `AWS_ACCESS_KEY_ID` | Yes (SES + SSM) |
+| `AWS_SECRET_ACCESS_KEY` | Yes |
+| `AWS_REGION` | Yes → `us-east-1` |
+| `GA4_PROPERTY_ID` | Yes (or load via SSM with AWS) |
+| `GOOGLE_ANALYTICS_CREDENTIALS_JSON` | Yes (or via SSM) |
+| `STRIPE_RESTRICTED_READ_KEY` | Yes (`rk_…` only) |
+| `ADMIN_EMAIL` | Optional (else SSM `/youtubebooster/admin/email`) |
+| `SES_FROM_EMAIL` | Optional (else SSM `/youtubebooster/ses/from-email`) |
+
+4. On the Automation (**YouTubeBooster daily paid growth**):
+   - Repo must be **YouTubeBooster** / `main`
+   - Do **not** enable “skip environment” / skip-install if that would skip secret injection
+   - Instructions must call `compose-and-send-growth-email.mjs`
+
+5. **Test:** Automations → **Run now**, then in the run log execute / confirm:
+   ```bash
+   node scripts/growth/print-env-secret-presence.mjs
+   ```
+   Every required name should show `true`. Then Admin email should arrive.
+
+### If Run History says secrets missing
+
+The 2026-08-11 cloud run failed because **no AWS keys were in the pod env**. Re-add secrets on the Cloud Agents Environment (step 2–3), save, then **Run now**. Pasting into `docs/growth/AUTOMATION.md` does nothing for cloud runs.
+
+AWS key IAM needs:
 
 - `ssm:GetParameter` on `/youtubebooster/growth/*`, `/youtubebooster/admin/email`, `/youtubebooster/ses/from-email`
-- `ses:SendEmail` from the verified `youtubeboosterai.com` identity
+- `ses:SendEmail` for `youtubeboosterai.com`
 
-Alternatively grant the Automation role the same SSM access and skip mirroring GA4/Stripe into Cursor secrets (load via `load-ssm-secrets-into-env.mjs`).
-
-Growth measurement params are already stored under `/youtubebooster/growth/*` (see verify script).
-
-## Verify (safe)
+## Verify SSM from your laptop (safe)
 
 ```bash
 node scripts/growth/verify-ssm-secrets.mjs

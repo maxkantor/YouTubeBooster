@@ -55,8 +55,12 @@ export function sendAdminGrowthEmail({ subject, body }) {
   if (!subject?.trim()) throw new Error('subject required');
   if (!body?.trim()) throw new Error('body required');
 
-  const from = getSsm('/youtubebooster/ses/from-email', true);
-  const to = getSsm('/youtubebooster/admin/email', false);
+  // Cursor Cloud secrets can supply addresses without SSM (still need AWS keys for ses:SendEmail).
+  const from =
+    (process.env.SES_FROM_EMAIL || '').trim() || getSsm('/youtubebooster/ses/from-email', true);
+  const to =
+    (process.env.ADMIN_EMAIL || process.env.SES_ADMIN_EMAIL || '').trim() ||
+    getSsm('/youtubebooster/admin/email', false);
   const fromSource = `YouTubeBoosterAI Growth <${from}>`;
 
   // Write temp files for AWS CLI (avoids shell escaping issues)
