@@ -5,9 +5,29 @@ Agents must append every experiment here. Do not delete history.
 ## Active
 
 - **EXP-001** — post-checkout guest activation (eval **2026-08-17**) — funnel stage: post-purchase activation
-- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (eval **2026-08-25**) — funnel stage: acquisition / SEO
+- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (**early read 2026-08-18**, full eval **2026-08-25**) — funnel stage: acquisition / SEO
+- **EXP-003** — new URL `/youtube-channel-analyzer` for commercial-intent search (eval **2026-08-19**) — funnel stage: acquisition / SEO (new indexed surface; does not invalidate EXP-002)
 
 ## Log
+
+### 2026-08-12 — EXP-003 YouTube channel analyzer landing page
+
+| Field | Value |
+|-------|--------|
+| Status | active |
+| Evidence | User wants faster acquisition than waiting for EXP-002 eval; ~16 sessions/7d; "youtube channel analyzer" is high-intent query not covered by a dedicated URL; EXP-002 tests form on existing pages only. |
+| Hypothesis | A dedicated `/youtube-channel-analyzer` page (with on-page audit form via EXP-002 component) will capture new organic/search traffic and increase audit starts vs relying on homepage alone. |
+| Exact change | New growth guide page + route + footer/homepage links. Files: `frontend/src/seo/growthGuideData.ts`, `frontend/src/App.tsx`. |
+| Primary metric | Organic sessions + `audit_started` with source containing `youtube-channel-analyzer`; secondary: live Stripe (directional). |
+| Guardrail | No regression on EXP-002 pages; homepage audit rate stable. |
+| Baseline | 0 indexed URL for "youtube channel analyzer"; ~16 sessions/7d sitewide. |
+| Target | Directional: first organic visits + audit starts from new URL within 7 days. |
+| Evaluation date | 2026-08-19 |
+| Stop rule | Build/SEO errors or demo failures on new URL within 48h → revert. |
+| Rollback | `git revert` EXP-003 commit on `main`. |
+| Funnel stage | acquisition / SEO (new landing URL) |
+| Commit | (pending) |
+| Amplify | (pending) |
 
 ### 2026-08-11 — EXP-002 SEO audit entry form (start on page → /demo)
 

@@ -869,6 +869,7 @@ function AppInner() {
         <Route path="/youtube-retention-analysis" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-thumbnail-ctr" element={<GrowthGuideRoutePage />} />
         <Route path="/free-youtube-channel-audit" element={<GrowthGuideRoutePage />} />
+        <Route path="/youtube-channel-analyzer" element={<GrowthGuideRoutePage />} />
         <Route path="/compare/tubebuddy-vs-youtubebooster-ai" element={<ComparisonRoutePage />} />
         <Route path="/compare/vidiq-vs-youtubebooster-ai" element={<ComparisonRoutePage />} />
         <Route path="/vidiq-alternative" element={<GrowthGuideRoutePage />} />

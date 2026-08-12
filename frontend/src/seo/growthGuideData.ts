@@ -849,6 +849,7 @@ An AI audit helps because it can surface repeated packaging weaknesses across ti
     footerGroup: 'growth',
     relatedPaths: [
       '/best-youtube-audit-tool',
+      '/youtube-channel-analyzer',
       '/youtube-title-generator',
       '/why-your-channel-gets-no-views',
       '/low-ctr-on-youtube',
@@ -912,6 +913,78 @@ That is why the free audit should come first. It gives the creator a more ground
         body: `The best conversion experience is simple: let the creator see enough signal to believe the tool is actually useful, then let them decide whether the deeper report is worth paying for. That is why the free audit should not feel like a gimmick. It should feel like a clear first layer of diagnosis that proves the system understands the channel.
 
 That approach is also better for trust. Instead of forcing a purchase before any insight appears, the creator can see what kind of recommendations the platform produces. If the fit is right, upgrading for the full fix becomes a rational next step rather than a leap of faith.`
+      }
+    ]
+  },
+  {
+    path: '/youtube-channel-analyzer',
+    title: 'YouTube Channel Analyzer — Free AI Growth Read',
+    metaDescription:
+      'Analyze your YouTube channel with a free AI channel analyzer. See titles, thumbnails, SEO, CTR, and retention signals — then run a free preview audit.',
+    lead:
+      'Looking for a YouTube channel analyzer that tells you what to fix next? Paste your channel URL for a free preview — titles, packaging, SEO fit, and retention clues in one read.',
+    h1: 'YouTube Channel Analyzer (Free Preview)',
+    cardTitle: 'YouTube channel analyzer',
+    teaser:
+      'Free AI channel analyzer for small creators: diagnose titles, thumbnails, SEO, CTR, and retention without a Studio login.',
+    keywords: [
+      'youtube channel analyzer',
+      'channel analyzer youtube',
+      'analyze youtube channel',
+      'youtube growth analyzer',
+      'ai youtube channel analysis'
+    ],
+    datePublished: '2026-08-12',
+    directoryGroup: 'growth',
+    footerGroup: 'growth',
+    relatedPaths: [
+      '/free-youtube-channel-audit',
+      '/best-youtube-audit-tool',
+      '/youtube-seo-for-small-channels',
+      '/low-ctr-on-youtube',
+      '/vidiq-alternative'
+    ],
+    faq: [
+      {
+        question: 'What does a YouTube channel analyzer check?',
+        answer:
+          'It reviews public growth signals: title patterns, thumbnail clarity, SEO fit, CTR pressure points, and retention clues — then suggests what to fix first.'
+      },
+      {
+        question: 'Is this different from YouTube Studio analytics?',
+        answer:
+          'Studio shows your private numbers. A channel analyzer helps interpret packaging and positioning — why clicks or retention may be weak — without requiring Studio access for the preview.'
+      },
+      {
+        question: 'Do I need to install anything?',
+        answer:
+          'No. Paste a channel URL or @handle in the form on this page to start a free preview audit in the browser.'
+      }
+    ],
+    sections: [
+      {
+        h2: 'Why creators search for a channel analyzer',
+        body: `Most creators do not need another dashboard. They need a clear read on what is blocking growth: weak titles, vague thumbnails, mixed topics, or openings that lose viewers fast. A YouTube channel analyzer should translate those signals into a short list of fixes you can act on this week — not dump fifty metrics with no direction.
+
+That is the gap between generic analytics and an audit-first tool. Analytics tell you what happened. A good analyzer helps explain why it keeps happening and which lever matters most right now.`
+      },
+      {
+        h2: 'What this analyzer looks at',
+        body: `The preview focuses on the areas that usually move small channels: title clarity, thumbnail promise, SEO and topic fit, CTR pressure, and early retention patterns. Those are the same levers large channels optimize constantly — small creators just need them explained in plain language.
+
+You do not need to connect YouTube login for the free preview. Paste a public channel URL or handle, review the diagnostic, and decide whether the deeper full report is worth unlocking.`
+      },
+      {
+        h2: 'How to use the results',
+        body: `Start with the single biggest bottleneck the report highlights. If CTR is the leak, fix packaging before you rewrite descriptions. If retention is the leak, tighten the opening before you change your niche. If topic fit is unclear, narrow the next upload before you buy new gear.
+
+Many creators rebuild everything at once and learn nothing. A channel analyzer works best when you fix one ranked issue per upload cycle and measure whether the next video improves.`
+      },
+      {
+        h2: 'When to upgrade to the full report',
+        body: `The free preview is meant to prove the diagnosis is useful. If the recommendations feel specific and actionable, upgrading for the full fix list is a rational next step. If the preview feels generic, stop there — no tool should ask for payment before showing any signal.
+
+Compare the output with your own intuition on your last five uploads. If the audit names problems you already suspected but could not prioritize, it is doing its job.`
       }
     ]
   },
@@ -1517,7 +1590,8 @@ export const FOOTER_GROWTH_PAGES = [
   '/youtube-thumbnail-mistakes',
   '/low-ctr-on-youtube',
   '/youtube-seo-for-small-channels',
-  '/free-youtube-channel-audit'
+  '/free-youtube-channel-audit',
+  '/youtube-channel-analyzer'
 ].map(pageByPath);
 
 export const FOOTER_AUDIT_TOPIC_PAGES = [
@@ -1542,7 +1616,8 @@ export const HOMEPAGE_GUIDE_GROUPS = [
       '/youtube-thumbnail-mistakes',
       '/low-ctr-on-youtube',
       '/youtube-seo-for-small-channels',
-      '/free-youtube-channel-audit'
+      '/free-youtube-channel-audit',
+      '/youtube-channel-analyzer'
     ].map(pageByPath)
   },
   {
