@@ -110,7 +110,7 @@ export function sendAdminGrowthEmail({ subject, body }) {
     } catch {
       /* ignore */
     }
-    return { ok: true, to, messageId };
+    return { ok: true, to, messageId, subjectSent: subject };
   } finally {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -238,6 +238,12 @@ if (invokedAsCli) {
   const experiments = parseActiveExperiments(logMd);
   const now = new Date();
   const date = now.toISOString().slice(0, 10);
+  const timeEt = now.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
   const body = composeGrowthEmailBody({
     snapshot,
     health,
@@ -245,7 +251,8 @@ if (invokedAsCli) {
     notes,
     generatedAt: now
   });
-  const subject = `[YouTubeBoosterAI] Growth run - ${date}`;
+  // Unique subject per run (avoids Outlook threading hiding new mail)
+  const subject = `[YouTubeBoosterAI] Growth run ${date} ${timeEt} ET`;
 
   if (args.dryRun) {
     console.log(subject);
@@ -261,7 +268,8 @@ if (invokedAsCli) {
         {
           ok: true,
           messageId: result.messageId,
-          subject,
+          subject: result.subjectSent ?? subject,
+          deliveredTo: result.to ? '(admin inbox from SSM/env — not printed)' : undefined,
           snapshotPath: snapPath,
           activeExperiments: experiments.map((e) => e.idLine)
         },
