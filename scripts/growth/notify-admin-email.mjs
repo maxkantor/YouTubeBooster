@@ -8,6 +8,7 @@
  *   node scripts/growth/notify-admin-email.mjs --subject "..." --body "plain text"
  *   echo "body" | node scripts/growth/notify-admin-email.mjs --subject "..."
  *
+ * Optional: pass htmlBody for multipart HTML+text (Outlook-friendly).
  * Never prints secret values. Exits non-zero if send fails.
  */
 import { spawnSync } from 'node:child_process';
@@ -51,7 +52,7 @@ function parseArgs(argv) {
   return out;
 }
 
-export function sendAdminGrowthEmail({ subject, body }) {
+export function sendAdminGrowthEmail({ subject, body, htmlBody }) {
   if (!subject?.trim()) throw new Error('subject required');
   if (!body?.trim()) throw new Error('body required');
 
@@ -63,21 +64,24 @@ export function sendAdminGrowthEmail({ subject, body }) {
     getSsm('/youtubebooster/admin/email', false);
   const fromSource = `YouTubeBoosterAI Growth <${from}>`;
 
+  const bodyPayload = {
+    Text: { Data: body, Charset: 'UTF-8' }
+  };
+  if (htmlBody?.trim()) {
+    bodyPayload.Html = { Data: htmlBody, Charset: 'UTF-8' };
+  }
+
   // Write temp files for AWS CLI (avoids shell escaping issues)
   const tmpDir = fs.mkdtempSync(path.join(process.env.TEMP || process.env.TMPDIR || '/tmp', 'yb-growth-mail-'));
   const destPath = path.join(tmpDir, 'dest.json');
   const msgPath = path.join(tmpDir, 'msg.json');
   try {
-    fs.writeFileSync(
-      destPath,
-      JSON.stringify({ ToAddresses: [to] }),
-      'utf8'
-    );
+    fs.writeFileSync(destPath, JSON.stringify({ ToAddresses: [to] }), 'utf8');
     fs.writeFileSync(
       msgPath,
       JSON.stringify({
         Subject: { Data: subject, Charset: 'UTF-8' },
-        Body: { Text: { Data: body, Charset: 'UTF-8' } }
+        Body: bodyPayload
       }),
       'utf8'
     );
@@ -133,7 +137,6 @@ if (invokedAsCli) {
   }
   try {
     const result = sendAdminGrowthEmail({ subject: args.subject, body });
-    // Do not print the admin address value in CI logs if avoidable — print ok + messageId only
     console.log(JSON.stringify({ ok: true, messageId: result.messageId }, null, 2));
   } catch (e) {
     console.error(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }));
