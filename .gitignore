@@ -58,6 +58,9 @@ Thumbs.db
 !requirements.txt
 # SEO programmatic content (otherwise ignored by *.json above)
 !frontend/src/seo/data/*.json
+# Growth Stripe allowlist (non-secret product/price IDs)
+!scripts/growth/config/
+!scripts/growth/config/*.json
 results/
 output/
 runner_data/

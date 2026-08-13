@@ -12,12 +12,15 @@ Shared definitions used by funnel snapshots, Admin email scoreboard, agent summa
 | `audit_completions` | **events** | GA4 `audit_completed` only |
 | `pricing_viewers` | events | GA4 `pricing_viewed` |
 | `checkout_starts` | events | GA4 `checkout_started` |
-| `successful_live_payments` | payments | Stripe Checkout Session `livemode` + `paid` + `complete` |
-| `unique_paying_customers` | customers | Stripe live paid sessions deduped by customer id (email hashed only in-memory for dedupe) |
-| `live_revenue` | USD | Sum of live paid session `amount_total` (refunds Unknown unless applied) |
+| `successful_live_payments` | payments | **Verified YouTubeBooster-attributed** live Checkout Sessions only (never account-wide Stripe). Baseline **0** until `reconciliationComplete`. |
+| `unique_paying_customers` | customers | Unique **external** customers among verified attributed payments (baseline **0** until reconciliation). |
+| `live_revenue` | USD | Verified attributed net live revenue (baseline **$0** until reconciliation). |
+| `unattributed_stripe_payments` | payments | Live paid sessions lacking conclusive YouTubeBooster attribution — **not** product revenue |
 | `entitled_paid_users` | users | Admin CRM (unavailable in growth scripts without CRM auth) |
 | `activation_within_24h` | users | Admin CRM — required for EXP-001 |
 | `experiment_attributed_paid` | payments | Unknown unless checkout metadata/UTM proves attribution |
+
+See **`docs/growth/STRIPE-PRODUCT-ALLOWLIST.md`**. GetTrainMate and YouTubeBooster verified external paying customers are both **0** until reconciliation.
 
 ## Alias rules
 

@@ -102,6 +102,25 @@ export function buildCanonicalFromSnapshot(snapshot) {
       );
     }
 
+    const attr = w?.stripe?.attribution;
+    if (attr) {
+      if (!attr.reconciliationComplete) {
+        warnings.push(
+          `${label}: Stripe reconciliation incomplete — verified YouTubeBooster payments/customers/revenue use documented baseline (0). Do not treat account-wide Stripe (${attr.accountWideLivePaidSessions ?? '?'}) as this product's revenue.`
+        );
+      }
+      if ((attr.unattributedLivePayments || 0) > 0) {
+        warnings.push(
+          `${label}: ${attr.unattributedLivePayments} Unattributed Stripe payment(s) excluded from YouTubeBooster revenue/customers.`
+        );
+      }
+      if ((attr.otherAppLivePayments || 0) > 0) {
+        warnings.push(
+          `${label}: ${attr.otherAppLivePayments} live payment(s) attributed to another application and excluded.`
+        );
+      }
+    }
+
     windows[label] = {
       start: w?.start,
       end: w?.end,
@@ -183,11 +202,17 @@ export function composeGrowthReport(opts) {
   t.push(`${scoreN}) SCOREBOARD (raw events unless noted)`);
   t.push('-'.repeat(40));
   t.push(
-    `7d (${range7}): sessions=${cell(m7?.sessions)} | qualified_landing=${cell(m7?.qualified_landing_sessions)} | audit_starts=${cell(m7?.audit_starts)} | audit_completions=${cell(m7?.audit_completions)} | pricing=${cell(m7?.pricing_viewers)} | checkout_starts=${cell(m7?.checkout_starts)} | live_payments=${cell(m7?.successful_live_payments)} | unique_customers=${cell(m7?.unique_paying_customers)} | entitled=${cell(m7?.entitled_paid_users)} | revenue=${cell(m7?.live_revenue)}`
+    `7d (${range7}): sessions=${cell(m7?.sessions)} | qualified_landing=${cell(m7?.qualified_landing_sessions)} | audit_starts=${cell(m7?.audit_starts)} | audit_completions=${cell(m7?.audit_completions)} | pricing=${cell(m7?.pricing_viewers)} | checkout_starts=${cell(m7?.checkout_starts)} | verified_live_payments=${cell(m7?.successful_live_payments)} | verified_unique_customers=${cell(m7?.unique_paying_customers)} | entitled=${cell(m7?.entitled_paid_users)} | verified_revenue=${cell(m7?.live_revenue)}`
   );
   t.push(
-    `30d (${range30}): sessions=${cell(m30?.sessions)} | qualified_landing=${cell(m30?.qualified_landing_sessions)} | audit_starts=${cell(m30?.audit_starts)} | audit_completions=${cell(m30?.audit_completions)} | pricing=${cell(m30?.pricing_viewers)} | checkout_starts=${cell(m30?.checkout_starts)} | live_payments=${cell(m30?.successful_live_payments)} | unique_customers=${cell(m30?.unique_paying_customers)} | entitled=${cell(m30?.entitled_paid_users)} | revenue=${cell(m30?.live_revenue)}`
+    `30d (${range30}): sessions=${cell(m30?.sessions)} | qualified_landing=${cell(m30?.qualified_landing_sessions)} | audit_starts=${cell(m30?.audit_starts)} | audit_completions=${cell(m30?.audit_completions)} | pricing=${cell(m30?.pricing_viewers)} | checkout_starts=${cell(m30?.checkout_starts)} | verified_live_payments=${cell(m30?.successful_live_payments)} | verified_unique_customers=${cell(m30?.unique_paying_customers)} | entitled=${cell(m30?.entitled_paid_users)} | verified_revenue=${cell(m30?.live_revenue)}`
   );
+  const a30 = opts.snapshot?.windows?.['30d']?.stripe?.attribution;
+  if (a30) {
+    t.push(
+      `Stripe attribution (30d diagnostic): account_wide_live_paid=${a30.accountWideLivePaidSessions ?? '?'} | unattributed=${a30.unattributedLivePayments ?? '?'} | other_app=${a30.otherAppLivePayments ?? '?'} | excluded_owner_smoke=${a30.excludedOwnerOrSmokePayments ?? '?'} | attributed_candidates=${a30.attributedCandidatesBeforeBaseline ?? '?'} | reconciliationComplete=${a30.reconciliationComplete}`
+    );
+  }
   t.push(
     `Rates (30d, directional if sample < 30): start/session=${rateCell(m30?.audit_starts?.value, m30?.sessions?.value)}; complete/start=${rateCell(m30?.audit_completions?.value, m30?.audit_starts?.value)} (not a cohort rate if completions can lag starts); checkout/pricing=${rateCell(m30?.checkout_starts?.value, m30?.pricing_viewers?.value)}; paid/checkout=${rateCell(m30?.successful_live_payments?.value, m30?.checkout_starts?.value)}`
   );
@@ -256,7 +281,10 @@ export function composeGrowthReport(opts) {
   t.push(
     `GA4=${opts.snapshot?.sources?.ga4 ?? '?'}; Stripe=${opts.snapshot?.sources?.stripe ?? '?'}; Admin CRM entitlement=unavailable`
   );
-  t.push('Truth: Stripe live payments are revenue source of truth. GA4 is directional funnel signal.');
+  t.push(
+    'Stripe truth: only YouTubeBooster-attributed verified payments count. Account-wide Stripe is never product revenue. See docs/growth/STRIPE-PRODUCT-ALLOWLIST.md.'
+  );
+  t.push('Truth: GA4 is directional funnel signal.');
   t.push('');
 
   const techN = srcN + 1;
@@ -359,7 +387,7 @@ export function composeGrowthReport(opts) {
       ${warnHtml}
 
       <h2 style="font-size:15px;margin:18px 0 8px;">Scoreboard</h2>
-      <p style="margin:0 0 8px;font-size:12px;color:#6b7280;">Audit metrics are labeled as raw GA4 <b>events</b>, not unique audits/users. Stripe payments and unique customers are separate.</p>
+      <p style="margin:0 0 8px;font-size:12px;color:#6b7280;">Audit metrics are raw GA4 <b>events</b>. Stripe scoreboard shows <b>verified YouTubeBooster-attributed</b> payments/customers only (baseline 0 until reconciliation). Account-wide Stripe is never this product's revenue.</p>
       <div style="overflow-x:auto;">
       <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:12px;min-width:640px;">
         <thead>
@@ -433,7 +461,8 @@ export function composeGrowthReport(opts) {
         GA4=${escapeHtml(opts.snapshot?.sources?.ga4 ?? '?')};
         Stripe=${escapeHtml(opts.snapshot?.sources?.stripe ?? '?')};
         Admin CRM entitlement metrics=unavailable.
-        Stripe live payments are the revenue source of truth.
+        Verified YouTubeBooster Stripe attribution only — see docs/growth/STRIPE-PRODUCT-ALLOWLIST.md.
+        Account-wide Stripe totals are diagnostic and must not be reported as product revenue.
       </p>
 
       <h2 style="font-size:15px;margin:18px 0 8px;">Technical Details</h2>

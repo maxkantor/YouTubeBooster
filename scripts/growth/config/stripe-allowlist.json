@@ -1,0 +1,29 @@
+{
+  "appKey": "youtubeboosterai",
+  "brand": "YouTubeBoosterAI",
+  "productNameContains": ["YouTube Booster AI", "YouTubeBooster"],
+  "successUrlHosts": ["youtubeboosterai.com", "www.youtubeboosterai.com"],
+  "productIds": [],
+  "priceIds": [],
+  "paymentLinkIds": [],
+  "excludedCustomerIds": [],
+  "excludedEmailHashesSha256Prefix16": [],
+  "smokeTestMetadataFlags": ["smoke_test", "setup_test", "internal_test"],
+  "reconciliationComplete": false,
+  "verifiedBaselines": {
+    "YouTubeBooster": {
+      "verifiedExternalPayingCustomers": 0,
+      "verifiedSuccessfulLivePayments": 0,
+      "verifiedNetLiveRevenueUsd": 0
+    },
+    "GetTrainMate": {
+      "verifiedExternalPayingCustomers": 0
+    }
+  },
+  "notes": [
+    "Checkout currently uses inline PriceData (not catalog Price IDs) with metadata.app=youtubeboosterai.",
+    "Populate productIds/priceIds/paymentLinkIds when catalog objects are created; or set STRIPE_YB_* env / SSM overrides.",
+    "Do not count account-wide Stripe live payments as YouTubeBooster revenue.",
+    "Until reconciliationComplete=true, verified scoreboard metrics stay at verifiedBaselines (currently 0)."
+  ]
+}

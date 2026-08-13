@@ -11,7 +11,12 @@ const REGION = process.env.AWS_REGION || 'us-east-1';
 const MAP = [
   ['GA4_PROPERTY_ID', '/youtubebooster/growth/ga4-property-id', false],
   ['GOOGLE_ANALYTICS_CREDENTIALS_JSON', '/youtubebooster/growth/google-analytics-credentials-json', true],
-  ['STRIPE_RESTRICTED_READ_KEY', '/youtubebooster/growth/stripe-restricted-read-key', true]
+  ['STRIPE_RESTRICTED_READ_KEY', '/youtubebooster/growth/stripe-restricted-read-key', true],
+  ['STRIPE_YB_PRODUCT_IDS', '/youtubebooster/growth/stripe-product-ids', false],
+  ['STRIPE_YB_PRICE_IDS', '/youtubebooster/growth/stripe-price-ids', false],
+  ['STRIPE_YB_PAYMENT_LINK_IDS', '/youtubebooster/growth/stripe-payment-link-ids', false],
+  ['STRIPE_YB_EXCLUDED_CUSTOMER_IDS', '/youtubebooster/growth/stripe-excluded-customer-ids', false],
+  ['STRIPE_YB_RECONCILIATION_COMPLETE', '/youtubebooster/growth/stripe-reconciliation-complete', false]
 ];
 
 export function loadSsmSecretsIntoEnv() {

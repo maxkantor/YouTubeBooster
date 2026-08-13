@@ -98,7 +98,7 @@ test('weekday labels match dates in America/New_York', () => {
   assert.match(formatLongDateEt('2026-08-25'), /^Tuesday, August 25, 2026$/);
 });
 
-test('Stripe separates payments and unique customers; never exposes email', () => {
+test('Stripe separates payments and unique customers; never exposes email; baseline 0 before reconciliation', () => {
   const summary = summarizeStripeSessions({
     data: [
       {
@@ -109,6 +109,7 @@ test('Stripe separates payments and unique customers; never exposes email', () =
         amount_total: 1999,
         customer: 'cus_a',
         customer_details: { email: 'secret@example.com' },
+        metadata: { app: 'youtubeboosterai' },
         created: 1
       },
       {
@@ -119,6 +120,7 @@ test('Stripe separates payments and unique customers; never exposes email', () =
         amount_total: 999,
         customer: 'cus_a',
         customer_details: { email: 'secret@example.com' },
+        metadata: { app: 'youtubeboosterai' },
         created: 2
       },
       {
@@ -132,8 +134,10 @@ test('Stripe separates payments and unique customers; never exposes email', () =
       }
     ]
   });
-  assert.equal(summary.successfulLivePayments, 2);
-  assert.equal(summary.uniquePayingCustomers, 1);
+  // Default allowlist reconciliationComplete=false → verified baseline 0
+  assert.equal(summary.successfulLivePayments, 0);
+  assert.equal(summary.uniquePayingCustomers, 0);
+  assert.equal(summary.attribution.attributedCandidatesBeforeBaseline, 2);
   assert.equal(summary.testPaidSessions, 1);
   const json = JSON.stringify(summary);
   assert.doesNotMatch(json, /secret@example\.com/);

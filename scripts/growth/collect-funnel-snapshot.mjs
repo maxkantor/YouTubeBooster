@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REQUIRED_FUNNEL_EVENTS, sumEventsByName } from './lib/canonical-metrics.mjs';
 import { summarizeStripeSessions } from './lib/stripe-metrics.mjs';
+import { loadStripeAllowlist } from './lib/stripe-allowlist.mjs';
 import { daysBeforeYmd, etDateParts } from './lib/time.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
 
@@ -36,10 +37,14 @@ const report = {
     audit_starts: 'GA4 event audit_started (raw event count)',
     audit_completions: 'GA4 event audit_completed (raw event count)',
     sessions: 'GA4 event session_start',
-    successful_live_payments: 'Stripe Checkout Sessions livemode+paid+complete',
-    unique_paying_customers: 'Stripe live paid sessions deduped by customer id (or hashed email internally)',
+    successful_live_payments:
+      'YouTubeBooster-attributed verified live Checkout Sessions only (never account-wide Stripe). Baseline 0 until reconciliationComplete.',
+    unique_paying_customers:
+      'Unique external customers among verified YouTubeBooster-attributed payments (baseline 0 until reconciliation).',
+    unattributed_stripe_payments: 'Live paid sessions without conclusive YouTubeBooster attribution',
     experiment_attributed_paid: 'Unknown unless checkout metadata/UTM attribution exists'
-  }
+  },
+  stripeAllowlist: null
 };
 
 async function getGa4Token(credentialsJson) {
@@ -205,7 +210,8 @@ async function fetchStripe(key, startUnix) {
   const params = new URLSearchParams({
     'created[gte]': String(startUnix),
     limit: '100',
-    status: 'complete'
+    status: 'complete',
+    'expand[]': 'data.line_items'
   });
   const res = await fetch(`https://api.stripe.com/v1/checkout/sessions?${params}`, {
     headers: { Authorization: `Bearer ${key}` }
@@ -215,6 +221,21 @@ async function fetchStripe(key, startUnix) {
     return null;
   }
   return res.json();
+}
+
+const stripeAllowlist = loadStripeAllowlist();
+report.stripeAllowlist = {
+  appKey: stripeAllowlist.appKey,
+  reconciliationComplete: stripeAllowlist.reconciliationComplete,
+  productIdCount: stripeAllowlist.productIds.length,
+  priceIdCount: stripeAllowlist.priceIds.length,
+  paymentLinkIdCount: stripeAllowlist.paymentLinkIds.length,
+  baselines: stripeAllowlist.verifiedBaselines
+};
+if (!stripeAllowlist.reconciliationComplete) {
+  report.notes.push(
+    'Stripe reconciliation incomplete: verified YouTubeBooster payments/customers/revenue forced to documented baseline (0). Account-wide Stripe totals are diagnostic only.'
+  );
 }
 
 const ga4Id = process.env.GA4_PROPERTY_ID;
@@ -274,7 +295,7 @@ for (const w of windows) {
       const startUnix = Math.floor(new Date(w.start + 'T00:00:00Z').getTime() / 1000);
       const endUnix = Math.floor(new Date(w.end + 'T23:59:59Z').getTime() / 1000);
       const raw = await fetchStripe(stripeKey, startUnix);
-      entry.stripe = summarizeStripeSessions(raw, { endUnix });
+      entry.stripe = summarizeStripeSessions(raw, { endUnix, allowlist: stripeAllowlist });
     } catch (e) {
       report.notes.push(`Stripe ${w.label} failed: ${e instanceof Error ? e.message : e}`);
     }

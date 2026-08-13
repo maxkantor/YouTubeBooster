@@ -12,7 +12,7 @@ description: >-
 Optimize for **verified Stripe purchases and revenue**, not traffic, clicks, or cosmetics.
 
 Product: https://youtubeboosterai.com/  
-Source of truth for conversion: **Stripe live payments** (Admin CRM live orders as secondary).  
+Source of truth for conversion: **verified YouTubeBooster-attributed Stripe live payments** (never account-wide Stripe; Admin CRM live orders as secondary).  
 Preserve existing GA4 (`G-P02EPD7EDB` in `frontend/index.html` + `frontend/src/lib/analytics.ts`). Never add a second GA4 install.
 
 ## Daily workflow
@@ -44,7 +44,7 @@ Preserve existing GA4 (`G-P02EPD7EDB` in `frontend/index.html` + `frontend/src/l
 
 Landing sessions → traffic source → audit starts → audit completions → result views → signup completions → checkout starts → **successful Stripe purchases** → revenue → returning users.
 
-Prefer Admin CRM activity + Stripe when GA4 API secrets are missing. Never invent baselines.
+Prefer Admin CRM activity + **YouTubeBooster-attributed** Stripe when GA4 API secrets are missing. Never invent baselines. **Never** count account-wide Stripe live payments as this product’s revenue (shared accounts may include GetTrainMate). See `docs/growth/STRIPE-PRODUCT-ALLOWLIST.md`. Verified external paying customers baseline remains **0** until reconciliation is marked complete.
 
 ## Experiment concurrency
 

@@ -9,6 +9,11 @@ Never commit credential files or paste secrets into git, chat logs, or experimen
 | `GA4_PROPERTY_ID` | `/youtubebooster/growth/ga4-property-id` | String |
 | `GOOGLE_ANALYTICS_CREDENTIALS_JSON` | `/youtubebooster/growth/google-analytics-credentials-json` | SecureString |
 | `STRIPE_RESTRICTED_READ_KEY` | `/youtubebooster/growth/stripe-restricted-read-key` | SecureString |
+| `STRIPE_YB_PRODUCT_IDS` (optional) | `/youtubebooster/growth/stripe-product-ids` | String (CSV) |
+| `STRIPE_YB_PRICE_IDS` (optional) | `/youtubebooster/growth/stripe-price-ids` | String (CSV) |
+| `STRIPE_YB_RECONCILIATION_COMPLETE` (optional) | `/youtubebooster/growth/stripe-reconciliation-complete` | String (`true` only after human reconciliation) |
+
+Product/price allowlist docs: **`docs/growth/STRIPE-PRODUCT-ALLOWLIST.md`**. Never count account-wide Stripe as YouTubeBooster revenue.
 
 Measurement ID on the site remains `G-P02EPD7EDB` (not a secret). **Property ID** is the numeric GA4 property (Admin → Property settings).
 

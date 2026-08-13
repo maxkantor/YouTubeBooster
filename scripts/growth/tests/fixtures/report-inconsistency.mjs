@@ -27,8 +27,15 @@ export const truncatedTopEventsBugFixture = {
         uniquePayingCustomers: 0,
         revenueLiveUsd: 0,
         netLiveRevenueUsd: 0,
-        refundsApplied: false,
-        entitledPaidUsers: null
+        refundsApplied: true,
+        entitledPaidUsers: null,
+        attribution: {
+          reconciliationComplete: false,
+          accountWideLivePaidSessions: 0,
+          unattributedLivePayments: 0,
+          otherAppLivePayments: 0,
+          attributedCandidatesBeforeBaseline: 0
+        }
       },
       landing: { exp002Sessions: 4, exp003Sessions: 1 }
     },
@@ -62,13 +69,27 @@ export const truncatedTopEventsBugFixture = {
         first_visit: 40
       },
       stripe: {
-        successfulLivePayments: 1,
-        livePaidSessions: 1,
-        uniquePayingCustomers: 1,
-        revenueLiveUsd: 19.99,
-        netLiveRevenueUsd: 19.99,
-        refundsApplied: false,
-        entitledPaidUsers: null
+        successfulLivePayments: 0,
+        livePaidSessions: 0,
+        uniquePayingCustomers: 0,
+        revenueLiveUsd: 0,
+        netLiveRevenueUsd: 0,
+        refundsApplied: true,
+        entitledPaidUsers: null,
+        attribution: {
+          reconciliationComplete: false,
+          accountWideLivePaidSessions: 1,
+          unattributedLivePayments: 1,
+          otherAppLivePayments: 0,
+          attributedCandidatesBeforeBaseline: 0,
+          baselines: {
+            YouTubeBooster: {
+              verifiedExternalPayingCustomers: 0,
+              verifiedSuccessfulLivePayments: 0,
+              verifiedNetLiveRevenueUsd: 0
+            }
+          }
+        }
       },
       landing: { exp002Sessions: 12, exp003Sessions: 3 }
     }
