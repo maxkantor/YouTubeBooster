@@ -17,6 +17,8 @@ const ROOT_GROWTH_GUIDE_PATHS = GROWTH_GUIDE_PAGES.map((page) => ({
 export const STATIC_INDEXABLE_PATHS: { path: string; changefreq: string; priority: number }[] = [
   { path: '/', changefreq: 'weekly', priority: 1 },
   { path: '/demo', changefreq: 'weekly', priority: 0.95 },
+  { path: '/share', changefreq: 'weekly', priority: 0.92 },
+  { path: '/sample-report', changefreq: 'weekly', priority: 0.9 },
   { path: '/pricing', changefreq: 'weekly', priority: 0.9 },
   { path: '/faq', changefreq: 'monthly', priority: 0.58 },
   { path: '/about', changefreq: 'monthly', priority: 0.55 },

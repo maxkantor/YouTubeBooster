@@ -1,30 +1,29 @@
 # Cursor Automation — YouTubeBooster Daily Paid Customer Growth
 
 **Name:** YouTubeBooster daily paid growth  
-**Schedule:** Monday–Friday **8:00 AM America/New_York** (prefer weekdays to cut cost; daily is OK)  
+**Schedule:** Monday–Friday **8:00 AM America/New_York**  
 **Repo:** `maxkantor/YouTubeBooster` · branch `main`  
 **Notify:** Full Admin email after every run → `scripts/growth/compose-and-send-growth-email.mjs`  
-**Cost:** Prefer cheapest capable model; measure+email most days; ship only when justified
+**Mode:** **Acquisition-first** — every run must complete one meaningful growth action
 
 ---
 
 ## Cost controls (do in Cursor UI)
 
-1. **Model:** Use the cheapest capable model (e.g. Composer / Auto — not Grok High unless needed).
-2. **Schedule:** Prefer Mon–Fri 8:00 AM Eastern over every day.
-3. **Spend limit:** [cursor.com/dashboard/billing](https://cursor.com/dashboard/billing) → enable on-demand if needed → set a **low hard spend limit** (e.g. $10–$20/month for this automation’s room). Cloud Agents need a little headroom under the limit to start.
-4. **Instructions:** Keep the cost paragraph in the prompt below (measure+stop unless shipping).
+1. **Model:** Cheapest capable model (e.g. Composer / Auto).
+2. **Schedule:** Mon–Fri 8:00 AM Eastern.
+3. **Spend limit:** Low hard limit on [billing](https://cursor.com/dashboard/billing).
+4. Keep the cost paragraph in the prompt below.
 
 ---
 
 ## Finish / edit in Automations
 
-1. Open **Automations** (left sidebar robot icon) → **YouTubeBooster daily paid growth**
-2. Paste/replace **Agent instructions** with the prompt below
-3. Set model to a cheaper option
-4. Confirm schedule shows **8:00 AM EDT/EST** (not 4:00 AM)
-5. Secrets stay in the Automation Secrets UI only — **never paste secret values into this markdown file**
-6. Leave **Active** On
+1. Open **Automations** → **YouTubeBooster daily paid growth**
+2. Replace **Agent instructions** with the prompt below
+3. Confirm schedule **8:00 AM** Eastern
+4. Secrets in Automation Secrets UI only — **never paste secret values into this file**
+5. Leave **Active** On
 
 ### Automation secret *names* (values from SSM / IAM — not in git)
 
@@ -33,17 +32,9 @@
 | `GA4_PROPERTY_ID` | SSM `/youtubebooster/growth/ga4-property-id` |
 | `GOOGLE_ANALYTICS_CREDENTIALS_JSON` | SSM `/youtubebooster/growth/google-analytics-credentials-json` |
 | `STRIPE_RESTRICTED_READ_KEY` | SSM `/youtubebooster/growth/stripe-restricted-read-key` |
-| `AWS_ACCESS_KEY_ID` | IAM (cloud agent) |
-| `AWS_SECRET_ACCESS_KEY` | IAM (cloud agent) |
+| `AWS_ACCESS_KEY_ID` | IAM |
+| `AWS_SECRET_ACCESS_KEY` | IAM |
 | `AWS_REGION` | `us-east-1` |
-
-Copy from SSM to clipboard when needed:
-
-```powershell
-aws ssm get-parameter --name /youtubebooster/growth/ga4-property-id --region us-east-1 --query Parameter.Value --output text | Set-Clipboard
-aws ssm get-parameter --name /youtubebooster/growth/google-analytics-credentials-json --with-decryption --region us-east-1 --query Parameter.Value --output text | Set-Clipboard
-aws ssm get-parameter --name /youtubebooster/growth/stripe-restricted-read-key --with-decryption --region us-east-1 --query Parameter.Value --output text | Set-Clipboard
-```
 
 ---
 
@@ -52,33 +43,37 @@ aws ssm get-parameter --name /youtubebooster/growth/stripe-restricted-read-key -
 ```
 Read and follow .cursor/skills/grow-paid-customers/SKILL.md.
 
-Cost control: Prefer the cheapest capable model. On most runs: collect metrics, health-check, update experiment log notes if needed, email Admin, and stop. Only implement/deploy when there is a clear leak, no same-stage conflict, and the change is tiny. Skip npm ci / full builds unless shipping.
+ACQUISITION-FIRST: Every run must complete one meaningful growth action. Reviewing analytics, updating the experiment log, waiting for traffic, sending Admin email, or publishing another low-value SEO page do NOT count by themselves.
 
-Review current GA4, Stripe, application funnel, experiment history (docs/growth/EXPERIMENT-LOG.md), production health, and recent repository changes.
+Verified baseline until product Stripe reconciliation proves otherwise: 0 external paying customers. Never attribute account-wide Stripe to YouTubeBooster. Filter via docs/growth/STRIPE-PRODUCT-ALLOWLIST.md.
 
-Never run two simultaneous conversion experiments on the same funnel stage. While an experiment is gathering data, you may implement independent acquisition, SEO, reliability, tracking, or funnel-repair improvements that do not invalidate the active experiment.
+Preserve active experiments and their evaluation dates. Active experiments lock only their exact treatment/cohort — they do not block outreach packages, mini-audit sharing, referral/distribution, or other acquisition work.
 
-If traffic is too low to evaluate conversion, prioritize qualified customer acquisition—high-intent SEO pages, creator partnerships, referral mechanics, lifecycle email, and tracked cross-promotion—before additional homepage optimization.
+30-day targets (not promises): 100 qualified completed audits, 20 pricing views, 5 checkout starts, 3 verified external paying customers.
 
-When shipping: select one small reversible change most likely to increase verified paid customers. Implement it, validate it, deploy directly to main only when all checks pass, verify production, and record the result in docs/growth/EXPERIMENT-LOG.md.
+Target: active creators ~1k–100k subs with visible packaging/SEO problems who prefer a one-time audit. No inactive/private/children/sensitive channels. No mass spam, fake social proof, or auto-sending outreach.
 
-Always end the run by sending a FULL Admin email (not a one-line smoke note) via:
-node scripts/growth/compose-and-send-growth-email.mjs --notes "<what was reviewed; what shipped or why nothing shipped; blockers; next eval date>"
-That script includes GA4/Stripe snapshot windows, production health, and active experiments automatically. Do this even on skipped or no-op days.
+Run:
+1) Production health
+2) Product-specific Stripe reconcile + GA4 7d/30d
+3) Experiment log + recent commits + locks
+4) Pick largest acquisition/revenue constraint
+5) Score actions; ship exactly ONE reversible action (prefer mini-audit share, sample paid report, outreach package, distribution, or attribution repair over generic SEO)
+6) If outreach: write sanitized docs/growth/outreach package with 10 drafts + UTM links — do NOT send
+7) Tests + frontend build; commit/push main only if valid; monitor Amplify; verify /share /demo /sample-report pricing checkout
+8) Update experiment log
+9) ALWAYS email Admin via:
+node scripts/growth/compose-and-send-growth-email.mjs --notes "<Decision; growth action completed; asset created; distribution status; owner actions; audits-by-source notes; verified customers; next action>"
 
-Load secrets from Automation env / SSM via scripts/growth/load-ssm-secrets-into-env.mjs (GA4_PROPERTY_ID, GOOGLE_ANALYTICS_CREDENTIALS_JSON, STRIPE_RESTRICTED_READ_KEY). Never commit credentials. Stripe key must remain read-only (rk_…). AWS credentials are required for SSM load and Admin email.
+Admin notes must distinguish: prospect list created vs drafts created vs outreach actually sent vs visits vs audits vs verified purchases.
+
+Cost: prefer cheapest model; skip npm ci unless shipping; still complete one meaningful growth action every run.
+
+Load secrets via scripts/growth/load-ssm-secrets-into-env.mjs. Never commit credentials. Stripe key rk_ only.
 ```
 
 ---
 
-## SSM reference (source of truth — no values in git)
+## SSM reference
 
-| Env / purpose | SSM path |
-|---------------|----------|
-| `GA4_PROPERTY_ID` | `/youtubebooster/growth/ga4-property-id` |
-| `GOOGLE_ANALYTICS_CREDENTIALS_JSON` | `/youtubebooster/growth/google-analytics-credentials-json` |
-| `STRIPE_RESTRICTED_READ_KEY` | `/youtubebooster/growth/stripe-restricted-read-key` |
-| Admin inbox | `/youtubebooster/admin/email` |
-| SES from | `/youtubebooster/ses/from-email` |
-
-See `docs/growth/SECRETS-SETUP.md`.
+See `docs/growth/SECRETS-SETUP.md` and `docs/growth/STRIPE-PRODUCT-ALLOWLIST.md`.

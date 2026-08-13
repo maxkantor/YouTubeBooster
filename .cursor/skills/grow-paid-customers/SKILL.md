@@ -1,136 +1,148 @@
 ---
 name: grow-paid-customers
 description: >-
-  Autonomous paid-customer growth for YouTubeBooster AI. Selects and ships one
-  small reversible experiment to increase verified Stripe purchases and revenue.
-  Use for daily growth runs, Monday–Friday automation, CRO, funnel leaks, GA4,
-  Stripe, Admin CRM funnel, or deploy-to-main conversion experiments.
+  Acquisition-first paid-customer growth for YouTubeBooster AI. Every run must
+  complete one meaningful growth action (not analytics-only). Use for daily
+  growth automation, qualified creator acquisition, founder outreach packages,
+  mini-audit sharing, referral/distribution, GA4, product-attributed Stripe,
+  Admin CRM, and reversible deploy-to-main experiments.
 ---
 
 # Grow paid customers (YouTubeBooster AI)
 
-Optimize for **verified Stripe purchases and revenue**, not traffic, clicks, or cosmetics.
+Optimize for **verified YouTubeBooster-attributed Stripe purchases and revenue**, not vanity traffic.
 
 Product: https://youtubeboosterai.com/  
-Source of truth for conversion: **verified YouTubeBooster-attributed Stripe live payments** (never account-wide Stripe; Admin CRM live orders as secondary).  
-Preserve existing GA4 (`G-P02EPD7EDB` in `frontend/index.html` + `frontend/src/lib/analytics.ts`). Never add a second GA4 install.
+Source of truth: **product-attributed Stripe only** (`docs/growth/STRIPE-PRODUCT-ALLOWLIST.md`). Never count account-wide Stripe (may include GetTrainMate).  
+Verified baseline until reconciliation proves otherwise: **0 external paying customers**.  
+Preserve GA4 `G-P02EPD7EDB` (`frontend/index.html` + `frontend/src/lib/analytics.ts`). Never add a second GA4 install.
+
+## 30-day targets (targets, not promises)
+
+| Metric | Target |
+|--------|--------|
+| Qualified completed channel audits | 100 |
+| Pricing views | 20 |
+| Checkout starts | 5 |
+| Verified external paying customers | 3 |
+
+## Acquisition-first rule (mandatory)
+
+**Every scheduled run must complete one meaningful growth action.**
+
+These do **not** count by themselves:
+
+- Reviewing analytics
+- Updating the experiment log
+- Waiting for more traffic
+- Sending the Admin email
+- Publishing another low-value SEO page
+
+Active experiments lock **only** their exact treatment and cohort. They do **not** block independent outreach enablement, distribution, referral, creator partnerships, or other acquisition work.
+
+## Target customer
+
+Prioritize active small creators who:
+
+- Publish consistently
+- Have roughly **1,000–100,000** subscribers
+- Show visible title, thumbnail, positioning, or search problems
+- Will act on practical recommendations
+- Cannot justify an expensive consultant
+- Prefer a **one-time audit** over another subscription
+
+Do **not** target inactive, abandoned, private, children-focused, or sensitive channels.
+
+## Prioritized acquisition actions
+
+Score with `(expected customer impact × confidence × strategic fit) ÷ effort`, then pick **exactly one**:
+
+1. Personalized mini-audit sharing page (one useful observation + CTA to full free audit)
+2. Clear sample of the paid report (e.g. MaxKantorCooking)
+3. Shareable audit results with referral / UTM attribution
+4. Ethical creator-referral program (owner approval before launch)
+5. Post-audit lifecycle sequence copy (summary → priority issue → before/after → paid explanation)
+6. Short demo-video script from a real audit
+7. Qualified creator list + personalized founder outreach drafts (owner sends)
+8. Partner pages (consultants, thumbnail designers, editors, communities)
+9. Distribution from existing SEO pages into the audit
+10. Free-preview → paid value demonstration
+11. Repair audit-event or Stripe attribution
+
+**Hard bans:** mass automated outreach, fake comments/testimonials/engagement, generic spam, claiming a channel was reviewed without inspecting public content, auto-sending DMs/emails/forms/comments without explicit authorization.
+
+Also never auto-change: product price, Stripe config, auth, AWS infra, privacy/legal, medical/financial/guaranteed-growth claims, ad spend, refund policies, production secrets.
+
+## Founder outreach package (when selected)
+
+Create a sanitized package under `docs/growth/outreach/` with **10** prospects:
+
+- Public channel URL
+- Visible growth issue
+- One genuinely useful observation (from public data only)
+- Personalized outreach draft
+- Public contact route if available
+- UTM-tagged audit / mini-audit URL
+- Follow-up draft
+- Tracking status (`draft` / `approved` / `sent_by_owner` / …)
+
+**Automation must not** send messages, submit forms, comment, or publish externally without explicit authorization.  
+Admin email must distinguish: prospect list created · drafts created · outreach actually sent · visits · audits · verified purchases.
 
 ## Daily workflow
 
-**Cost control:** Prefer the cheapest capable model. On most runs: collect metrics, health-check, note anything useful in the experiment log if needed, email Admin, and **stop**. Only implement/deploy when there is a clear leak, no same-stage conflict, and the change is tiny. Skip `npm ci` / full production builds unless shipping.
+**Cost control:** Prefer the cheapest capable model. Skip `npm ci` / full builds unless shipping. Always still complete one meaningful growth action (code asset, outreach package, distribution enablement, or measurement repair that unblocks acquisition).
 
-1. Read experiment history: `docs/growth/EXPERIMENT-LOG.md`
-2. Collect funnel evidence (7d + 30d when secrets exist):
-   ```bash
-   node scripts/growth/load-ssm-secrets-into-env.mjs   # optional: pull from AWS SSM
-   node scripts/growth/collect-funnel-snapshot.mjs
-   node scripts/growth/check-production-health.mjs
-   ```
-3. Compute stage rates; pick the **largest meaningful leak** with enough volume.
-4. **Low-traffic rule:** If traffic is too low to evaluate conversion, prioritize **qualified customer acquisition**—high-intent SEO pages, creator partnerships, referral mechanics, lifecycle email, and tracked cross-promotion—**before** additional homepage optimization.
-5. Skip conversion experiments that would conflict with an `active` experiment on the **same funnel stage** (see concurrency rule below). Other experiment statuses: do not repeat `completed` / `failed` without new evidence.
-6. If no clear, tiny ship candidate: email Admin and end the run (do not force a change).
-7. Otherwise choose **exactly one** production change using:
-   `Priority = expected paid-customer impact × confidence × strategic fit ÷ effort`
-8. Define the experiment block (required fields below), implement, validate, deploy.
-9. Append the result to `docs/growth/EXPERIMENT-LOG.md`.
-10. **Email Admin** a full run summary (required every run, including no-op / skipped days):
-   ```bash
-   node scripts/growth/compose-and-send-growth-email.mjs --notes "What shipped (or why nothing shipped); blockers; next eval."
-   ```
-   This script refreshes the funnel snapshot, runs health checks, includes active experiments from `docs/growth/EXPERIMENT-LOG.md`, and emails Admin via SES. Prefer it over a hand-written short body. Recipient is SSM `/youtubebooster/admin/email`.
+1. Verify production health (`scripts/growth/check-production-health.mjs`)
+2. Reconcile YouTubeBooster-specific Stripe (`collect-funnel-snapshot.mjs` + allowlist)
+3. Read GA4 7d + 30d; read `docs/growth/EXPERIMENT-LOG.md` and recent commits
+4. Review active experiment locks (exact treatment/cohort only)
+5. Identify the largest acquisition or revenue constraint
+6. Score actions; select **exactly one** reversible action; define audience, channel, hypothesis, metric, guardrail, target, duration, rollback
+7. Implement authorized repository changes (and/or outreach package)
+8. Run tests + frontend production build; inspect diff
+9. Commit + push `main` only when validation passes
+10. Monitor Amplify `youtubebooster-ai-web` (`d2s1ju1o5ef9dw`); verify audit → pricing → checkout path (desktop + mobile)
+11. Revert if verification fails; append experiment log
+12. Email Admin via `compose-and-send-growth-email.mjs` with Decision-first acquisition report
 
-## Funnel stages to measure
+## Funnel stages
 
-Landing sessions → traffic source → audit starts → audit completions → result views → signup completions → checkout starts → **successful Stripe purchases** → revenue → returning users.
-
-Prefer Admin CRM activity + **YouTubeBooster-attributed** Stripe when GA4 API secrets are missing. Never invent baselines. **Never** count account-wide Stripe live payments as this product’s revenue (shared accounts may include GetTrainMate). See `docs/growth/STRIPE-PRODUCT-ALLOWLIST.md`. Verified external paying customers baseline remains **0** until reconciliation is marked complete.
+Landing → source → audit starts → **qualified audit completions** → pricing views → checkout starts → **verified attributed purchases** → entitlement → returning users.
 
 ## Experiment concurrency
 
-**Never run two simultaneous conversion experiments on the same funnel stage.**
+Never run two simultaneous **conversion** experiments on the **same funnel stage treatment**.  
+Acquisition / distribution / outreach packages may proceed in parallel when they do not invalidate an active treatment.
 
-While an experiment is gathering data, the agent **may** implement independent **acquisition, SEO, reliability, tracking, or funnel-repair** improvements that do **not** invalidate the active experiment.
+## Experiment definition (required when shipping)
 
-Do **not** idle until the evaluation date if other high-value non-conflicting work exists.
-
-## Allowed action types
-
-Landing positioning · free-audit activation · audit-result usefulness · paid-upgrade presentation · signup friction · checkout friction · trust · purchase-intent SEO · internal conversion CTAs · referral loops · lifecycle email · cross-promo attribution · qualified acquisition (when volume is too low for CRO).
-
-## Hard bans (never auto-change)
-
-Product price · Stripe config · authentication system · AWS infra · privacy/legal · medical/financial/guaranteed-growth claims · ad spend · bulk outreach.
-
-## Truth rules
-
-- Do not fabricate CTR, retention, impressions, projected subs/views, testimonials, customer counts, or revenue.
-- Public YouTube data ≠ private YouTube Studio analytics.
-- Do not claim paid customers increased until Stripe confirms.
-
-## Experiment definition (required)
-
-| Field | Required |
-|-------|----------|
-| Evidence | Yes |
-| Hypothesis | Yes |
-| Exact change | Yes |
-| Primary metric | Yes (prefer live Stripe purchases or checkout→purchase) |
-| Guardrail metric | Yes |
-| Baseline | Yes (or `unknown — missing data source`) |
-| Target | Yes |
-| Evaluation date | Yes |
-| Stop rule | Yes |
-| Rollback procedure | Yes |
-| Funnel stage | Yes (for concurrency checks) |
+Evidence · Hypothesis · Exact change · Primary metric · Guardrail · Baseline · Target · Evaluation date · Stop rule · Rollback · Funnel stage
 
 ## Deploy gate
 
-Before push to `main`:
-
-1. Install deps; run available tests; lint if configured
-2. Full production frontend build (`frontend`: `npm ci` / `npm run build`)
-3. Inspect diff — one change set; reversible; does not invalidate an active same-stage experiment
-4. Commit + push `main`
-5. Monitor Amplify app `youtubebooster-ai-web` (`d2s1ju1o5ef9dw`)
-6. Verify production desktop + mobile; smoke audit → checkout path
-7. On failure: revert, record cause in the log
+1. Install deps if needed; run growth tests (`scripts/growth` `npm test`); frontend `npm run build`
+2. Inspect diff — one change set; reversible; does not break active experiment treatments
+3. Commit + push `main`
+4. Monitor Amplify; smoke `/share`, `/demo`, `/sample-report`, pricing, checkout/success
+5. On failure: revert and record cause
 
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/growth/collect-funnel-snapshot.mjs` | GA4 + Stripe + notes gaps |
-| `scripts/growth/check-production-health.mjs` | Live `/health` + homepage + robots |
-| `scripts/growth/append-experiment.mjs` | Helper to append a log entry |
-| `scripts/growth/verify-ssm-secrets.mjs` | Confirm SSM params exist (no value dump) |
-| `scripts/growth/put-ssm-secrets.ps1` | One-time put of secrets from env → SSM |
-| `scripts/growth/load-ssm-secrets-into-env.mjs` | Load SSM into process env for collectors |
-| `scripts/growth/notify-admin-email.mjs` | Low-level SES send (subject + body) |
-| `scripts/growth/compose-and-send-growth-email.mjs` | Full Admin email: snapshot + health + active experiments + notes |
-| `scripts/growth/lib/canonical-metrics.mjs` | Shared metric definitions, explicit event maps, reconciliation |
-| `docs/growth/METRICS.md` | Canonical metric documentation |
+| `scripts/growth/collect-funnel-snapshot.mjs` | GA4 + attributed Stripe |
+| `scripts/growth/check-production-health.mjs` | Live health + key routes |
+| `scripts/growth/compose-and-send-growth-email.mjs` | Full Admin email |
+| `scripts/growth/lib/canonical-metrics.mjs` | Metric definitions |
+| `scripts/growth/config/stripe-allowlist.json` | Product attribution allowlist |
+| `docs/growth/STRIPE-PRODUCT-ALLOWLIST.md` | Attribution rules |
+| `docs/growth/outreach/` | Founder outreach packages (drafts only) |
 
 ## Secrets (never commit)
 
-**Env / Cursor Automation names:**
-
-- `GA4_PROPERTY_ID`
-- `GOOGLE_ANALYTICS_CREDENTIALS_JSON` (service account JSON string)
-- `STRIPE_RESTRICTED_READ_KEY` (read-only restricted key — never full `sk_live`)
-
-**AWS SSM (prefix `/youtubebooster/growth/`):**
-
-| Env | SSM path | Type |
-|-----|----------|------|
-| `GA4_PROPERTY_ID` | `/youtubebooster/growth/ga4-property-id` | String |
-| `GOOGLE_ANALYTICS_CREDENTIALS_JSON` | `/youtubebooster/growth/google-analytics-credentials-json` | SecureString |
-| `STRIPE_RESTRICTED_READ_KEY` | `/youtubebooster/growth/stripe-restricted-read-key` | SecureString |
-
-Grant the Google service account **Viewer** on GA4 property `G-P02EPD7EDB` (Admin → Property access management). See `docs/growth/SECRETS-SETUP.md`.
-
-If missing, continue with health checks + code/CRM evidence and mark baselines `unknown`.
+See `docs/growth/SECRETS-SETUP.md`. Stripe key must remain read-only (`rk_…`).
 
 ## Admin CRM
 
-Use Admin CRM funnel/drop-off and live vs test revenue as operational signal. Do not confuse GA4 visitors with CRM users (`docs/ADMIN-METRICS.md`).
+Operational signal only. Do not confuse GA4 visitors with CRM users (`docs/ADMIN-METRICS.md`).

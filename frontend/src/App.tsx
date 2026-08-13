@@ -106,6 +106,12 @@ const GrowthGuideRoutePage = React.lazy(() =>
 const ComparisonRoutePage = React.lazy(() =>
   import('./pages/marketing/ComparisonPages').then((m) => ({ default: m.ComparisonRoutePage }))
 );
+const MiniAuditSharePage = React.lazy(() =>
+  import('./pages/marketing/MiniAuditSharePage').then((m) => ({ default: m.MiniAuditSharePage }))
+);
+const SampleReportPage = React.lazy(() =>
+  import('./pages/marketing/SampleReportPage').then((m) => ({ default: m.SampleReportPage }))
+);
 
 /** Redirect from /app to the main dashboard (onboarding wizard removed). */
 function AppEntryRedirect() {
@@ -888,6 +894,8 @@ function AppInner() {
         <Route path="/blog/:slug" element={<BlogPostPage />} />
         <Route path="/site-map" element={<HtmlSitemapPage />} />
         <Route path="/demo" element={<ChannelAnalyzeDashboard variant="marketing" />} />
+        <Route path="/share" element={<MiniAuditSharePage />} />
+        <Route path="/sample-report" element={<SampleReportPage />} />
         <Route
           path="/auth/signin"
           element={<SignInPage userSession={userSession} sessionLoading={sessionLoading} />}

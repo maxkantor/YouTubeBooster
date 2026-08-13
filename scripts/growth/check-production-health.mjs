@@ -70,6 +70,18 @@ await check('youtube_channel_analyzer', async () => {
   return { status: res.status, bytes: html.length };
 });
 
+await check('mini_audit_share', async () => {
+  const res = await fetch('https://youtubeboosterai.com/share', { redirect: 'follow' });
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return { status: res.status };
+});
+
+await check('sample_report', async () => {
+  const res = await fetch('https://youtubeboosterai.com/sample-report', { redirect: 'follow' });
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return { status: res.status };
+});
+
 await check('pricing', async () => {
   const res = await fetch('https://youtubeboosterai.com/pricing', { redirect: 'follow' });
   if (!res.ok) throw new Error(`status ${res.status}`);
