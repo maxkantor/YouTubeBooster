@@ -26,8 +26,8 @@ Agents must append every experiment here. Do not delete history.
 | Stop rule | Build/SEO errors or demo failures on new URL within 48h → revert. |
 | Rollback | `git revert` EXP-003 commit on `main`. |
 | Funnel stage | acquisition / SEO (new landing URL) |
-| Commit | (pending) |
-| Amplify | (pending) |
+| Commit | `368098e` |
+| Amplify | deployed — `/youtube-channel-analyzer` returns 200 (2026-08-13 health check) |
 
 ### 2026-08-11 — EXP-002 SEO audit entry form (start on page → /demo)
 
