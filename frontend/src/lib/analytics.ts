@@ -143,14 +143,30 @@ export const analytics = {
 
   auditUrlEntered: (channel: string) => trackFunnel('audit_url_entered', channel, { channel }),
 
-  /** GA4: audit_started — no channel URL sent to GA4. */
-  auditStarted: (source = 'homepage_or_audit_form') => {
-    trackEvent('audit_started', { source, input_type: 'url_or_handle' });
+  /**
+   * GA4: audit_started — no channel URL sent to GA4.
+   * Pass audit_attempt_id when available for future unique-audit reporting.
+   */
+  auditStarted: (
+    source = 'homepage_or_audit_form',
+    opts?: { auditAttemptId?: string }
+  ) => {
+    trackEvent('audit_started', {
+      source,
+      input_type: 'url_or_handle',
+      ...(opts?.auditAttemptId ? { audit_attempt_id: opts.auditAttemptId } : {})
+    });
   },
 
-  /** GA4: audit_completed */
-  auditCompleted: () => {
-    trackEvent('audit_completed', { source: 'audit_flow' });
+  /**
+   * GA4: audit_completed — call only after claimAuditCompletion succeeds
+   * and only for non-showcase user audits.
+   */
+  auditCompleted: (opts?: { auditAttemptId?: string; source?: string }) => {
+    trackEvent('audit_completed', {
+      source: opts?.source ?? 'audit_flow',
+      ...(opts?.auditAttemptId ? { audit_attempt_id: opts.auditAttemptId } : {})
+    });
   },
 
   channelAuditStarted: (channel?: string) => {

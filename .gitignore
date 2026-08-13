@@ -16,6 +16,8 @@ eggs/
 lib/
 !frontend/src/lib/
 !frontend/src/lib/**
+!scripts/growth/lib/
+!scripts/growth/lib/**
 lib64/
 parts/
 sdist/
@@ -65,6 +67,7 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 scripts/growth/node_modules/
+scripts/growth/previews/
 
 # .NET build outputs
 **/bin/

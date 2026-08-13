@@ -1,51 +1,54 @@
 #!/usr/bin/env node
 /**
  * Collect 7d + 30d funnel/revenue snapshot for growth experiments.
+ * Queries required funnel events explicitly (never infer zero from top-N absence).
  * Never prints secret values. Missing sources are reported, not invented.
- *
- * Env (or load from SSM first via load-ssm-secrets-into-env.mjs):
- *   GA4_PROPERTY_ID
- *   GOOGLE_ANALYTICS_CREDENTIALS_JSON  (full service-account JSON string)
- *   STRIPE_RESTRICTED_READ_KEY         (rk_… read-only restricted key)
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { REQUIRED_FUNNEL_EVENTS, sumEventsByName } from './lib/canonical-metrics.mjs';
+import { summarizeStripeSessions } from './lib/stripe-metrics.mjs';
+import { daysBeforeYmd, etDateParts } from './lib/time.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Same-process SSM → env (child spawn cannot mutate parent env)
 const ssmLoad = loadSsmSecretsIntoEnv();
 const outDir = path.join(__dirname, '../../docs/growth/snapshots');
 const now = new Date();
-const stamp = now.toISOString().slice(0, 10);
-
-function daysAgo(n) {
-  const d = new Date(now);
-  d.setUTCDate(d.getUTCDate() - n);
-  return d.toISOString().slice(0, 10);
-}
+const stamp = etDateParts(now).ymd;
 
 const windows = [
-  { label: '7d', start: daysAgo(7), end: stamp },
-  { label: '30d', start: daysAgo(30), end: stamp }
+  { label: '7d', start: daysBeforeYmd(stamp, 7), end: stamp },
+  { label: '30d', start: daysBeforeYmd(stamp, 30), end: stamp }
 ];
 
 const report = {
   generatedAt: now.toISOString(),
+  timezone: 'America/New_York',
+  reportDateEt: stamp,
   ssm: ssmLoad,
   sources: { ga4: 'missing', stripe: 'missing' },
   windows: {},
-  notes: []
+  notes: [],
+  metricDefinitions: {
+    audit_starts: 'GA4 event audit_started (raw event count)',
+    audit_completions: 'GA4 event audit_completed (raw event count)',
+    sessions: 'GA4 event session_start',
+    successful_live_payments: 'Stripe Checkout Sessions livemode+paid+complete',
+    unique_paying_customers: 'Stripe live paid sessions deduped by customer id (or hashed email internally)',
+    experiment_attributed_paid: 'Unknown unless checkout metadata/UTM attribution exists'
+  }
 };
 
-async function fetchGa4(propertyId, credentialsJson, startDate, endDate) {
+async function getGa4Token(credentialsJson) {
   const creds = JSON.parse(credentialsJson);
-  // Lazy import — optional dependency; use google-auth + fetch to Data API
   const { GoogleAuth } = await import('google-auth-library').catch(() => ({ GoogleAuth: null }));
   if (!GoogleAuth) {
-    report.notes.push('google-auth-library not installed; run: npm i google-auth-library --prefix scripts/growth');
+    report.notes.push(
+      'google-auth-library not installed; run: npm i google-auth-library --prefix scripts/growth'
+    );
     return null;
   }
   const auth = new GoogleAuth({
@@ -53,12 +56,10 @@ async function fetchGa4(propertyId, credentialsJson, startDate, endDate) {
     scopes: ['https://www.googleapis.com/auth/analytics.readonly']
   });
   const client = await auth.getClient();
-  const token = await client.getAccessToken();
-  const body = {
-    dateRanges: [{ startDate, endDate }],
-    dimensions: [{ name: 'eventName' }, { name: 'sessionDefaultChannelGroup' }],
-    metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }]
-  };
+  return client.getAccessToken();
+}
+
+async function runGa4Report(propertyId, token, body) {
   const url = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`;
   const res = await fetch(url, {
     method: 'POST',
@@ -73,6 +74,131 @@ async function fetchGa4(propertyId, credentialsJson, startDate, endDate) {
     return null;
   }
   return res.json();
+}
+
+/** All events with channel group (diagnostic / top-events display). */
+async function fetchGa4AllEvents(propertyId, token, startDate, endDate) {
+  return runGa4Report(propertyId, token, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'eventName' }, { name: 'sessionDefaultChannelGroup' }],
+    metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }],
+    limit: 10000
+  });
+}
+
+/**
+ * Explicit funnel event counts — dimensionFilter so required events are always present or zero.
+ */
+async function fetchGa4ExplicitFunnel(propertyId, token, startDate, endDate) {
+  return runGa4Report(propertyId, token, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'eventName' }],
+    metrics: [{ name: 'eventCount' }],
+    dimensionFilter: {
+      filter: {
+        fieldName: 'eventName',
+        inListFilter: { values: [...REQUIRED_FUNNEL_EVENTS] }
+      }
+    },
+    limit: 100
+  });
+}
+
+/** Landing page sessions for EXP isolation (pagePath + session_start via sessions metric). */
+async function fetchGa4LandingSessions(propertyId, token, startDate, endDate) {
+  return runGa4Report(propertyId, token, {
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'pagePath' }],
+    metrics: [{ name: 'sessions' }],
+    dimensionFilter: {
+      orGroup: {
+        expressions: [
+          {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'CONTAINS', value: '/youtube-channel-analyzer', caseSensitive: false }
+            }
+          },
+          {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'CONTAINS', value: '/compare/', caseSensitive: false }
+            }
+          },
+          {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'CONTAINS', value: '/free-youtube-channel-audit', caseSensitive: false }
+            }
+          },
+          {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'CONTAINS', value: '/vidiq-alternative', caseSensitive: false }
+            }
+          },
+          {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'CONTAINS', value: '/why-your-channel', caseSensitive: false }
+            }
+          },
+          {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'CONTAINS', value: '/best-youtube-audit', caseSensitive: false }
+            }
+          },
+          {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'CONTAINS', value: '/youtube-seo', caseSensitive: false }
+            }
+          },
+          {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'CONTAINS', value: '/low-ctr', caseSensitive: false }
+            }
+          }
+        ]
+      }
+    },
+    limit: 1000
+  });
+}
+
+function summarizeLanding(ga4Landing) {
+  let exp003 = 0;
+  let exp002 = 0;
+  for (const row of ga4Landing?.rows ?? []) {
+    const p = row.dimensionValues?.[0]?.value ?? '';
+    const sessions = Number(row.metricValues?.[0]?.value ?? 0);
+    if (!Number.isFinite(sessions)) continue;
+    if (p.includes('/youtube-channel-analyzer')) exp003 += sessions;
+    else exp002 += sessions;
+  }
+  return {
+    exp002Sessions: exp002,
+    exp003Sessions: exp003,
+    note: 'EXP-002 excludes analyzer URL; portfolio totals must not sum these with sitewide sessions for double-count.'
+  };
+}
+
+/**
+ * Merge explicit funnel rows into a full map with zeros for missing required events.
+ * @param {object|null} explicitReport
+ */
+export function explicitEventMap(explicitReport) {
+  /** @type {Record<string, number>} */
+  const map = {};
+  for (const name of REQUIRED_FUNNEL_EVENTS) map[name] = 0;
+  for (const row of explicitReport?.rows ?? []) {
+    const ev = row.dimensionValues?.[0]?.value;
+    const count = Number(row.metricValues?.[0]?.value ?? 0);
+    if (ev && Number.isFinite(count)) map[ev] = count;
+  }
+  return map;
 }
 
 async function fetchStripe(key, startUnix) {
@@ -91,19 +217,6 @@ async function fetchStripe(key, startUnix) {
   return res.json();
 }
 
-function summarizeStripe(sessions) {
-  const live = (sessions?.data ?? []).filter((s) => s.livemode && s.payment_status === 'paid');
-  const test = (sessions?.data ?? []).filter((s) => !s.livemode && s.payment_status === 'paid');
-  const revenueLive = live.reduce((sum, s) => sum + (s.amount_total || 0), 0) / 100;
-  const revenueTest = test.reduce((sum, s) => sum + (s.amount_total || 0), 0) / 100;
-  return {
-    livePaidSessions: live.length,
-    testPaidSessions: test.length,
-    revenueLiveUsd: revenueLive,
-    revenueTestUsd: revenueTest
-  };
-}
-
 const ga4Id = process.env.GA4_PROPERTY_ID;
 const ga4Creds = process.env.GOOGLE_ANALYTICS_CREDENTIALS_JSON;
 const stripeKey = process.env.STRIPE_RESTRICTED_READ_KEY;
@@ -120,28 +233,69 @@ if (stripeKey) {
   report.notes.push('STRIPE_RESTRICTED_READ_KEY missing — use read-only restricted key only.');
 }
 
+let token = null;
+if (report.sources.ga4 === 'configured') {
+  try {
+    token = await getGa4Token(ga4Creds);
+  } catch (e) {
+    report.notes.push(`GA4 auth failed: ${e instanceof Error ? e.message : e}`);
+  }
+}
+
 for (const w of windows) {
-  const entry = { start: w.start, end: w.end, ga4: null, stripe: null };
-  if (report.sources.ga4 === 'configured') {
+  const entry = {
+    start: w.start,
+    end: w.end,
+    ga4: null,
+    ga4Explicit: null,
+    ga4ExplicitEvents: null,
+    ga4Landing: null,
+    landing: null,
+    stripe: null,
+    eventsTruncated: false
+  };
+
+  if (token?.token) {
     try {
-      entry.ga4 = await fetchGa4(ga4Id, ga4Creds, w.start, w.end);
+      entry.ga4 = await fetchGa4AllEvents(ga4Id, token, w.start, w.end);
+      entry.ga4Explicit = await fetchGa4ExplicitFunnel(ga4Id, token, w.start, w.end);
+      entry.ga4ExplicitEvents = explicitEventMap(entry.ga4Explicit);
+      // Prefer explicit map; also keep full sum for diagnostics
+      entry.ga4AllEventsSum = sumEventsByName(entry.ga4);
+      entry.ga4Landing = await fetchGa4LandingSessions(ga4Id, token, w.start, w.end);
+      entry.landing = summarizeLanding(entry.ga4Landing);
     } catch (e) {
       report.notes.push(`GA4 ${w.label} failed: ${e instanceof Error ? e.message : e}`);
     }
   }
+
   if (report.sources.stripe === 'configured') {
     try {
       const startUnix = Math.floor(new Date(w.start + 'T00:00:00Z').getTime() / 1000);
+      const endUnix = Math.floor(new Date(w.end + 'T23:59:59Z').getTime() / 1000);
       const raw = await fetchStripe(stripeKey, startUnix);
-      entry.stripe = summarizeStripe(raw);
+      entry.stripe = summarizeStripeSessions(raw, { endUnix });
     } catch (e) {
       report.notes.push(`Stripe ${w.label} failed: ${e instanceof Error ? e.message : e}`);
     }
   }
+
   report.windows[w.label] = entry;
 }
 
 fs.mkdirSync(outDir, { recursive: true });
 const outPath = path.join(outDir, `funnel-${stamp}.json`);
 fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
-console.log(JSON.stringify({ wrote: outPath, sources: report.sources, notes: report.notes }, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      wrote: outPath,
+      sources: report.sources,
+      notes: report.notes,
+      explicit7d: report.windows['7d']?.ga4ExplicitEvents ?? null,
+      explicit30d: report.windows['30d']?.ga4ExplicitEvents ?? null
+    },
+    null,
+    2
+  )
+);

@@ -4,11 +4,36 @@ Agents must append every experiment here. Do not delete history.
 
 ## Active
 
-- **EXP-001** — post-checkout guest activation (eval **2026-08-17**) — funnel stage: post-purchase activation
-- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (**early read 2026-08-18**, full eval **2026-08-25**) — funnel stage: acquisition / SEO
-- **EXP-003** — new URL `/youtube-channel-analyzer` for commercial-intent search (eval **2026-08-19**) — funnel stage: acquisition / SEO (new indexed surface; does not invalidate EXP-002)
+- **EXP-001** — post-checkout guest activation (eval **Monday, August 17, 2026** / `2026-08-17`) — funnel stage: post-purchase activation
+- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO
+- **EXP-003** — `/youtube-channel-analyzer` commercial-intent landing (eval **Wednesday, August 19, 2026** / `2026-08-19`) — funnel stage: acquisition / SEO (nested surface using EXP-002 form UI)
+
+## EXP-002 / EXP-003 overlap
+
+| Topic | Decision |
+|-------|----------|
+| Relationship | EXP-003 is a **new distribution/landing URL** that **reuses the EXP-002 on-page form treatment** (`SeoAuditEntryForm`). |
+| Independent evaluation? | **Yes for page-level performance** (sessions/starts on `/youtube-channel-analyzer` vs other SEO pages). **No for incremental form-UI lift** — EXP-003 inherits EXP-002 UI. |
+| Eligible pages EXP-002 | SEO growth + compare pages that render the form, **excluding** `/youtube-channel-analyzer`. |
+| Eligible pages EXP-003 | `/youtube-channel-analyzer` only. |
+| Attribution | Prefer `pagePath` and/or GA4 `source` (`growth_guide_*`, `comparison_*`, `youtube-channel-analyzer`). |
+| Primary metrics | EXP-002: audit starts from eligible SEO paths. EXP-003: sessions + audit starts on analyzer URL. |
+| Double-count rule | A session may appear in **both descriptive sections** when disclosed; **portfolio/sitewide totals count once**. Never add EXP-002+EXP-003 paid into a portfolio sum on top of sitewide Stripe. |
+| Measurement limitation | Experiment-attributed paid conversions remain **Unknown** without reliable checkout metadata/UTM. |
+| Stop rule | Do **not** auto-stop either experiment solely due to overlap; concurrency skill still blocks a *third* same-stage CRO test. |
+
+Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-13 — Measurement repair (not a conversion experiment)
+
+| Field | Value |
+|-------|--------|
+| Status | completed (measurement) |
+| Evidence | Admin growth email scoreboard showed 0 audit starts / 30d while notes cited 4; completions exceeded starts; weekday labels wrong; UTC-first timestamps; EXP attribution unclear. |
+| Exact change | Canonical metrics layer; explicit GA4 funnel queries; scoreboard never reads truncated top-events; audit attempt-id completion dedupe; showcase demo excluded from audit_completed; Admin email Decision-first layout; EXP overlap docs. |
+| Funnel stage | tracking / funnel-repair (does not invalidate EXP-001/002/003) |
 
 ### 2026-08-12 — EXP-003 YouTube channel analyzer landing page
 
@@ -25,7 +50,7 @@ Agents must append every experiment here. Do not delete history.
 | Evaluation date | 2026-08-19 |
 | Stop rule | Build/SEO errors or demo failures on new URL within 48h → revert. |
 | Rollback | `git revert` EXP-003 commit on `main`. |
-| Funnel stage | acquisition / SEO (new landing URL) |
+| Funnel stage | acquisition / SEO (new landing URL; nested with EXP-002 form UI — see overlap section) |
 | Commit | `368098e` |
 | Amplify | deployed — `/youtube-channel-analyzer` returns 200 (2026-08-13 health check) |
 
@@ -44,7 +69,7 @@ Agents must append every experiment here. Do not delete history.
 | Evaluation date | 2026-08-25 |
 | Stop rule | Demo failures or bounce spike on those URLs within 3 days → rollback. |
 | Rollback | `git revert` the EXP-002 commit on `main` and push. |
-| Funnel stage | acquisition / SEO (SEO landing → audit start) |
+| Funnel stage | acquisition / SEO (SEO landing → audit start; excludes `/youtube-channel-analyzer` — see overlap section) |
 | Commit | `5b4efc2` |
 | Amplify | job **230** SUCCEED (2026-08-11) |
 
@@ -71,4 +96,4 @@ Agents must append every experiment here. Do not delete history.
 
 ## Completed / failed
 
-_None yet._
+_None yet (conversion experiments). Measurement repair 2026-08-13 logged above._

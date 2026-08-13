@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { analytics } from './lib/analytics';
+import {
+  claimAuditCompletion,
+  ensureAuditAttemptForDemoLanding,
+  shouldCountAsUserAudit
+} from './lib/auditEventGate';
 import { billingApi, meApi, publicApi } from './lib/api';
 import { startPremiumCheckout } from './lib/startCheckout';
 import { DEFAULT_DEMO_CHANNEL, getDisplayHandle, getStoredDemoChannel, normalizeChannelForComparison } from './lib/demo';
@@ -59,14 +64,32 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
   const [apiDemoData, setApiDemoData] = useState<DemoPreview | null>(null);
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
-  const auditCompletedForRef = useRef<string | null>(null);
   const demoOpenedTrackedRef = useRef(false);
+  const orphanStartTrackedRef = useRef(false);
 
   useEffect(() => {
     if (variant !== 'marketing' || !isDefaultChannelDemo || demoOpenedTrackedRef.current) return;
     demoOpenedTrackedRef.current = true;
     analytics.demoOpenedOnDemoRoute();
   }, [variant, isDefaultChannelDemo]);
+
+  // User channel on /demo without a prior form start: fire one audit_started (session-deduped).
+  useEffect(() => {
+    if (variant !== 'marketing' || !shouldCountAsUserAudit(isDefaultChannelDemo)) return;
+    if (orphanStartTrackedRef.current) return;
+    if (typeof window === 'undefined') return;
+    orphanStartTrackedRef.current = true;
+    const channelKey = inputNormalized || inputHandle || 'unknown';
+    const { attemptId, shouldTrackStart } = ensureAuditAttemptForDemoLanding(
+      window.sessionStorage,
+      channelKey
+    );
+    if (shouldTrackStart) {
+      const auditSource =
+        (location.state as { auditSource?: string } | null)?.auditSource || 'demo_landing';
+      analytics.auditStarted(auditSource, { auditAttemptId: attemptId });
+    }
+  }, [variant, isDefaultChannelDemo, inputNormalized, inputHandle, location.state]);
 
   const refreshPremium = useCallback(async () => {
     if (!authSession?.idToken) {
@@ -126,9 +149,13 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
         if (!cancelled) {
           setApiDemoData(data);
           setDemoError(null);
-          if (auditCompletedForRef.current !== raw) {
-            auditCompletedForRef.current = raw;
-            analytics.auditCompleted();
+          // Showcase demo is not an audit completion. Dedupe by attempt id across remounts.
+          if (shouldCountAsUserAudit(isDefaultChannelDemo) && typeof window !== 'undefined') {
+            const channelKey = inputNormalized || inputHandle || 'unknown';
+            const { attemptId } = ensureAuditAttemptForDemoLanding(window.sessionStorage, channelKey);
+            if (claimAuditCompletion(window.sessionStorage, attemptId)) {
+              analytics.auditCompleted({ auditAttemptId: attemptId });
+            }
           }
         }
       })
@@ -144,7 +171,7 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
     return () => {
       cancelled = true;
     };
-  }, [channelInput]);
+  }, [channelInput, isDefaultChannelDemo, inputNormalized, inputHandle]);
 
   if (variant === 'paid') {
     if (!authSession?.idToken) {

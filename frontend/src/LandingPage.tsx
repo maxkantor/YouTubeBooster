@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { MarketingFooter } from './components/MarketingFooter';
 import { analytics } from './lib/analytics';
+import { beginAuditAttempt } from './lib/auditEventGate';
 import {
   buildYoutubeChannelCanonicalUrl,
   DEFAULT_DEMO_CHANNEL,
@@ -729,16 +730,23 @@ export function LandingPage() {
     const normalized = validated.normalized;
     setAuditSubmitting(true);
     analytics.auditUrlEntered(normalized);
-    analytics.auditStarted();
+    const { attemptId } =
+      typeof window !== 'undefined'
+        ? beginAuditAttempt(window.sessionStorage)
+        : { attemptId: undefined as string | undefined };
+    analytics.auditStarted('homepage_or_audit_form', attemptId ? { auditAttemptId: attemptId } : undefined);
     analytics.channelAuditStarted();
     setStoredDemoChannel(normalized);
     if (hasPremium) {
       navigate(`/dashboard/channel?channel=${encodeURIComponent(normalized)}`, {
         replace: true,
-        state: { channelInput: normalized }
+        state: { channelInput: normalized, auditAttemptId: attemptId }
       });
     } else {
-      navigate(`/demo?channel=${encodeURIComponent(normalized)}`, { replace: true, state: { channelInput: normalized } });
+      navigate(`/demo?channel=${encodeURIComponent(normalized)}`, {
+        replace: true,
+        state: { channelInput: normalized, auditAttemptId: attemptId }
+      });
     }
     setAuditSubmitting(false);
   }

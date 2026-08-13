@@ -2,6 +2,7 @@ import { FormEvent, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { analytics } from '../lib/analytics';
+import { beginAuditAttempt } from '../lib/auditEventGate';
 import { DEFAULT_DEMO_CHANNEL, setStoredDemoChannel } from '../lib/demo';
 import { validateYouTubeChannelInput } from '../lib/youtubeChannelInput';
 
@@ -38,10 +39,14 @@ export function SeoAuditEntryForm({ source = 'seo_page' }: SeoAuditEntryFormProp
     const normalized = validated.normalized;
     setSubmitting(true);
     analytics.auditUrlEntered(normalized);
-    analytics.auditStarted(source);
+    const { attemptId } =
+      typeof window !== 'undefined'
+        ? beginAuditAttempt(window.sessionStorage)
+        : { attemptId: undefined as string | undefined };
+    analytics.auditStarted(source, attemptId ? { auditAttemptId: attemptId } : undefined);
     setStoredDemoChannel(normalized);
     navigate(`/demo?channel=${encodeURIComponent(normalized)}`, {
-      state: { channelInput: normalized, auditSource: source }
+      state: { channelInput: normalized, auditSource: source, auditAttemptId: attemptId }
     });
     setSubmitting(false);
   }

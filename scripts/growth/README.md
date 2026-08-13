@@ -27,3 +27,12 @@ Env / Automation / SSM:
 - `STRIPE_RESTRICTED_READ_KEY` → `/youtubebooster/growth/stripe-restricted-read-key` (`rk_…` only)
 
 Snapshots write under `docs/growth/snapshots/` (JSON gitignored by root `*.json`).
+
+## Tests
+
+```bash
+cd scripts/growth
+npm test
+```
+
+Canonical metric definitions: `docs/growth/METRICS.md`.

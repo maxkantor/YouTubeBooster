@@ -108,6 +108,8 @@ Before push to `main`:
 | `scripts/growth/load-ssm-secrets-into-env.mjs` | Load SSM into process env for collectors |
 | `scripts/growth/notify-admin-email.mjs` | Low-level SES send (subject + body) |
 | `scripts/growth/compose-and-send-growth-email.mjs` | Full Admin email: snapshot + health + active experiments + notes |
+| `scripts/growth/lib/canonical-metrics.mjs` | Shared metric definitions, explicit event maps, reconciliation |
+| `docs/growth/METRICS.md` | Canonical metric documentation |
 
 ## Secrets (never commit)
 

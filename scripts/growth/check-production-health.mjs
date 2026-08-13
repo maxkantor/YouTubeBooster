@@ -60,6 +60,22 @@ await check('checkout_success_route', async () => {
   return { status: res.status };
 });
 
+await check('youtube_channel_analyzer', async () => {
+  const res = await fetch('https://youtubeboosterai.com/youtube-channel-analyzer', { redirect: 'follow' });
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  const html = await res.text();
+  if (!/channel analyzer/i.test(html) && !/YouTubeBooster/i.test(html)) {
+    throw new Error('analyzer page missing expected content');
+  }
+  return { status: res.status, bytes: html.length };
+});
+
+await check('pricing', async () => {
+  const res = await fetch('https://youtubeboosterai.com/pricing', { redirect: 'follow' });
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return { status: res.status };
+});
+
 const failed = checks.filter((c) => !c.ok);
 console.log(JSON.stringify({ ok: failed.length === 0, checks }, null, 2));
 process.exit(failed.length ? 1 : 0);
