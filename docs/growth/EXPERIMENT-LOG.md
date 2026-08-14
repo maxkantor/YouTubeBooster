@@ -27,6 +27,23 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-14 — Productivity/education founder outreach package (acquisition-first)
+
+| Field | Value |
+|-------|--------|
+| Status | completed (outreach enablement — drafts only) |
+| Evidence | Verified external paying customers = 0; 11 audit completions / 30d but 0 checkout starts; 2026-08-13 food outreach still `draft` / not sent; need diversified qualified prospects in productivity/education. |
+| Hypothesis | A second outreach segment (productivity/education, ~1k–112k subs) with public-data observations + `/share` UTMs will give Max more qualified founder-send options than waiting on organic traffic alone. |
+| Exact change | `docs/growth/outreach/2026-08-14-productivity-education-outreach.md` — 10 prospects, personalized drafts + follow-ups, UTM campaign `acq_2026_08_14`. No product code changes. |
+| Primary metric | `mini_audit_share_viewed` (utm `founder_outreach` / `acq_2026_08_14`) → `audit_started` → qualified `audit_completed` after owner sends. |
+| Guardrail | No auto-send; does not alter EXP-001/002/003/004 treatments; Stripe remains product-attributed only. |
+| Baseline | 0 founder-sent productivity/education outreach; 0 verified external paying customers. |
+| Target | Directional: first owner-sent links from this package produce mini-audit views + audit starts within 7 days of send. |
+| Evaluation date | 2026-08-21 |
+| Stop rule | Spam complaints or `/share` failures → pause package; do not auto-send. |
+| Rollback | Delete or archive outreach markdown; no deploy rollback needed. |
+| Funnel stage | acquisition / distribution (founder outreach enablement; independent of active CRO experiments) |
+
 ### 2026-08-13 — EXP-004 Mini-audit share + sample report (acquisition-first)
 
 | Field | Value |
