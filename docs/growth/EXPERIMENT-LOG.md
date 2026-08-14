@@ -43,8 +43,10 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 | Stop rule | Share/demo failures or spam complaints within 48h → revert routes. |
 | Rollback | `git revert` EXP-004 commit on `main`. |
 | Funnel stage | acquisition / distribution (outreach enablement; independent of EXP-002 form treatment) |
-| Commit | (pending) |
-| Amplify | (pending) |
+| Commit | `78b2429` |
+| Amplify | job **238** SUCCEED |
+
+Owner approved all 10 founder outreach drafts on **2026-08-14**. Send kit: `docs/growth/outreach/2026-08-13-send-kit.md`. Outreach is **not** marked sent until Max transmits each message.
 
 ### 2026-08-13 — Measurement repair (not a conversion experiment)
 
