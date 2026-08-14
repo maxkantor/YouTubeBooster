@@ -4,7 +4,6 @@
  */
 import {
   buildCanonicalWindowMetrics,
-  cohortRate,
   formatMetricValue,
   reconcileCanonicalWindows,
   sumEventsByName,
@@ -13,32 +12,70 @@ import {
 import { EXP_OVERLAP_POLICY, nextEvaluation, parseActiveExperiments } from './experiment-report.mjs';
 import { etDateParts, formatEtDateTime, formatLongDateEt } from './time.mjs';
 
-function ascii(s) {
+/** Normalize punctuation only. Do not strip Unicode from UTF-8 email bodies. */
+function typographicNormalize(s) {
   return String(s ?? '')
     .replace(/[\u2010-\u2015\u2212]/g, '-')
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
-    .replace(/[\u2026]/g, '...')
-    .replace(/[\u2190-\u21FF]/g, '->')
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '');
+    .replace(/[\u2026]/g, '...');
 }
 
 function escapeHtml(s) {
-  return ascii(s)
+  return String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
 
-function cell(m) {
-  return formatMetricValue(m);
+/** Cohort conversion is unavailable until start and completion share an audit_attempt_id in the same window. */
+export const COHORT_CONVERSION_UNAVAILABLE =
+  'Unavailable until same-cohort audit tracking exists (do not divide raw audit_completed by audit_started).';
+
+function stripeBuckets(attr) {
+  if (!attr) {
+    return {
+      attributedLivePayments: 'Unknown',
+      verifiedExternalCustomers: '0',
+      verifiedExternalRevenue: '$0.00',
+      ownerSelfPayments: 'Unknown',
+      unverifiedPayments: 'Unknown'
+    };
+  }
+  return {
+    attributedLivePayments: String(attr.attributedCandidatesBeforeBaseline ?? 'Unknown'),
+    verifiedExternalCustomers: String(
+      attr.verifiedUniquePayingCustomers ??
+        attr.baselines?.YouTubeBooster?.verifiedExternalPayingCustomers ??
+        0
+    ),
+    verifiedExternalRevenue: `$${Number(
+      attr.verifiedNetLiveRevenueUsd ??
+        attr.baselines?.YouTubeBooster?.verifiedNetLiveRevenueUsd ??
+        0
+    ).toFixed(2)}`,
+    ownerSelfPayments: String(attr.excludedOwnerOrSmokePayments ?? 'Unknown'),
+    unverifiedPayments: String(attr.unattributedLivePayments ?? 'Unknown')
+  };
 }
 
-function rateCell(num, den) {
-  const r = cohortRate(num, den);
-  if (r.rate == null) return r.label;
-  return r.directional ? `${r.label} (directional — insufficient sample)` : r.label;
+function ga4DataThrough(snapshot, windows) {
+  const end = windows['30d']?.end || snapshot?.reportDateEt || null;
+  if (!end) return { through: 'Unknown', note: 'GA4 window end missing.' };
+  const [y, m, d] = end.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  const through = dt.toISOString().slice(0, 10);
+  return {
+    through,
+    windowEnd: end,
+    note: `GA4 standard processing often lags 24-48 hours. Query window ends ${end}; treat data-through as ${through} (not real-time).`
+  };
+}
+
+function cell(m) {
+  return formatMetricValue(m);
 }
 
 /**
@@ -57,11 +94,11 @@ export function defaultDecisionText({ experiments, health, shipped, nextEval }) 
         : 'Production health was partially unavailable.';
 
   if (shipped) {
-    return ascii(
+    return typographicNormalize(
       `A production change was deployed this run. ${n} experiment(s) remain active. ${healthBit} ${next}`
     );
   }
-  return ascii(
+  return typographicNormalize(
     `No new production experiment was deployed. ${n} active experiment(s) are still collecting data, and current traffic is too low to support another overlapping CRO test. ${healthBit} ${next}`
   );
 }
@@ -159,9 +196,12 @@ export function composeGrowthReport(opts) {
   const nextEval = nextEvaluation(experiments);
   const { windows, warnings } = buildCanonicalFromSnapshot(opts.snapshot || {});
 
-  const noteText = ascii((opts.notes && opts.notes.trim()) || '');
+  const ga4Through = ga4DataThrough(opts.snapshot, windows);
+  const stripe30 = stripeBuckets(opts.snapshot?.windows?.['30d']?.stripe?.attribution);
+
+  const noteText = (opts.notes && opts.notes.trim()) || '';
   const decision =
-    ascii(opts.decision?.trim() || '') ||
+    (opts.decision && opts.decision.trim()) ||
     defaultDecisionText({
       experiments,
       health: opts.health,
@@ -175,7 +215,7 @@ export function composeGrowthReport(opts) {
   const range30 = windows['30d'] ? `${windows['30d'].start} to ${windows['30d'].end}` : 'missing';
 
   const shipLabel = opts.shipped ? 'Change deployed' : 'No change deployed';
-  const subject = ascii(
+  const subject = typographicNormalize(
     `${opts.subjectPrefix || 'YouTubeBooster Growth'} - ${shipLabel} - ${experiments.length} experiments collecting data - ${et.date}`
   );
 
@@ -184,6 +224,8 @@ export function composeGrowthReport(opts) {
   t.push('YouTubeBooster AI - Growth report');
   t.push('================================');
   t.push(`Generated: ${et.date} ${et.time} ${et.zone}`);
+  t.push(`GA4 data-through (assumed): ${ga4Through.through} | query window end: ${ga4Through.windowEnd || 'Unknown'}`);
+  t.push(ga4Through.note);
   t.push(`Site: https://youtubeboosterai.com/`);
   t.push(`Admin: https://youtubeboosterai.com/admin/orders`);
   t.push(`Analyzer: https://youtubeboosterai.com/youtube-channel-analyzer`);
@@ -195,7 +237,7 @@ export function composeGrowthReport(opts) {
   if (warnings.length) {
     t.push('2) DATA QUALITY WARNING');
     t.push('-----------------------');
-    for (const w of warnings) t.push(`* ${ascii(w)}`);
+    for (const w of warnings) t.push(`* ${typographicNormalize(w)}`);
     t.push('');
   }
   const scoreN = warnings.length ? 3 : 2;
@@ -210,13 +252,13 @@ export function composeGrowthReport(opts) {
   const a30 = opts.snapshot?.windows?.['30d']?.stripe?.attribution;
   if (a30) {
     t.push(
-      `Stripe attribution (30d diagnostic): account_wide_live_paid=${a30.accountWideLivePaidSessions ?? '?'} | unattributed=${a30.unattributedLivePayments ?? '?'} | other_app=${a30.otherAppLivePayments ?? '?'} | excluded_owner_smoke=${a30.excludedOwnerOrSmokePayments ?? '?'} | attributed_candidates=${a30.attributedCandidatesBeforeBaseline ?? '?'} | reconciliationComplete=${a30.reconciliationComplete}`
+      `Stripe 30d: attributed_live_payments=${stripe30.attributedLivePayments} | verified_external_customers=${stripe30.verifiedExternalCustomers} | verified_external_revenue=${stripe30.verifiedExternalRevenue} | owner_self_or_smoke=${stripe30.ownerSelfPayments} | unverified_unattributed=${stripe30.unverifiedPayments} | other_app=${a30.otherAppLivePayments ?? '?'} | account_wide_live_paid=${a30.accountWideLivePaidSessions ?? '?'} (diagnostic only)`
     );
   }
-  t.push(
-    `Rates (30d, directional if sample < 30): start/session=${rateCell(m30?.audit_starts?.value, m30?.sessions?.value)}; complete/start=${rateCell(m30?.audit_completions?.value, m30?.audit_starts?.value)} (not a cohort rate if completions can lag starts); checkout/pricing=${rateCell(m30?.checkout_starts?.value, m30?.pricing_viewers?.value)}; paid/checkout=${rateCell(m30?.successful_live_payments?.value, m30?.checkout_starts?.value)}`
-  );
+  t.push(`Audit start-to-completion conversion: ${COHORT_CONVERSION_UNAVAILABLE}`);
+  t.push('Do not divide raw audit_completed by audit_started. Other stage rates omitted for the same reason.');
   t.push(`Experiment-attributed paid conversions: Unknown`);
+  t.push('A $9.99 live charge is not verified external revenue unless product attribution AND external-customer checks pass. Current verified external revenue baseline is $0.00.');
   t.push('');
 
   const expN = scoreN + 1;
@@ -237,9 +279,12 @@ export function composeGrowthReport(opts) {
       } else if (ex.id === 'EXP-001') {
         eligible = 'post-checkout guests';
         primary = 'Post-purchase activation: Unavailable - Admin CRM connection required';
+      } else if (ex.id === 'EXP-004') {
+        eligible = '/share and /sample-report (founder outreach enablement)';
+        primary = 'Outreach: awaiting owner approval of specific recipients and copy';
       }
       t.push(
-        `${ex.id || ex.idLine} | ${ascii(ex.funnelStage)} | ${ascii(ex.status)} | ${eligible} | ${primary} | low | ${ex.evalDateLabel || ex.evalDate} | continue collecting`
+        `${ex.id || ex.idLine} | ${typographicNormalize(ex.funnelStage)} | ${typographicNormalize(ex.status)} | ${eligible} | ${primary} | low | ${ex.evalDateLabel || ex.evalDate} | continue collecting`
       );
     }
     t.push('');
@@ -343,6 +388,9 @@ export function composeGrowthReport(opts) {
           } else if (ex.id === 'EXP-003') {
             eligible = '/youtube-channel-analyzer';
             primary = 'Isolated result: Unknown';
+          } else if (ex.id === 'EXP-004') {
+            eligible = '/share + /sample-report';
+            primary = 'Outreach awaiting owner approval';
           }
           return `<tr>
             <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(ex.id || ex.idLine)}</td>
@@ -367,7 +415,7 @@ export function composeGrowthReport(opts) {
 
   const html = `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
+<head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Arial,sans-serif;color:#111827;">
   <div style="max-width:720px;margin:24px auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
     <div style="padding:18px 20px;background:#0f172a;color:#fff;">
@@ -412,13 +460,20 @@ export function composeGrowthReport(opts) {
       </table>
       </div>
       <p style="margin:8px 0 0;font-size:12px;color:#374151;">
-        30d rates: landing→start ${escapeHtml(rateCell(m30?.audit_starts?.value, m30?.sessions?.value))};
-        start→complete ${escapeHtml(rateCell(m30?.audit_completions?.value, m30?.audit_starts?.value))} (not same-window cohort);
-        pricing→checkout ${escapeHtml(rateCell(m30?.checkout_starts?.value, m30?.pricing_viewers?.value))};
-        checkout→paid ${escapeHtml(rateCell(m30?.successful_live_payments?.value, m30?.checkout_starts?.value))}.
+        Audit start-to-completion conversion: <b>Unavailable</b> until same-cohort audit tracking exists.
+        Do not divide raw <code>audit_completed</code> by <code>audit_started</code>.
         Experiment-attributed paid: <b>Unknown</b>.
         Paid→entitled within 24h: <b>Unavailable — Admin CRM connection required</b>.
       </p>
+      <p style="margin:8px 0 0;font-size:12px;color:#374151;">
+        Stripe 30d — attributed live payments: <b>${escapeHtml(stripe30.attributedLivePayments)}</b>;
+        verified external customers: <b>${escapeHtml(stripe30.verifiedExternalCustomers)}</b>;
+        verified external revenue: <b>${escapeHtml(stripe30.verifiedExternalRevenue)}</b>;
+        owner/self or smoke: <b>${escapeHtml(stripe30.ownerSelfPayments)}</b>;
+        unverified/unattributed: <b>${escapeHtml(stripe30.unverifiedPayments)}</b>.
+        A $9.99 charge is not verified external revenue unless those checks pass.
+      </p>
+      <p style="margin:8px 0 0;font-size:12px;color:#6b7280;">${escapeHtml(ga4Through.note)}</p>
 
       <h2 style="font-size:15px;margin:18px 0 8px;">Experiment Results</h2>
       <div style="overflow-x:auto;">

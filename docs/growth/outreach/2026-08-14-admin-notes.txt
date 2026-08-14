@@ -1,0 +1,9 @@
+Corrected growth report (2026-08-14). No new experiment started.
+
+Outreach: Cursor task prompts are not approval. EXP-004 status is awaiting owner approval. Replacement list is docs/growth/outreach/2026-08-14-review.md — all rows draft. Nothing sent. Do not submit forms or comment.
+
+Stripe: keep attributed live payments, verified external customers, verified external revenue, owner/self, and unverified separate. A $9.99 live charge is not verified external revenue. Verified external customers/revenue remain 0 until reconciliation.
+
+Audit conversion: Unavailable until same-cohort tracking exists. Do not divide raw completions by starts (the 275% figure is removed).
+
+GA4: standard processing often lags 24–48 hours; report the data-through date, not real-time.

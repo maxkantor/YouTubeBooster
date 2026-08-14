@@ -29,6 +29,15 @@
 
 GA4 counts anonymous visitors, sessions, and devices. CRM users are registered accounts (Cognito + DynamoDB profiles). They will not match.
 
-## Backfill
+## Email (Admin CRM)
+
+| Address | SSM | Role |
+|---------|-----|------|
+| **From** `contact@youtubeboosterai.com` | `/youtubebooster/ses/from-email` | Verified SES sender. Recipients see this as From. |
+| **Admin CRM inbox** | `/youtubebooster/admin/email` (also `ses/admin-email`) | Login identity + Reply-To + BCC of every CRM send. Recipient replies land here. |
+
+Outbound Support/outreach mail is stored on the ticket thread (`ybai-support` MSG rows, `direction=outbound`). Continue replies from **Support → ticket → Send reply**. If a recipient replies to the Admin inbox, paste it with **Log recipient reply** (that also emails the Admin inbox).
+
+Do not send outreach from a personal mailbox if you want the CRM thread to stay complete.
 
 `POST /api/admin/crm/migrations/backfill-payment-livemode` (admin session required) re-reads Stripe Checkout Sessions and updates `mode` on existing `PAYMENT#` rows. Records are never deleted.

@@ -38,7 +38,12 @@ export function parseActiveExperiments(md) {
   let m;
   while ((m = re.exec(md))) {
     const block = m[0];
-    if (!/\|\s*Status\s*\|\s*active\s*\|/i.test(block)) continue;
+    const status = (() => {
+      const fm = block.match(/\|\s*Status\s*\|\s*([^|]+)\s*\|/i);
+      return fm ? String(fm[1]).trim() : '';
+    })();
+    const reportable = /^(active|awaiting owner approval)$/i.test(status);
+    if (!reportable) continue;
     const field = (name) => {
       const fm = block.match(new RegExp(`\\|\\s*${name}\\s*\\|\\s*([^|]+)\\s*\\|`, 'i'));
       return fm ? String(fm[1]).trim() : '';
@@ -48,7 +53,7 @@ export function parseActiveExperiments(md) {
     active.push({
       idLine: `${m[1]} - ${m[2].trim()}`,
       id: (m[2].match(/EXP-\d+/) || [])[0] || '',
-      status: field('Status'),
+      status,
       funnelStage: field('Funnel stage'),
       evalDate: evalYmd,
       evalDateLabel: evalYmd ? formatLongDateEt(evalYmd) : '',

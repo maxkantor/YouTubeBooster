@@ -500,6 +500,46 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
             new AdminFunnelResponse(range, Array.Empty<AdminFunnelStepDto>(), string.Empty),
             Array.Empty<AdminFunnelEventDiagnosticDto>()));
 
+    public Task UpsertOutreachContactAsync(OutreachContactRecord contact, CancellationToken cancellationToken)
+    {
+        _outreach[contact.Email.Trim().ToLowerInvariant()] = contact;
+        return Task.CompletedTask;
+    }
+
+    public Task<OutreachContactRecord?> GetOutreachContactAsync(string email, CancellationToken cancellationToken)
+    {
+        _outreach.TryGetValue(email.Trim().ToLowerInvariant(), out var row);
+        return Task.FromResult(row);
+    }
+
+    public Task<IReadOnlyList<OutreachContactRecord>> ListOutreachContactsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OutreachContactRecord>>(_outreach.Values.ToArray());
+
+    public Task MarkOutreachSentAsync(string email, DateTimeOffset sentAt, CancellationToken cancellationToken)
+    {
+        var key = email.Trim().ToLowerInvariant();
+        if (_outreach.TryGetValue(key, out var row) &&
+            !string.Equals(row.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+        {
+            _outreach[key] = row with { Status = "sent", LastSentAt = sentAt, UpdatedAt = sentAt };
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task UnsubscribeOutreachAsync(string email, DateTimeOffset when, CancellationToken cancellationToken)
+    {
+        var key = email.Trim().ToLowerInvariant();
+        if (_outreach.TryGetValue(key, out var row))
+        {
+            _outreach[key] = row with { Status = "unsubscribed", UnsubscribedAt = when, UpdatedAt = when };
+        }
+        else
+        {
+            _outreach[key] = new OutreachContactRecord(key, null, null, null, null, "unsubscribed", null, when, when);
+        }
+        return Task.CompletedTask;
+    }
+
     public Task<bool> TryMarkStripeWebhookEventProcessedAsync(string stripeEventId, CancellationToken cancellationToken) =>
         Task.FromResult(true);
 

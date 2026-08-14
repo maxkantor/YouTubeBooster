@@ -341,6 +341,132 @@ async Task<IResult> HandleContactSubmission(
 publicApi.MapPost("/support/contact", HandleContactSubmission).RequireRateLimiting("contact-form");
 app.MapPost("/api/contact", HandleContactSubmission).RequireRateLimiting("contact-form");
 
+publicApi.MapGet("/outreach/unsubscribe", async (
+    string? token,
+    IAppDataStore appDataStore,
+    ISecretValueProvider secrets,
+    CancellationToken cancellationToken) =>
+{
+    var hmac = (await secrets.GetValueAsync("outreach/unsubscribe-hmac", secure: true, cancellationToken))?.Trim();
+    if (string.IsNullOrWhiteSpace(hmac) || !OutreachUnsubscribeToken.TryValidate(token ?? "", hmac, out var email))
+    {
+        return Results.BadRequest(new { ok = false, error = "Invalid unsubscribe link." });
+    }
+
+    await appDataStore.UnsubscribeOutreachAsync(email, DateTimeOffset.UtcNow, cancellationToken);
+    return Results.Ok(new { ok = true, unsubscribed = true, email });
+});
+
+publicApi.MapPost("/outreach/daily-send", async (
+    HttpContext httpContext,
+    DailyOutreachRequest? request,
+    IAppDataStore appDataStore,
+    IAmazonSimpleEmailService ses,
+    ISecretValueProvider secrets,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    var expected = (await secrets.GetValueAsync("outreach/cron-key", secure: true, cancellationToken))?.Trim();
+    var provided = httpContext.Request.Headers["X-Outreach-Cron-Key"].ToString();
+    if (string.IsNullOrWhiteSpace(expected) || !string.Equals(expected, provided, StringComparison.Ordinal))
+    {
+        return Results.Unauthorized();
+    }
+
+    var count = request?.Count is > 0 and <= 5 ? request.Count.Value : 2;
+    foreach (var seed in request?.Contacts ?? [])
+    {
+        if (!EmailAddressHelpers.LooksLikeEmail(seed.Email)) continue;
+        await appDataStore.UpsertOutreachContactAsync(
+            new OutreachContactRecord(
+                seed.Email.Trim().ToLowerInvariant(),
+                seed.Name,
+                seed.ProspectId,
+                seed.ChannelUrl,
+                seed.Handle,
+                "pending",
+                null,
+                null,
+                DateTimeOffset.UtcNow),
+            cancellationToken);
+    }
+
+    TimeZoneInfo tz;
+    try { tz = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
+    catch { tz = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time"); }
+    var todayEt = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).Date;
+
+    var eligible = (await appDataStore.ListOutreachContactsAsync(cancellationToken))
+        .Where(c => !string.Equals(c.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+        .Where(c => c.LastSentAt is null || TimeZoneInfo.ConvertTime(c.LastSentAt.Value, tz).Date < todayEt)
+        .OrderBy(c => c.LastSentAt == null ? 0 : 1)
+        .ThenBy(c => c.LastSentAt ?? DateTimeOffset.MinValue)
+        .ThenBy(c => c.Email)
+        .Take(count)
+        .ToArray();
+
+    var (fromAddress, adminEmail) = await SupportCrmEmail.LoadAddressesAsync(secrets, cancellationToken);
+    if (string.IsNullOrWhiteSpace(fromAddress))
+        return Results.Problem("SES sender identity is not configured.");
+
+    var hmac = (await secrets.GetValueAsync("outreach/unsubscribe-hmac", secure: true, cancellationToken))?.Trim();
+    if (string.IsNullOrWhiteSpace(hmac))
+        return Results.Problem("Unsubscribe signing key is not configured.");
+
+    var site = configuration["App:PublicSiteUrl"] ?? configuration["PUBLIC_SITE_URL"] ?? "https://youtubeboosterai.com";
+    var seeds = request?.Contacts ?? [];
+    var sent = new List<object>();
+    var skipped = new List<object>();
+
+    foreach (var contact in eligible)
+    {
+        var latest = await appDataStore.GetOutreachContactAsync(contact.Email, cancellationToken);
+        if (latest is not null && string.Equals(latest.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+        {
+            skipped.Add(new { email = contact.Email, reason = "unsubscribed" });
+            continue;
+        }
+
+        var seed = seeds.FirstOrDefault(s =>
+            string.Equals(s.Email?.Trim(), contact.Email, StringComparison.OrdinalIgnoreCase));
+        var subject = string.IsNullOrWhiteSpace(seed?.Subject)
+            ? $"Quick public note on {contact.Handle ?? contact.Name ?? "your cooking channel"}"
+            : seed!.Subject!.Trim();
+        var body = string.IsNullOrWhiteSpace(seed?.Body)
+            ? $"Hi — I looked at {contact.Handle ?? "your channel"} publicly and put a one-observation mini audit here: https://youtubeboosterai.com/share?channel={Uri.EscapeDataString(contact.Handle ?? "")}"
+            : seed!.Body!.Trim();
+
+        var ticketId = await appDataStore.SaveSupportTicketAsync(
+            new SupportTicketRequest(
+                Email: contact.Email,
+                Name: contact.Name,
+                Subject: subject,
+                Message: body,
+                ProductArea: "growth_outreach",
+                ChannelUrl: contact.ChannelUrl,
+                OrderReference: contact.ProspectId,
+                AccountEmail: null,
+                Source: "founder_outreach"),
+            linkedUserId: null,
+            cancellationToken);
+
+        var unsub = $"{site.TrimEnd('/')}/unsubscribe?token={Uri.EscapeDataString(OutreachUnsubscribeToken.Create(contact.Email, hmac))}";
+        var send = await SupportCrmEmail.SendToRecipientAsync(
+            ses, fromAddress, adminEmail ?? "", contact.Email, ticketId, subject, body, site, cancellationToken, unsub);
+        if (!send.Ok)
+        {
+            skipped.Add(new { email = contact.Email, reason = send.Error });
+            continue;
+        }
+
+        await appDataStore.SaveSupportReplyAsync(ticketId, subject, body, send.SesMessageId, "sent", cancellationToken);
+        await appDataStore.MarkOutreachSentAsync(contact.Email, DateTimeOffset.UtcNow, cancellationToken);
+        sent.Add(new { email = contact.Email, prospectId = contact.ProspectId, ticketId, sesMessageId = send.SesMessageId });
+    }
+
+    return Results.Ok(new { ok = true, sent, skipped, requested = count });
+});
+
 var checkoutApi = app.MapGroup("/api/checkout");
 checkoutApi.MapPost("/session", async (CreateCheckoutSessionRequest request, ICheckoutService service, CancellationToken cancellationToken) =>
 {
@@ -1295,6 +1421,62 @@ adminProtectedApi.MapGet("/crm/support/tickets/{ticketId}", async (string ticket
     return result is null ? Results.NotFound() : Results.Ok(result);
 });
 
+adminProtectedApi.MapPost("/crm/support/tickets", async (
+    AdminComposeOutreachRequest request,
+    IAppDataStore appDataStore,
+    IAmazonSimpleEmailService ses,
+    ISecretValueProvider secretValueProvider,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    if (!EmailAddressHelpers.LooksLikeEmail(request.Email))
+        return Results.BadRequest(new { error = "A real recipient email from a public contact page is required. Do not guess addresses." });
+    var unsubRow = await appDataStore.GetOutreachContactAsync(request.Email.Trim(), cancellationToken);
+    if (unsubRow is not null && string.Equals(unsubRow.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "This address unsubscribed. Do not email them again." });
+    if (string.IsNullOrWhiteSpace(request.Subject) || string.IsNullOrWhiteSpace(request.Body))
+        return Results.BadRequest(new { error = "Subject and body are required." });
+
+    var ticketId = await appDataStore.SaveSupportTicketAsync(
+        new SupportTicketRequest(
+            Email: request.Email.Trim(),
+            Name: request.Name,
+            Subject: request.Subject.Trim(),
+            Message: request.Body.Trim(),
+            ProductArea: "growth_outreach",
+            ChannelUrl: request.ChannelUrl,
+            OrderReference: request.ProspectId,
+            AccountEmail: null,
+            Source: "founder_outreach"),
+        linkedUserId: null,
+        cancellationToken);
+
+    if (!request.SendNow)
+    {
+        return Results.Ok(new { ok = true, ticketId, sent = false });
+    }
+
+    var (fromAddress, adminEmail) = await SupportCrmEmail.LoadAddressesAsync(secretValueProvider, cancellationToken);
+    if (string.IsNullOrWhiteSpace(fromAddress))
+        return Results.Problem("SES sender identity is not configured.");
+
+    var site = configuration["App:PublicSiteUrl"] ?? configuration["PUBLIC_SITE_URL"] ?? "https://youtubeboosterai.com";
+    var send = await SupportCrmEmail.SendToRecipientAsync(
+        ses, fromAddress, adminEmail ?? "", request.Email.Trim(), ticketId, request.Subject.Trim(), request.Body.Trim(), site, cancellationToken);
+    if (!send.Ok)
+    {
+        await appDataStore.TrackEventAsync("support_reply_failed", ticketId, new Dictionary<string, string?>
+        {
+            ["to"] = request.Email,
+            ["error"] = send.Error
+        }, cancellationToken);
+        return Results.Problem(send.Error ?? "Failed to send email.");
+    }
+
+    await appDataStore.SaveSupportReplyAsync(ticketId, request.Subject.Trim(), request.Body.Trim(), send.SesMessageId, "sent", cancellationToken);
+    return Results.Ok(new { ok = true, ticketId, sent = true, sesMessageId = send.SesMessageId });
+});
+
 adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
     string ticketId,
     AdminSupportReplyRequest request,
@@ -1306,52 +1488,79 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
 {
     var ticket = await appDataStore.GetSupportTicketAsync(ticketId, cancellationToken);
     if (ticket is null) return Results.NotFound();
+    var blocked = await appDataStore.GetOutreachContactAsync(ticket.Ticket.Email, cancellationToken);
+    if (blocked is not null && string.Equals(blocked.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "This address unsubscribed. Do not email them again." });
 
-    var fromAddress = await secretValueProvider.GetValueAsync("ses/from-email", secure: true, cancellationToken);
+    var (fromAddress, adminEmail) = await SupportCrmEmail.LoadAddressesAsync(secretValueProvider, cancellationToken);
     if (string.IsNullOrWhiteSpace(fromAddress)) return Results.Problem("SES sender identity is not configured.");
 
-    var fromName = configuration["App:SupportFromName"]
-                   ?? configuration["SUPPORT_FROM_NAME"]
-                   ?? "YouTubeBooster Support";
-    var fromSource = $"{fromName} <{fromAddress}>";
-
     var subject = string.IsNullOrWhiteSpace(request.Subject) ? $"Re: {ticket.Ticket.Subject}" : request.Subject.Trim();
-    string? sesMessageId = null;
-    try
-    {
-        var sendResponse = await ses.SendEmailAsync(new Amazon.SimpleEmail.Model.SendEmailRequest
-        {
-            Source = fromSource,
-            Destination = new Amazon.SimpleEmail.Model.Destination { ToAddresses = [ticket.Ticket.Email] },
-            ReplyToAddresses = [fromAddress],
-            ReturnPath = fromAddress,
-            Message = new Amazon.SimpleEmail.Model.Message
-            {
-                Subject = new Amazon.SimpleEmail.Model.Content(subject),
-                Body = new Amazon.SimpleEmail.Model.Body
-                {
-                    Text = new Amazon.SimpleEmail.Model.Content(request.Body ?? string.Empty)
-                }
-            }
-        }, cancellationToken);
-        sesMessageId = sendResponse.MessageId;
-    }
-    catch (Exception ex)
+    var site = configuration["App:PublicSiteUrl"] ?? configuration["PUBLIC_SITE_URL"] ?? "https://youtubeboosterai.com";
+    var send = await SupportCrmEmail.SendToRecipientAsync(
+        ses,
+        fromAddress,
+        adminEmail ?? "",
+        ticket.Ticket.Email,
+        ticketId,
+        subject,
+        request.Body ?? string.Empty,
+        site,
+        cancellationToken);
+    if (!send.Ok)
     {
         await appDataStore.TrackEventAsync("support_reply_failed", ticketId, new Dictionary<string, string?>
         {
             ["to"] = ticket.Ticket.Email,
-            ["error"] = ex.Message
+            ["error"] = send.Error
         }, cancellationToken);
-        return Results.Problem("Failed to send email.");
+        return Results.Problem(send.Error ?? "Failed to send email.");
     }
 
-    await appDataStore.SaveSupportReplyAsync(ticketId, subject, request.Body ?? string.Empty, sesMessageId, "sent", cancellationToken);
+    await appDataStore.SaveSupportReplyAsync(ticketId, subject, request.Body ?? string.Empty, send.SesMessageId, "sent", cancellationToken);
     await appDataStore.TrackEventAsync("support_reply_sent", ticketId, new Dictionary<string, string?>
     {
         ["to"] = ticket.Ticket.Email,
-        ["sesMessageId"] = sesMessageId
+        ["sesMessageId"] = send.SesMessageId
     }, cancellationToken);
+
+    return Results.Ok(new { ok = true, sesMessageId = send.SesMessageId });
+});
+
+adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/inbound", async (
+    string ticketId,
+    AdminSupportInboundRequest request,
+    IAppDataStore appDataStore,
+    IAmazonSimpleEmailService ses,
+    ISecretValueProvider secretValueProvider,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Body))
+        return Results.BadRequest(new { error = "Body is required." });
+
+    var ticket = await appDataStore.GetSupportTicketAsync(ticketId, cancellationToken);
+    if (ticket is null) return Results.NotFound();
+
+    var subject = string.IsNullOrWhiteSpace(request.Subject) ? $"Re: {ticket.Ticket.Subject}" : request.Subject.Trim();
+    await appDataStore.SaveSupportInboundAsync(ticketId, subject, request.Body.Trim(), cancellationToken);
+
+    var (fromAddress, adminEmail) = await SupportCrmEmail.LoadAddressesAsync(secretValueProvider, cancellationToken);
+    var site = configuration["App:PublicSiteUrl"] ?? configuration["PUBLIC_SITE_URL"] ?? "https://youtubeboosterai.com";
+    if (!string.IsNullOrWhiteSpace(fromAddress) && !string.IsNullOrWhiteSpace(adminEmail))
+    {
+        try
+        {
+            var snippet = request.Body.Trim();
+            if (snippet.Length > 800) snippet = snippet[..800] + "…";
+            await SupportCrmEmail.NotifyAdminInboundAsync(
+                ses, fromAddress, adminEmail, ticketId, ticket.Ticket.Email, subject, snippet, site, cancellationToken);
+        }
+        catch
+        {
+            /* ticket is already saved */
+        }
+    }
 
     return Results.Ok(new { ok = true });
 });

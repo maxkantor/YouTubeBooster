@@ -1348,6 +1348,7 @@ export function AuditsPage() {
 }
 
 export function ContactListPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<AdminSupportTicketRow[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1357,6 +1358,14 @@ export function ContactListPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
+  const [outEmail, setOutEmail] = useState('');
+  const [outName, setOutName] = useState('');
+  const [outChannel, setOutChannel] = useState('');
+  const [outProspect, setOutProspect] = useState('');
+  const [outSubject, setOutSubject] = useState('');
+  const [outBody, setOutBody] = useState('');
+  const [outSending, setOutSending] = useState(false);
+  const [outErr, setOutErr] = useState('');
 
   const filteredSupport = useMemo(() => {
     const base = filterSupport(items, statusFilter);
@@ -1407,13 +1416,60 @@ export function ContactListPage() {
     };
   }, []);
 
+  const sendOutreach = async () => {
+    setOutErr('');
+    setOutSending(true);
+    try {
+      const res = await adminApi.crmComposeOutreach({
+        email: outEmail.trim(),
+        name: outName.trim() || undefined,
+        channelUrl: outChannel.trim() || undefined,
+        prospectId: outProspect.trim() || undefined,
+        subject: outSubject.trim(),
+        body: outBody.trim(),
+        sendNow: true
+      });
+      if (res.ticketId) navigate(`/admin/contacts/${encodeURIComponent(res.ticketId)}`);
+    } catch (e) {
+      setOutErr(e instanceof Error ? e.message : 'Failed to send');
+    } finally {
+      setOutSending(false);
+    }
+  };
+
   return (
     <AdminShell title="Support">
       {error && <p className="admin-crm-error">{error}</p>}
+      <div className="admin-crm-panel" style={{ marginBottom: 16 }}>
+        <h2>Send outreach (SES)</h2>
+        <p className="admin-crm-muted">
+          From: <code>contact@youtubeboosterai.com</code> (SSM <code>ses/from-email</code>). Reply-To and BCC: Admin CRM inbox
+          (SSM <code>admin/email</code>). Paste an address only from the creator’s public contact page — do not guess. The sent
+          message is stored on this Support thread.
+        </p>
+        {outErr && <p className="admin-crm-error">{outErr}</p>}
+        <div className="admin-crm-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+          <input className="admin-crm-input" placeholder="Recipient email (from public contact page)" value={outEmail} onChange={(e) => setOutEmail(e.target.value)} style={{ minWidth: 280 }} />
+          <input className="admin-crm-input" placeholder="Name" value={outName} onChange={(e) => setOutName(e.target.value)} />
+          <input className="admin-crm-input" placeholder="Channel URL" value={outChannel} onChange={(e) => setOutChannel(e.target.value)} style={{ minWidth: 240 }} />
+          <input className="admin-crm-input" placeholder="Prospect ID (P01…)" value={outProspect} onChange={(e) => setOutProspect(e.target.value)} style={{ width: 120 }} />
+        </div>
+        <input className="admin-crm-input" placeholder="Subject" value={outSubject} onChange={(e) => setOutSubject(e.target.value)} style={{ width: '100%', marginTop: 8 }} />
+        <textarea className="admin-crm-textarea" placeholder="Message" value={outBody} onChange={(e) => setOutBody(e.target.value)} style={{ marginTop: 8 }} />
+        <button
+          type="button"
+          className="admin-crm-btn admin-crm-btn-primary"
+          style={{ marginTop: 8 }}
+          disabled={outSending || !outEmail.trim() || !outSubject.trim() || !outBody.trim()}
+          onClick={sendOutreach}
+        >
+          {outSending ? 'Sending…' : 'Send and open thread'}
+        </button>
+      </div>
       {loading ? (
         <p style={{ color: '#64748b' }}>Loading…</p>
       ) : items.length === 0 ? (
-        <div className="admin-crm-panel admin-crm-empty">No contacts.</div>
+        <div className="admin-crm-panel admin-crm-empty">No contacts yet. Send outreach above to create the first thread.</div>
       ) : (
         <>
           <div style={{ marginBottom: 12 }}>
@@ -1532,6 +1588,10 @@ export function ContactTicketPage() {
   const [linkUserId, setLinkUserId] = useState('');
   const [linkSaving, setLinkSaving] = useState(false);
   const [linkErr, setLinkErr] = useState('');
+  const [inboundSubject, setInboundSubject] = useState('Re: ');
+  const [inboundBody, setInboundBody] = useState('');
+  const [inboundSaving, setInboundSaving] = useState(false);
+  const [inboundErr, setInboundErr] = useState('');
 
   useEffect(() => {
     if (!ticketId) return;
@@ -1543,6 +1603,7 @@ export function ContactTicketPage() {
         if (!c) {
           setData(d);
           setSubject(`Re: ${d.ticket.subject}`);
+          setInboundSubject(`Re: ${d.ticket.subject}`);
           setStatusValue(d.ticket.status || 'open');
           setPriorityValue(d.ticket.priority || 'normal');
           setLinkUserId(d.ticket.linkedUserId ?? '');
@@ -1622,7 +1683,23 @@ export function ContactTicketPage() {
     } finally {
       setLinkSaving(false);
     }
-  }
+  };
+
+  const logInbound = async () => {
+    if (!ticketId || !inboundBody.trim()) return;
+    setInboundSaving(true);
+    setInboundErr('');
+    try {
+      await adminApi.crmSupportInbound(ticketId, inboundSubject, inboundBody);
+      const refreshed = await adminApi.crmSupportTicket(ticketId);
+      setData(refreshed);
+      setInboundBody('');
+    } catch (e) {
+      setInboundErr(e instanceof Error ? e.message : 'Failed to record reply');
+    } finally {
+      setInboundSaving(false);
+    }
+  };
 
   return (
     <AdminShell title="Support thread">
@@ -1649,6 +1726,10 @@ export function ContactTicketPage() {
                   </p>
                 )}
                 <p><strong>Source</strong>: {data.ticket.source ?? 'contact_form'}</p>
+                <p className="admin-crm-muted">
+                  Outbound From: contact@youtubeboosterai.com. Recipient replies go to the Admin CRM inbox
+                  (SSM admin/email). Continue the conversation with Send reply below so the thread stays in CRM.
+                </p>
               </div>
               <div>
                 <p><strong>Status</strong>: {contactsStatusBadge(data.ticket.status)}</p>
@@ -1697,10 +1778,12 @@ export function ContactTicketPage() {
           <div className="admin-crm-panel">
             <h2>Conversation</h2>
             <div className="admin-crm-thread" style={{ marginTop: 16 }}>
+              {data.ticket.source !== 'founder_outreach' && (
               <div className="admin-crm-msg admin-crm-msg-in">
                 <div className="admin-crm-msg-meta">Original · {formatDt(data.ticket.createdAt)}</div>
                 <div className="admin-crm-msg-body">{data.message}</div>
               </div>
+              )}
               {data.thread.map((m) => (
                 <div
                   key={m.messageId}
@@ -1729,6 +1812,22 @@ export function ContactTicketPage() {
             <textarea className="admin-crm-textarea" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" />
             <button type="button" className="admin-crm-btn admin-crm-btn-primary" disabled={sending || !body.trim()} onClick={sendReply}>
               {sending ? 'Sending…' : 'Send reply'}
+            </button>
+            <p className="admin-crm-muted" style={{ marginTop: 8 }}>
+              Sends UTF-8 HTML + text from contact@youtubeboosterai.com, BCC + Reply-To the Admin inbox. Stored on this thread.
+            </p>
+          </div>
+          <div className="admin-crm-panel">
+            <h2>Log recipient reply</h2>
+            <p className="admin-crm-muted">
+              When the creator replies, it arrives at the Admin CRM inbox. Paste it here so the thread stays complete, then
+              answer with Send reply (not from Gmail).
+            </p>
+            {inboundErr && <p className="admin-crm-error">{inboundErr}</p>}
+            <input className="admin-crm-input" value={inboundSubject} onChange={(e) => setInboundSubject(e.target.value)} placeholder="Subject" />
+            <textarea className="admin-crm-textarea" value={inboundBody} onChange={(e) => setInboundBody(e.target.value)} placeholder="Paste the recipient’s email" />
+            <button type="button" className="admin-crm-btn" disabled={inboundSaving || !inboundBody.trim()} onClick={logInbound}>
+              {inboundSaving ? 'Saving…' : 'Record reply and notify Admin inbox'}
             </button>
           </div>
           <div className="admin-crm-panel">

@@ -7,7 +7,7 @@ Agents must append every experiment here. Do not delete history.
 - **EXP-001** — post-checkout guest activation (eval **Monday, August 17, 2026** / `2026-08-17`) — funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO
 - **EXP-003** — `/youtube-channel-analyzer` commercial-intent landing (eval **Wednesday, August 19, 2026** / `2026-08-19`) — funnel stage: acquisition / SEO (nested surface using EXP-002 form UI)
-- **EXP-004** — mini-audit share page `/share` + sample paid report `/sample-report` for founder outreach (eval **2026-08-20**) — funnel stage: acquisition / distribution (does not change EXP-002/003 treatments)
+- **EXP-004** — mini-audit share page `/share` + sample paid report `/sample-report` for founder outreach (eval **2026-08-20**) — status **awaiting owner approval** — funnel stage: acquisition / distribution (does not change EXP-002/003 treatments)
 
 ## EXP-002 / EXP-003 overlap
 
@@ -31,7 +31,7 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 | Field | Value |
 |-------|--------|
-| Status | active |
+| Status | awaiting owner approval |
 | Evidence | Verified external paying customers = 0; traffic too low for more CRO; need qualified audits in 7 days; founder outreach blocked without a shareable one-observation asset. |
 | Hypothesis | A `/share` mini-audit (one public-data observation + tracked CTA to `/demo`) plus `/sample-report` (MaxKantorCooking paid-shape sample) will increase qualified audit completions from founder outreach vs generic SEO alone. |
 | Exact change | `MiniAuditSharePage`, `SampleReportPage`, routes, sitemap entries, styles; skill/automation acquisition-first; outreach package `docs/growth/outreach/2026-08-13-founder-outreach.md` (drafts only). |
@@ -46,7 +46,7 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 | Commit | `78b2429` |
 | Amplify | job **238** SUCCEED |
 
-Owner approved all 10 founder outreach drafts on **2026-08-14**. Send kit: `docs/growth/outreach/2026-08-13-send-kit.md`. Outreach is **not** marked sent until Max transmits each message.
+**Outreach:** A Cursor task prompt is **not** approval of recipients or copy. The 2026-08-13 list (Budget Bytes, Damn Delicious, Simply Recipes, and other drafts) is **superseded and not approved**. Replacement review: `docs/growth/outreach/2026-08-14-review.md` — status `draft` until Max explicitly approves specific recipients and messages. Do not send, submit forms, or comment.
 
 ### 2026-08-13 — Measurement repair (not a conversion experiment)
 

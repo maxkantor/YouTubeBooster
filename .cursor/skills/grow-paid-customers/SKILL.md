@@ -86,7 +86,8 @@ Create a sanitized package under `docs/growth/outreach/` with **10** prospects:
 - Follow-up draft
 - Tracking status (`draft` / `approved` / `sent_by_owner` / …)
 
-**Automation must not** send messages, submit forms, comment, or publish externally without explicit authorization.  
+**Automation must not** submit forms, comment, or invent email addresses. Owner-approved daily cooking outreach may send **at most 2** SES emails via `scripts/growth/daily-outreach-send.mjs` to roster addresses that were copied from public contact pages. Skip anyone marked **unsubscribed**. Rotate so the same creator is not emailed twice the same day.
+
 Admin email must distinguish: prospect list created · drafts created · outreach actually sent · visits · audits · verified purchases.
 
 ## Daily workflow

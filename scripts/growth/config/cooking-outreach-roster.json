@@ -1,0 +1,55 @@
+{
+  "dailyCount": 2,
+  "contacts": [
+    {
+      "id": "P02",
+      "name": "The Defined Dish",
+      "handle": "@TheDefinedDish",
+      "email": "info@thedefineddish.com",
+      "channelUrl": "https://www.youtube.com/@TheDefinedDish",
+      "contactUrl": "https://thedefineddish.com/contact/",
+      "subject": "Public note on @TheDefinedDish packaging",
+      "body": "Hi — I checked @TheDefinedDish publicly. Street taco salad and miso-ginger chuck roast uploaded this week look on-brand, but engagement is only moderate and several descriptions look weak for discoverability. I’d test one clearer payoff in the description on the next creamy-defined-dish upload. Mini audit: https://youtubeboosterai.com/share?channel=%40TheDefinedDish&utm_source=founder_outreach&utm_medium=email&utm_campaign=acq_2026_08_14&utm_content=P02"
+    },
+    {
+      "id": "P06",
+      "name": "Erin Clarke / Well Plated",
+      "handle": "@WellPlated",
+      "email": "hello@wellplated.com",
+      "channelUrl": "https://www.youtube.com/@WellPlated",
+      "contactUrl": "https://www.wellplated.com/contact/",
+      "subject": "Public note on @WellPlated shorts engagement",
+      "body": "Hi Erin — I checked @WellPlated publicly. Greek yogurt chicken salad and freezer-meal shorts are on-niche this week, but recent engagement looks soft. I’d test a clearer outcome in the first seconds/title on the next avocado/banana-style short. Public mini audit: https://youtubeboosterai.com/share?channel=%40WellPlated&utm_source=founder_outreach&utm_medium=email&utm_campaign=acq_2026_08_14&utm_content=P06"
+    },
+    {
+      "id": "P07",
+      "name": "smitten kitchen",
+      "handle": "@SmittenKitchen",
+      "email": "deb@smittenkitchen.com",
+      "channelUrl": "https://www.youtube.com/@SmittenKitchen",
+      "contactUrl": "https://smittenkitchen.com/about/",
+      "subject": "Public note on @SmittenKitchen titles",
+      "body": "Hi Deb — I looked at @SmittenKitchen publicly. Ultimate zucchini bread and chocolate ice cream sandwiches are strong topics, but most recent titles in the sample look under-optimized for CTR length and descriptions look thin for search. I’d test one payoff-first title on the next cake/chiffon-style upload. Mini audit: https://youtubeboosterai.com/share?channel=%40SmittenKitchen&utm_source=founder_outreach&utm_medium=email&utm_campaign=acq_2026_08_14&utm_content=P07"
+    },
+    {
+      "id": "P08",
+      "name": "Swasthi's Recipes",
+      "handle": "@IndianHealthyRecipes",
+      "email": "contact@indianhealthyrecipes.com",
+      "channelUrl": "https://www.youtube.com/@IndianHealthyRecipes",
+      "contactUrl": "https://www.indianhealthyrecipes.com/about/",
+      "subject": "Public note on @IndianHealthyRecipes packaging",
+      "body": "Hi Swasthi — I looked at @IndianHealthyRecipes publicly. Tofu bhurji and pav bhaji are clear demand, but most recent titles look under-optimized for CTR length, descriptions are thin, and the upload rhythm looks too sparse to compound. I’d test one cleaner payoff-first title on the next street-food recipe. Mini audit: https://youtubeboosterai.com/share?channel=%40IndianHealthyRecipes&utm_source=founder_outreach&utm_medium=email&utm_campaign=acq_2026_08_14&utm_content=P08"
+    },
+    {
+      "id": "P09",
+      "name": "Skinnytaste",
+      "handle": "@Skinnytaste",
+      "email": "ginah2design@gmail.com",
+      "channelUrl": "https://www.youtube.com/@Skinnytaste",
+      "contactUrl": "https://www.skinnytaste.com/contact/",
+      "subject": "Public note on @Skinnytaste descriptions",
+      "body": "Hi — I checked @Skinnytaste publicly. High-fiber reset soup and zucchini pie are on-niche, but recent engagement looks soft and most descriptions in the sample look weak for search. I’d test one clearer payoff in the description on the next bean/chicken-style video. Mini audit: https://youtubeboosterai.com/share?channel=%40Skinnytaste&utm_source=founder_outreach&utm_medium=email&utm_campaign=acq_2026_08_14&utm_content=P09"
+    }
+  ]
+}

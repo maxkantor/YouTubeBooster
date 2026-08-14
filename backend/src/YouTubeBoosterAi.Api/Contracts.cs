@@ -95,7 +95,8 @@ public sealed record SupportTicketRequest(
     string ProductArea,
     string? ChannelUrl,
     string? OrderReference = null,
-    string? AccountEmail = null
+    string? AccountEmail = null,
+    string? Source = null
 );
 
 public sealed record SupportTicketResponse(string TicketId, string Status);
@@ -227,6 +228,18 @@ public sealed record AdminSupportMessageDto(
 );
 
 public sealed record AdminSupportReplyRequest(string Subject, string Body);
+
+public sealed record AdminSupportInboundRequest(string Subject, string Body);
+
+public sealed record AdminComposeOutreachRequest(
+    string Email,
+    string Subject,
+    string Body,
+    string? Name = null,
+    string? ChannelUrl = null,
+    string? ProspectId = null,
+    bool SendNow = true
+);
 
 public sealed record AdminSupportNoteRequest(string Body);
 

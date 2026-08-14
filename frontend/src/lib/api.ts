@@ -368,10 +368,30 @@ export const adminApi = {
       `/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}`
     );
   },
-  async crmSupportReply(ticketId: string, subject: string, body: string): Promise<{ status?: string }> {
+  async crmSupportReply(ticketId: string, subject: string, body: string): Promise<{ status?: string; ok?: boolean; sesMessageId?: string }> {
     return fetchJson(`/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}/reply`, {
       method: 'POST',
       body: JSON.stringify({ subject, body })
+    });
+  },
+  async crmSupportInbound(ticketId: string, subject: string, body: string): Promise<{ ok: boolean }> {
+    return fetchJson(`/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}/inbound`, {
+      method: 'POST',
+      body: JSON.stringify({ subject, body })
+    });
+  },
+  async crmComposeOutreach(payload: {
+    email: string;
+    subject: string;
+    body: string;
+    name?: string;
+    channelUrl?: string;
+    prospectId?: string;
+    sendNow?: boolean;
+  }): Promise<{ ok: boolean; ticketId: string; sent: boolean; sesMessageId?: string }> {
+    return fetchJson('/api/admin/crm/support/tickets', {
+      method: 'POST',
+      body: JSON.stringify(payload)
     });
   },
   async crmSupportNote(ticketId: string, body: string): Promise<{ ok: boolean }> {

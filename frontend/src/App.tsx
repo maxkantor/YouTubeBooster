@@ -112,6 +112,9 @@ const MiniAuditSharePage = React.lazy(() =>
 const SampleReportPage = React.lazy(() =>
   import('./pages/marketing/SampleReportPage').then((m) => ({ default: m.SampleReportPage }))
 );
+const UnsubscribePage = React.lazy(() =>
+  import('./pages/marketing/UnsubscribePage').then((m) => ({ default: m.UnsubscribePage }))
+);
 
 /** Redirect from /app to the main dashboard (onboarding wizard removed). */
 function AppEntryRedirect() {
@@ -896,6 +899,7 @@ function AppInner() {
         <Route path="/demo" element={<ChannelAnalyzeDashboard variant="marketing" />} />
         <Route path="/share" element={<MiniAuditSharePage />} />
         <Route path="/sample-report" element={<SampleReportPage />} />
+        <Route path="/unsubscribe" element={<UnsubscribePage />} />
         <Route
           path="/auth/signin"
           element={<SignInPage userSession={userSession} sessionLoading={sessionLoading} />}

@@ -213,3 +213,34 @@ test('email does not attribute payment to experiments; EXP-001 shows CRM unavail
   assert.match(report.html, /Decision/);
   assert.doesNotMatch(report.html, /@example\.com/);
 });
+
+test('awaiting owner approval experiments appear; conversion is unavailable; UTF-8 body kept', () => {
+  const md = `
+### 2026-08-13 — EXP-004 Mini-audit
+
+| Field | Value |
+|-------|--------|
+| Status | awaiting owner approval |
+| Evaluation date | 2026-08-20 |
+| Funnel stage | acquisition / distribution |
+`;
+  const report = composeGrowthReport({
+    snapshot: explicitFunnelFixture,
+    health: { ok: true, checks: [] },
+    experiments: parseActiveExperiments(md),
+    notes: 'Café test — do not strip Unicode.',
+    generatedAt: '2026-08-13T16:00:00.000Z'
+  });
+  assert.equal(parseActiveExperiments(md)[0].status, 'awaiting owner approval');
+  assert.match(report.text, /EXP-004/);
+  assert.match(report.text, /awaiting owner approval/i);
+  assert.match(report.text, /Unavailable until same-cohort/);
+  assert.doesNotMatch(report.text, /275%/);
+  assert.doesNotMatch(report.html, /275%/);
+  assert.doesNotMatch(report.text, /complete\/start=/);
+  assert.match(report.text, /GA4 data-through/);
+  assert.match(report.text, /Café test/);
+  assert.match(report.html, /Café test/);
+  assert.match(report.text, /verified_external_customers=0/);
+  assert.match(report.text, /verified_external_revenue=\$0\.00/);
+});

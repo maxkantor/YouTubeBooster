@@ -37,4 +37,4 @@ See **`docs/growth/STRIPE-PRODUCT-ALLOWLIST.md`**. GetTrainMate and YouTubeBoost
 2. Historical showcase/demo completions were counted (fixed: default demo no longer fires `audit_completed`).
 3. Remount/retry double-fires before attempt-id dedupe (fixed via sessionStorage attempt ids).
 
-Report both period event totals and (when available) cohort conversion for audits started in-period. Do not divide unrelated totals and call it a conversion rate.
+Until start and completion share an `audit_attempt_id` in the same window, **do not divide** `audit_completed` by `audit_started` (that produced a false 275% start-to-completion rate). Display conversion as **Unavailable**.
