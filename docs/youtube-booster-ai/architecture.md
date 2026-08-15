@@ -40,7 +40,7 @@ The hosted product sells access to the software, not source code and not recurri
   - `/admin/analytics`
 
 ### Backend
-- .NET 8 Lambda functions behind API Gateway
+- .NET 10 Lambda functions behind API Gateway
 - ASP.NET Core minimal APIs packaged for Lambda
 - Route groups:
   - `public`

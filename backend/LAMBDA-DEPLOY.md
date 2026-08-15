@@ -31,7 +31,7 @@ Upload that file to Lambda.
 
 1. **Lambda** → function **youtubebooster-ai-api** → **Code** → **Upload from** → **.zip file** → choose `backend/youtubebooster-api.zip`.
 2. **Runtime settings** (Code tab, right) → **Edit**:
-   - **Runtime:** .NET 8 (C#/F#/PowerShell)
+   - **Runtime:** .NET 10 (C#/F#/PowerShell)
    - **Handler:** `YouTubeBoosterAi.Api`
 3. **Save**.
 4. **Configuration** → **Environment variables**: ensure **LambdaEventSource** = `HttpApi` (so the app uses HTTP API payload v2, not REST).

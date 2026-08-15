@@ -631,7 +631,7 @@ resource "aws_lambda_function" "backend" {
   function_name    = "${var.project_name}-api"
   role             = aws_iam_role.lambda_exec[0].arn
   handler          = var.backend_handler
-  runtime          = "dotnet8"
+  runtime          = "dotnet10"
   source_code_hash = filebase64sha256(var.backend_package_path)
   timeout          = 30
   memory_size      = 1024
