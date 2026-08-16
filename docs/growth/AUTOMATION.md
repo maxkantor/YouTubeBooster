@@ -67,10 +67,10 @@ ACQUISITION-FIRST: every run must complete one meaningful customer-getting actio
 
 Today’s task order (do the first unfinished item, then stop after one ship):
 1) Production health. If homepage title, description, or canonical is missing, fix that before any new landing page.
-2) Evaluate any experiment whose eval date has passed (EXP-001, EXP-002, EXP-003, EXP-004). Keep, iterate, or stop. Record the result.
-3) If qualified audit volume is still too low for paid conversion, ship ONE acquisition action: mini-audit share improvement, sample paid report, SEO page that starts an audit above the fold, or referral/share UTMs. Target active creators ~1k–100k subs with visible packaging/SEO problems who prefer a one-time audit.
+2) Evaluate experiments whose eval date is today or has passed. On the next run that is EXP-001 only unless another date is due. Keep, iterate, or stop. Record the result. If you evaluated, that is today’s action unless a keep/iterate decision requires one code change.
+3) If homepage metadata is healthy and audit volume is still too low, ship ONE acquisition action that is not a new SEO article: mini-audit share, sample report, or referral/share UTMs. Target active creators ~1k–100k subs with visible packaging/SEO problems who prefer a one-time audit. Do not add another SEO landing while EXP-002 or EXP-003 is still in-flight.
 4) If audits complete but checkout does not, ship ONE post-audit upgrade/pricing-clarity change. Do not start a second test on the same funnel stage.
-5) Founder outreach: drafts and packages only unless Max has explicitly approved named recipients. EXP-004 lists are not send approval. Do not invent emails. If daily-outreach-send.mjs is authorized and capped, max 2, skip unsubscribed, rotate recipients; otherwise skip send.
+5) Founder outreach: drafts and packages only unless Max has explicitly approved named recipients. EXP-004 lists are not send approval. Do not invent emails. Do not run daily-outreach-send.mjs unless this run’s notes name the approval id and the exact recipients. Otherwise drafts only. Cap 2, skip unsubscribed, rotate recipients.
 
 Hard bans: mass spam; fake comments/engagement/testimonials; claiming a channel was reviewed without inspecting public content; auto DMs/forms/comments; payments/prices/auth/secrets; guaranteed-growth claims.
 
