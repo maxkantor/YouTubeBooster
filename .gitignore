@@ -100,3 +100,6 @@ artifacts/publish/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+
+# Daily growth automation lock (local / agent workspace)
+docs/growth/.growth-run.lock

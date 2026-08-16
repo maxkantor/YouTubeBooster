@@ -2,6 +2,30 @@
 
 Shared definitions used by funnel snapshots, Admin email scoreboard, agent summaries, and experiment reporting (`scripts/growth/lib/canonical-metrics.mjs`).
 
+## Unit labels (mandatory in reports)
+
+Every reported number must state whether it is an **event**, **session**, **user**, **audit record**, **checkout session**, **payment**, or **customer**. Never compute conversion rates across unrelated cohorts.
+
+## Qualified audit
+
+A **qualified audit** is a successfully completed audit for a real, publicly accessible YouTube channel with approximately **1,000–100,000** subscribers and identifiable packaging, discoverability, or SEO improvement opportunities.
+
+**Exclude** from qualified counts: test, owner, duplicate, failed, and incomplete audits. Raw GA4 `audit_completed` **events** are not the same as qualified audit **records**.
+
+## Payments vs customers vs revenue
+
+Report separately. One customer can make multiple payments — never label payments as customers.
+
+| Field | Unit | Rule |
+|-------|------|------|
+| Successful product-attributed live payments | payment / checkout session | Allowlist only |
+| Unique verified external paying customers | customer | Distinct external customers among those payments |
+| Owner / test payments | payment | Labeled; not external customers |
+| Refunds | payment | Disclosed separately |
+| Verified net revenue | USD | Product-attributed only |
+| Unattributed account-wide payments | payment | Excluded from product revenue |
+| Experiment-attributed purchases | payment | Evidence required; else Unknown |
+
 ## Units
 
 | Metric | Unit | Source |
@@ -10,8 +34,6 @@ Shared definitions used by funnel snapshots, Admin email scoreboard, agent summa
 | `qualified_landing_sessions` | sessions | GA4 `pagePath` sessions on EXP-002/003 eligible pages |
 | `audit_starts` | **events** (not unique audits yet) | GA4 `audit_started` only |
 | `audit_completions` | **events** | GA4 `audit_completed` only |
-| `pricing_viewers` | events | GA4 `pricing_viewed` |
-| `checkout_starts` | events | GA4 `checkout_started` |
 | `successful_live_payments` | payments | **Verified YouTubeBooster-attributed** live Checkout Sessions only (never account-wide Stripe). Baseline **0** until `reconciliationComplete`. |
 | `unique_paying_customers` | customers | Unique **external** customers among verified attributed payments (baseline **0** until reconciliation). |
 | `live_revenue` | USD | Verified attributed net live revenue (baseline **$0** until reconciliation). |
@@ -19,6 +41,8 @@ Shared definitions used by funnel snapshots, Admin email scoreboard, agent summa
 | `entitled_paid_users` | users | Admin CRM (unavailable in growth scripts without CRM auth) |
 | `activation_within_24h` | users | Admin CRM — required for EXP-001 |
 | `experiment_attributed_paid` | payments | Unknown unless checkout metadata/UTM proves attribution |
+| `pricing_viewers` | events | GA4 `pricing_viewed` |
+| `checkout_starts` | events | GA4 `checkout_started` |
 
 See **`docs/growth/STRIPE-PRODUCT-ALLOWLIST.md`**. GetTrainMate and YouTubeBooster verified external paying customers are both **0** until reconciliation.
 

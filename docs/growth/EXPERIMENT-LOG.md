@@ -7,7 +7,20 @@ Agents must append every experiment here. Do not delete history.
 - **EXP-001** — post-checkout guest activation (eval **Monday, August 17, 2026** / `2026-08-17`) — funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO
 - **EXP-003** — `/youtube-channel-analyzer` commercial-intent landing (eval **Wednesday, August 19, 2026** / `2026-08-19`) — funnel stage: acquisition / SEO (nested surface using EXP-002 form UI)
-- **EXP-004** — mini-audit share page `/share` + sample paid report `/sample-report` for founder outreach (eval **2026-08-20**) — status **awaiting owner approval** — funnel stage: acquisition / distribution (does not change EXP-002/003 treatments)
+- **EXP-004** — mini-audit share page `/share` + sample paid report `/sample-report` for founder outreach (eval **2026-08-20**) — status **awaiting owner approval** — funnel stage: founder outreach / acquisition distribution (does not change EXP-002/003 treatments)
+
+## Locked stages (do not launch overlapping treatments)
+
+Use this table before starting a new experiment or CRO change. Two active experiments may not share the same **locked stage**. Independent work on a different stage is allowed when it does not invalidate an active treatment.
+
+| Experiment | Locked stage | Notes |
+|------------|--------------|--------|
+| EXP-001 | Post-purchase activation | Guest activation after checkout |
+| EXP-002 | Acquisition / SEO | Eligible SEO + compare pages with on-page form (excludes analyzer URL) |
+| EXP-003 | Acquisition / SEO (`/youtube-channel-analyzer`) | Same broad stage as EXP-002; page-level eval OK; form-UI lift nested — see overlap |
+| EXP-004 | Founder outreach / acquisition distribution | Share + sample report for outreach; not send approval |
+
+Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EXP-003 is in-flight. Do **not** start another post-purchase activation test while EXP-001 is in-flight. Outreach draft packages may proceed under EXP-004 rules without changing EXP-002/003 treatments.
 
 ## EXP-002 / EXP-003 overlap
 
