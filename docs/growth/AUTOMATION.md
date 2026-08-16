@@ -4,7 +4,8 @@
 **Schedule:** Monday–Friday **8:00 AM America/New_York**  
 **Repo:** `maxkantor/YouTubeBooster` · branch `main`  
 **Notify:** Full Admin email after every run → `scripts/growth/compose-and-send-growth-email.mjs`  
-**Mode:** **Acquisition-first** — every run must complete one meaningful growth action
+**North star:** 1000+ verified paying customers (scoreboard, not a promise)  
+**Mode:** **Acquisition-first** — every run must complete one meaningful customer-getting action
 
 ---
 
@@ -60,33 +61,33 @@ If a weekday 8:00 AM run fails for rate limit, treat it as a missed run: retry o
 ```
 Read and follow .cursor/skills/grow-paid-customers/SKILL.md.
 
-ACQUISITION-FIRST: Every run must complete one meaningful growth action. Reviewing analytics, updating the experiment log, waiting for traffic, sending Admin email, or publishing another low-value SEO page do NOT count by themselves.
+North star: 1000+ verified YouTubeBooster paying customers. That is a scoreboard, not a promise. Count product-attributed live Stripe only (docs/growth/STRIPE-PRODUCT-ALLOWLIST.md). Never attribute account-wide Stripe. Never invent audits, customers, or testimonials.
 
-Verified baseline until product Stripe reconciliation proves otherwise: 0 external paying customers. Never attribute account-wide Stripe to YouTubeBooster. Filter via docs/growth/STRIPE-PRODUCT-ALLOWLIST.md.
+ACQUISITION-FIRST: every run must complete one meaningful customer-getting action. Reviewing analytics, updating the log, waiting, sending Admin email, or publishing another low-value SEO page do not count.
 
-Preserve active experiments and their evaluation dates. Active experiments lock only their exact treatment/cohort — they do not block outreach packages, mini-audit sharing, referral/distribution, or other acquisition work.
+Today’s task order (do the first unfinished item, then stop after one ship):
+1) Production health. If homepage title, description, or canonical is missing, fix that before any new landing page.
+2) Evaluate any experiment whose eval date has passed (EXP-001, EXP-002, EXP-003, EXP-004). Keep, iterate, or stop. Record the result.
+3) If qualified audit volume is still too low for paid conversion, ship ONE acquisition action: mini-audit share improvement, sample paid report, SEO page that starts an audit above the fold, or referral/share UTMs. Target active creators ~1k–100k subs with visible packaging/SEO problems who prefer a one-time audit.
+4) If audits complete but checkout does not, ship ONE post-audit upgrade/pricing-clarity change. Do not start a second test on the same funnel stage.
+5) Founder outreach: drafts and packages only unless Max has explicitly approved named recipients. EXP-004 lists are not send approval. Do not invent emails. If daily-outreach-send.mjs is authorized and capped, max 2, skip unsubscribed, rotate recipients; otherwise skip send.
 
-30-day targets (not promises): 100 qualified completed audits, 20 pricing views, 5 checkout starts, 3 verified external paying customers.
+Hard bans: mass spam; fake comments/engagement/testimonials; claiming a channel was reviewed without inspecting public content; auto DMs/forms/comments; payments/prices/auth/secrets; guaranteed-growth claims.
 
-Target: active creators ~1k–100k subs with visible packaging/SEO problems who prefer a one-time audit. No inactive/private/children/sensitive channels. No mass spam or fake social proof.
+Preserve active experiment treatments. Independent acquisition may ship in parallel.
 
-Run:
-1) Production health
-2) Product-specific Stripe reconcile + GA4 7d/30d
-3) Experiment log + recent commits + locks
-4) Pick largest acquisition/revenue constraint
-5) Score actions; ship exactly ONE reversible action when needed
-6) Send daily cooking outreach (max 2): node scripts/growth/daily-outreach-send.mjs — skips unsubscribed, rotates recipients, never invents emails
-7) Tests + frontend build; commit/push main only if valid; monitor Amplify
-8) Update experiment log
-9) ALWAYS email Admin via:
-node scripts/growth/compose-and-send-growth-email.mjs --notes "<Decision; growth action completed; outreach sent vs skipped unsubscribed; verified customers; next action>"
+Run then:
+- Product Stripe reconcile + GA4 7d/30d
+- Tests + frontend build if shipping; commit/push main only if valid; monitor Amplify
+- Update docs/growth/EXPERIMENT-LOG.md
+- ALWAYS email Admin:
+node scripts/growth/compose-and-send-growth-email.mjs --notes "<action shipped; audits; pricing views; checkout starts; paid this week vs 1000 north star; outreach sent vs drafts; eval result; blockers>"
 
-Admin notes must distinguish: prospect list created vs drafts created vs outreach actually sent vs visits vs audits vs verified purchases.
+Admin notes must distinguish: prospect list vs drafts vs sent vs visits vs audits vs verified purchases.
 
-Cost: prefer cheapest model; skip npm ci unless shipping; still complete one meaningful growth action every run.
+Cost: cheapest capable model. Skip npm ci unless shipping.
 
-If this run is rate-limited or another YouTubeBooster agent is already active: stop. Do not start a second parallel growth job. The owner should click Run now after other agents finish.
+If rate-limited or another YouTubeBooster agent is already active: stop. Do not start a second parallel growth job.
 
 Load secrets via scripts/growth/load-ssm-secrets-into-env.mjs. Never commit credentials. Stripe key rk_ only.
 ```

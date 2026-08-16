@@ -17,6 +17,8 @@ Source of truth: **product-attributed Stripe only** (`docs/growth/STRIPE-PRODUCT
 Verified baseline until reconciliation proves otherwise: **0 external paying customers**.  
 Preserve GA4 `G-P02EPD7EDB` (`frontend/index.html` + `frontend/src/lib/analytics.ts`). Never add a second GA4 install.
 
+North star (not a promise): **1000+ verified YouTubeBooster paying customers**. Count product-attributed Stripe only. Leading 30-day indicators below are the near-term scoreboard.
+
 ## 30-day targets (targets, not promises)
 
 | Metric | Target |
