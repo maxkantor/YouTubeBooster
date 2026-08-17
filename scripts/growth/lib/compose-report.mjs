@@ -9,8 +9,20 @@ import {
   sumEventsByName,
   topEventsForDisplay
 } from './canonical-metrics.mjs';
-import { EXP_OVERLAP_POLICY, nextEvaluation, parseActiveExperiments } from './experiment-report.mjs';
-import { etDateParts, formatEtDateTime, formatLongDateEt } from './time.mjs';
+import {
+  EXP_OVERLAP_POLICY,
+  classifyExperiment,
+  nextFutureEvaluation,
+  parseActiveExperiments
+} from './experiment-report.mjs';
+import {
+  etDateParts,
+  formatDateRangeEt,
+  formatEtDateTime,
+  formatLongDateEt,
+  formatMonthDayYear,
+  ga4DataThroughYmd
+} from './time.mjs';
 
 /** Normalize punctuation only. Do not strip Unicode from UTF-8 email bodies. */
 function typographicNormalize(s) {
@@ -32,6 +44,9 @@ function escapeHtml(s) {
 /** Cohort conversion is unavailable until start and completion share an audit_attempt_id in the same window. */
 export const COHORT_CONVERSION_UNAVAILABLE =
   'Unavailable until same-cohort audit tracking exists (do not divide raw audit_completed by audit_started).';
+
+export const AUDIT_LANDING_DEFINITION =
+  'Audit landing sessions: GA4 sessions on EXP-002 SEO/compare form pages plus EXP-003 /youtube-channel-analyzer (pagePath). Not qualified audits and not unique users.';
 
 function stripeBuckets(attr) {
   if (!attr) {
@@ -60,47 +75,226 @@ function stripeBuckets(attr) {
   };
 }
 
-function ga4DataThrough(snapshot, windows) {
-  const end = windows['30d']?.end || snapshot?.reportDateEt || null;
-  if (!end) return { through: 'Unknown', note: 'GA4 window end missing.' };
-  const [y, m, d] = end.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() - 1);
-  const through = dt.toISOString().slice(0, 10);
-  return {
-    through,
-    windowEnd: end,
-    note: `GA4 standard processing often lags 24-48 hours. Query window ends ${end}; treat data-through as ${through} (not real-time).`
-  };
+/**
+ * Display windows must not include the incomplete report day.
+ * Prefer snapshot.ga4DataThrough; otherwise clip window.end when it equals reportDateEt.
+ */
+export function resolveGa4Through(snapshot, windows, reportYmd) {
+  const explicit = snapshot?.ga4DataThrough;
+  if (explicit && /^\d{4}-\d{2}-\d{2}$/.test(explicit)) {
+    return explicit;
+  }
+  const end = windows['30d']?.end || windows['7d']?.end || snapshot?.reportDateEt || null;
+  if (!end) return null;
+  if (reportYmd && end >= reportYmd) return ga4DataThroughYmd(reportYmd);
+  return end;
+}
+
+function clipRange(start, end, through) {
+  if (!start || !end) return { start, end, rangeLabel: 'missing' };
+  const displayEnd = through && end > through ? through : end;
+  return { start, end: displayEnd, rangeLabel: formatDateRangeEt(start, displayEnd) };
 }
 
 function cell(m) {
   return formatMetricValue(m);
 }
 
-/**
- * Build decision paragraph when agent notes do not supply one.
- */
-export function defaultDecisionText({ experiments, health, shipped, nextEval }) {
-  const n = experiments.length;
-  const next = nextEval
-    ? `The next evaluation is ${nextEval.id || 'the soonest experiment'} on ${nextEval.evalDateLabel}.`
-    : 'No evaluation date is scheduled.';
-  const healthBit =
-    health?.ok === true
-      ? 'Production, GA4, and Stripe collection paths look healthy for this run.'
-      : health?.ok === false
-        ? 'Production health reported a failure — see Production Health.'
-        : 'Production health was partially unavailable.';
+function experimentCopy(ex) {
+  if (ex.id === 'EXP-002') {
+    return {
+      stage: 'Acquisition / SEO (main)',
+      eligible: 'SEO + compare form pages (excludes analyzer URL)',
+      primary: 'Page-isolated audit_started events: Unknown until path join verified',
+      sample: 'low'
+    };
+  }
+  if (ex.id === 'EXP-003') {
+    return {
+      stage: 'Acquisition / SEO (nested URL)',
+      eligible: '/youtube-channel-analyzer only',
+      primary: 'Analyzer sessions + audit_started events: Unknown until path join verified',
+      sample: 'low'
+    };
+  }
+  if (ex.id === 'EXP-001') {
+    return {
+      stage: 'Post-purchase activation',
+      eligible: 'Post-checkout guests',
+      primary: 'Paid-to-entitled within 24h: Unavailable - Admin CRM connection required',
+      sample: '0 verified payments'
+    };
+  }
+  if (ex.id === 'EXP-004') {
+    return {
+      stage: 'Founder outreach',
+      eligible: '/share and /sample-report (distribution asset; not send approval)',
+      primary: 'Outreach paused pending named-recipient approval',
+      sample: 'n/a'
+    };
+  }
+  return {
+    stage: typographicNormalize(ex.funnelStage || 'see log'),
+    eligible: 'see log',
+    primary: 'see log',
+    sample: 'low'
+  };
+}
 
-  if (shipped) {
-    return typographicNormalize(
-      `A production change was deployed this run. ${n} experiment(s) remain active. ${healthBit} ${next}`
+function emptyShip() {
+  return {
+    change: 'none this run',
+    experiment: 'n/a',
+    url: 'n/a',
+    primaryMetric: 'n/a',
+    attribution: 'n/a',
+    commit: 'n/a',
+    amplify: 'n/a',
+    verification: 'n/a'
+  };
+}
+
+/**
+ * Consolidate repeating 7d/30d quality notes into a short scan list.
+ */
+export function consolidateQualityWarnings({ windows, snapshot, crmUnavailable = true }) {
+  const items = [];
+  const seen = new Set();
+  const add = (key, text) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push(text);
+  };
+
+  let completionsExceed = false;
+  for (const label of ['7d', '30d']) {
+    const m = windows[label]?.metrics;
+    const starts = m?.audit_starts?.value;
+    const dones = m?.audit_completions?.value;
+    if (typeof starts === 'number' && typeof dones === 'number' && dones > starts) {
+      completionsExceed = true;
+    }
+  }
+  if (completionsExceed) {
+    add(
+      'cohort',
+      'Audit completions exceed starts; raw events cannot form a same-cohort conversion rate.'
     );
   }
-  return typographicNormalize(
-    `No new production experiment was deployed. ${n} active experiment(s) are still collecting data, and current traffic is too low to support another overlapping CRO test. ${healthBit} ${next}`
+
+  const attr7 = snapshot?.windows?.['7d']?.stripe?.attribution;
+  const attr30 = snapshot?.windows?.['30d']?.stripe?.attribution;
+  if (attr7?.reconciliationComplete === false || attr30?.reconciliationComplete === false) {
+    add('recon', 'Product-specific Stripe reconciliation is incomplete.');
+  }
+
+  const unattr = Number(attr30?.unattributedLivePayments || attr7?.unattributedLivePayments || 0);
+  if (unattr > 0) {
+    add(
+      'unattr',
+      `${unattr} unattributed 30-day Stripe payment${unattr === 1 ? '' : 's'} ${unattr === 1 ? 'is' : 'are'} excluded.`
+    );
+  }
+
+  const other = Number(attr30?.otherAppLivePayments || 0);
+  if (other > 0) {
+    add('other', `${other} live payment(s) attributed to another application and excluded.`);
+  }
+
+  if (crmUnavailable) {
+    add('crm', 'Admin CRM activation/entitlement data is unavailable.');
+  }
+
+  const recon = reconcileCanonicalWindows({
+    '7d': windows['7d']?.metrics,
+    '30d': windows['30d']?.metrics
+  });
+  for (const w of recon.warnings || []) add(`recon:${w}`, w);
+
+  return items;
+}
+
+/**
+ * Build decision paragraph when agent notes do not supply one.
+ * Must name the ship (or none), EXP-001 result when due, and verified customers/revenue.
+ */
+export function defaultDecisionText({
+  classified,
+  health,
+  shipped,
+  ship,
+  stripe30,
+  nextFuture,
+  reportYmd
+}) {
+  const nCollecting = classified.filter((e) => e.collecting).length;
+  const nAwaiting = classified.filter((e) => e.decision === 'Awaiting approval').length;
+  const dueMissed = classified.filter((e) => e.dueUnevaluated);
+  const exp001 = classified.find((e) => e.id === 'EXP-001');
+
+  const parts = [];
+
+  if (shipped && ship?.change && ship.change !== 'none this run') {
+    const owner = ship.experiment && ship.experiment !== 'n/a' ? ` under ${ship.experiment}` : '';
+    parts.push(`${ship.change}${owner}.`);
+  } else if (shipped) {
+    parts.push(
+      'A production change was marked shipped this run, but attribution details were not provided.'
+    );
+  } else {
+    parts.push('No new production treatment shipped this run.');
+  }
+
+  if (dueMissed.length) {
+    parts.push(
+      `${dueMissed.map((e) => e.id).join(', ')} ${dueMissed.length === 1 ? 'was' : 'were'} due on ${formatMonthDayYear(reportYmd)} and ${dueMissed.length === 1 ? 'was' : 'were'} not evaluated - this violates the run sequence.`
+    );
+  } else if (exp001 && (exp001.decision === 'Inconclusive' || exp001.evaluationDecision === 'Inconclusive')) {
+    const reason =
+      exp001.decisionReason ||
+      'Admin CRM activation data remains unavailable and verified attributed payments are 0';
+    parts.push(
+      `EXP-001 was evaluated and marked Inconclusive because ${reason}; its treatment remains unchanged.`
+    );
+  } else if (exp001 && exp001.decision && exp001.decision !== 'Keep' && exp001.decision !== 'Due - not evaluated') {
+    parts.push(`EXP-001 was evaluated as ${exp001.decision}; treatment per experiment log.`);
+  }
+
+  const outreachBit =
+    nAwaiting > 0
+      ? `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic, while outreach remains paused pending owner approval.`
+      : `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic.`;
+  parts.push(outreachBit);
+
+  parts.push(
+    `Verified external paying customers: ${stripe30.verifiedExternalCustomers}. Verified net revenue: ${stripe30.verifiedExternalRevenue}.`
   );
+
+  if (health?.ok === false) {
+    parts.push('Production health reported a failure - see Production Health.');
+  }
+
+  if (nextFuture) {
+    parts.push(`The next scheduled evaluation is ${nextFuture.id} on ${nextFuture.evalDateLabel}.`);
+  }
+
+  return typographicNormalize(parts.join(' '));
+}
+
+export function buildSubject({ prefix, shipped, ship, classified, et }) {
+  const nActive = classified.filter((e) => e.collecting).length;
+  const nAwaiting = classified.filter((e) => e.decision === 'Awaiting approval').length;
+  const dueMissed = classified.some((e) => e.dueUnevaluated);
+  const shipLabel = shipped
+    ? ship?.kind === 'acquisition' || /acquisition|share|sample-report|seo/i.test(ship?.change || '')
+      ? 'Acquisition change deployed'
+      : 'Change deployed'
+    : 'No change deployed';
+  let s = `${prefix || 'YouTubeBooster Growth'} - ${shipLabel} · ${nActive} experiments active`;
+  if (nAwaiting) s += ` · ${nAwaiting} awaiting approval`;
+  if (dueMissed) s += ' · due eval missed';
+  s += ` · ${et.date}`;
+  return typographicNormalize(s);
 }
 
 /**
@@ -109,8 +303,6 @@ export function defaultDecisionText({ experiments, health, shipped, nextEval }) 
 export function buildCanonicalFromSnapshot(snapshot) {
   /** @type {Record<string, object>} */
   const windows = {};
-  /** @type {string[]} */
-  const warnings = [];
 
   for (const label of ['7d', '30d']) {
     const w = snapshot?.windows?.[label];
@@ -119,7 +311,6 @@ export function buildCanonicalFromSnapshot(snapshot) {
       w?.ga4ExplicitEvents ||
       (w?.ga4 ? sumEventsByName(w.ga4) : null);
 
-    // If snapshot marked topEventsOnly, treat as truncated
     const truncated = w?.eventsTruncated === true;
     const byEvent = truncated ? w.topEventsMap || null : explicitMap;
 
@@ -130,34 +321,6 @@ export function buildCanonicalFromSnapshot(snapshot) {
       landing: w?.landing || snapshot?.landing?.[label] || null
     });
 
-    // Completions > starts is often valid (cross-window + demo path) — warn, don't blank
-    const starts = metrics.audit_starts.value;
-    const dones = metrics.audit_completions.value;
-    if (typeof starts === 'number' && typeof dones === 'number' && dones > starts) {
-      warnings.push(
-        `${label}: audit_completed events (${dones}) exceed audit_started (${starts}). Likely causes: completions for audits started before the window, showcase/demo completions historically counted as audits, or remount double-fires before dedupe fix. These are raw event totals, not a same-window cohort conversion.`
-      );
-    }
-
-    const attr = w?.stripe?.attribution;
-    if (attr) {
-      if (!attr.reconciliationComplete) {
-        warnings.push(
-          `${label}: Stripe reconciliation incomplete — verified YouTubeBooster payments/customers/revenue use documented baseline (0). Do not treat account-wide Stripe (${attr.accountWideLivePaidSessions ?? '?'}) as this product's revenue.`
-        );
-      }
-      if ((attr.unattributedLivePayments || 0) > 0) {
-        warnings.push(
-          `${label}: ${attr.unattributedLivePayments} Unattributed Stripe payment(s) excluded from YouTubeBooster revenue/customers.`
-        );
-      }
-      if ((attr.otherAppLivePayments || 0) > 0) {
-        warnings.push(
-          `${label}: ${attr.otherAppLivePayments} live payment(s) attributed to another application and excluded.`
-        );
-      }
-    }
-
     windows[label] = {
       start: w?.start,
       end: w?.end,
@@ -166,13 +329,44 @@ export function buildCanonicalFromSnapshot(snapshot) {
     };
   }
 
+  const warnings = consolidateQualityWarnings({ windows, snapshot, crmUnavailable: true });
   const recon = reconcileCanonicalWindows({
     '7d': windows['7d']?.metrics,
     '30d': windows['30d']?.metrics
   });
-  warnings.push(...recon.warnings);
 
   return { windows, warnings, reconOk: recon.ok };
+}
+
+function nextActions({ classified, nextFuture, reportYmd }) {
+  const items = [];
+  const dueMissed = classified.filter((e) => e.dueUnevaluated);
+  const exp001 = classified.find((e) => e.id === 'EXP-001');
+
+  if (dueMissed.length) {
+    items.push(
+      `Evaluate ${dueMissed.map((e) => e.id).join(', ')} immediately (due ${formatMonthDayYear(reportYmd)}). Do not report another ship until that decision is recorded.`
+    );
+  } else if (exp001?.decision === 'Inconclusive') {
+    items.push(
+      'Keep EXP-001 treatment unchanged. Re-evaluate when a verified attributed live payment exists and Admin CRM entitlement can be measured.'
+    );
+  }
+
+  items.push(
+    'Keep one main Acquisition/SEO treatment (EXP-002). Treat EXP-003 /youtube-channel-analyzer as a nested distribution URL, not a second CRO test.'
+  );
+  items.push(
+    'Keep EXP-004 /share and /sample-report as a distribution asset. Outreach stays awaiting owner approval - not collecting.'
+  );
+  items.push('Do not start another experiment at current traffic (sessions and checkout starts are too low to split).');
+  items.push('Keep audit-start/completion measurement trustworthy (dedupe + explicit GA4 queries). Never divide raw completions by starts.');
+
+  if (nextFuture) {
+    items.push(`Next scheduled evaluation: ${nextFuture.id} on ${nextFuture.evalDateLabel}.`);
+  }
+
+  return items;
 }
 
 /**
@@ -184,6 +378,8 @@ export function buildCanonicalFromSnapshot(snapshot) {
  *   notes?: string,
  *   decision?: string,
  *   shipped?: boolean,
+ *   ship?: object,
+ *   evaluations?: Record<string, { decision?: string, reason?: string }>,
  *   generatedAt?: Date|string,
  *   subjectPrefix?: string
  * }} opts
@@ -191,48 +387,73 @@ export function buildCanonicalFromSnapshot(snapshot) {
 export function composeGrowthReport(opts) {
   const now = opts.generatedAt ? new Date(opts.generatedAt) : new Date();
   const et = formatEtDateTime(now);
+  const reportYmd = et.ymd;
   const experiments =
     opts.experiments || (opts.logMd ? parseActiveExperiments(opts.logMd) : []);
-  const nextEval = nextEvaluation(experiments);
+  const classified = experiments.map((ex) =>
+    classifyExperiment(ex, { reportYmd, evaluations: opts.evaluations || {} })
+  );
+  const nextFuture = nextFutureEvaluation(classified, reportYmd);
   const { windows, warnings } = buildCanonicalFromSnapshot(opts.snapshot || {});
 
-  const ga4Through = ga4DataThrough(opts.snapshot, windows);
+  const ga4Through = resolveGa4Through(opts.snapshot, windows, reportYmd);
+  const range7 = clipRange(windows['7d']?.start, windows['7d']?.end, ga4Through);
+  const range30 = clipRange(windows['30d']?.start, windows['30d']?.end, ga4Through);
+  const throughLabel = ga4Through ? formatMonthDayYear(ga4Through) : 'Unknown';
+
   const stripe30 = stripeBuckets(opts.snapshot?.windows?.['30d']?.stripe?.attribution);
+  const ship = { ...emptyShip(), ...(opts.ship || {}) };
+  const shipped = !!opts.shipped;
 
   const noteText = (opts.notes && opts.notes.trim()) || '';
   const decision =
     (opts.decision && opts.decision.trim()) ||
     defaultDecisionText({
-      experiments,
+      classified,
       health: opts.health,
-      shipped: !!opts.shipped,
-      nextEval
+      shipped,
+      ship,
+      stripe30,
+      nextFuture,
+      reportYmd
     });
 
   const m7 = windows['7d']?.metrics;
   const m30 = windows['30d']?.metrics;
-  const range7 = windows['7d'] ? `${windows['7d'].start} to ${windows['7d'].end}` : 'missing';
-  const range30 = windows['30d'] ? `${windows['30d'].start} to ${windows['30d'].end}` : 'missing';
-
-  const shipLabel = opts.shipped ? 'Change deployed' : 'No change deployed';
-  const subject = typographicNormalize(
-    `${opts.subjectPrefix || 'YouTubeBooster Growth'} - ${shipLabel} - ${experiments.length} experiments collecting data - ${et.date}`
-  );
+  const subject = buildSubject({
+    prefix: opts.subjectPrefix,
+    shipped,
+    ship,
+    classified,
+    et
+  });
+  const actions = nextActions({ classified, nextFuture, reportYmd });
 
   // ---- plain text ----
   const t = [];
   t.push('YouTubeBooster AI - Growth report');
   t.push('================================');
   t.push(`Generated: ${et.date} ${et.time} ${et.zone}`);
-  t.push(`GA4 data-through (assumed): ${ga4Through.through} | query window end: ${ga4Through.windowEnd || 'Unknown'}`);
-  t.push(ga4Through.note);
+  t.push(`GA4 data through: ${throughLabel}`);
+  t.push(`7d: ${range7.rangeLabel}`);
+  t.push(`30d: ${range30.rangeLabel}`);
+  t.push('Do not treat the report calendar day as included when GA4 processing is incomplete.');
   t.push(`Site: https://youtubeboosterai.com/`);
   t.push(`Admin: https://youtubeboosterai.com/admin/orders`);
-  t.push(`Analyzer: https://youtubeboosterai.com/youtube-channel-analyzer`);
   t.push('');
   t.push('1) DECISION');
   t.push('-----------');
   t.push(decision);
+  t.push('');
+  t.push('Change deployed:');
+  t.push(`  Change deployed: ${ship.change}`);
+  t.push(`  Experiment: ${ship.experiment}`);
+  t.push(`  Production URL: ${ship.url}`);
+  t.push(`  Primary metric: ${ship.primaryMetric}`);
+  t.push(`  Attribution: ${ship.attribution}`);
+  t.push(`  Commit: ${ship.commit}`);
+  t.push(`  Amplify deployment: ${ship.amplify}`);
+  t.push(`  Production verification: ${ship.verification}`);
   t.push('');
   if (warnings.length) {
     t.push('2) DATA QUALITY WARNING');
@@ -243,11 +464,12 @@ export function composeGrowthReport(opts) {
   const scoreN = warnings.length ? 3 : 2;
   t.push(`${scoreN}) SCOREBOARD (raw events unless noted)`);
   t.push('-'.repeat(40));
+  t.push(AUDIT_LANDING_DEFINITION);
   t.push(
-    `7d (${range7}): sessions=${cell(m7?.sessions)} | qualified_landing=${cell(m7?.qualified_landing_sessions)} | audit_starts=${cell(m7?.audit_starts)} | audit_completions=${cell(m7?.audit_completions)} | pricing=${cell(m7?.pricing_viewers)} | checkout_starts=${cell(m7?.checkout_starts)} | verified_live_payments=${cell(m7?.successful_live_payments)} | verified_unique_customers=${cell(m7?.unique_paying_customers)} | entitled=${cell(m7?.entitled_paid_users)} | verified_revenue=${cell(m7?.live_revenue)}`
+    `7d (${range7.rangeLabel}): sessions=${cell(m7?.sessions)} | audit_landing_sessions=${cell(m7?.qualified_landing_sessions)} | audit_starts=${cell(m7?.audit_starts)} | audit_completions=${cell(m7?.audit_completions)} | pricing=${cell(m7?.pricing_viewers)} | checkout_starts=${cell(m7?.checkout_starts)} | verified_live_payments=${cell(m7?.successful_live_payments)} | verified_unique_customers=${cell(m7?.unique_paying_customers)} | entitled=${cell(m7?.entitled_paid_users)} | verified_revenue=${cell(m7?.live_revenue)}`
   );
   t.push(
-    `30d (${range30}): sessions=${cell(m30?.sessions)} | qualified_landing=${cell(m30?.qualified_landing_sessions)} | audit_starts=${cell(m30?.audit_starts)} | audit_completions=${cell(m30?.audit_completions)} | pricing=${cell(m30?.pricing_viewers)} | checkout_starts=${cell(m30?.checkout_starts)} | verified_live_payments=${cell(m30?.successful_live_payments)} | verified_unique_customers=${cell(m30?.unique_paying_customers)} | entitled=${cell(m30?.entitled_paid_users)} | verified_revenue=${cell(m30?.live_revenue)}`
+    `30d (${range30.rangeLabel}): sessions=${cell(m30?.sessions)} | audit_landing_sessions=${cell(m30?.qualified_landing_sessions)} | audit_starts=${cell(m30?.audit_starts)} | audit_completions=${cell(m30?.audit_completions)} | pricing=${cell(m30?.pricing_viewers)} | checkout_starts=${cell(m30?.checkout_starts)} | verified_live_payments=${cell(m30?.successful_live_payments)} | verified_unique_customers=${cell(m30?.unique_paying_customers)} | entitled=${cell(m30?.entitled_paid_users)} | verified_revenue=${cell(m30?.live_revenue)}`
   );
   const a30 = opts.snapshot?.windows?.['30d']?.stripe?.attribution;
   if (a30) {
@@ -257,53 +479,40 @@ export function composeGrowthReport(opts) {
   }
   t.push(`Audit start-to-completion conversion: ${COHORT_CONVERSION_UNAVAILABLE}`);
   t.push('Do not divide raw audit_completed by audit_started. Other stage rates omitted for the same reason.');
-  t.push(`Experiment-attributed paid conversions: Unknown`);
-  t.push('A $9.99 live charge is not verified external revenue unless product attribution AND external-customer checks pass. Current verified external revenue baseline is $0.00.');
+  t.push('Experiment-attributed paid conversions: Unknown');
+  t.push(
+    'A $9.99 live charge is not verified external revenue unless product attribution AND external-customer checks pass. Current verified external revenue baseline is $0.00.'
+  );
   t.push('');
 
   const expN = scoreN + 1;
   t.push(`${expN}) EXPERIMENT RESULTS`);
   t.push('--------------------');
-  if (!experiments.length) t.push('(none marked active)');
+  if (!classified.length) t.push('(none marked active)');
   else {
-    t.push('Experiment | Stage | Status | Eligible traffic | Primary result | Sample | Eval | Decision');
-    for (const ex of experiments) {
-      let eligible = 'see log';
-      let primary = 'collecting';
-      if (ex.id === 'EXP-002') {
-        eligible = 'SEO form pages (excl analyzer URL)';
-        primary = 'page-isolated audit_starts: Unknown until path join verified';
-      } else if (ex.id === 'EXP-003') {
-        eligible = '/youtube-channel-analyzer';
-        primary = 'analyzer sessions/starts: Unknown until path join verified';
-      } else if (ex.id === 'EXP-001') {
-        eligible = 'post-checkout guests';
-        primary = 'Post-purchase activation: Unavailable - Admin CRM connection required';
-      } else if (ex.id === 'EXP-004') {
-        eligible = '/share and /sample-report (founder outreach enablement)';
-        primary = 'Outreach: awaiting owner approval of specific recipients and copy';
-      }
-      t.push(
-        `${ex.id || ex.idLine} | ${typographicNormalize(ex.funnelStage)} | ${typographicNormalize(ex.status)} | ${eligible} | ${primary} | low | ${ex.evalDateLabel || ex.evalDate} | continue collecting`
-      );
+    for (const ex of classified) {
+      const copy = experimentCopy(ex);
+      t.push(`${ex.id || ex.idLine}`);
+      t.push(`  Stage: ${copy.stage}`);
+      t.push(`  Status: ${typographicNormalize(ex.status)}`);
+      t.push(`  Decision: ${ex.decision}`);
+      t.push(`  Eligible traffic: ${copy.eligible}`);
+      t.push(`  Primary result: ${copy.primary}`);
+      t.push(`  Sample: ${copy.sample}`);
+      t.push(`  Evaluation date: ${ex.evalDateLabel || ex.evalDate || 'n/a'}`);
+      t.push('');
     }
-    t.push('');
     t.push(`Overlap: ${EXP_OVERLAP_POLICY.summary}`);
+    t.push(
+      'At current volume, EXP-002 is the main Acquisition/SEO treatment; EXP-003 is a nested URL; EXP-004 is awaiting approval and is not collecting outreach data.'
+    );
   }
   t.push('');
 
   const nextN = expN + 1;
   t.push(`${nextN}) NEXT ACTIONS`);
   t.push('---------------');
-  if (nextEval) {
-    t.push(`1. Next evaluation: ${nextEval.id} on ${nextEval.evalDateLabel}.`);
-  } else {
-    t.push('1. Next evaluation: none scheduled.');
-  }
-  t.push('2. Keep audit-start/completion measurement trustworthy (dedupe + explicit GA4 queries).');
-  t.push('3. Verify EXP-001 payment-to-entitlement tracking via Admin CRM when available.');
-  t.push('4. Continue collecting for EXP-002 and EXP-003; do not start another SEO/acquisition/checkout/post-purchase experiment while those stages are locked.');
-  t.push('5. Prioritize qualified acquisition after measurement is trustworthy.');
+  actions.forEach((a, i) => t.push(`${i + 1}. ${a}`));
   if (noteText) {
     t.push('');
     t.push('Agent notes:');
@@ -337,7 +546,10 @@ export function composeGrowthReport(opts) {
   t.push('--------------------');
   t.push(`UTC generatedAt: ${now.toISOString()}`);
   t.push(`ET calendar day: ${etDateParts(now).ymd}`);
-  t.push('Metric units: sessions=session_start events; audit_*=raw event counts; payments/customers from Stripe.');
+  t.push(`GA4 data through: ${ga4Through || 'Unknown'}`);
+  t.push(
+    'Metric units: sessions=session_start events; audit_landing_sessions=pagePath sessions on audit landings; audit_*=raw event counts; payments/customers from Stripe.'
+  );
   t.push('Top-events tables are display-only and must never feed the scoreboard.');
   if (windows['7d']?.topEvents?.length) {
     t.push('7d top events (display only):');
@@ -351,182 +563,176 @@ export function composeGrowthReport(opts) {
 
   const text = t.join('\n');
 
-  // ---- HTML ----
+  const shipRows = [
+    ['Change deployed', ship.change],
+    ['Experiment', ship.experiment],
+    ['Production URL', ship.url],
+    ['Primary metric', ship.primaryMetric],
+    ['Attribution', ship.attribution],
+    ['Commit', ship.commit],
+    ['Amplify deployment', ship.amplify],
+    ['Production verification', ship.verification]
+  ]
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;width:180px;font-weight:600;color:#334155;">${escapeHtml(k)}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(v)}</td></tr>`
+    )
+    .join('');
+
   const warnHtml = warnings.length
-    ? `<h2 style="font-size:15px;margin:18px 0 8px;color:#b45309;">Data Quality Warning</h2>
-       <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.45;color:#92400e;">
-         ${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}
+    ? `<h2 style="font-size:18px;margin:28px 0 10px;color:#9a3412;">Data quality</h2>
+       <ul style="margin:0;padding:12px 12px 12px 32px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;font-size:15px;line-height:1.55;color:#9a3412;">
+         ${warnings.map((w) => `<li style="margin:0 0 6px;">${escapeHtml(w)}</li>`).join('')}
        </ul>`
     : '';
 
   const scoreRow = (label, range, m) => `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(label)}<div style="font-size:11px;color:#6b7280;">${escapeHtml(range)}</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.sessions))}<div style="font-size:10px;color:#9ca3af;">sessions</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.qualified_landing_sessions))}<div style="font-size:10px;color:#9ca3af;">sessions</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.audit_starts))}<div style="font-size:10px;color:#9ca3af;">events</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.audit_completions))}<div style="font-size:10px;color:#9ca3af;">events</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.pricing_viewers))}<div style="font-size:10px;color:#9ca3af;">events</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.checkout_starts))}<div style="font-size:10px;color:#9ca3af;">events</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.successful_live_payments))}<div style="font-size:10px;color:#9ca3af;">payments</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.unique_paying_customers))}<div style="font-size:10px;color:#9ca3af;">customers</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.entitled_paid_users))}<div style="font-size:10px;color:#9ca3af;">users</div></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${escapeHtml(cell(m?.live_revenue))}<div style="font-size:10px;color:#9ca3af;">usd</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escapeHtml(label)}<div style="font-size:13px;font-weight:400;color:#64748b;">${escapeHtml(range)}</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.sessions))}<div style="font-size:12px;color:#64748b;">sessions</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.qualified_landing_sessions))}<div style="font-size:12px;color:#64748b;">sessions</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.audit_starts))}<div style="font-size:12px;color:#64748b;">events</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.audit_completions))}<div style="font-size:12px;color:#64748b;">events</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.pricing_viewers))}<div style="font-size:12px;color:#64748b;">events</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.checkout_starts))}<div style="font-size:12px;color:#64748b;">events</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.successful_live_payments))}<div style="font-size:12px;color:#64748b;">payments</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.unique_paying_customers))}<div style="font-size:12px;color:#64748b;">customers</div></td>
+      <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${escapeHtml(cell(m?.live_revenue))}<div style="font-size:12px;color:#64748b;">usd</div></td>
     </tr>`;
 
-  const expRows = experiments.length
-    ? experiments
+  const expCards = classified.length
+    ? classified
         .map((ex) => {
-          let eligible = 'see log';
-          let primary = 'collecting';
-          if (ex.id === 'EXP-001') {
-            eligible = 'post-checkout guests';
-            primary = 'Activation: Unavailable — Admin CRM required';
-          } else if (ex.id === 'EXP-002') {
-            eligible = 'SEO form pages';
-            primary = 'Isolated result: Unknown';
-          } else if (ex.id === 'EXP-003') {
-            eligible = '/youtube-channel-analyzer';
-            primary = 'Isolated result: Unknown';
-          } else if (ex.id === 'EXP-004') {
-            eligible = '/share + /sample-report';
-            primary = 'Outreach awaiting owner approval';
-          }
-          return `<tr>
-            <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(ex.id || ex.idLine)}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(ex.funnelStage)}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(ex.status)}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(eligible)}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(primary)}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #eee;">low</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #eee;">${escapeHtml(ex.evalDateLabel || ex.evalDate)}</td>
-            <td style="padding:6px 8px;border-bottom:1px solid #eee;">continue</td>
-          </tr>`;
+          const copy = experimentCopy(ex);
+          const decisionColor =
+            ex.decision === 'Due - not evaluated'
+              ? '#b91c1c'
+              : ex.decision === 'Awaiting approval'
+                ? '#b45309'
+                : ex.decision === 'Inconclusive'
+                  ? '#a16207'
+                  : '#166534';
+          return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 12px;border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;">
+            <tr><td style="padding:14px 16px;">
+              <div style="font-size:17px;font-weight:700;">${escapeHtml(ex.id || ex.idLine)}</div>
+              <div style="margin-top:6px;font-size:15px;"><b>Decision:</b> <span style="color:${decisionColor};font-weight:700;">${escapeHtml(ex.decision)}</span></div>
+              <div style="margin-top:8px;font-size:14px;line-height:1.5;color:#334155;">
+                <div><b>Stage:</b> ${escapeHtml(copy.stage)}</div>
+                <div><b>Status:</b> ${escapeHtml(ex.status)}</div>
+                <div><b>Eligible traffic:</b> ${escapeHtml(copy.eligible)}</div>
+                <div><b>Primary result:</b> ${escapeHtml(copy.primary)}</div>
+                <div><b>Sample:</b> ${escapeHtml(copy.sample)}</div>
+                <div><b>Evaluation date:</b> ${escapeHtml(ex.evalDateLabel || ex.evalDate || 'n/a')}</div>
+              </div>
+            </td></tr>
+          </table>`;
         })
         .join('')
-    : `<tr><td colspan="8" style="padding:6px 8px;">(none marked active)</td></tr>`;
+    : '<p style="font-size:15px;">(none marked active)</p>';
 
   const healthRows = (opts.health?.checks || [])
     .map(
       (c) =>
-        `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;">${escapeHtml(c.name)}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;">${c.ok ? 'OK' : 'FAIL'}</td></tr>`
+        `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(c.name)}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${c.ok ? 'OK' : 'FAIL'}</td></tr>`
     )
     .join('');
 
   const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Segoe UI,Arial,sans-serif;color:#111827;">
-  <div style="max-width:720px;margin:24px auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-    <div style="padding:18px 20px;background:#0f172a;color:#fff;">
-      <div style="font-size:18px;font-weight:700;">YouTubeBooster AI - Growth report</div>
-      <div style="font-size:13px;opacity:0.85;margin-top:4px;">${escapeHtml(et.date)} ${escapeHtml(et.time)} ${escapeHtml(et.zone)}</div>
-    </div>
-    <div style="padding:18px 20px;">
-      <p style="margin:0 0 12px;font-size:13px;">
-        <a href="https://youtubeboosterai.com/">Homepage</a> ·
-        <a href="https://youtubeboosterai.com/admin/orders">Admin orders</a> ·
-        <a href="https://youtubeboosterai.com/youtube-channel-analyzer">Channel analyzer</a>
-      </p>
+<body style="margin:0;padding:0;background:#e2e8f0;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;font-size:16px;line-height:1.5;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e2e8f0;">
+    <tr><td align="center" style="padding:24px 12px;">
+      <table role="presentation" width="840" cellpadding="0" cellspacing="0" style="width:840px;max-width:840px;background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;">
+        <tr><td style="padding:22px 28px;background:#0f172a;color:#fff;border-radius:12px 12px 0 0;">
+          <div style="font-size:22px;font-weight:700;line-height:1.3;">YouTubeBooster AI - Growth report</div>
+          <div style="font-size:14px;opacity:0.9;margin-top:6px;">${escapeHtml(et.date)} ${escapeHtml(et.time)} ${escapeHtml(et.zone)}</div>
+          <div style="margin-top:14px;font-size:14px;">
+            <a href="https://youtubeboosterai.com/" style="color:#93c5fd;text-decoration:none;margin-right:16px;">Open site</a>
+            <a href="https://youtubeboosterai.com/admin/orders" style="color:#93c5fd;text-decoration:none;">Admin orders</a>
+          </div>
+        </td></tr>
+        <tr><td style="padding:24px 28px 32px;">
+          <h2 style="font-size:18px;margin:0 0 10px;">Decision</h2>
+          <p style="margin:0;padding:16px 18px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:16px;line-height:1.55;">${escapeHtml(decision)}</p>
 
-      <h2 style="font-size:15px;margin:18px 0 8px;">Decision</h2>
-      <p style="margin:0;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;font-size:14px;line-height:1.5;">${escapeHtml(decision)}</p>
+          <h2 style="font-size:18px;margin:28px 0 10px;">Change deployed</h2>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:15px;">
+            ${shipRows}
+          </table>
 
-      ${warnHtml}
+          ${warnHtml}
 
-      <h2 style="font-size:15px;margin:18px 0 8px;">Scoreboard</h2>
-      <p style="margin:0 0 8px;font-size:12px;color:#6b7280;">Audit metrics are raw GA4 <b>events</b>. Stripe scoreboard shows <b>verified YouTubeBooster-attributed</b> payments/customers only (baseline 0 until reconciliation). Account-wide Stripe is never this product's revenue.</p>
-      <div style="overflow-x:auto;">
-      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:12px;min-width:640px;">
-        <thead>
-          <tr style="background:#f3f4f6;">
-            <th align="left" style="padding:6px 8px;">Window</th>
-            <th align="right" style="padding:6px 8px;">Sessions</th>
-            <th align="right" style="padding:6px 8px;">Qualified landings</th>
-            <th align="right" style="padding:6px 8px;">Audit starts</th>
-            <th align="right" style="padding:6px 8px;">Audit completions</th>
-            <th align="right" style="padding:6px 8px;">Pricing</th>
-            <th align="right" style="padding:6px 8px;">Checkout starts</th>
-            <th align="right" style="padding:6px 8px;">Live payments</th>
-            <th align="right" style="padding:6px 8px;">Unique customers</th>
-            <th align="right" style="padding:6px 8px;">Entitled</th>
-            <th align="right" style="padding:6px 8px;">Net revenue</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${scoreRow('7d', range7, m7)}
-          ${scoreRow('30d', range30, m30)}
-        </tbody>
+          <h2 style="font-size:18px;margin:28px 0 10px;">Scoreboard</h2>
+          <p style="margin:0 0 8px;font-size:15px;color:#334155;"><b>GA4 data through:</b> ${escapeHtml(throughLabel)}</p>
+          <p style="margin:0 0 8px;font-size:14px;color:#475569;">${escapeHtml(AUDIT_LANDING_DEFINITION)}</p>
+          <p style="margin:0 0 12px;font-size:14px;color:#475569;">Audit metrics are raw GA4 <b>events</b>. Stripe shows <b>verified YouTubeBooster-attributed</b> payments and customers only. Account-wide Stripe is never this product's revenue.</p>
+          <div style="overflow-x:auto;">
+          <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px;min-width:720px;">
+            <thead>
+              <tr style="background:#f1f5f9;">
+                <th align="left" style="padding:10px 12px;">Window</th>
+                <th align="right" style="padding:10px 12px;">Sessions</th>
+                <th align="right" style="padding:10px 12px;">Audit landing sessions</th>
+                <th align="right" style="padding:10px 12px;">Audit starts</th>
+                <th align="right" style="padding:10px 12px;">Audit completions</th>
+                <th align="right" style="padding:10px 12px;">Pricing</th>
+                <th align="right" style="padding:10px 12px;">Checkout starts</th>
+                <th align="right" style="padding:10px 12px;">Live payments</th>
+                <th align="right" style="padding:10px 12px;">Unique customers</th>
+                <th align="right" style="padding:10px 12px;">Net revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${scoreRow('7d', range7.rangeLabel, m7)}
+              ${scoreRow('30d', range30.rangeLabel, m30)}
+            </tbody>
+          </table>
+          </div>
+          <p style="margin:12px 0 0;font-size:14px;color:#334155;">
+            Audit start-to-completion conversion: <b>Unavailable</b> until same-cohort audit tracking exists.
+            Experiment-attributed paid: <b>Unknown</b>.
+            Paid to entitled within 24h: <b>Unavailable - Admin CRM required</b>.
+          </p>
+          <p style="margin:8px 0 0;font-size:14px;color:#334155;">
+            Stripe 30d - attributed live payments: <b>${escapeHtml(stripe30.attributedLivePayments)}</b>;
+            verified external customers: <b>${escapeHtml(stripe30.verifiedExternalCustomers)}</b>;
+            verified external revenue: <b>${escapeHtml(stripe30.verifiedExternalRevenue)}</b>;
+            owner/self or smoke: <b>${escapeHtml(stripe30.ownerSelfPayments)}</b>;
+            unverified/unattributed: <b>${escapeHtml(stripe30.unverifiedPayments)}</b>.
+          </p>
+
+          <h2 style="font-size:18px;margin:28px 0 10px;">Experiment results</h2>
+          ${expCards}
+          <p style="margin:8px 0 0;font-size:14px;color:#475569;">${escapeHtml(EXP_OVERLAP_POLICY.summary)} EXP-004 is awaiting owner approval and is not collecting outreach data.</p>
+
+          <h2 style="font-size:18px;margin:28px 0 10px;">Next actions</h2>
+          <ol style="margin:0;padding-left:22px;font-size:15px;line-height:1.55;">
+            ${actions.map((a) => `<li style="margin:0 0 8px;">${escapeHtml(a)}</li>`).join('')}
+          </ol>
+          ${noteText ? `<p style="margin:16px 0 0;font-size:14px;color:#475569;"><b>Agent notes:</b> ${escapeHtml(noteText)}</p>` : ''}
+
+          <h2 style="font-size:18px;margin:28px 0 10px;">Production health</h2>
+          <p style="margin:0 0 8px;font-size:15px;"><b>Overall:</b> ${opts.health?.ok ? 'OK' : 'FAILED / unavailable'}</p>
+          <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:15px;">
+            <tbody>${healthRows || '<tr><td style="padding:8px 12px;">(unavailable)</td></tr>'}</tbody>
+          </table>
+
+          <h2 style="font-size:18px;margin:28px 0 10px;">Data sources</h2>
+          <p style="margin:0;font-size:15px;line-height:1.5;">
+            GA4=${escapeHtml(opts.snapshot?.sources?.ga4 ?? '?')};
+            Stripe=${escapeHtml(opts.snapshot?.sources?.stripe ?? '?')};
+            Admin CRM entitlement=unavailable.
+            Verified YouTubeBooster Stripe only. Account-wide Stripe is diagnostic, not product revenue.
+          </p>
+
+          <p style="margin:24px 0 0;font-size:13px;color:#64748b;line-height:1.45;">
+            UTC: ${escapeHtml(now.toISOString())}. Scoreboard uses explicit event maps, never truncated top-event tables.
+          </p>
+        </td></tr>
       </table>
-      </div>
-      <p style="margin:8px 0 0;font-size:12px;color:#374151;">
-        Audit start-to-completion conversion: <b>Unavailable</b> until same-cohort audit tracking exists.
-        Do not divide raw <code>audit_completed</code> by <code>audit_started</code>.
-        Experiment-attributed paid: <b>Unknown</b>.
-        Paid→entitled within 24h: <b>Unavailable — Admin CRM connection required</b>.
-      </p>
-      <p style="margin:8px 0 0;font-size:12px;color:#374151;">
-        Stripe 30d — attributed live payments: <b>${escapeHtml(stripe30.attributedLivePayments)}</b>;
-        verified external customers: <b>${escapeHtml(stripe30.verifiedExternalCustomers)}</b>;
-        verified external revenue: <b>${escapeHtml(stripe30.verifiedExternalRevenue)}</b>;
-        owner/self or smoke: <b>${escapeHtml(stripe30.ownerSelfPayments)}</b>;
-        unverified/unattributed: <b>${escapeHtml(stripe30.unverifiedPayments)}</b>.
-        A $9.99 charge is not verified external revenue unless those checks pass.
-      </p>
-      <p style="margin:8px 0 0;font-size:12px;color:#6b7280;">${escapeHtml(ga4Through.note)}</p>
-
-      <h2 style="font-size:15px;margin:18px 0 8px;">Experiment Results</h2>
-      <div style="overflow-x:auto;">
-      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px;">
-        <thead>
-          <tr style="background:#f3f4f6;">
-            <th align="left" style="padding:6px 8px;">Experiment</th>
-            <th align="left" style="padding:6px 8px;">Stage</th>
-            <th align="left" style="padding:6px 8px;">Status</th>
-            <th align="left" style="padding:6px 8px;">Eligible traffic</th>
-            <th align="left" style="padding:6px 8px;">Primary result</th>
-            <th align="left" style="padding:6px 8px;">Sample</th>
-            <th align="left" style="padding:6px 8px;">Evaluation</th>
-            <th align="left" style="padding:6px 8px;">Decision</th>
-          </tr>
-        </thead>
-        <tbody>${expRows}</tbody>
-      </table>
-      </div>
-      <p style="margin:8px 0 0;font-size:12px;color:#6b7280;">${escapeHtml(EXP_OVERLAP_POLICY.summary)} Details: docs/growth/EXPERIMENT-LOG.md</p>
-
-      <h2 style="font-size:15px;margin:18px 0 8px;">Next Actions</h2>
-      <ol style="margin:0;padding-left:18px;font-size:13px;line-height:1.5;">
-        <li>${nextEval ? escapeHtml(`Next evaluation: ${nextEval.id} on ${nextEval.evalDateLabel}.`) : 'Next evaluation: none scheduled.'}</li>
-        <li>Keep audit-start/completion measurement trustworthy (dedupe + explicit GA4 queries).</li>
-        <li>Verify EXP-001 payment-to-entitlement tracking via Admin CRM when available.</li>
-        <li>Continue EXP-002 and EXP-003; do not open another overlapping SEO/acquisition/checkout/post-purchase experiment.</li>
-        <li>Prioritize qualified acquisition after measurement is trustworthy.</li>
-      </ol>
-      ${noteText ? `<p style="margin:12px 0 0;font-size:12px;color:#6b7280;"><b>Agent notes:</b> ${escapeHtml(noteText)}</p>` : ''}
-
-      <h2 style="font-size:15px;margin:18px 0 8px;">Production Health</h2>
-      <p style="margin:0 0 8px;font-size:13px;"><b>Overall:</b> ${opts.health?.ok ? 'OK' : 'FAILED / unavailable'}</p>
-      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:13px;">
-        <tbody>${healthRows || '<tr><td style="padding:6px 8px;">(unavailable)</td></tr>'}</tbody>
-      </table>
-
-      <h2 style="font-size:15px;margin:18px 0 8px;">Data Sources</h2>
-      <p style="margin:0;font-size:13px;line-height:1.45;">
-        GA4=${escapeHtml(opts.snapshot?.sources?.ga4 ?? '?')};
-        Stripe=${escapeHtml(opts.snapshot?.sources?.stripe ?? '?')};
-        Admin CRM entitlement metrics=unavailable.
-        Verified YouTubeBooster Stripe attribution only — see docs/growth/STRIPE-PRODUCT-ALLOWLIST.md.
-        Account-wide Stripe totals are diagnostic and must not be reported as product revenue.
-      </p>
-
-      <h2 style="font-size:15px;margin:18px 0 8px;">Technical Details</h2>
-      <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.45;">
-        UTC: ${escapeHtml(now.toISOString())}. Scoreboard uses explicitly aggregated event maps, never truncated top-event tables.
-        Audit start/completion are raw event counts until audit_attempt_id is queryable in GA4.
-      </p>
-    </div>
-  </div>
+    </td></tr>
+  </table>
 </body>
 </html>`;
 
@@ -536,10 +742,12 @@ export function composeGrowthReport(opts) {
     html,
     decision,
     warnings,
-    experiments,
-    nextEval,
+    experiments: classified,
+    nextEval: nextFuture,
     windows,
-    et
+    et,
+    ga4Through,
+    ship
   };
 }
 

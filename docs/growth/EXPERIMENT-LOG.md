@@ -4,7 +4,7 @@ Agents must append every experiment here. Do not delete history.
 
 ## Active
 
-- **EXP-001** — post-checkout guest activation (eval **Monday, August 17, 2026** / `2026-08-17` — **keep**, insufficient purchase volume; next eval when checkout starts occur) — funnel stage: post-purchase activation
+- **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive** (treatment unchanged; Admin CRM activation unavailable; 0 verified payments; next eval when a verified checkout/payment occurs or 2026-08-24) — funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO
 - **EXP-003** — `/youtube-channel-analyzer` commercial-intent landing (eval **Wednesday, August 19, 2026** / `2026-08-19`) — funnel stage: acquisition / SEO (nested surface using EXP-002 form UI)
 - **EXP-004** — mini-audit share page `/share` + sample paid report `/sample-report` for founder outreach (eval **2026-08-20**) — status **awaiting owner approval** — funnel stage: founder outreach / acquisition distribution (does not change EXP-002/003 treatments)
@@ -44,9 +44,9 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 | Field | Value |
 |-------|--------|
-| Status | EXP-001 **keep** (no treatment change); outreach package **shipped to main** (drafts only) |
-| EXP-001 evidence | 7d: 0 checkout_started events, 0 verified external paying customers, 0 verified net revenue; 30d: same. `activation_within_24h` **Unavailable** — no product-attributed live payments to measure. Account-wide Stripe shows 1 unattributed live payment (7d) / 2 (30d) — excluded from product metrics. |
-| EXP-001 decision | **Keep** — treatment remains active; re-evaluate when first verified checkout/payment occurs or 2026-08-24, whichever is sooner. |
+| Status | EXP-001 **Inconclusive** (treatment unchanged); outreach package **shipped to main** (drafts only) |
+| EXP-001 evidence | 7d: 0 checkout_started events, 0 verified external paying customers, 0 verified net revenue; 30d: same. `activation_within_24h` **Unavailable** — Admin CRM not queryable and no product-attributed live payments to measure. Account-wide Stripe shows 1 unattributed live payment (7d) / 2 (30d) — excluded from product metrics. |
+| EXP-001 decision | **Inconclusive** — primary metric unmeasurable; treatment remains active; re-evaluate when first verified checkout/payment occurs or 2026-08-24, whichever is sooner. |
 | Ship (acquisition) | Merge `docs/growth/outreach/2026-08-14-productivity-education-outreach.md` to `main` — 10 productivity/education prospects (~968–112k subs) with public API–verified observations, personalized DM drafts, follow-ups, UTM campaign `acq_2026_08_14`. Complements food list (`2026-08-14-review.md`). **Not sent** — owner must send from Admin CRM. |
 | Primary metric | `mini_audit_share_viewed` (utm `founder_outreach` / `acq_2026_08_14`) → `audit_started` → qualified `audit_completed` after owner sends. |
 | Guardrail | No auto-send; does not alter EXP-001/002/003/004 treatments. |
@@ -143,6 +143,8 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 | Field | Value |
 |-------|--------|
 | Status | active |
+| Evaluation decision | Inconclusive |
+| Evaluation reason | Admin CRM activation data remains unavailable |
 | Evidence | Guest Stripe checkout is primary path (`feat(checkout): guest Stripe`). `CheckoutSuccessPage` prioritizes **Sign in** over **Create account** for unauthenticated buyers. CRM docs track unmatched payments / email mismatch. GA4/Stripe API secrets unavailable in agent env — baseline unknown from APIs; code+CRM path evidence only. Recent CRO already polished landing; SEO CTA changes risk repeating 3a3e5d3 without purchase data. |
 | Hypothesis | Making **Create account** the primary post-pay CTA and emphasizing **same checkout email** will increase the share of live Stripe payments that attach to an entitled Cognito user within 24h. |
 | Exact change | `CheckoutSuccessPage` guest CTA flip + homepage `/?checkout=success` banner for guests (primary Create account, same-email copy). Files: `frontend/src/App.tsx`, `frontend/src/LandingPage.tsx`. |

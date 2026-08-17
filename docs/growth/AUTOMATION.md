@@ -71,6 +71,10 @@ DEFINITIONS (mandatory)
 - Qualified audit = successfully completed audit for a real, publicly accessible YouTube channel with ~1,000–100,000 subscribers and identifiable packaging, discoverability, or SEO improvement opportunities. Exclude test, owner, duplicate, failed, and incomplete audits.
 - Report separately: successful product-attributed live payments; unique verified external paying customers; owner/test payments; refunds; verified net revenue; unattributed account-wide payments (excluded); experiment-attributed purchases only with evidence. Payments ≠ customers.
 - Label every metric unit: event | session | user | audit record | checkout session | payment | customer. Never compute conversion rates across unrelated cohorts.
+- Subject counts only experiments that are collecting (status active, not awaiting approval). EXP-004 awaiting approval is not collecting outreach data.
+- Scoreboard windows must end on GA4 data-through (yesterday ET), never the incomplete report day.
+- Decision must name: what shipped (or none), owning experiment, EXP-001 result if due, verified customers, verified net revenue.
+- Change-deployed block is required: change, experiment, URL, primary metric, attribution, commit, Amplify, production verification.
 - Sample paid report must use fictional or sanitized data and must not imply a real creator was audited without inspection.
 
 ACQUISITION-FIRST: every run must complete one ship. These alone do not count: reviewing analytics, updating the log, waiting, sending Admin email, publishing another low-value SEO page, or an evaluation with no treatment change.
@@ -80,7 +84,7 @@ RUN SEQUENCE (strict)
    If a non-stale lock exists, or another YouTubeBooster agent is active / rate-limited: stop. Do not send a second report. Never bypass or delete an active lock. Stale = older than 120 minutes.
 2) Production health (scripts/growth/check-production-health.mjs). Fix critical production health first (e.g. missing homepage title/description/canonical). After verification, continue to one acquisition ship unless the repair itself restores a broken acquisition path (then that repair may be today’s ship).
 3) Collect GA4 7d/30d + product Stripe reconcile.
-4) Evaluate experiments whose eval date is today or has passed. Keep, iterate, or stop. Record the result. Evaluation alone is not the ship; if keep-without-change, continue.
+4) Evaluate experiments whose eval date is today or has passed. Record Keep, Iterate, Stop, Inconclusive, or Awaiting approval. Never use Continue. Never report a due experiment as a future evaluation. A decision alone is not the ship; if keep-without-change, continue.
 5) Select and ship ONE action from the first unfinished item below.
 6) Tests + frontend build if shipping; commit/push main only if valid.
 7) Monitor Amplify; verify production.

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { REQUIRED_FUNNEL_EVENTS, sumEventsByName } from './lib/canonical-metrics.mjs';
 import { summarizeStripeSessions } from './lib/stripe-metrics.mjs';
 import { loadStripeAllowlist } from './lib/stripe-allowlist.mjs';
-import { daysBeforeYmd, etDateParts } from './lib/time.mjs';
+import { daysBeforeYmd, etDateParts, ga4DataThroughYmd, inclusiveWindowStart } from './lib/time.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,16 +19,18 @@ const ssmLoad = loadSsmSecretsIntoEnv();
 const outDir = path.join(__dirname, '../../docs/growth/snapshots');
 const now = new Date();
 const stamp = etDateParts(now).ymd;
+const dataThrough = ga4DataThroughYmd(stamp);
 
 const windows = [
-  { label: '7d', start: daysBeforeYmd(stamp, 7), end: stamp },
-  { label: '30d', start: daysBeforeYmd(stamp, 30), end: stamp }
+  { label: '7d', start: inclusiveWindowStart(dataThrough, 7), end: dataThrough },
+  { label: '30d', start: inclusiveWindowStart(dataThrough, 30), end: dataThrough }
 ];
 
 const report = {
   generatedAt: now.toISOString(),
   timezone: 'America/New_York',
   reportDateEt: stamp,
+  ga4DataThrough: dataThrough,
   ssm: ssmLoad,
   sources: { ga4: 'missing', stripe: 'missing' },
   windows: {},

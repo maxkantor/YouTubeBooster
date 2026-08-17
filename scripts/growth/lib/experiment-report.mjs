@@ -50,6 +50,8 @@ export function parseActiveExperiments(md) {
     };
     const evalRaw = field('Evaluation date');
     const evalYmd = (evalRaw.match(/\d{4}-\d{2}-\d{2}/) || [])[0] || '';
+    const evaluationDecision = field('Evaluation decision');
+    const evaluationReason = field('Evaluation reason') || field('Evaluation evidence');
     active.push({
       idLine: `${m[1]} - ${m[2].trim()}`,
       id: (m[2].match(/EXP-\d+/) || [])[0] || '',
@@ -61,15 +63,83 @@ export function parseActiveExperiments(md) {
       primaryMetric: field('Primary metric'),
       hypothesis: field('Hypothesis'),
       commit: field('Commit').replace(/`/g, ''),
-      amplify: field('Amplify')
+      amplify: field('Amplify'),
+      evaluationDecision,
+      evaluationReason
     });
   }
   return active;
 }
 
+export const EXPERIMENT_DECISIONS = Object.freeze([
+  'Keep',
+  'Iterate',
+  'Stop',
+  'Inconclusive',
+  'Awaiting approval'
+]);
+
+/**
+ * @param {ReturnType<typeof parseActiveExperiments>[number]} ex
+ * @param {{ reportYmd?: string, evaluations?: Record<string, { decision?: string, reason?: string }> }} [opts]
+ */
+export function classifyExperiment(ex, opts = {}) {
+  const reportYmd = opts.reportYmd || '';
+  const override = opts.evaluations?.[ex.id] || {};
+  const awaiting = /awaiting owner approval/i.test(ex.status);
+  const due = Boolean(reportYmd && ex.evalDate && ex.evalDate <= reportYmd);
+  const nested = /nested/i.test(ex.funnelStage || '') || ex.id === 'EXP-003';
+  const recorded = override.decision || ex.evaluationDecision || '';
+  const allowed = new Set(EXPERIMENT_DECISIONS);
+
+  let decision = recorded;
+  if (decision && !allowed.has(decision)) {
+    decision = '';
+  }
+  if (!decision) {
+    if (awaiting) decision = 'Awaiting approval';
+    else if (due) decision = 'Due - not evaluated';
+    else decision = 'Keep';
+  }
+
+  const dueUnevaluated = due && !recorded && !awaiting;
+  const collecting =
+    !awaiting && decision !== 'Stop' && decision !== 'Awaiting approval';
+
+  return {
+    ...ex,
+    decision,
+    decisionReason: override.reason || ex.evaluationReason || '',
+    collecting,
+    dueUnevaluated,
+    nested,
+    independentCollecting: collecting && !nested && !awaiting
+  };
+}
+
+/**
+ * Next evaluation among experiments whose eval date is strictly after reportYmd.
+ * Due/overdue experiments are not "next" — they must be evaluated this run.
+ */
+export function nextFutureEvaluation(experiments, reportYmd) {
+  const dated = experiments
+    .filter((e) => e.evalDate && reportYmd && e.evalDate > reportYmd)
+    .filter((e) => !/awaiting owner approval/i.test(e.status))
+    .sort((a, b) => a.evalDate.localeCompare(b.evalDate));
+  return dated[0] || null;
+}
+
+/**
+ * Experiments whose eval date is today or earlier and still need a recorded decision.
+ */
+export function dueUnevaluatedExperiments(classified) {
+  return classified.filter((e) => e.dueUnevaluated);
+}
+
 /**
  * Next evaluation among active experiments (soonest eval date).
  * @param {ReturnType<typeof parseActiveExperiments>} experiments
+ * @deprecated Prefer nextFutureEvaluation(experiments, reportYmd) so due evals are not treated as future.
  */
 export function nextEvaluation(experiments) {
   const dated = experiments

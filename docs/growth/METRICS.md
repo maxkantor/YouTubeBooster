@@ -31,7 +31,7 @@ Report separately. One customer can make multiple payments — never label payme
 | Metric | Unit | Source |
 |--------|------|--------|
 | `sessions` | sessions (events) | GA4 `session_start` |
-| `qualified_landing_sessions` | sessions | GA4 `pagePath` sessions on EXP-002/003 eligible pages |
+| `qualified_landing_sessions` | sessions | **Audit landing sessions**: GA4 `pagePath` sessions on EXP-002 SEO/compare form pages plus EXP-003 `/youtube-channel-analyzer`. Not qualified audits. |
 | `audit_starts` | **events** (not unique audits yet) | GA4 `audit_started` only |
 | `audit_completions` | **events** | GA4 `audit_completed` only |
 | `successful_live_payments` | payments | **Verified YouTubeBooster-attributed** live Checkout Sessions only (never account-wide Stripe). Baseline **0** until `reconciliationComplete`. |

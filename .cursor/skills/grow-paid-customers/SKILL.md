@@ -40,7 +40,7 @@ Required but **not** additional ships: supporting tests, experiment-log updates,
 
 ### Experiment evaluation
 
-Evaluating an experiment is a **required decision**. A decision alone does **not** count as today’s ship unless it includes a reversible treatment change. After recording **keep-without-change**, continue to the next applicable acquisition task.
+Evaluating an experiment is a **required decision**. Allowed labels: **Keep**, **Iterate**, **Stop**, **Inconclusive**, **Awaiting approval**. Never use **Continue**. Never report a due experiment as a future evaluation. A decision alone does **not** count as today’s ship unless it includes a reversible treatment change. After recording **keep-without-change** or **Inconclusive** with treatment unchanged, continue to the next applicable acquisition task.
 
 ### Production health
 

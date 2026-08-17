@@ -95,3 +95,50 @@ export function daysBeforeYmd(endYmd, days) {
   dt.setUTCDate(dt.getUTCDate() - days);
   return dt.toISOString().slice(0, 10);
 }
+
+/**
+ * Start of an inclusive N-day window ending on endYmd.
+ * 7 complete days through Aug 16 → Aug 10–16.
+ */
+export function inclusiveWindowStart(endYmd, dayCount) {
+  return daysBeforeYmd(endYmd, dayCount - 1);
+}
+
+/** Last complete ET calendar day before reportDateYmd (GA4 data-through). */
+export function ga4DataThroughYmd(reportDateYmd) {
+  return daysBeforeYmd(reportDateYmd, 1);
+}
+
+/**
+ * @param {string} ymd
+ * @returns {string} e.g. "August 16, 2026"
+ */
+export function formatMonthDayYear(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const utcNoon = new Date(Date.UTC(y, m - 1, d, 17, 0, 0));
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: REPORT_TZ,
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(utcNoon);
+}
+
+/**
+ * Inclusive civil range in ET. Same month: "August 10-16, 2026".
+ * Cross month: "July 18-August 16, 2026".
+ */
+export function formatDateRangeEt(startYmd, endYmd) {
+  if (!startYmd || !endYmd) return 'missing';
+  const [sy, sm, sd] = startYmd.split('-').map(Number);
+  const [ey, em, ed] = endYmd.split('-').map(Number);
+  const monthName = (y, m, d) =>
+    new Intl.DateTimeFormat('en-US', { timeZone: REPORT_TZ, month: 'long' }).format(
+      new Date(Date.UTC(y, m - 1, d, 17, 0, 0))
+    );
+  const startMonth = monthName(sy, sm, sd);
+  const endMonth = monthName(ey, em, ed);
+  if (sy === ey && sm === em) return `${startMonth} ${sd}-${ed}, ${ey}`;
+  if (sy === ey) return `${startMonth} ${sd}-${endMonth} ${ed}, ${ey}`;
+  return `${startMonth} ${sd}, ${sy}-${endMonth} ${ed}, ${ey}`;
+}

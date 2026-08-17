@@ -16,6 +16,8 @@
  *   --dry-run         Print body to stdout; do not send
  *   --preview-dir path  Write text+html previews
  *   --shipped         Mark that a production change shipped this run
+ *   --ship-file path  JSON: change, experiment, url, primaryMetric, attribution, commit, amplify, verification, kind
+ *   --evaluations-file path  JSON map of EXP-ID → { decision, reason }
  *   --subject-prefix  Override subject prefix
  */
 import { spawnSync } from 'node:child_process';
@@ -41,6 +43,8 @@ function parseArgs(argv) {
     dryRun: false,
     previewDir: null,
     shipped: false,
+    shipFile: null,
+    evaluationsFile: null,
     subjectPrefix: 'YouTubeBooster Growth',
     skipCollect: false
   };
@@ -53,6 +57,8 @@ function parseArgs(argv) {
     else if (a === '--dry-run') out.dryRun = true;
     else if (a === '--preview-dir') out.previewDir = argv[++i];
     else if (a === '--shipped') out.shipped = true;
+    else if (a === '--ship-file') out.shipFile = argv[++i];
+    else if (a === '--evaluations-file') out.evaluationsFile = argv[++i];
     else if (a === '--subject-prefix') out.subjectPrefix = argv[++i] ?? out.subjectPrefix;
     else if (a === '--skip-collect') out.skipCollect = true;
   }
@@ -136,6 +142,10 @@ if (invokedAsCli) {
   const logMd = fs.existsSync(LOG_PATH) ? fs.readFileSync(LOG_PATH, 'utf8') : '';
   const experiments = parseActiveExperiments(logMd);
   const now = new Date();
+  const ship = args.shipFile ? JSON.parse(fs.readFileSync(args.shipFile, 'utf8')) : undefined;
+  const evaluations = args.evaluationsFile
+    ? JSON.parse(fs.readFileSync(args.evaluationsFile, 'utf8'))
+    : undefined;
 
   const report = composeGrowthReport({
     snapshot,
@@ -144,6 +154,8 @@ if (invokedAsCli) {
     notes,
     decision: args.decision,
     shipped: args.shipped,
+    ship,
+    evaluations,
     generatedAt: now,
     subjectPrefix: args.subjectPrefix
   });

@@ -238,7 +238,7 @@ test('awaiting owner approval experiments appear; conversion is unavailable; UTF
   assert.doesNotMatch(report.text, /275%/);
   assert.doesNotMatch(report.html, /275%/);
   assert.doesNotMatch(report.text, /complete\/start=/);
-  assert.match(report.text, /GA4 data-through/);
+  assert.match(report.text, /GA4 data through/);
   assert.match(report.text, /Café test/);
   assert.match(report.html, /Café test/);
   assert.match(report.text, /verified_external_customers=0/);

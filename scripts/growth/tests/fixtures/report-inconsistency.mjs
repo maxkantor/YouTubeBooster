@@ -5,6 +5,8 @@
  */
 export const truncatedTopEventsBugFixture = {
   generatedAt: '2026-08-13T16:00:00.000Z',
+  reportDateEt: '2026-08-13',
+  ga4DataThrough: '2026-08-13',
   sources: { ga4: 'configured', stripe: 'configured' },
   windows: {
     '7d': {
