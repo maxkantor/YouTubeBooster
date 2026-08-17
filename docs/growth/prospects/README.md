@@ -11,8 +11,15 @@ Contact status values:
 
 Approval status is `none` until Max approves a batch in Admin → Marketing → Creator Acquisition.
 
-Regenerate:
+Regenerate sanitized CSV (no emails):
 
 ```bash
 node scripts/growth/discover-creator-prospects.mjs
+```
+
+Populate production CRM (Admin session via SSM; never sends email):
+
+```bash
+node scripts/growth/sync-creator-prospects-to-crm.mjs
+node scripts/growth/sync-creator-prospects-to-crm.mjs --dry-run
 ```

@@ -68,7 +68,18 @@ Do not use Max’s personal mailbox in campaign headers.
 
 Do **not** run `daily-outreach-send.mjs` against the old roster.
 
-## Lists
+## Discovery → CRM sync
+
+Sanitized CSVs are git-safe summaries. **Production CRM** is populated separately:
+
+```bash
+# Probe public demo + upsert into Dynamo via Admin inspect (never sends email)
+node scripts/growth/sync-creator-prospects-to-crm.mjs
+```
+
+Requires SSM `/youtubebooster/admin/email` and `/youtubebooster/admin/password` for Admin session. Uses the existing public demo API (`POST /api/public/demo`) as the discovery provider — no guessed emails, no CAPTCHA bypass.
+
+Provider: **YouTubeBooster public demo** (YouTube Data API key in SSM when configured; otherwise quota placeholders are skipped).
 
 - `docs/growth/prospects/COOK-001-QUALIFIED.csv` — cooking, no emails
 - `docs/growth/prospects/OTHER-001-QUALIFIED.csv` — other niches, no emails
