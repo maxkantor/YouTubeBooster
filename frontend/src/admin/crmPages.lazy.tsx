@@ -14,3 +14,4 @@ export const ContactTicketPage = lazy(() => m().then((x) => ({ default: x.Contac
 export const ActivityLogsPage = lazy(() => m().then((x) => ({ default: x.ActivityLogsPage })));
 export const DiagnosticsPage = lazy(() => m().then((x) => ({ default: x.DiagnosticsPage })));
 export const SystemLogsPage = lazy(() => m().then((x) => ({ default: x.SystemLogsPage })));
+export const CreatorAcquisitionPage = lazy(() => import('./CreatorAcquisitionPage').then((x) => ({ default: x.CreatorAcquisitionPage })));

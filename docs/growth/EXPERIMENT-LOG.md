@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-17 — Creator Acquisition Center (EXP-004 distribution system; sending disabled)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 still **awaiting owner approval** for sends. Acquisition CRM shipped; **0 emails sent**. |
+| Hypothesis | A bounded, approval-gated cooking outreach system (inspect → verified public contact → personalized mini-review → max 5 weekday sends) will produce customer #1 without mass spam. |
+| Exact change | Admin → Marketing → Creator Acquisition; scoring/dedup/contact rules; SES MIME + unsubscribe; inbound ingest; sanitized COOK-001 / OTHER-001 CSVs (no emails). Marketing sending remains disabled. |
+| Funnel stage | Founder outreach / acquisition distribution (EXP-004). Does not alter EXP-001/002/003 treatments. |
+| Distribution | **Not executed.** Blocking Max approval + SES identity `hello@youtubeboosterai.com` + postal address + marketing-sending flag. |
+| Guardrail | Preview never sends. Scheduler sends 0 when gates fail. No guessed emails. No PII in SES tags. |
+| Primary metric | After first approved batch: unique attributed clicks → qualified audits → checkout → product-attributed customers. |
+| Verified customers | **0** |
+| Rollback | Revert this commit; do not enable SSM `outreach/marketing-sending-enabled`. |
+
 ### 2026-08-17 — Sample-report acquisition iterate + EXP-003 reclassify
 
 | Field | Value |

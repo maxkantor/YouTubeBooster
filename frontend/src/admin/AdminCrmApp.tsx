@@ -32,6 +32,7 @@ const NAV: { to: string; end?: boolean; label: string }[] = [
   { to: 'users', label: 'Users' },
   { to: 'orders', label: 'Orders' },
   { to: 'audits', label: 'Audits' },
+  { to: 'marketing/creator-acquisition', label: 'Creator acquisition' },
   { to: 'contacts', label: 'Support' },
   { to: 'activity', label: 'Activity logs' },
   { to: 'diagnostics', label: 'Diagnostics' }
@@ -79,7 +80,7 @@ function contactsStatusBadge(status: string) {
   return <Badge kind="neutral">{status}</Badge>;
 }
 
-function AdminShell({ title, children }: { title: string; children: React.ReactNode }) {
+export function AdminShell({ title, children }: { title: string; children: React.ReactNode }) {
   const { adminSession, onSignOut } = useAdminCrm();
   return (
     <div className="admin-crm-root">

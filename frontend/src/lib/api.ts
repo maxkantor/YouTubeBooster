@@ -15,6 +15,8 @@ import type {
   AdminSupportTicketRow,
   AdminUserDetailResponse,
   AdminUserRow,
+  AcqAdminProspect,
+  AcqSummary,
   CheckoutSession,
   DashboardOverview,
   DemoPreview,
@@ -471,6 +473,52 @@ export const adminApi = {
     return fetchJson(`/api/admin/crm/support/tickets/${encodeURIComponent(ticketId)}`, {
       method: 'PATCH',
       body: JSON.stringify(body)
+    });
+  },
+  async acqSummary(): Promise<AcqSummary> {
+    return fetchJson<AcqSummary>('/api/admin/crm/acquisition/summary');
+  },
+  async acqProspects(params: { view?: string; niche?: string; campaign?: string; language?: string } = {}): Promise<{
+    items: AcqAdminProspect[];
+    totalCount: number;
+  }> {
+    const q = new URLSearchParams();
+    if (params.view) q.set('view', params.view);
+    if (params.niche) q.set('niche', params.niche);
+    if (params.campaign) q.set('campaign', params.campaign);
+    if (params.language) q.set('language', params.language);
+    const qs = q.toString();
+    return fetchJson(`/api/admin/crm/acquisition/prospects${qs ? `?${qs}` : ''}`);
+  },
+  async acqInspect(body: {
+    channelInput: string;
+    primaryNiche: string;
+    campaign: string;
+    language?: string;
+    officialWebsite?: string;
+    publicBusinessEmail?: string;
+    contactSourceUrl?: string;
+    contactType: string;
+    notes?: string;
+  }): Promise<AcqAdminProspect> {
+    return fetchJson('/api/admin/crm/acquisition/inspect', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  },
+  async acqDraft(id: string): Promise<AcqAdminProspect> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/draft`, { method: 'POST' });
+  },
+  async acqPreview(prospectIds: string[], campaign = 'COOK-001'): Promise<{ preview: boolean; sent: boolean; items: unknown[] }> {
+    return fetchJson('/api/admin/crm/acquisition/preview', {
+      method: 'POST',
+      body: JSON.stringify({ campaign, prospectIds, maximumSends: 5, audienceQueryVersion: 'v1' })
+    });
+  },
+  async acqApprove(prospectIds: string[], campaign = 'COOK-001'): Promise<{ approvalId: string }> {
+    return fetchJson('/api/admin/crm/acquisition/approvals', {
+      method: 'POST',
+      body: JSON.stringify({ campaign, prospectIds, maximumSends: 5, audienceQueryVersion: 'v1' })
     });
   }
 };

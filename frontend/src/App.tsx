@@ -38,7 +38,8 @@ import {
   ContactTicketPage,
   ContactListPage,
   ActivityLogsPage,
-  DiagnosticsPage
+  DiagnosticsPage,
+  CreatorAcquisitionPage
 } from './admin/crmPages.lazy';
 
 /**
@@ -844,6 +845,7 @@ function AppInner() {
           <Route path="orders" element={<OrdersPage />} />
           <Route path="payments" element={<Navigate to="/admin/orders" replace />} />
           <Route path="audits" element={<AuditsPage />} />
+          <Route path="marketing/creator-acquisition" element={<CreatorAcquisitionPage />} />
         <Route path="contacts/:ticketId" element={<ContactTicketPage />} />
           <Route path="support/:ticketId" element={<ContactTicketPage />} />
         <Route path="contacts" element={<ContactListPage />} />

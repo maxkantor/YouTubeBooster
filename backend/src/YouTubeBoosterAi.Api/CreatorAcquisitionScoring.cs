@@ -1,0 +1,300 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
+
+namespace YouTubeBoosterAi.Api;
+
+public sealed record AcqScoreInput(
+    long SubscriberCount,
+    DateTimeOffset? RecentUploadAt,
+    DateTimeOffset NowUtc,
+    int WeakDescriptionCount,
+    int TitleIssueCount,
+    int SampleSize,
+    bool PublicBusinessEmailVerified,
+    bool IndependentCreator,
+    string Language,
+    bool OneTimeAuditFit,
+    bool PreviewPlaceholder,
+    bool CelebrityOrNetwork,
+    bool ChildrenFocused,
+    bool Inactive
+);
+
+public sealed record AcqScoreBreakdown(
+    int TargetRange,
+    int RecentActivity,
+    int PackagingOpportunity,
+    int PublicEmail,
+    int Independent,
+    int EnglishSuitability,
+    int OfferFit,
+    int Total
+);
+
+public static class CreatorAcquisitionScoring
+{
+    public static AcqScoreBreakdown Score(AcqScoreInput input)
+    {
+        if (input.PreviewPlaceholder || input.CelebrityOrNetwork || input.ChildrenFocused || input.Inactive)
+        {
+            return new AcqScoreBreakdown(0, 0, 0, 0, 0, 0, 0, 0);
+        }
+
+        var range = input.SubscriberCount is >= 1000 and <= 100000 ? 15
+            : input.SubscriberCount is > 100000 and <= 120000 ? 6
+            : 0;
+
+        var ageDays = input.RecentUploadAt is null
+            ? 999
+            : (input.NowUtc - input.RecentUploadAt.Value).TotalDays;
+        var activity = ageDays <= 14 ? 15 : ageDays <= 30 ? 12 : ageDays <= 60 ? 8 : 0;
+
+        var sample = Math.Max(1, input.SampleSize);
+        var packRatio = (input.WeakDescriptionCount + input.TitleIssueCount) / (double)(sample * 2);
+        var packaging = packRatio >= 0.5 ? 25 : packRatio >= 0.25 ? 18 : packRatio >= 0.1 ? 10 : 0;
+
+        var email = input.PublicBusinessEmailVerified ? 15 : 0;
+        var independent = input.IndependentCreator ? 10 : 0;
+        var english = input.Language.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? 10
+            : input.Language is "ru" or "uk" ? 4
+            : 2;
+        var offer = input.OneTimeAuditFit ? 10 : 0;
+        var total = range + activity + packaging + email + independent + english + offer;
+        return new AcqScoreBreakdown(range, activity, packaging, email, independent, english, offer, total);
+    }
+
+    public static bool IsSendEligible(AcqProspectRecord p, DateTimeOffset nowUtc, AcqCampaignState state)
+    {
+        return ExplainSendEligibility(p, nowUtc, state, alreadyContacted: p.LastContactedAt is not null).Ok;
+    }
+
+    public static AcqSendGateResult ExplainSendEligibility(
+        AcqProspectRecord p,
+        DateTimeOffset nowUtc,
+        AcqCampaignState state,
+        bool alreadyContacted)
+    {
+        if (!state.MarketingSendingEnabled)
+            return new AcqSendGateResult(false, "marketing_sending_disabled");
+        if (state.ComplaintPause)
+            return new AcqSendGateResult(false, "complaint_pause");
+        if (string.IsNullOrWhiteSpace(state.PostalAddress))
+            return new AcqSendGateResult(false, "postal_address_missing");
+        if (string.IsNullOrWhiteSpace(state.FromEmail) || !EmailAddressHelpers.LooksLikeEmail(state.FromEmail))
+            return new AcqSendGateResult(false, "from_email_unconfigured");
+        if (p.PreviewPlaceholder)
+            return new AcqSendGateResult(false, "preview_placeholder");
+        if (p.PriorityScore < 70)
+            return new AcqSendGateResult(false, "score_below_70");
+        if (!string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
+            return new AcqSendGateResult(false, "inspection_incomplete");
+        if (!IsVerifiedPublicEmail(p))
+            return new AcqSendGateResult(false, "public_email_unverified");
+        if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
+            return new AcqSendGateResult(false, "suppressed");
+        if (alreadyContacted || p.LastContactedAt is not null)
+            return new AcqSendGateResult(false, "already_contacted");
+        if (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60)
+            return new AcqSendGateResult(false, "stale_upload");
+        if (string.IsNullOrWhiteSpace(p.ApprovalId) || string.IsNullOrWhiteSpace(p.ContentHash))
+            return new AcqSendGateResult(false, "not_approved");
+        if (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body) || string.IsNullOrWhiteSpace(p.Observation))
+            return new AcqSendGateResult(false, "draft_incomplete");
+        var liveHash = ContentHash(p);
+        if (!string.Equals(liveHash, p.ContentHash, StringComparison.Ordinal))
+            return new AcqSendGateResult(false, "content_hash_changed");
+        if (p.SubscriberCount < 1000 || p.SubscriberCount > 100000)
+            return new AcqSendGateResult(false, "subscriber_out_of_band");
+        return new AcqSendGateResult(true, "ok");
+    }
+
+    public static bool IsVerifiedPublicEmail(AcqProspectRecord p) =>
+        EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
+        && !string.IsNullOrWhiteSpace(p.ContactSourceUrl)
+        && p.ContactVerifiedAt is not null
+        && p.ContactType is "business" or "partnership" or "media" or "general"
+        && !string.Equals(p.ContactType, "guessed", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(p.ContactType, "form_only", StringComparison.OrdinalIgnoreCase);
+
+    public static string ContentHash(AcqProspectRecord p)
+    {
+        var raw = string.Join('\n',
+            p.ProspectId,
+            p.PublicBusinessEmail?.Trim().ToLowerInvariant() ?? "",
+            p.Subject ?? "",
+            p.Observation ?? "",
+            p.SuggestedImprovement ?? "",
+            p.TrackedPath ?? "");
+        return AcqIds.Sha256Hex(raw);
+    }
+
+    public static string BuildObservation(int titleIssues, int weakDescriptions, int sampleSize, string? exampleTitle)
+    {
+        var n = Math.Max(1, sampleSize);
+        if (weakDescriptions >= Math.Max(3, n / 2))
+        {
+            return string.IsNullOrWhiteSpace(exampleTitle)
+                ? $"{weakDescriptions} of the last {n} public videos have descriptions too thin for search (no ingredient summary or chapters)."
+                : $"{weakDescriptions} of the last {n} public videos have thin descriptions for search. Example title in the sample: “{TrimTitle(exampleTitle)}”.";
+        }
+        if (titleIssues >= Math.Max(3, n / 4))
+        {
+            return $"{titleIssues} of the last {n} public titles are much shorter or longer than a typical clickable recipe title.";
+        }
+        return "Recent public uploads use inconsistent title structure, which makes the channel harder to scan in search and suggested videos.";
+    }
+
+    public static string BuildImprovement(int titleIssues, int weakDescriptions)
+    {
+        if (weakDescriptions >= titleIssues)
+            return "On the next recipe, add a short description block: dish + main ingredients + who it is for.";
+        return "On the next upload, put the dish and the payoff in the first words of the title.";
+    }
+
+    public static (int titles, int descriptions, double cadence) ParseDemoFindings(IReadOnlyList<string> findings)
+    {
+        var titles = 0;
+        var descriptions = 0;
+        var cadence = 0d;
+        foreach (var f in findings ?? [])
+        {
+            var titleMatch = Regex.Match(f, @"(\d+)\s+of the last\s+(\d+)\s+videos have titles", RegexOptions.IgnoreCase);
+            if (titleMatch.Success) titles = int.Parse(titleMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+            var descMatch = Regex.Match(f, @"(\d+)\s+recent videos have weak descriptions", RegexOptions.IgnoreCase);
+            if (descMatch.Success) descriptions = int.Parse(descMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+            var cadMatch = Regex.Match(f, @"every\s+([0-9.]+)\s+days", RegexOptions.IgnoreCase);
+            if (cadMatch.Success) cadence = double.Parse(cadMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+        }
+        return (titles, descriptions, cadence);
+    }
+
+    public static string OpportunityCategory(int titleIssues, int weakDescriptions, double cadenceDays)
+    {
+        if (weakDescriptions >= 8) return "weak_descriptions";
+        if (titleIssues >= 6) return "title_packaging";
+        if (cadenceDays > 21) return "upload_cadence";
+        return "discoverability";
+    }
+
+    public static string OpportunityFromProspect(AcqProspectRecord p)
+    {
+        var obs = p.Observation ?? "";
+        if (obs.Contains("description", StringComparison.OrdinalIgnoreCase)) return "weak_descriptions";
+        if (obs.Contains("title", StringComparison.OrdinalIgnoreCase)) return "title_packaging";
+        if ((p.CadenceDays ?? 0) > 21) return "upload_cadence";
+        return "discoverability";
+    }
+
+    public static string MapView(AcqProspectRecord p)
+    {
+        var s = (p.OutreachStatus ?? "").ToLowerInvariant();
+        if (s is "unsubscribed" or "bounced" or "complained" or "suppressed" or "rejected"
+            or "sent" or "delivered" or "replied" or "interested" or "scheduled" or "approved"
+            or "customer" or "audit_started" or "audit_completed" or "pricing_viewed" or "checkout_started")
+            return s;
+        if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
+            return p.SuppressionStatus.ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(p.ApprovalId)) return "approved";
+        if (!string.IsNullOrWhiteSpace(p.Subject) && !string.IsNullOrWhiteSpace(p.Body) && !string.IsNullOrWhiteSpace(p.Observation))
+            return "draft_ready";
+        if (IsVerifiedPublicEmail(p)) return "contact_verified";
+        if (string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase) && p.PriorityScore >= 50)
+            return "qualified";
+        if (string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
+            return "needs_inspection";
+        return "discovered";
+    }
+
+    public static AcqSanitizedProspectDto Sanitize(AcqProspectRecord p) => new(
+        p.ProspectId,
+        p.ChannelName,
+        p.Handle,
+        p.ChannelUrl,
+        p.ChannelId,
+        p.PrimaryNiche,
+        p.Language,
+        p.Country,
+        AcqIds.SubscriberRange(p.SubscriberCount),
+        p.VideoCount,
+        p.RecentUploadAt,
+        p.CadenceDays,
+        p.OfficialWebsite,
+        p.ContactSourceUrl,
+        p.ContactType,
+        ContactStatusLabel(p),
+        p.PriorityScore,
+        OpportunityFromProspect(p),
+        p.InspectionStatus,
+        p.OutreachStatus,
+        string.IsNullOrWhiteSpace(p.ApprovalId) ? "none" : "approved",
+        p.Campaign,
+        p.TrackedPath,
+        p.Observation,
+        p.SuggestedImprovement,
+        p.Subject,
+        p.EvidenceAt,
+        p.PreviewPlaceholder
+    );
+
+    public static string ContactStatusLabel(AcqProspectRecord p)
+    {
+        if (string.Equals(p.ContactType, "form_only", StringComparison.OrdinalIgnoreCase))
+            return "Contact route available — automated email unavailable";
+        if (IsVerifiedPublicEmail(p)) return "verified_public";
+        if (!string.IsNullOrWhiteSpace(p.ContactSourceUrl)) return "source_recorded_unverified";
+        return "none";
+    }
+
+    public static string CsvEscape(string? value)
+    {
+        var v = value ?? "";
+        if (v.Contains(',') || v.Contains('"') || v.Contains('\n'))
+            return "\"" + v.Replace("\"", "\"\"") + "\"";
+        return v;
+    }
+
+    public static string SanitizedCsvHeader() =>
+        "prospect_id,channel_name,handle,channel_url,niche,subscriber_range,recent_upload_date,fit_score,opportunity_category,contact_source_url,contact_status,approval_status";
+
+    public static string SanitizedCsvRow(AcqProspectRecord p)
+    {
+        var dto = Sanitize(p);
+        return string.Join(',',
+            CsvEscape(dto.ProspectId),
+            CsvEscape(dto.ChannelName),
+            CsvEscape(dto.Handle),
+            CsvEscape(dto.ChannelUrl),
+            CsvEscape(dto.PrimaryNiche),
+            CsvEscape(dto.SubscriberRange),
+            CsvEscape(dto.RecentUploadAt?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+            dto.PriorityScore.ToString(CultureInfo.InvariantCulture),
+            CsvEscape(dto.OpportunityCategory),
+            CsvEscape(dto.ContactSourceUrl),
+            CsvEscape(dto.ContactStatus),
+            CsvEscape(dto.ApprovalStatus));
+    }
+
+    public static bool CsvContainsEmail(string csv) =>
+        Regex.IsMatch(csv ?? "", @"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
+
+    private static string TrimTitle(string title)
+    {
+        var t = title.Trim();
+        return t.Length <= 80 ? t : t[..77] + "…";
+    }
+
+    public static DateTimeOffset EasternDate(DateTimeOffset utc)
+    {
+        TimeZoneInfo tz;
+        try { tz = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
+        catch { tz = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time"); }
+        return TimeZoneInfo.ConvertTime(utc, tz);
+    }
+
+    public static bool IsWeekdayEastern(DateTimeOffset utc)
+    {
+        var d = EasternDate(utc).DayOfWeek;
+        return d is >= DayOfWeek.Monday and <= DayOfWeek.Friday;
+    }
+}

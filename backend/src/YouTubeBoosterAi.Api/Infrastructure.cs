@@ -80,6 +80,12 @@ public static class Infrastructure
         services.AddScoped<IPromptBuilder, PromptBuilder>();
         services.AddScoped<IBedrockService, BedrockService>();
         services.AddScoped<IAiStudioService, AiStudioService>();
+        if (string.Equals(storageProvider, "DynamoDb", StringComparison.OrdinalIgnoreCase))
+            services.AddSingleton<ICreatorAcquisitionStore, DynamoCreatorAcquisitionStore>();
+        else
+            services.AddSingleton<ICreatorAcquisitionStore, InMemoryCreatorAcquisitionStore>();
+        services.AddScoped<CreatorAcquisitionService>();
+        services.AddScoped<ICreatorAcquisitionService>(sp => sp.GetRequiredService<CreatorAcquisitionService>());
 
         return services;
     }

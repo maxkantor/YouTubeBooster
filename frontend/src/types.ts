@@ -524,3 +524,55 @@ export type UserOnboardingState = {
   growthGoal: string | null;
   youTubeSettings: UserYouTubeSettings | null;
 };
+
+export type AcqSanitizedProspect = {
+  prospectId: string;
+  channelName: string;
+  handle: string;
+  channelUrl: string;
+  channelId: string | null;
+  primaryNiche: string;
+  language: string;
+  country: string | null;
+  subscriberRange: string;
+  videoCount: number;
+  recentUploadAt: string | null;
+  cadenceDays: number | null;
+  officialWebsite: string | null;
+  contactSourceUrl: string | null;
+  contactType: string;
+  contactStatus: string;
+  priorityScore: number;
+  opportunityCategory: string;
+  inspectionStatus: string;
+  outreachStatus: string;
+  approvalStatus: string;
+  campaign: string;
+  trackedPath: string;
+  observation: string | null;
+  suggestedImprovement: string | null;
+  subject: string | null;
+  evidenceAt: string | null;
+  previewPlaceholder: boolean;
+};
+
+export type AcqAdminProspect = {
+  public: AcqSanitizedProspect;
+  publicBusinessEmail: string | null;
+};
+
+export type AcqSummary = {
+  verifiedCustomers: number;
+  marketingSendingEnabled: boolean;
+  complaintPause: boolean;
+  fromEmailConfigured: boolean;
+  postalAddressConfigured: boolean;
+  discovered: number;
+  inspected: number;
+  contactVerified: number;
+  drafts: number;
+  approved: number;
+  sent: number;
+  views: Record<string, number>;
+};
+

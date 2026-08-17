@@ -125,3 +125,19 @@ Terraform often creates a **placeholder** `admin/password`; update it in the **A
 ## Lambda environment
 
 - `SSM__BASEPATH=/youtubebooster` (must match parameter prefix)
+
+## Creator acquisition (sending stays disabled until explicitly enabled)
+
+| Parameter | Type | Notes |
+|-----------|------|--------|
+| `{prefix}/ses/outreach-from-email` | SecureString | Preferred `hello@youtubeboosterai.com` after SES verify |
+| `{prefix}/ses/outreach-from-name` | String | `Max from YouTubeBooster` |
+| `{prefix}/ses/outreach-reply-to` | SecureString | `hello@youtubeboosterai.com` |
+| `{prefix}/business/postal-address` | String | Required in every marketing footer; block send if missing |
+| `{prefix}/outreach/marketing-sending-enabled` | String | Must be `true` **and** Max must have approved a batch. Default omit/false. |
+| `{prefix}/outreach/complaint-pause` | String | `true` pauses COOK-001 after a complaint |
+| `{prefix}/outreach/test-recipient` | String | Max’s test inbox only |
+| `{prefix}/outreach/cron-key` | SecureString | Weekday sender |
+| `{prefix}/outreach/inbound-key` | SecureString | SES inbound Lambda |
+| `{prefix}/outreach/ses-events-key` | SecureString | Bounce/complaint webhook |
+| `{prefix}/outreach/unsubscribe-hmac` | SecureString | Existing unsubscribe signer |

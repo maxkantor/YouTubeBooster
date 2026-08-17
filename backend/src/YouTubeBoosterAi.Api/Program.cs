@@ -1745,6 +1745,8 @@ app.MapGet("/api/route-plan", () =>
     return Results.Content(JsonSerializer.Serialize(routes), "application/json");
 });
 
+app.MapCreatorAcquisition();
+
 app.Run();
 
 static bool ExceptionLooksLikeTimeout(Exception ex, string flat)

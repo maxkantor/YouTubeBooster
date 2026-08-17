@@ -1,0 +1,196 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace YouTubeBoosterAi.Api;
+
+public static class CreatorAcquisitionCampaigns
+{
+    public const string Cook001 = "COOK-001";
+    public const string Other001 = "OTHER-001";
+    public const string DefaultSubject = "One idea for your YouTube channel";
+}
+
+public static class CreatorAcquisitionViews
+{
+    public static readonly string[] All =
+    [
+        "discovered", "needs_inspection", "qualified", "contact_verified", "draft_ready",
+        "approval_queue", "approved", "scheduled", "sent", "delivered", "replied", "interested",
+        "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer",
+        "unsubscribed", "bounced", "complained", "suppressed", "rejected"
+    ];
+}
+
+public sealed record AcqProspectRecord(
+    string ProspectId,
+    string ChannelName,
+    string Handle,
+    string ChannelUrl,
+    string? ChannelId,
+    string PrimaryNiche,
+    string Language,
+    string? Country,
+    long SubscriberCount,
+    int VideoCount,
+    DateTimeOffset? RecentUploadAt,
+    double? CadenceDays,
+    string? TypicalViewRange,
+    string? OfficialWebsite,
+    string? PublicBusinessEmail,
+    string? ContactSourceUrl,
+    DateTimeOffset? ContactVerifiedAt,
+    string ContactType,
+    int ChannelFitScore,
+    int AuditOpportunityScore,
+    int PurchaseLikelihoodScore,
+    int PriorityScore,
+    string InspectionStatus,
+    string OutreachStatus,
+    DateTimeOffset? LastContactedAt,
+    string SuppressionStatus,
+    string Campaign,
+    string TrackedPath,
+    string OpaqueToken,
+    string? InspectedUrl,
+    DateTimeOffset? EvidenceAt,
+    string? Observation,
+    string? SuggestedImprovement,
+    string? EvidenceSummary,
+    string? Subject,
+    string? Body,
+    string? ContentHash,
+    string? ApprovalId,
+    string? TicketId,
+    string? Notes,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    bool PreviewPlaceholder
+);
+
+public sealed record AcqApprovalRecord(
+    string ApprovalId,
+    string Approver,
+    DateTimeOffset ApprovedAt,
+    string Campaign,
+    IReadOnlyList<string> ProspectIds,
+    Dictionary<string, string> ContentHashes,
+    string AudienceQueryVersion,
+    int MaximumSends,
+    DateTimeOffset ExpiresAt
+);
+
+public sealed record AcqCampaignState(
+    bool MarketingSendingEnabled,
+    bool ComplaintPause,
+    int DailyLimit,
+    DateTimeOffset? LastSendDayEt,
+    int SentTodayEt,
+    string? PostalAddress,
+    string? FromEmail,
+    string? FromName,
+    string? ReplyTo,
+    string? ConfigSet
+);
+
+public sealed record AcqSendGateResult(bool Ok, string Reason);
+
+public sealed record AcqSanitizedProspectDto(
+    string ProspectId,
+    string ChannelName,
+    string Handle,
+    string ChannelUrl,
+    string? ChannelId,
+    string PrimaryNiche,
+    string Language,
+    string? Country,
+    string SubscriberRange,
+    int VideoCount,
+    DateTimeOffset? RecentUploadAt,
+    double? CadenceDays,
+    string? OfficialWebsite,
+    string? ContactSourceUrl,
+    string ContactType,
+    string ContactStatus,
+    int PriorityScore,
+    string OpportunityCategory,
+    string InspectionStatus,
+    string OutreachStatus,
+    string ApprovalStatus,
+    string Campaign,
+    string TrackedPath,
+    string? Observation,
+    string? SuggestedImprovement,
+    string? Subject,
+    DateTimeOffset? EvidenceAt,
+    bool PreviewPlaceholder
+);
+
+public sealed record AcqAdminProspectDto(
+    AcqSanitizedProspectDto Public,
+    string? PublicBusinessEmail
+);
+
+public sealed record AcqUpsertProspectRequest(
+    string ChannelInput,
+    string PrimaryNiche,
+    string Campaign,
+    string? Language,
+    string? OfficialWebsite,
+    string? PublicBusinessEmail,
+    string? ContactSourceUrl,
+    string ContactType,
+    string? Notes
+);
+
+public sealed record AcqApproveBatchRequest(
+    string Campaign,
+    IReadOnlyList<string> ProspectIds,
+    int MaximumSends,
+    string AudienceQueryVersion
+);
+
+public sealed record AcqWeekdaySendResult(
+    bool MarketingSendingEnabled,
+    int Attempted,
+    int Sent,
+    int Skipped,
+    IReadOnlyList<string> Reasons
+);
+
+public static class AcqJson
+{
+    public static readonly JsonSerializerOptions Options = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = false
+    };
+}
+
+public static class AcqIds
+{
+    public static string NewProspectId(string campaign, int n) =>
+        $"{campaign}-P{n:D3}";
+
+    public static string NewOpaqueToken() =>
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+
+    public static string NewApprovalId() =>
+        $"APR-{DateTimeOffset.UtcNow:yyyyMMdd}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant()}";
+
+    public static string Sha256Hex(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    public static string SubscriberRange(long subs)
+    {
+        if (subs < 1000) return "under_1k";
+        if (subs <= 100000) return "1k_100k";
+        if (subs <= 350000) return "100k_350k";
+        return "over_350k";
+    }
+}
