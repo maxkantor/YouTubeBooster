@@ -61,6 +61,9 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 | Reversal | Revert the sample-report + SeoAuditEntryForm extra-props commit. |
 | Distribution | **Not executed.** Deployed asset is not distribution. Blocking owner approval for named-recipient send. |
 | Exact change | `SampleReportPage` above-the-fold `SeoAuditEntryForm` submit “Audit my channel”; UTM params; `sample_report_view` / `sample_report_audit_click`; sanitized copy (not a named-creator customer audit). EXP-003 status → nested. |
+| Commit | `a6699ae` |
+| Amplify | job **247** SUCCEED (2026-08-17) |
+| Production verification | Live `/sample-report` hydrates title “Sample YouTube growth audit”; above-the-fold “Audit my channel”; sanitized cooking-niche sample (no named-creator customer claim). `/demo` showcase OK. Health OK. |
 
 ### 2026-08-17 — EXP-001 evaluation (keep) + productivity/education outreach package to main
 
@@ -175,7 +178,7 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 | Guardrail | Checkout start rate / Stripe payment success rate must not drop; no increase in support tickets about “paid but locked”. |
 | Baseline | unknown — `STRIPE_RESTRICTED_READ_KEY` / GA4 secrets not set in agent environment |
 | Target | Directional: higher create-account clicks from `/checkout/success` and fewer unmatched live payments over 7 days |
-| Evaluation date | 2026-08-17 |
+| Evaluation date | 2026-08-17 (evaluated Inconclusive; next eval on first verified payment or 2026-08-24) |
 | Stop rule | If payment success rate falls or unlock complaints rise within 3 days → rollback |
 | Rollback | `git revert` the EXP-001 commit on `main` and push; Amplify redeploys |
 | Funnel stage | post-purchase activation / signup attach |
