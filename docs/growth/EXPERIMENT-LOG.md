@@ -4,7 +4,7 @@ Agents must append every experiment here. Do not delete history.
 
 ## Active
 
-- **EXP-001** — post-checkout guest activation (eval **Monday, August 17, 2026** / `2026-08-17`) — funnel stage: post-purchase activation
+- **EXP-001** — post-checkout guest activation (eval **Monday, August 17, 2026** / `2026-08-17` — **keep**, insufficient purchase volume; next eval when checkout starts occur) — funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO
 - **EXP-003** — `/youtube-channel-analyzer` commercial-intent landing (eval **Wednesday, August 19, 2026** / `2026-08-19`) — funnel stage: acquisition / SEO (nested surface using EXP-002 form UI)
 - **EXP-004** — mini-audit share page `/share` + sample paid report `/sample-report` for founder outreach (eval **2026-08-20**) — status **awaiting owner approval** — funnel stage: founder outreach / acquisition distribution (does not change EXP-002/003 treatments)
@@ -39,6 +39,36 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-17 — EXP-001 evaluation (keep) + productivity/education outreach package to main
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-001 **keep** (no treatment change); outreach package **shipped to main** (drafts only) |
+| EXP-001 evidence | 7d: 0 checkout_started events, 0 verified external paying customers, 0 verified net revenue; 30d: same. `activation_within_24h` **Unavailable** — no product-attributed live payments to measure. Account-wide Stripe shows 1 unattributed live payment (7d) / 2 (30d) — excluded from product metrics. |
+| EXP-001 decision | **Keep** — treatment remains active; re-evaluate when first verified checkout/payment occurs or 2026-08-24, whichever is sooner. |
+| Ship (acquisition) | Merge `docs/growth/outreach/2026-08-14-productivity-education-outreach.md` to `main` — 10 productivity/education prospects (~968–112k subs) with public API–verified observations, personalized DM drafts, follow-ups, UTM campaign `acq_2026_08_14`. Complements food list (`2026-08-14-review.md`). **Not sent** — owner must send from Admin CRM. |
+| Primary metric | `mini_audit_share_viewed` (utm `founder_outreach` / `acq_2026_08_14`) → `audit_started` → qualified `audit_completed` after owner sends. |
+| Guardrail | No auto-send; does not alter EXP-001/002/003/004 treatments. |
+| Funnel stage | acquisition / distribution (founder outreach enablement) |
+| GA4 baseline (2026-08-17) | 7d: 18 sessions, 3 audit_started events, 6 audit_completed events, 2 pricing_viewed events, 0 checkout_started. 30d: 42 sessions, 4 audit_started, 11 audit_completed, 2 pricing_viewed, 0 checkout_started. Qualified audit volume still far below 100/30d target. |
+
+### 2026-08-14 — Productivity/education founder outreach package (acquisition-first)
+
+| Field | Value |
+|-------|--------|
+| Status | completed (outreach enablement — drafts only; merged to main 2026-08-17) |
+| Evidence | Verified external paying customers = 0; 11 audit completions / 30d but 0 checkout starts; 2026-08-13 food outreach still `draft` / not sent; need diversified qualified prospects in productivity/education. |
+| Hypothesis | A second outreach segment (productivity/education, ~1k–112k subs) with public-data observations + `/share` UTMs will give Max more qualified founder-send options than waiting on organic traffic alone. |
+| Exact change | `docs/growth/outreach/2026-08-14-productivity-education-outreach.md` — 10 prospects, personalized drafts + follow-ups, UTM campaign `acq_2026_08_14`. No product code changes. |
+| Primary metric | `mini_audit_share_viewed` (utm `founder_outreach` / `acq_2026_08_14`) → `audit_started` → qualified `audit_completed` after owner sends. |
+| Guardrail | No auto-send; does not alter EXP-001/002/003/004 treatments; Stripe remains product-attributed only. |
+| Baseline | 0 founder-sent productivity/education outreach; 0 verified external paying customers. |
+| Target | Directional: first owner-sent links from this package produce mini-audit views + audit starts within 7 days of send. |
+| Evaluation date | 2026-08-21 |
+| Stop rule | Spam complaints or `/share` failures → pause package; do not auto-send. |
+| Rollback | Delete or archive outreach markdown; no deploy rollback needed. |
+| Funnel stage | acquisition / distribution (founder outreach enablement; independent of active CRO experiments) |
 
 ### 2026-08-13 — EXP-004 Mini-audit share + sample report (acquisition-first)
 
