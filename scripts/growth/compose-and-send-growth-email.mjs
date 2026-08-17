@@ -17,7 +17,7 @@
  *   --preview-dir path  Write text+html previews
  *   --shipped         Mark that a production change shipped this run
  *   --ship-file path  JSON: change, experiment, url, primaryMetric, attribution, commit, amplify, verification, kind
- *   --evaluations-file path  JSON map of EXP-ID → { decision, reason }
+ *   --distribution-file path  JSON acquisition lead: executed, channel, audience, attributedVisits, activations, checkoutStarts, newCustomersThisRun, existingCustomers, customersObservedInWindow, experimentAttributedCustomers, verifiedRevenue, requiredOwnerApproval, blockingApproval, exactActionPrepared
  *   --subject-prefix  Override subject prefix
  */
 import { spawnSync } from 'node:child_process';
@@ -45,6 +45,7 @@ function parseArgs(argv) {
     shipped: false,
     shipFile: null,
     evaluationsFile: null,
+    distributionFile: null,
     subjectPrefix: 'YouTubeBooster Growth',
     skipCollect: false
   };
@@ -59,6 +60,7 @@ function parseArgs(argv) {
     else if (a === '--shipped') out.shipped = true;
     else if (a === '--ship-file') out.shipFile = argv[++i];
     else if (a === '--evaluations-file') out.evaluationsFile = argv[++i];
+    else if (a === '--distribution-file') out.distributionFile = argv[++i];
     else if (a === '--subject-prefix') out.subjectPrefix = argv[++i] ?? out.subjectPrefix;
     else if (a === '--skip-collect') out.skipCollect = true;
   }
@@ -146,6 +148,9 @@ if (invokedAsCli) {
   const evaluations = args.evaluationsFile
     ? JSON.parse(fs.readFileSync(args.evaluationsFile, 'utf8'))
     : undefined;
+  const distribution = args.distributionFile
+    ? JSON.parse(fs.readFileSync(args.distributionFile, 'utf8'))
+    : undefined;
 
   const report = composeGrowthReport({
     snapshot,
@@ -156,6 +161,7 @@ if (invokedAsCli) {
     shipped: args.shipped,
     ship,
     evaluations,
+    distribution,
     generatedAt: now,
     subjectPrefix: args.subjectPrefix
   });

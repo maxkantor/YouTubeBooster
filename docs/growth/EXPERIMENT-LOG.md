@@ -20,6 +20,8 @@ Use this table before starting a new experiment or CRO change. Two active experi
 | EXP-003 | Acquisition / SEO (`/youtube-channel-analyzer`) | Same broad stage as EXP-002; page-level eval OK; form-UI lift nested — see overlap |
 | EXP-004 | Founder outreach / acquisition distribution | Share + sample report for outreach; not send approval |
 
+Until the first newly attributed external customer: **at most one experiment per funnel stage**. Prefer qualified distribution over additional CRO. Do not launch another experiment merely because a run needs a ship.
+
 Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EXP-003 is in-flight. Do **not** start another post-purchase activation test while EXP-001 is in-flight. Outreach draft packages may proceed under EXP-004 rules without changing EXP-002/003 treatments.
 
 ## EXP-002 / EXP-003 overlap

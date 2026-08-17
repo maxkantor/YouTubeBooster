@@ -154,6 +154,55 @@ function emptyShip() {
   };
 }
 
+export const DEFAULT_BLOCKING_APPROVAL =
+  'Approve one exact distribution action: named recipient + exact subject/body (or owned social post, consented list, partner channel, or approved ad budget). Draft packages and deployed pages are not distribution.';
+
+export function emptyDistribution() {
+  return {
+    executed: false,
+    channel: 'none',
+    audience: 'none',
+    attributedVisits: 'Unknown',
+    activations: 'Unknown',
+    checkoutStarts: 'Unknown',
+    newCustomersThisRun: 0,
+    existingCustomers: 0,
+    customersObservedInWindow: 0,
+    experimentAttributedCustomers: 'Unknown',
+    verifiedRevenue: '$0.00',
+    requiredOwnerApproval: DEFAULT_BLOCKING_APPROVAL,
+    blockingApproval: true,
+    exactActionPrepared: 'none'
+  };
+}
+
+/**
+ * @param {object|undefined} input
+ * @param {{ stripe30?: object, m7?: object }} [ctx]
+ */
+export function normalizeDistribution(input, ctx = {}) {
+  const d = { ...emptyDistribution(), ...(input || {}) };
+  const stripe30 = ctx.stripe30 || {};
+  if (input?.verifiedRevenue == null) d.verifiedRevenue = stripe30.verifiedExternalRevenue ?? d.verifiedRevenue;
+  if (input?.existingCustomers == null) {
+    const n = Number(stripe30.verifiedExternalCustomers);
+    d.existingCustomers = Number.isFinite(n) ? n : 0;
+  }
+  if (input?.checkoutStarts == null && ctx.m7?.checkout_starts) {
+    d.checkoutStarts = `${cell(ctx.m7.checkout_starts)} checkout_started events (7d window; not this-run attribution unless UTM)`;
+  }
+  if (input?.activations == null && ctx.m7?.audit_starts) {
+    d.activations = `${cell(ctx.m7.audit_starts)} audit_started events (7d window; not this-run attribution unless UTM)`;
+  }
+  d.executed = d.executed === true;
+  d.newCustomersThisRun = Number(d.newCustomersThisRun) || 0;
+  d.customersObservedInWindow = Number(d.customersObservedInWindow) || 0;
+  if (d.executed) d.blockingApproval = false;
+  else if (input?.blockingApproval === false) d.blockingApproval = false;
+  else d.blockingApproval = true;
+  return d;
+}
+
 /**
  * Consolidate repeating 7d/30d quality notes into a short scan list.
  */
@@ -225,24 +274,39 @@ export function defaultDecisionText({
   ship,
   stripe30,
   nextFuture,
-  reportYmd
+  reportYmd,
+  dist
 }) {
   const nCollecting = classified.filter((e) => e.collecting).length;
   const nAwaiting = classified.filter((e) => e.decision === 'Awaiting approval').length;
   const dueMissed = classified.filter((e) => e.dueUnevaluated);
   const exp001 = classified.find((e) => e.id === 'EXP-001');
+  const d = dist || emptyDistribution();
 
   const parts = [];
 
-  if (shipped && ship?.change && ship.change !== 'none this run') {
-    const owner = ship.experiment && ship.experiment !== 'n/a' ? ` under ${ship.experiment}` : '';
-    parts.push(`${ship.change}${owner}.`);
-  } else if (shipped) {
+  if (d.blockingApproval) {
+    parts.push(`BLOCKING OWNER APPROVAL: ${d.requiredOwnerApproval}`);
+    if (d.exactActionPrepared && d.exactActionPrepared !== 'none') {
+      parts.push(`Exact action prepared: ${d.exactActionPrepared}`);
+    }
+  } else if (d.executed) {
     parts.push(
-      'A production change was marked shipped this run, but attribution details were not provided.'
+      `Distribution executed via ${d.channel} to ${d.audience}. New customers acquired by this run: ${d.newCustomersThisRun}.`
     );
   } else {
-    parts.push('No new production treatment shipped this run.');
+    parts.push(
+      'Distribution was not executed. This run is not successful unless a proven funnel blocker was removed.'
+    );
+  }
+
+  parts.push(
+    `New customers this run: ${d.newCustomersThisRun}. Existing customers: ${d.existingCustomers}. Observed in window: ${d.customersObservedInWindow}. Experiment-attributed: ${d.experimentAttributedCustomers}. Verified net revenue: ${d.verifiedRevenue}.`
+  );
+
+  if (shipped && ship?.change && ship.change !== 'none this run') {
+    const owner = ship.experiment && ship.experiment !== 'n/a' ? ` under ${ship.experiment}` : '';
+    parts.push(`Production change (not distribution by itself): ${ship.change}${owner}.`);
   }
 
   if (dueMissed.length) {
@@ -266,10 +330,6 @@ export function defaultDecisionText({
       : `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic.`;
   parts.push(outreachBit);
 
-  parts.push(
-    `Verified external paying customers: ${stripe30.verifiedExternalCustomers}. Verified net revenue: ${stripe30.verifiedExternalRevenue}.`
-  );
-
   if (health?.ok === false) {
     parts.push('Production health reported a failure - see Production Health.');
   }
@@ -281,20 +341,17 @@ export function defaultDecisionText({
   return typographicNormalize(parts.join(' '));
 }
 
-export function buildSubject({ prefix, shipped, ship, classified, et }) {
-  const nActive = classified.filter((e) => e.collecting).length;
-  const nAwaiting = classified.filter((e) => e.decision === 'Awaiting approval').length;
-  const dueMissed = classified.some((e) => e.dueUnevaluated);
-  const shipLabel = shipped
-    ? ship?.kind === 'acquisition' || /acquisition|share|sample-report|seo/i.test(ship?.change || '')
-      ? 'Acquisition change deployed'
-      : 'Change deployed'
-    : 'No change deployed';
-  let s = `${prefix || 'YouTubeBooster Growth'} - ${shipLabel} · ${nActive} experiments active`;
-  if (nAwaiting) s += ` · ${nAwaiting} awaiting approval`;
-  if (dueMissed) s += ' · due eval missed';
-  s += ` · ${et.date}`;
-  return typographicNormalize(s);
+export function buildSubject({ prefix, et, dist }) {
+  const d = dist || emptyDistribution();
+  const newCust = d.newCustomersThisRun ?? 0;
+  const lead = d.executed
+    ? 'Distribution executed'
+    : d.blockingApproval
+      ? 'Blocking approval required'
+      : 'Distribution not executed';
+  return typographicNormalize(
+    `${prefix || 'YouTubeBooster Growth'} - ${lead} · ${newCust} new customers this run · ${et.date}`
+  );
 }
 
 /**
@@ -338,29 +395,33 @@ export function buildCanonicalFromSnapshot(snapshot) {
   return { windows, warnings, reconOk: recon.ok };
 }
 
-function nextActions({ classified, nextFuture, reportYmd }) {
+function nextActions({ classified, nextFuture, reportYmd, dist }) {
   const items = [];
+  const d = dist || emptyDistribution();
   const dueMissed = classified.filter((e) => e.dueUnevaluated);
-  const exp001 = classified.find((e) => e.id === 'EXP-001');
+
+  if (d.blockingApproval) {
+    items.push(
+      `BLOCKING: ${d.requiredOwnerApproval}${d.exactActionPrepared && d.exactActionPrepared !== 'none' ? ` Exact action prepared: ${d.exactActionPrepared}` : ''}`
+    );
+  } else if (!d.executed) {
+    items.push('Execute one allowed external distribution action this run. Deployed pages are not distribution.');
+  }
 
   if (dueMissed.length) {
     items.push(
-      `Evaluate ${dueMissed.map((e) => e.id).join(', ')} immediately (due ${formatMonthDayYear(reportYmd)}). Do not report another ship until that decision is recorded.`
-    );
-  } else if (exp001?.decision === 'Inconclusive') {
-    items.push(
-      'Keep EXP-001 treatment unchanged. Re-evaluate when a verified attributed live payment exists and Admin CRM entitlement can be measured.'
+      `Evaluate ${dueMissed.map((e) => e.id).join(', ')} immediately (due ${formatMonthDayYear(reportYmd)}).`
     );
   }
 
   items.push(
-    'Keep one main Acquisition/SEO treatment (EXP-002). Treat EXP-003 /youtube-channel-analyzer as a nested distribution URL, not a second CRO test.'
+    'Until the first newly attributed external customer: at most one experiment per funnel stage; prefer qualified distribution over additional CRO.'
   );
   items.push(
-    'Keep EXP-004 /share and /sample-report as a distribution asset. Outreach stays awaiting owner approval - not collecting.'
+    'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 outreach stays awaiting named-recipient approval.'
   );
-  items.push('Do not start another experiment at current traffic (sessions and checkout starts are too low to split).');
-  items.push('Keep audit-start/completion measurement trustworthy (dedupe + explicit GA4 queries). Never divide raw completions by starts.');
+  items.push('Do not launch another experiment merely to have a ship.');
+  items.push('Report new customers acquired by this run separately from customers observed in the date window.');
 
   if (nextFuture) {
     items.push(`Next scheduled evaluation: ${nextFuture.id} on ${nextFuture.evalDateLabel}.`);
@@ -404,6 +465,10 @@ export function composeGrowthReport(opts) {
   const stripe30 = stripeBuckets(opts.snapshot?.windows?.['30d']?.stripe?.attribution);
   const ship = { ...emptyShip(), ...(opts.ship || {}) };
   const shipped = !!opts.shipped;
+  const dist = normalizeDistribution(opts.distribution, {
+    stripe30,
+    m7: windows['7d']?.metrics
+  });
 
   const noteText = (opts.notes && opts.notes.trim()) || '';
   const decision =
@@ -415,19 +480,18 @@ export function composeGrowthReport(opts) {
       ship,
       stripe30,
       nextFuture,
-      reportYmd
+      reportYmd,
+      dist
     });
 
   const m7 = windows['7d']?.metrics;
   const m30 = windows['30d']?.metrics;
   const subject = buildSubject({
     prefix: opts.subjectPrefix,
-    shipped,
-    ship,
-    classified,
-    et
+    et,
+    dist
   });
-  const actions = nextActions({ classified, nextFuture, reportYmd });
+  const actions = nextActions({ classified, nextFuture, reportYmd, dist });
 
   // ---- plain text ----
   const t = [];
@@ -440,6 +504,25 @@ export function composeGrowthReport(opts) {
   t.push('Do not treat the report calendar day as included when GA4 processing is incomplete.');
   t.push(`Site: https://youtubeboosterai.com/`);
   t.push(`Admin: https://youtubeboosterai.com/admin/orders`);
+  t.push('');
+  t.push('ACQUISITION LEAD (this run)');
+  t.push('---------------------------');
+  t.push(`Distribution executed: ${dist.executed ? 'yes' : 'no'}`);
+  t.push(`Audience/channel: ${dist.audience} / ${dist.channel}`);
+  t.push(`Attributed visits: ${dist.attributedVisits}`);
+  t.push(`Activations: ${dist.activations}`);
+  t.push(`Checkout starts: ${dist.checkoutStarts}`);
+  t.push(`Newly attributed external customers (this run): ${dist.newCustomersThisRun}`);
+  t.push(`Verified revenue: ${dist.verifiedRevenue}`);
+  t.push(
+    `Required owner approval: ${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
+  );
+  t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
+  t.push('Customer buckets:');
+  t.push(`  Existing customers: ${dist.existingCustomers}`);
+  t.push(`  Customers observed during the window: ${dist.customersObservedInWindow}`);
+  t.push(`  Customers causally attributed to a specific experiment: ${dist.experimentAttributedCustomers}`);
+  t.push(`  New customers acquired by the current run: ${dist.newCustomersThisRun}`);
   t.push('');
   t.push('1) DECISION');
   t.push('-----------');
@@ -579,6 +662,34 @@ export function composeGrowthReport(opts) {
     )
     .join('');
 
+  const distLeadBg = dist.blockingApproval ? '#fef3c7' : dist.executed ? '#ecfdf5' : '#f1f5f9';
+  const distLeadBorder = dist.blockingApproval ? '#f59e0b' : dist.executed ? '#6ee7b7' : '#cbd5e1';
+  const distRows = [
+    ['Distribution executed', dist.executed ? 'yes' : 'no'],
+    ['Audience/channel', `${dist.audience} / ${dist.channel}`],
+    ['Attributed visits', String(dist.attributedVisits)],
+    ['Activations', String(dist.activations)],
+    ['Checkout starts', String(dist.checkoutStarts)],
+    ['Newly attributed external customers (this run)', String(dist.newCustomersThisRun)],
+    ['Verified revenue', String(dist.verifiedRevenue)],
+    [
+      'Required owner approval',
+      `${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
+    ],
+    ['Existing customers', String(dist.existingCustomers)],
+    ['Customers observed during the window', String(dist.customersObservedInWindow)],
+    [
+      'Customers causally attributed to a specific experiment',
+      String(dist.experimentAttributedCustomers)
+    ],
+    ['New customers acquired by the current run', String(dist.newCustomersThisRun)]
+  ]
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;width:220px;font-weight:600;color:#334155;">${escapeHtml(k)}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(v)}</td></tr>`
+    )
+    .join('');
+
   const warnHtml = warnings.length
     ? `<h2 style="font-size:18px;margin:28px 0 10px;color:#9a3412;">Data quality</h2>
        <ul style="margin:0;padding:12px 12px 12px 32px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;font-size:15px;line-height:1.55;color:#9a3412;">
@@ -653,6 +764,11 @@ export function composeGrowthReport(opts) {
           </div>
         </td></tr>
         <tr><td style="padding:24px 28px 32px;">
+          <h2 style="font-size:18px;margin:0 0 10px;">Acquisition lead</h2>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid ${distLeadBorder};background:${distLeadBg};border-radius:8px;border-collapse:separate;font-size:15px;">
+            ${distRows}
+          </table>
+
           <h2 style="font-size:18px;margin:0 0 10px;">Decision</h2>
           <p style="margin:0;padding:16px 18px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:16px;line-height:1.55;">${escapeHtml(decision)}</p>
 
@@ -747,7 +863,8 @@ export function composeGrowthReport(opts) {
     windows,
     et,
     ga4Through,
-    ship
+    ship,
+    dist
   };
 }
 

@@ -5,7 +5,8 @@
 **Repo:** `maxkantor/YouTubeBooster` · branch `main`  
 **Notify:** Full Admin email after every run → `scripts/growth/compose-and-send-growth-email.mjs`  
 **North star:** 1000+ verified paying customers (scoreboard, not a promise)  
-**Mode:** **Acquisition-first** — every run must complete **one ship** (defined below)
+**Immediate milestone:** the next newly attributed external customer  
+**Mode:** **Customer acquisition override** — a run succeeds only with approved external distribution or removal of a proven funnel blocker
 
 ---
 
@@ -61,69 +62,74 @@ If a weekday 8:00 AM run fails for rate limit, treat it as a missed run: retry o
 ## Prompt (paste into Automations)
 
 ```
-Read and follow .cursor/skills/grow-paid-customers/SKILL.md and docs/growth/AUTOMATION.md definitions.
+Read and follow .cursor/skills/grow-paid-customers/SKILL.md and docs/growth/AUTOMATION.md.
 
-North star: 1000+ verified YouTubeBooster paying customers. Scoreboard, not a promise. Count product-attributed live Stripe only (docs/growth/STRIPE-PRODUCT-ALLOWLIST.md). Never attribute account-wide Stripe. Never invent audits, customers, or testimonials.
+CUSTOMER ACQUISITION OVERRIDE
+North star: 1000+ verified YouTubeBooster paying customers (scoreboard, not a promise). Immediate milestone: the next newly attributed external customer. Count product-attributed live Stripe only (docs/growth/STRIPE-PRODUCT-ALLOWLIST.md). Never attribute account-wide Stripe. Never invent audits, customers, or testimonials.
 
-DEFINITIONS (mandatory)
-- One ship = one reversible production treatment OR one approved, attributable acquisition action. Supporting tests, experiment-log updates, deployment verification, and the Admin report are required but do NOT count as additional ships.
-- Experiment evaluation is a required decision. A decision alone does NOT count as today’s ship unless it includes a reversible treatment change. After recording keep-without-change, continue to the next applicable acquisition task.
-- Qualified audit = successfully completed audit for a real, publicly accessible YouTube channel with ~1,000–100,000 subscribers and identifiable packaging, discoverability, or SEO improvement opportunities. Exclude test, owner, duplicate, failed, and incomplete audits.
-- Report separately: successful product-attributed live payments; unique verified external paying customers; owner/test payments; refunds; verified net revenue; unattributed account-wide payments (excluded); experiment-attributed purchases only with evidence. Payments ≠ customers.
-- Label every metric unit: event | session | user | audit record | checkout session | payment | customer. Never compute conversion rates across unrelated cohorts.
-- Subject counts only experiments that are collecting (status active, not awaiting approval). EXP-004 awaiting approval is not collecting outreach data.
-- Scoreboard windows must end on GA4 data-through (yesterday ET), never the incomplete report day.
-- Decision must name: what shipped (or none), owning experiment, EXP-001 result if due, verified customers, verified net revenue.
-- Change-deployed block is required: change, experiment, URL, primary metric, attribution, commit, Amplify, production verification.
-- Sample paid report must use fictional or sanitized data and must not imply a real creator was audited without inspection.
+Accurate reporting is required but is NOT the primary output. These do not count as customer acquisition: analytics review, report formatting, documentation, internal pages, experiment logs, health checks, draft packages, unexposed production changes. A production asset is not distributed merely because it is deployed.
 
-ACQUISITION-FIRST: every run must complete one ship. These alone do not count: reviewing analytics, updating the log, waiting, sending Admin email, publishing another low-value SEO page, or an evaluation with no treatment change.
+A run is successful ONLY when it either (a) executes an approved external distribution action, or (b) removes a proven blocker preventing qualified traffic from entering or completing the funnel.
 
-RUN SEQUENCE (strict)
-1) Acquire growth-run lock: node scripts/growth/growth-run-lock.mjs acquire
-   If a non-stale lock exists, or another YouTubeBooster agent is active / rate-limited: stop. Do not send a second report. Never bypass or delete an active lock. Stale = older than 120 minutes.
-2) Production health (scripts/growth/check-production-health.mjs). Fix critical production health first (e.g. missing homepage title/description/canonical). After verification, continue to one acquisition ship unless the repair itself restores a broken acquisition path (then that repair may be today’s ship).
-3) Collect GA4 7d/30d + product Stripe reconcile.
-4) Evaluate experiments whose eval date is today or has passed. Record Keep, Iterate, Stop, Inconclusive, or Awaiting approval. Never use Continue. Never report a due experiment as a future evaluation. A decision alone is not the ship; if keep-without-change, continue.
-5) Select and ship ONE action from the first unfinished item below.
-6) Tests + frontend build if shipping; commit/push main only if valid.
-7) Monitor Amplify; verify production.
-8) Update docs/growth/EXPERIMENT-LOG.md with final commit/deployment.
-9) Send ONE Admin email (success or failure — see below).
-10) Release lock: node scripts/growth/growth-run-lock.mjs release
+Every successful run must complete:
+1) One measurable acquisition improvement WHEN NECESSARY (do not launch another experiment merely because this run needs a ship).
+2) One real, policy-compliant distribution action that places the product in front of a relevant external audience.
 
-Today’s task order (first unfinished → one ship):
-1) Production health repair when critical metadata/path is broken (counts as ship only if it restores a broken acquisition path; otherwise fix then continue).
-2) Due experiment evals (required; not a ship unless a treatment change ships from the decision).
-3) If homepage metadata is healthy and qualified audit volume is still too low, ship ONE acquisition action that is not a new SEO article: mini-audit share, sample report, or referral/share UTMs. Target active creators ~1k–100k subs with visible packaging/SEO problems who prefer a one-time audit. Do not add another SEO landing while EXP-002 or EXP-003 is still in-flight on Acquisition/SEO.
-4) If qualified audits complete but checkout does not, ship ONE post-audit upgrade/pricing-clarity change. Do not start a second test on the same locked funnel stage (see EXPERIMENT-LOG locked-stage table).
-5) Founder outreach: drafts and packages by default.
+Allowed distribution (exactly one):
+- Explicitly approved recipient + exact approved message
+- Owned social account with explicit posting authorization
+- Approved email list with valid consent and unsubscribe
+- Legitimate partner/community channel that permits promotion
+- Paid advertising within an explicitly approved budget
+- Product-triggered referral/share initiated by a real user
 
-OUTREACH SEND GATES (all required — a script existing or being enabled is NEVER recipient approval)
-Do not run daily-outreach-send.mjs unless ALL of the following are true and recorded in this run’s notes:
-- Named recipient approval from Max
-- Exact approved address (public contact page only; never invent emails)
-- Exact approved subject and body version
-- Approval ID and timestamp
-- Unsubscribed / bounce / duplicate check passed
-- Explicit sending-enabled configuration for this run
-- Maximum two approved sends
-EXP-004 lists are not send approval. Cap 2, skip unsubscribed, rotate recipients. Otherwise drafts only.
+Never: spam; invent contacts; automate comments/DMs; evade community rules; claim visits/customers/revenue without verified attribution.
 
-Hard bans: mass spam; fake comments/engagement/testimonials; claiming a channel was reviewed without inspecting public content; auto DMs/forms/comments; payments/prices/auth/secrets; guaranteed-growth claims.
+Until the first newly attributed external customer:
+- At most one experiment per funnel stage
+- Prefer qualified distribution over additional CRO
+- Measure visits → activation → checkout → verified payment
+- Report new customers acquired by THIS RUN separately from customers merely observed in the date window
+- If distribution requires Max approval and none exists: prepare the EXACT action and make the Admin report LEAD with a blocking approval request. Do not substitute analytics or formatting.
 
-Preserve active experiment treatments. Independent acquisition may ship in parallel only when it does not invalidate a locked stage (see docs/growth/EXPERIMENT-LOG.md locked-stage table).
+CUSTOMER BUCKETS (always separate)
+Existing customers | customers observed during the window | customers causally attributed to a named experiment (evidence or Unknown) | new customers acquired by this run (default 0)
 
-DEPLOYMENT FAILURE
-If build, deployment, or production verification fails: do not report the action as shipped. Revert when safe, record the failure, send one failure Admin report, release the lock, and stop.
+DEFINITIONS
+- Qualified audit = successfully completed audit for a real public YouTube channel ~1k–100k subs with identifiable packaging/SEO opportunities. Exclude test, owner, duplicate, failed, incomplete.
+- Payments ≠ customers. Report payments, unique verified external customers, owner/test, refunds, verified net revenue, unattributed account-wide (excluded) separately.
+- Label every metric unit: event | session | user | audit record | checkout session | payment | customer. Never convert across unrelated cohorts.
+- Scoreboard windows end on GA4 data-through (yesterday ET).
+- Experiment decisions: Keep | Iterate | Stop | Inconclusive | Awaiting approval. Never Continue. Never report a due eval as future.
+- EXP-004 lists / a script existing is NEVER send approval.
 
-ALWAYS email Admin once at the end (after final state):
-node scripts/growth/compose-and-send-growth-email.mjs --notes "<one ship or failure; qualified audits; pricing views; checkout starts; payments vs customers vs revenue; outreach sent vs drafts; eval result; blockers>"
+OUTREACH SEND GATES (all required to send)
+Named recipient approval; exact approved address (public contact page only); exact subject and body version; approval ID + timestamp; unsubscribed/bounce/duplicate check; explicit sending-enabled for this run; max two approved sends.
 
-Admin notes must distinguish: prospect list vs drafts vs sent vs visits vs audits vs verified purchases. Label metric units.
+RUN SEQUENCE
+1) Acquire lock: node scripts/growth/growth-run-lock.mjs acquire
+   Non-stale lock or another YouTubeBooster agent active / rate-limited: stop. Never bypass or delete an active lock. Stale = 120 minutes.
+2) Production health. Fix a proven funnel blocker if one exists (that can be the successful run). Otherwise continue.
+3) Collect GA4 7d/30d + product Stripe.
+4) Evaluate due experiments. Record the decision. Then distribute — do not stop at the eval.
+5) Execute one allowed distribution action OR prepare the exact next send/post and set blocking owner approval.
+6) Acquisition improvement only if necessary and it does not add a second experiment on a locked stage (docs/growth/EXPERIMENT-LOG.md).
+7) Tests + frontend build if production code changes; commit/push main only if valid.
+8) Monitor Amplify when frontend shipped; verify production.
+9) Update experiment log with distribution evidence (or blocking approval).
+10) Send ONE Admin email AFTER final state. Lead with the acquisition scoreboard.
+11) Release lock: node scripts/growth/growth-run-lock.mjs release
 
-Cost: cheapest capable model. Skip npm ci unless shipping.
+ADMIN EMAIL MUST LEAD WITH
+Distribution executed | Audience/channel | Attributed visits | Activations | Checkout starts | Newly attributed external customers (this run) | Verified revenue | Required owner approval
 
+Pass --distribution-file JSON with those fields. If blocking approval, subject must say so. Do not lead with experiment counts or “change deployed.”
+
+node scripts/growth/compose-and-send-growth-email.mjs --notes "<distribution executed or blocking approval; exact action prepared; new customers this run; visits; activations; checkout starts; verified revenue>"
+
+DEPLOYMENT FAILURE: do not report distribution as executed. Revert when safe, record failure, one failure Admin report, release lock, stop.
+
+Cost: cheapest capable model. Skip npm ci unless production UI/API ships.
 Load secrets via scripts/growth/load-ssm-secrets-into-env.mjs. Never commit credentials. Stripe key rk_ only.
 ```
 

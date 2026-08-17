@@ -12,7 +12,16 @@ A **qualified audit** is a successfully completed audit for a real, publicly acc
 
 **Exclude** from qualified counts: test, owner, duplicate, failed, and incomplete audits. Raw GA4 `audit_completed` **events** are not the same as qualified audit **records**.
 
-## Payments vs customers vs revenue
+## Customer buckets (never collapse)
+
+| Bucket | Meaning |
+|--------|---------|
+| Existing customers | Verified external paying customers already on the books before this run |
+| Customers observed during the window | Verified external customers whose payment timestamp falls in the reporting window (may predate this run’s action) |
+| Experiment-attributed customers | Verified external customers with evidence tying the purchase to a named experiment (metadata/UTM); else **Unknown** |
+| New customers acquired by this run | Verified external customers **causally attributed to this run’s distribution or blocker-removal**. Default **0**. |
+
+Do not label window-observed customers as acquired by the current run.
 
 Report separately. One customer can make multiple payments — never label payments as customers.
 
