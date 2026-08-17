@@ -42,7 +42,7 @@ export function parseActiveExperiments(md) {
       const fm = block.match(/\|\s*Status\s*\|\s*([^|]+)\s*\|/i);
       return fm ? String(fm[1]).trim() : '';
     })();
-    const reportable = /^(active|awaiting owner approval)$/i.test(status);
+    const reportable = /^(active|awaiting owner approval|nested)$/i.test(status);
     if (!reportable) continue;
     const field = (name) => {
       const fm = block.match(new RegExp(`\\|\\s*${name}\\s*\\|\\s*([^|]+)\\s*\\|`, 'i'));
@@ -88,7 +88,8 @@ export function classifyExperiment(ex, opts = {}) {
   const override = opts.evaluations?.[ex.id] || {};
   const awaiting = /awaiting owner approval/i.test(ex.status);
   const due = Boolean(reportYmd && ex.evalDate && ex.evalDate <= reportYmd);
-  const nested = /nested/i.test(ex.funnelStage || '') || ex.id === 'EXP-003';
+  const nested =
+    /^nested$/i.test(ex.status) || /nested/i.test(ex.funnelStage || '') || ex.id === 'EXP-003';
   const recorded = override.decision || ex.evaluationDecision || '';
   const allowed = new Set(EXPERIMENT_DECISIONS);
 
@@ -102,9 +103,12 @@ export function classifyExperiment(ex, opts = {}) {
     else decision = 'Keep';
   }
 
-  const dueUnevaluated = due && !recorded && !awaiting;
+  const dueUnevaluated = due && !recorded && !awaiting && !/^nested$/i.test(ex.status);
   const collecting =
-    !awaiting && decision !== 'Stop' && decision !== 'Awaiting approval';
+    !awaiting &&
+    !/^nested$/i.test(ex.status) &&
+    decision !== 'Stop' &&
+    decision !== 'Awaiting approval';
 
   return {
     ...ex,

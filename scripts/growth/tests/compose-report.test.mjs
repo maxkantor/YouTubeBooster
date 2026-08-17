@@ -68,9 +68,9 @@ test('subject does not count awaiting-approval as collecting; due eval is not fu
   assert.match(report.subject, /0 new customers this run/);
   assert.doesNotMatch(report.subject, /4 experiments collecting/);
   assert.doesNotMatch(report.subject, /Change deployed/);
-  assert.match(report.text, /ACQUISITION LEAD/);
+  assert.match(report.text, /ACQUISITION ACTION/);
   assert.match(report.text, /Newly attributed external customers \(this run\): 0/);
-  assert.match(report.html, /Acquisition lead/);
+  assert.match(report.html, /Acquisition action/);
   assert.match(report.text, /GA4 data through: August 16, 2026/);
   assert.match(report.text, /7d: August 10-16, 2026/);
   assert.match(report.text, /30d: July 18-August 16, 2026/);
@@ -130,7 +130,7 @@ test('ship attribution block is required in executive section', () => {
     }
   });
   assert.match(report.subject, /Blocking approval required/);
-  assert.match(report.html, /Acquisition lead/);
+  assert.match(report.html, /Acquisition action/);
   assert.match(report.text, /Commit: abc123/);
   assert.match(report.decision, /Production change \(not distribution by itself\)/);
   assert.match(report.text, /New customers acquired by the current run: 0/);

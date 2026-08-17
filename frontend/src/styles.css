@@ -6831,7 +6831,22 @@ html.is-scrolling .landing-section {
 .sample-report-lead {
   color: #475569;
   font-size: 1.05rem;
-  margin: 0 0 1.5rem;
+  margin: 0 0 1.25rem;
+}
+.sample-report-start {
+  margin: 0 0 1.75rem;
+  padding: 1.25rem;
+  border: 2px solid #0f766e;
+  border-radius: 12px;
+  background: #f0fdfa;
+}
+.sample-report-cta-title {
+  margin: 0 0 0.4rem;
+  font-size: 1.2rem;
+}
+.sample-report-cta-lead {
+  margin: 0 0 0.85rem;
+  color: #334155;
 }
 .mini-audit-form label {
   display: block;

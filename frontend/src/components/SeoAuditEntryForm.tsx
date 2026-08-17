@@ -9,13 +9,21 @@ import { validateYouTubeChannelInput } from '../lib/youtubeChannelInput';
 type SeoAuditEntryFormProps = {
   /** GA4 source label for this placement. */
   source?: string;
+  submitLabel?: string;
+  extraSearchParams?: Record<string, string>;
+  onAuditClick?: () => void;
 };
 
 /**
  * Channel entry for SEO / growth pages.
  * Submits to /demo?channel=… (same path as homepage) instead of /#audit.
  */
-export function SeoAuditEntryForm({ source = 'seo_page' }: SeoAuditEntryFormProps) {
+export function SeoAuditEntryForm({
+  source = 'seo_page',
+  submitLabel = 'Analyze my channel',
+  extraSearchParams,
+  onAuditClick
+}: SeoAuditEntryFormProps) {
   const navigate = useNavigate();
   const inputId = useId();
   const errorId = useId();
@@ -38,6 +46,7 @@ export function SeoAuditEntryForm({ source = 'seo_page' }: SeoAuditEntryFormProp
     }
     const normalized = validated.normalized;
     setSubmitting(true);
+    onAuditClick?.();
     analytics.auditUrlEntered(normalized);
     const { attemptId } =
       typeof window !== 'undefined'
@@ -45,7 +54,13 @@ export function SeoAuditEntryForm({ source = 'seo_page' }: SeoAuditEntryFormProp
         : { attemptId: undefined as string | undefined };
     analytics.auditStarted(source, attemptId ? { auditAttemptId: attemptId } : undefined);
     setStoredDemoChannel(normalized);
-    navigate(`/demo?channel=${encodeURIComponent(normalized)}`, {
+    const params = new URLSearchParams({ channel: normalized });
+    if (extraSearchParams) {
+      for (const [k, v] of Object.entries(extraSearchParams)) {
+        if (v) params.set(k, v);
+      }
+    }
+    navigate(`/demo?${params.toString()}`, {
       state: { channelInput: normalized, auditSource: source, auditAttemptId: attemptId }
     });
     setSubmitting(false);
@@ -79,7 +94,7 @@ export function SeoAuditEntryForm({ source = 'seo_page' }: SeoAuditEntryFormProp
           disabled={submitting}
         />
         <button type="submit" className="btn btn-primary seo-audit-entry-submit" disabled={submitting}>
-          {submitting ? 'Starting…' : 'Analyze my channel'}
+          {submitting ? 'Starting…' : submitLabel}
         </button>
       </div>
       {error ? (

@@ -505,38 +505,9 @@ export function composeGrowthReport(opts) {
   t.push(`Site: https://youtubeboosterai.com/`);
   t.push(`Admin: https://youtubeboosterai.com/admin/orders`);
   t.push('');
-  t.push('ACQUISITION LEAD (this run)');
-  t.push('---------------------------');
-  t.push(`Distribution executed: ${dist.executed ? 'yes' : 'no'}`);
-  t.push(`Audience/channel: ${dist.audience} / ${dist.channel}`);
-  t.push(`Attributed visits: ${dist.attributedVisits}`);
-  t.push(`Activations: ${dist.activations}`);
-  t.push(`Checkout starts: ${dist.checkoutStarts}`);
-  t.push(`Newly attributed external customers (this run): ${dist.newCustomersThisRun}`);
-  t.push(`Verified revenue: ${dist.verifiedRevenue}`);
-  t.push(
-    `Required owner approval: ${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
-  );
-  t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
-  t.push('Customer buckets:');
-  t.push(`  Existing customers: ${dist.existingCustomers}`);
-  t.push(`  Customers observed during the window: ${dist.customersObservedInWindow}`);
-  t.push(`  Customers causally attributed to a specific experiment: ${dist.experimentAttributedCustomers}`);
-  t.push(`  New customers acquired by the current run: ${dist.newCustomersThisRun}`);
-  t.push('');
   t.push('1) DECISION');
   t.push('-----------');
   t.push(decision);
-  t.push('');
-  t.push('Change deployed:');
-  t.push(`  Change deployed: ${ship.change}`);
-  t.push(`  Experiment: ${ship.experiment}`);
-  t.push(`  Production URL: ${ship.url}`);
-  t.push(`  Primary metric: ${ship.primaryMetric}`);
-  t.push(`  Attribution: ${ship.attribution}`);
-  t.push(`  Commit: ${ship.commit}`);
-  t.push(`  Amplify deployment: ${ship.amplify}`);
-  t.push(`  Production verification: ${ship.verification}`);
   t.push('');
   if (warnings.length) {
     t.push('2) DATA QUALITY WARNING');
@@ -592,7 +563,36 @@ export function composeGrowthReport(opts) {
   }
   t.push('');
 
-  const nextN = expN + 1;
+  const acqN = expN + 1;
+  t.push(`${acqN}) ACQUISITION ACTION`);
+  t.push('--------------------');
+  t.push(`Distribution executed: ${dist.executed ? 'yes' : 'no'}`);
+  t.push(`Audience/channel: ${dist.audience} / ${dist.channel}`);
+  t.push(`Attributed visits: ${dist.attributedVisits}`);
+  t.push(`Activations: ${dist.activations}`);
+  t.push(`Checkout starts: ${dist.checkoutStarts}`);
+  t.push(`Newly attributed external customers (this run): ${dist.newCustomersThisRun}`);
+  t.push(`Verified revenue: ${dist.verifiedRevenue}`);
+  t.push(
+    `Required owner approval: ${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
+  );
+  t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
+  t.push(`Change deployed: ${ship.change}`);
+  t.push(`Experiment: ${ship.experiment}`);
+  t.push(`Production URL: ${ship.url}`);
+  t.push(`Primary metric: ${ship.primaryMetric}`);
+  t.push(`Attribution: ${ship.attribution}`);
+  t.push(`Commit: ${ship.commit}`);
+  t.push(`Amplify deployment: ${ship.amplify}`);
+  t.push(`Production verification: ${ship.verification}`);
+  t.push('Customer buckets:');
+  t.push(`  Existing customers: ${dist.existingCustomers}`);
+  t.push(`  Customers observed during the window: ${dist.customersObservedInWindow}`);
+  t.push(`  Customers causally attributed to a specific experiment: ${dist.experimentAttributedCustomers}`);
+  t.push(`  New customers acquired by the current run: ${dist.newCustomersThisRun}`);
+  t.push('');
+
+  const nextN = acqN + 1;
   t.push(`${nextN}) NEXT ACTIONS`);
   t.push('---------------');
   actions.forEach((a, i) => t.push(`${i + 1}. ${a}`));
@@ -764,18 +764,8 @@ export function composeGrowthReport(opts) {
           </div>
         </td></tr>
         <tr><td style="padding:24px 28px 32px;">
-          <h2 style="font-size:18px;margin:0 0 10px;">Acquisition lead</h2>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid ${distLeadBorder};background:${distLeadBg};border-radius:8px;border-collapse:separate;font-size:15px;">
-            ${distRows}
-          </table>
-
           <h2 style="font-size:18px;margin:0 0 10px;">Decision</h2>
           <p style="margin:0;padding:16px 18px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:16px;line-height:1.55;">${escapeHtml(decision)}</p>
-
-          <h2 style="font-size:18px;margin:28px 0 10px;">Change deployed</h2>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:15px;">
-            ${shipRows}
-          </table>
 
           ${warnHtml}
 
@@ -821,6 +811,14 @@ export function composeGrowthReport(opts) {
           <h2 style="font-size:18px;margin:28px 0 10px;">Experiment results</h2>
           ${expCards}
           <p style="margin:8px 0 0;font-size:14px;color:#475569;">${escapeHtml(EXP_OVERLAP_POLICY.summary)} EXP-004 is awaiting owner approval and is not collecting outreach data.</p>
+
+          <h2 style="font-size:18px;margin:28px 0 10px;">Acquisition action</h2>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid ${distLeadBorder};background:${distLeadBg};border-radius:8px;border-collapse:separate;font-size:15px;">
+            ${distRows}
+          </table>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:separate;font-size:15px;">
+            ${shipRows}
+          </table>
 
           <h2 style="font-size:18px;margin:28px 0 10px;">Next actions</h2>
           <ol style="margin:0;padding-left:22px;font-size:15px;line-height:1.55;">

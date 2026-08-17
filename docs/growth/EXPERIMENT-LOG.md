@@ -5,9 +5,9 @@ Agents must append every experiment here. Do not delete history.
 ## Active
 
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive** (treatment unchanged; Admin CRM activation unavailable; 0 verified payments; next eval when a verified checkout/payment occurs or 2026-08-24) — funnel stage: post-purchase activation
-- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO
-- **EXP-003** — `/youtube-channel-analyzer` commercial-intent landing (eval **Wednesday, August 19, 2026** / `2026-08-19`) — funnel stage: acquisition / SEO (nested surface using EXP-002 form UI)
-- **EXP-004** — mini-audit share page `/share` + sample paid report `/sample-report` for founder outreach (eval **2026-08-20**) — status **awaiting owner approval** — funnel stage: founder outreach / acquisition distribution (does not change EXP-002/003 treatments)
+- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO (**main** treatment)
+- **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
+- **EXP-004** — mini-audit share + sample paid report — status **awaiting owner approval** for sends; **2026-08-17 sample-report iterate** (above-the-fold Audit my channel CTA) — not collecting outreach data
 
 ## Locked stages (do not launch overlapping treatments)
 
@@ -41,6 +41,26 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-17 — Sample-report acquisition iterate + EXP-003 reclassify
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 sample-report **Iterate** (page only); outreach still **awaiting owner approval**. EXP-003 **reclassified nested**. EXP-001 **Inconclusive** (unchanged). EXP-002 **Keep**. |
+| Hypothesis | An above-the-fold “Audit my channel” form on `/sample-report` (sanitized sample, UTM `utm_source=sample_report`) will start real audits from creators who open the paid-shape sample, vs burying the CTA below sample content. |
+| Target | Active creators ~1k–100k subscribers. |
+| Funnel stage | Acquisition / sample-report surface (does not add a second Acquisition/SEO CRO). |
+| Baseline | 7d through 2026-08-16: 18 session_start events, 3 audit_started events, 6 audit_completed events (raw; not qualified records), 2 pricing_viewed, 0 checkout_started. Verified external customers 0. EXP-003 landing sessions 0/7d. |
+| Primary metric | `sample_report_audit_click` → `audit_started` (source `sample_report`) **events**. |
+| Secondary | `sample_report_view`; qualified completed audits (records, not raw events); checkout_started events; new customers this run. |
+| Evaluation date | 2026-08-24 |
+| KEEP | Treatment stays if sample_report_audit_click > 0 or no regression on `/demo`. |
+| ITERATE | If views occur but zero audit clicks after 7d. |
+| STOP | If `/sample-report` or `/demo` breaks; revert this commit. |
+| Locked surface | `/sample-report` form; EXP-002 SEO form pages unchanged. |
+| Reversal | Revert the sample-report + SeoAuditEntryForm extra-props commit. |
+| Distribution | **Not executed.** Deployed asset is not distribution. Blocking owner approval for named-recipient send. |
+| Exact change | `SampleReportPage` above-the-fold `SeoAuditEntryForm` submit “Audit my channel”; UTM params; `sample_report_view` / `sample_report_audit_click`; sanitized copy (not a named-creator customer audit). EXP-003 status → nested. |
 
 ### 2026-08-17 — EXP-001 evaluation (keep) + productivity/education outreach package to main
 
@@ -106,7 +126,8 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 | Field | Value |
 |-------|--------|
-| Status | active |
+| Status | nested |
+| Evaluation decision | Keep |
 | Evidence | User wants faster acquisition than waiting for EXP-002 eval; ~16 sessions/7d; "youtube channel analyzer" is high-intent query not covered by a dedicated URL; EXP-002 tests form on existing pages only. |
 | Hypothesis | A dedicated `/youtube-channel-analyzer` page (with on-page audit form via EXP-002 component) will capture new organic/search traffic and increase audit starts vs relying on homepage alone. |
 | Exact change | New growth guide page + route + footer/homepage links. Files: `frontend/src/seo/growthGuideData.ts`, `frontend/src/App.tsx`. |
