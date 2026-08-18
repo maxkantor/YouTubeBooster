@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-18 — EXP-002 early read (Keep) + blocking founder-outreach approval
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (early read); EXP-004 outreach **awaiting owner approval**; **0 emails sent** |
+| Distribution | **Not executed.** Blocking Max approval for first COOK-001 batch (P04 Kelvin's Kitchen + P05 Sohla and Ham) with pasted public business emails + SES/marketing-sending gates. |
+| EXP-002 evidence | 7d through 2026-08-17: 11 session_start events, **0** audit_started events, 1 audit_completed event, 1 pricing_viewed event, 0 checkout_started events; EXP-002 eligible SEO sessions 0/7d, 3/30d; EXP-003 analyzer sessions 0/7d. Health OK. |
+| EXP-002 decision | **Keep** — no demo regression; full eval remains 2026-08-25. |
+| Exact action prepared | Two named sends from approved 2026-08-14 food list: COOK-001-P004 (@kelvinskitchen) and COOK-001-P005 (@sohlaandham) with exact subject/body in Admin distribution file; Max must paste public emails from contact pages. |
+| Verified customers | **0** (product-attributed baseline; reconciliation incomplete) |
+| New customers this run | **0** |
+| GA4 baseline | 7d: 11 sessions, 0 audit starts, 1 completion, 1 pricing view, 0 checkout starts. 30d: 42 sessions, 4 audit starts, 11 completions, 2 pricing views, 0 checkout starts. |
+| Snapshot | `docs/growth/snapshots/funnel-2026-08-18.json` |
+
 ### 2026-08-17 — Creator Acquisition Center (EXP-004 distribution system; sending disabled)
 
 | Field | Value |
