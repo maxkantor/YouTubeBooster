@@ -89,7 +89,7 @@ export function CreatorAcquisitionPage() {
     setBusy(true);
     try {
       const res = await adminApi.acqApprove(selected, campaign);
-      setNote(`Approval ${res.approvalId} stored. Marketing sending is still disabled until SES identity + postal address + sending flag are set.`);
+      setNote(`Approval ${res.approvalId} stored. Weekday sender will send only approved verified contacts while marketing sending is enabled.`);
       setSelected([]);
       await load();
     } catch (e) {
@@ -112,12 +112,14 @@ export function CreatorAcquisitionPage() {
         <p className="admin-crm-muted">
           Customer #1 target. Verified external paying customers: <strong>{summary?.verifiedCustomers ?? 0}</strong>.
           Marketing sending: <Badge kind={sendingOff ? 'warn' : 'ok'}>{sendingOff ? 'disabled' : 'enabled'}</Badge>
-          {' '}Preferred From: Max from YouTubeBooster &lt;hello@youtubeboosterai.com&gt;. Do not send until SES identity, MAIL FROM, postal address, and inbound receiving are configured.
+          {' '}Preferred From: Max from YouTubeBooster &lt;hello@youtubeboosterai.com&gt;. COOK-001 weekday send is gated: verified public business email, named approval, postal footer, unsubscribe, suppression, and a max of 5 per weekday.
         </p>
         {summary && (
           <p className="admin-crm-muted">
             Discovered {summary.discovered} · Inspected {summary.inspected} · Verified contacts {summary.contactVerified} ·
             Drafts {summary.drafts} · Approved {summary.approved} · Sent {summary.sent}
+            {typeof summary.delivered === 'number' ? ` · Delivered ${summary.delivered}` : ''}
+            {typeof summary.converted === 'number' ? ` · Converted ${summary.converted}` : ''}
           </p>
         )}
       </div>

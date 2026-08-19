@@ -135,10 +135,10 @@ function experimentCopy(ex, snapshot) {
     return {
       stage: 'Founder outreach',
       eligible: collecting
-        ? '/share + /sample-report; approved named-recipient SES (utm_content P04/P05)'
+        ? '/share + /sample-report; COOK-001 weekday SES (verified public emails, max 5/day)'
         : '/share and /sample-report (distribution asset; not send approval)',
       primary: collecting
-        ? 'Collecting named-recipient outreach (SES-accepted sends; COOK-001 weekday automation remains disabled)'
+        ? 'Collecting named-recipient + COOK-001 weekday outreach (drafts are not distribution)'
         : 'Outreach paused pending named-recipient approval',
       sample: collecting ? 'See experiment log for send counts; attributed conversions still 0' : 'n/a'
     };
@@ -154,7 +154,7 @@ function experimentCopy(ex, snapshot) {
 function exp004OverlapNote(classified) {
   const collecting = classified.some((e) => e.id === 'EXP-004' && e.collecting);
   return collecting
-    ? 'EXP-004 is ACTIVE/COLLECTING on named-recipient outreach. COOK-001 weekday automation remains disabled.'
+    ? 'EXP-004 is ACTIVE/COLLECTING. COOK-001 weekday sending is enabled with verified-email and approval gates (max 5/day).'
     : 'EXP-004 is awaiting owner approval and is not collecting outreach data.';
 }
 
@@ -189,7 +189,15 @@ export function emptyDistribution() {
     verifiedRevenue: '$0.00',
     requiredOwnerApproval: DEFAULT_BLOCKING_APPROVAL,
     blockingApproval: true,
-    exactActionPrepared: 'none'
+    exactActionPrepared: 'none',
+    outreachFunnel: {
+      drafted: 0,
+      approved: 0,
+      sent: 0,
+      delivered: 'Unknown',
+      clicked: 'Unknown',
+      converted: 0
+    }
   };
 }
 
@@ -343,7 +351,7 @@ export function defaultDecisionText({
 
   const exp004 = classified.find((e) => e.id === 'EXP-004');
   const outreachBit = exp004?.collecting
-    ? `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic. EXP-004 named-recipient outreach is collecting (COOK-001 weekday automation remains disabled).`
+    ? `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic. EXP-004 COOK-001 weekday outreach is enabled under send gates.`
     : nAwaiting > 0
       ? `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic, while outreach remains paused pending owner approval.`
       : `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic.`;
@@ -442,7 +450,7 @@ function nextActions({ classified, nextFuture, reportYmd, dist }) {
   );
   const exp004 = classified.find((e) => e.id === 'EXP-004');
   const exp004Action = exp004?.collecting
-    ? 'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 is ACTIVE/COLLECTING on named-recipient outreach; do not enable COOK-001 weekday automation.'
+    ? 'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 COOK-001 weekday sending is enabled; keep batches small and skip form-only contacts.'
     : 'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 outreach stays awaiting named-recipient approval.';
   items.push(exp004Action);
   items.push('Do not launch another experiment merely to have a ship.');
@@ -602,6 +610,14 @@ export function composeGrowthReport(opts) {
     `Required owner approval: ${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
   );
   t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
+  const funnel = dist.outreachFunnel || emptyDistribution().outreachFunnel;
+  t.push('COOK-001 outreach funnel (counts; a draft is not distribution):');
+  t.push(`  DRAFTED: ${funnel.drafted}`);
+  t.push(`  APPROVED: ${funnel.approved}`);
+  t.push(`  SENT: ${funnel.sent}`);
+  t.push(`  DELIVERED: ${funnel.delivered}`);
+  t.push(`  CLICKED: ${funnel.clicked}`);
+  t.push(`  CONVERTED: ${funnel.converted}`);
   t.push(`Change deployed: ${ship.change}`);
   t.push(`Experiment: ${ship.experiment}`);
   t.push(`Production URL: ${ship.url}`);
@@ -708,7 +724,13 @@ export function composeGrowthReport(opts) {
       'Customers causally attributed to a specific experiment',
       String(dist.experimentAttributedCustomers)
     ],
-    ['New customers acquired by the current run', String(dist.newCustomersThisRun)]
+    ['New customers acquired by the current run', String(dist.newCustomersThisRun)],
+    ['COOK-001 DRAFTED', String(dist.outreachFunnel?.drafted ?? 0)],
+    ['COOK-001 APPROVED', String(dist.outreachFunnel?.approved ?? 0)],
+    ['COOK-001 SENT', String(dist.outreachFunnel?.sent ?? 0)],
+    ['COOK-001 DELIVERED', String(dist.outreachFunnel?.delivered ?? 'Unknown')],
+    ['COOK-001 CLICKED', String(dist.outreachFunnel?.clicked ?? 'Unknown')],
+    ['COOK-001 CONVERTED', String(dist.outreachFunnel?.converted ?? 0)]
   ]
     .map(
       ([k, v]) =>

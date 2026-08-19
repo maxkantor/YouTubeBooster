@@ -573,6 +573,8 @@ export type AcqSummary = {
   drafts: number;
   approved: number;
   sent: number;
+  delivered?: number;
+  converted?: number;
   views: Record<string, number>;
 };
 

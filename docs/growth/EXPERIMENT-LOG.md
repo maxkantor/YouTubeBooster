@@ -7,7 +7,7 @@ Agents must append every experiment here. Do not delete history.
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive**; **2026-08-19** growth report now reads `ybai-purchases` + `ybai-users` entitlements (no PII). Still **0** verified product-attributed payments. Next eval on first verified checkout/payment or **2026-08-24**. Funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO (**main** treatment)
 - **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
-- **EXP-004** — mini-audit share + sample paid report — **ACTIVE / COLLECTING** as of **2026-08-19**: P05 SES-accepted (`ticket_777de1d0ebd14a34bcf9ff8bc86f6f13`). P04 **SKIPPED_FORM_ONLY**. COOK-001 weekday automation remains disabled.
+- **EXP-004** — mini-audit share + sample paid report — **ACTIVE / COLLECTING**. COOK-001 weekday sending **enabled** 2026-08-19 (`CreatorAcquisition:MarketingSendingEnabled=true`, max 5/day). Conservative batch **2 SENT** (approval `APR-20260819-529e31b7`). P05 founder send earlier the same day. P04 form-only skipped.
 
 ## Locked stages (do not launch overlapping treatments)
 
@@ -41,6 +41,20 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-19 — COOK-001 weekday sending enabled; first conservative batch sent
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 **ACTIVE / COLLECTING**. COOK-001 sending enabled. |
+| Approval | User authorization to enable `CreatorAcquisition:MarketingSendingEnabled`; named batch `APR-20260819-529e31b7` (max 2) |
+| Distribution | **Executed:** 2 COOK-001 SES-accepted weekday sends via `/api/public/acq/weekday-send`. Official-site mailto only. Form-only skipped. Kelvin/Sohla skipped (form-only / already contacted). |
+| Funnel | DRAFTED 77 · APPROVED 2 this batch · SENT 2 · DELIVERED Unknown (SES config set has no event destination yet) · CLICKED Unknown · CONVERTED 0 |
+| Gates | Postal SSM set; unsubscribe HMAC; Dynamo `ACQFLAGS#COOK-001` sending=true; Lambda `CreatorAcquisition__MarketingSendingEnabled=true`; daily cap 5; this run max 2 |
+| COOK-001 automation | **Enabled** (weekday, gated) |
+| Emails sent this batch | **2** |
+| Verified customers | **0** |
+| Verified revenue | **$0** |
 
 ### 2026-08-19 — EXP-004 P05 sent; P04 skipped form-only
 

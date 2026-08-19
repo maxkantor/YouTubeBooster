@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using Amazon.SimpleEmail;
 using Amazon.SimpleEmail.Model;
 
@@ -17,7 +16,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     private readonly IAmazonSimpleEmailService _ses;
     private readonly ISecretValueProvider _secrets;
     private readonly IConfiguration _configuration;
-    private readonly IHttpClientFactory _http;
+    private readonly IPublicDashboardService _dashboard;
 
     public CreatorAcquisitionService(
         ICreatorAcquisitionStore store,
@@ -26,7 +25,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         IAmazonSimpleEmailService ses,
         ISecretValueProvider secrets,
         IConfiguration configuration,
-        IHttpClientFactory http)
+        IPublicDashboardService dashboard)
     {
         _store = store;
         _appDataStore = appDataStore;
@@ -34,7 +33,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         _ses = ses;
         _secrets = secrets;
         _configuration = configuration;
-        _http = http;
+        _dashboard = dashboard;
     }
 
     public async Task<AcqCampaignState> LoadStateAsync(string campaign, CancellationToken cancellationToken)
@@ -66,7 +65,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             FromEmail: from?.Trim(),
             FromName: fromName.Trim(),
             ReplyTo: reply?.Trim(),
-            ConfigSet: _configuration["CreatorAcquisition:ConfigSet"] ?? "yb-creator-acquisition"
+            ConfigSet: string.IsNullOrWhiteSpace(_configuration["CreatorAcquisition:ConfigSet"])
+                ? null
+                : _configuration["CreatorAcquisition:ConfigSet"]!.Trim()
         );
     }
 
@@ -301,6 +302,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         var sent = 0;
         var skipped = 0;
         var attempted = 0;
+        var sentThisRunByApproval = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var p in candidates)
         {
             if (sent >= remaining) break;
@@ -328,6 +330,16 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             {
                 skipped++;
                 reasons.Add($"{p.ProspectId}:approval_expired");
+                continue;
+            }
+            var priorForApproval = all.Count(x =>
+                string.Equals(x.ApprovalId, approval.ApprovalId, StringComparison.OrdinalIgnoreCase)
+                && x.LastContactedAt is not null);
+            var extraThisRun = sentThisRunByApproval.GetValueOrDefault(approval.ApprovalId);
+            if (priorForApproval + extraThisRun >= approval.MaximumSends)
+            {
+                skipped++;
+                reasons.Add($"{p.ProspectId}:approval_cap");
                 continue;
             }
             if (!approval.ContentHashes.TryGetValue(p.ProspectId, out var approvedHash)
@@ -397,6 +409,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     ["token"] = p.OpaqueToken
                 }, cancellationToken);
                 sent++;
+                sentThisRunByApproval[approval.ApprovalId] = extraThisRun + 1;
             }
             catch (Exception ex)
             {
@@ -497,23 +510,16 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     {
         try
         {
-            var client = _http.CreateClient();
-            var url = $"{Site()}/api/public/channel/videos?channel={Uri.EscapeDataString(handle)}&max_results=5";
-            using var res = await client.GetAsync(url, cancellationToken);
-            if (!res.IsSuccessStatusCode) return [];
-            var json = await res.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(cancellationToken);
-            if (!json.TryGetProperty("items", out var items) && !json.TryGetProperty("videos", out items))
-                return [];
-            var list = new List<(DateTimeOffset, string)>();
-            foreach (var item in items.EnumerateArray())
-            {
-                var title = item.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
-                var published = item.TryGetProperty("publishedAt", out var p) ? p.GetString()
-                    : item.TryGetProperty("published_at", out var p2) ? p2.GetString() : null;
-                if (DateTimeOffset.TryParse(published, out var dt))
-                    list.Add((dt, title));
-            }
-            return list.OrderByDescending(v => v.Item1).ToArray();
+            var videos = await _dashboard.GetVideosAsync(handle, 8, cancellationToken);
+            return videos
+                .Select(v =>
+                {
+                    DateTimeOffset.TryParse(v.PublishedAt, out var dt);
+                    return (dt, v.Title ?? "");
+                })
+                .Where(v => v.dt != default)
+                .OrderByDescending(v => v.dt)
+                .ToArray();
         }
         catch
         {

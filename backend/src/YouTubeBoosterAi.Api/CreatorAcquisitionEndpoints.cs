@@ -125,8 +125,10 @@ public static class CreatorAcquisitionEndpoints
                 inspected = rows.Count(r => r.InspectionStatus == "completed"),
                 contactVerified = rows.Count(CreatorAcquisitionScoring.IsVerifiedPublicEmail),
                 drafts = rows.Count(r => !string.IsNullOrWhiteSpace(r.Observation) && !string.IsNullOrWhiteSpace(r.Subject)),
-                approved = rows.Count(r => !string.IsNullOrWhiteSpace(r.ApprovalId)),
+                approved = rows.Count(r => string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(r.ApprovalId)),
                 sent = rows.Count(r => r.LastContactedAt is not null),
+                delivered = rows.Count(r => string.Equals(r.OutreachStatus, "delivered", StringComparison.OrdinalIgnoreCase)),
+                converted = rows.Count(r => string.Equals(r.OutreachStatus, "customer", StringComparison.OrdinalIgnoreCase)),
                 views = CreatorAcquisitionViews.All.ToDictionary(v => v, v => rows.Count(r => CreatorAcquisitionScoring.MapView(r) == v))
             });
         });
@@ -200,6 +202,26 @@ public static class CreatorAcquisitionEndpoints
             return Results.Ok(new { preview = true, sent = false, marketingSendingEnabled = state.MarketingSendingEnabled, items });
         });
 
+        admin.MapPost("/campaign-flags", async (
+            [FromBody] AcqCampaignFlagsRequest request,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var campaign = string.IsNullOrWhiteSpace(request.Campaign) ? CreatorAcquisitionCampaigns.Cook001 : request.Campaign.Trim();
+            var existing = await acq.Store.GetCampaignFlagsAsync(campaign, cancellationToken);
+            var sending = request.SendingEnabled ?? existing.SendingEnabled;
+            var pause = request.ComplaintPause ?? existing.ComplaintPause;
+            await acq.Store.SaveCampaignFlagsAsync(campaign, sending, pause, cancellationToken);
+            var state = await acq.LoadStateAsync(campaign, cancellationToken);
+            return Results.Ok(new
+            {
+                campaign,
+                campaignFlagSendingEnabled = sending,
+                complaintPause = pause,
+                marketingSendingEnabled = state.MarketingSendingEnabled
+            });
+        });
+
         admin.MapPost("/approvals", async (HttpContext http, AcqApproveBatchRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var adminUser = (AdminSessionRecord)http.Items["authenticatedAdmin"]!;
@@ -226,6 +248,7 @@ public static class CreatorAcquisitionEndpoints
 public sealed record AcqSesEventRequest(string ProspectId, string EventType);
 public sealed record AcqInboundRequest(string FromEmail, string? Subject, string? Preview, string? MessageId, string? InReplyTo);
 public sealed record AcqTestSendRequest(string? To);
+public sealed record AcqCampaignFlagsRequest(string? Campaign, bool? SendingEnabled, bool? ComplaintPause);
 
 public interface ICreatorAcquisitionService
 {

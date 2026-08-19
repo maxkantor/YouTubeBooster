@@ -1,7 +1,6 @@
 # Creator Acquisition Center
 
-**Status:** Implemented in product. **Marketing sending is disabled.**  
-Verified external paying customers: **0**. Immediate target: customer #1.
+**Status:** Implemented. COOK-001 weekday sending is **enabled** under send gates (verified public business email, named approval, postal footer, unsubscribe, suppression, max 5/weekday). A draft is not distribution.
 
 Admin UI: https://youtubeboosterai.com/admin/marketing/creator-acquisition
 
@@ -18,18 +17,23 @@ Admin UI: https://youtubeboosterai.com/admin/marketing/creator-acquisition
 ## Sending gates (all required)
 
 1. SSM `/youtubebooster/outreach/marketing-sending-enabled` = `true`
-2. Config `CreatorAcquisition:MarketingSendingEnabled` = `true`
-3. Campaign flag sending enabled and complaint pause off
-4. SES identity **hello@youtubeboosterai.com** verified (`ses/outreach-from-email`)
+2. Config `CreatorAcquisition:MarketingSendingEnabled` = `true` (Lambda `CreatorAcquisition__MarketingSendingEnabled`)
+3. Campaign flag sending enabled and complaint pause off (`ACQFLAGS#COOK-001`)
+4. SES identity **hello@youtubeboosterai.com** verified (`ses/outreach-from-email` or domain identity)
 5. Reply-To `hello@youtubeboosterai.com`
-6. Custom MAIL FROM `bounce.youtubeboosterai.com` (configure in SES; not auto-created)
+6. Custom MAIL FROM `bounce.youtubeboosterai.com` (optional; do not block sends if domain identity is valid)
 7. SSM `/youtubebooster/business/postal-address` set
 8. Unsubscribe HMAC configured
-9. Max named-batch approval, content hash unchanged
-10. Max **5** emails per weekday (America/New_York), no weekend sends
+9. Named-batch approval, content hash unchanged
+10. Max **5** emails per weekday (America/New_York), no weekend sends; first batches should be **2**
 11. No guessed emails, no prior send, no suppression
 
-A campaign being enabled is **not** recipient approval. Preview never sends.
+Conservative operator:
+
+```bash
+node scripts/growth/enable-cook-001-sending.mjs
+node scripts/growth/run-cook-001-weekday.mjs --max 2
+```
 
 ## Preferred sender (after SES is ready)
 
@@ -56,15 +60,13 @@ Do not use Max’s personal mailbox in campaign headers.
 | POST | `/api/public/acq/inbound` | Inbound key; sanitized preview only |
 | POST | `/api/public/acq/ses-events` | Bounce/complaint; no PII in tags |
 
-## Infra still required before first five sends
+## Infra notes
 
-1. Verify SES identity `hello@youtubeboosterai.com` (and MAIL FROM subdomain).
-2. SES inbound → encrypted S3 → Lambda posting `/api/public/acq/inbound`.
-3. Outreach configuration set `yb-creator-acquisition` (delivery/bounce/complaint).
-4. Put postal address in SSM.
-5. Put Max’s test recipient in `outreach/test-recipient`.
-6. Approve a COOK-001 batch of ≤5 English cooking prospects with **verified public business emails**.
-7. Then set marketing sending enabled.
+1. SES identity `hello@youtubeboosterai.com` is covered by the verified domain. Custom MAIL FROM is optional.
+2. SES configuration set `yb-creator-acquisition` exists; add SNS/event destinations later for DELIVERED/bounce/complaint CRM updates.
+3. Postal address is in SSM. Unsubscribe HMAC is required.
+4. Conservative operator: `node scripts/growth/run-cook-001-weekday.mjs --max 2` (official mailto only; form-only skipped).
+5. Increase volume only while bounce/complaint rates stay healthy.
 
 Do **not** run `daily-outreach-send.mjs` against the old roster.
 
