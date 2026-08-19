@@ -6,7 +6,7 @@ Agents must append every experiment here. Do not delete history.
 
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive** (treatment unchanged; Admin CRM activation unavailable; 0 verified payments; next eval when a verified checkout/payment occurs or 2026-08-24) — funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO (**main** treatment)
-- **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
+- **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 — eval **2026-08-19 Keep** (page-level: 0 analyzer sessions 7d/30d through 2026-08-18; page live; no stop rule; nested form UI unchanged)
 - **EXP-004** — mini-audit share + sample paid report — status **awaiting owner approval** for sends; **2026-08-17 sample-report iterate** (above-the-fold Audit my channel CTA) — not collecting outreach data
 
 ## Locked stages (do not launch overlapping treatments)
@@ -41,6 +41,20 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-19 — EXP-003 page-level eval (Keep) + blocking outreach approval
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-003 **Keep** (page-level eval due 2026-08-19). EXP-002 unchanged (full eval 2026-08-25). EXP-004 still **awaiting owner approval** for sends. |
+| EXP-003 evidence | GA4 through 2026-08-18: **0 sessions** on `/youtube-channel-analyzer` (7d and 30d); **0** audit_started events sitewide (7d); 1 audit_completed event (7d); 0 checkout_started events (7d/30d). Production health OK (analyzer 200). |
+| EXP-003 decision | **Keep** — dedicated URL live with no build/demo failures; insufficient page-level traffic for lift measurement; stop rule not triggered; remains nested under EXP-002 form treatment. |
+| Distribution | **Not executed.** Blocking owner approval for first approved founder sends. |
+| Exact action prepared | Send **P04 Kelvin's Kitchen** + **P05 Sohla and Ham** from Admin CRM using `docs/growth/outreach/2026-08-14-review.md` drafts + tracked `/share` URLs. Max must paste public emails from https://kelvinskitchen.com/contact and https://www.hellosohla.com/contact . Enable SSM `/youtubebooster/outreach/marketing-sending-enabled=true` + verify SES `hello@youtubeboosterai.com` + postal address. Reply with approval ID + timestamp + exact pasted addresses. |
+| GA4 baseline (2026-08-19) | 7d: 15 sessions, 0 audit_started events, 1 audit_completed event, 0 pricing_viewed events, 0 checkout_started events. 30d: 46 sessions, 4 audit_started, 11 audit_completed, 2 pricing_viewed, 0 checkout_started. EXP-002 landing sessions 2/7d, 5/30d. |
+| Verified customers | **0** (product-attributed baseline; Stripe reconciliation incomplete) |
+| New customers this run | **0** |
+| Account-wide Stripe (excluded) | 1 live paid session (7d) / 2 (30d) — diagnostic only |
 
 ### 2026-08-17 — Creator Acquisition Center (EXP-004 distribution system; sending disabled)
 
