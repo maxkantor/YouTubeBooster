@@ -131,11 +131,16 @@ function experimentCopy(ex, snapshot) {
     };
   }
   if (ex.id === 'EXP-004') {
+    const collecting = ex.collecting === true;
     return {
       stage: 'Founder outreach',
-      eligible: '/share and /sample-report (distribution asset; not send approval)',
-      primary: 'Outreach paused pending named-recipient approval',
-      sample: 'n/a'
+      eligible: collecting
+        ? '/share + /sample-report; approved named-recipient SES (utm_content P04/P05)'
+        : '/share and /sample-report (distribution asset; not send approval)',
+      primary: collecting
+        ? 'Collecting named-recipient outreach (SES-accepted sends; COOK-001 weekday automation remains disabled)'
+        : 'Outreach paused pending named-recipient approval',
+      sample: collecting ? 'See experiment log for send counts; attributed conversions still 0' : 'n/a'
     };
   }
   return {
@@ -144,6 +149,13 @@ function experimentCopy(ex, snapshot) {
     primary: 'see log',
     sample: 'low'
   };
+}
+
+function exp004OverlapNote(classified) {
+  const collecting = classified.some((e) => e.id === 'EXP-004' && e.collecting);
+  return collecting
+    ? 'EXP-004 is ACTIVE/COLLECTING on named-recipient outreach. COOK-001 weekday automation remains disabled.'
+    : 'EXP-004 is awaiting owner approval and is not collecting outreach data.';
 }
 
 function emptyShip() {
@@ -329,8 +341,10 @@ export function defaultDecisionText({
     parts.push(`EXP-001 was evaluated as ${exp001.decision}; treatment per experiment log.`);
   }
 
-  const outreachBit =
-    nAwaiting > 0
+  const exp004 = classified.find((e) => e.id === 'EXP-004');
+  const outreachBit = exp004?.collecting
+    ? `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic. EXP-004 named-recipient outreach is collecting (COOK-001 weekday automation remains disabled).`
+    : nAwaiting > 0
       ? `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic, while outreach remains paused pending owner approval.`
       : `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic.`;
   parts.push(outreachBit);
@@ -426,9 +440,11 @@ function nextActions({ classified, nextFuture, reportYmd, dist }) {
   items.push(
     'Until the first newly attributed external customer: at most one experiment per funnel stage; prefer qualified distribution over additional CRO.'
   );
-  items.push(
-    'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 outreach stays awaiting named-recipient approval.'
-  );
+  const exp004 = classified.find((e) => e.id === 'EXP-004');
+  const exp004Action = exp004?.collecting
+    ? 'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 is ACTIVE/COLLECTING on named-recipient outreach; do not enable COOK-001 weekday automation.'
+    : 'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 outreach stays awaiting named-recipient approval.';
+  items.push(exp004Action);
   items.push('Do not launch another experiment merely to have a ship.');
   items.push('Report new customers acquired by this run separately from customers observed in the date window.');
 
@@ -567,7 +583,7 @@ export function composeGrowthReport(opts) {
     }
     t.push(`Overlap: ${EXP_OVERLAP_POLICY.summary}`);
     t.push(
-      'At current volume, EXP-002 is the main Acquisition/SEO treatment; EXP-003 is a nested URL; EXP-004 is awaiting approval and is not collecting outreach data.'
+      `At current volume, EXP-002 is the main Acquisition/SEO treatment; EXP-003 is a nested URL; ${exp004OverlapNote(classified)}`
     );
   }
   t.push('');
@@ -828,7 +844,7 @@ export function composeGrowthReport(opts) {
 
           <h2 style="font-size:18px;margin:28px 0 10px;">Experiment results</h2>
           ${expCards}
-          <p style="margin:8px 0 0;font-size:14px;color:#475569;">${escapeHtml(EXP_OVERLAP_POLICY.summary)} EXP-004 is awaiting owner approval and is not collecting outreach data.</p>
+          <p style="margin:8px 0 0;font-size:14px;color:#475569;">${escapeHtml(EXP_OVERLAP_POLICY.summary)} ${escapeHtml(exp004OverlapNote(classified))}</p>
 
           <h2 style="font-size:18px;margin:28px 0 10px;">Acquisition action</h2>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid ${distLeadBorder};background:${distLeadBg};border-radius:8px;border-collapse:separate;font-size:15px;">

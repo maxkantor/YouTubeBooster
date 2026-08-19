@@ -7,7 +7,7 @@ Agents must append every experiment here. Do not delete history.
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive**; **2026-08-19** growth report now reads `ybai-purchases` + `ybai-users` entitlements (no PII). Still **0** verified product-attributed payments. Next eval on first verified checkout/payment or **2026-08-24**. Funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO (**main** treatment)
 - **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
-- **EXP-004** — mini-audit share + sample paid report — **awaiting owner completion**: P04/P05 approved (`APR-2026-08-19-P04-P05`) but **0 emails sent** (P04 has no public email; marketing send blocked without postal address). Not collecting outreach click data yet
+- **EXP-004** — mini-audit share + sample paid report — **ACTIVE / COLLECTING** as of **2026-08-19**: P05 SES-accepted (`ticket_777de1d0ebd14a34bcf9ff8bc86f6f13`). P04 **SKIPPED_FORM_ONLY**. COOK-001 weekday automation remains disabled.
 
 ## Locked stages (do not launch overlapping treatments)
 
@@ -41,6 +41,20 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-19 — EXP-004 P05 sent; P04 skipped form-only
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 **ACTIVE / COLLECTING** (one SES-accepted send). |
+| Approval | `APR-2026-08-19-P04-P05` |
+| Distribution | **Executed:** P05 via Admin CRM SES. Ticket `ticket_777de1d0ebd14a34bcf9ff8bc86f6f13`. SES message id prefix `010001a01a7e9ce6`. utm_content=P05. |
+| P04 | **SKIPPED_FORM_ONLY** |
+| Postal SSM | Configured (`/youtubebooster/business/postal-address`) |
+| COOK-001 automation | **Disabled** (`CreatorAcquisition:MarketingSendingEnabled` not set) |
+| Emails sent | **1** |
+| Verified customers | **0** |
+| Verified revenue | **$0** (product-attributed Stripe baseline) |
 
 ### 2026-08-19 — EXP-004 P04/P05 approval recorded; sends blocked
 
@@ -126,7 +140,7 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 | Field | Value |
 |-------|--------|
-| Status | awaiting owner approval |
+| Status | active |
 | Evidence | Verified external paying customers = 0; traffic too low for more CRO; need qualified audits in 7 days; founder outreach blocked without a shareable one-observation asset. |
 | Hypothesis | A `/share` mini-audit (one public-data observation + tracked CTA to `/demo`) plus `/sample-report` (MaxKantorCooking paid-shape sample) will increase qualified audit completions from founder outreach vs generic SEO alone. |
 | Exact change | `MiniAuditSharePage`, `SampleReportPage`, routes, sitemap entries, styles; skill/automation acquisition-first; outreach package `docs/growth/outreach/2026-08-13-founder-outreach.md` (drafts only). |
@@ -141,7 +155,7 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 | Commit | `78b2429` |
 | Amplify | job **238** SUCCEED |
 
-**Outreach:** A Cursor task prompt is **not** approval of recipients or copy. The 2026-08-13 list (Budget Bytes, Damn Delicious, Simply Recipes, and other drafts) is **superseded and not approved**. Replacement review: `docs/growth/outreach/2026-08-14-review.md` — status `draft` until Max explicitly approves specific recipients and messages. Do not send, submit forms, or comment.
+**Outreach:** A Cursor task prompt is **not** approval of recipients or copy. The 2026-08-13 list (Budget Bytes, Damn Delicious, Simply Recipes, and other drafts) remains **not approved**. Replacement review: `docs/growth/outreach/2026-08-14-review.md`. Named-recipient approval `APR-2026-08-19-P04-P05`: **P05 SENT**; **P04 SKIPPED_FORM_ONLY**. Do not send other drafts, submit forms, or enable COOK-001 weekday automation.
 
 ### 2026-08-13 — Measurement repair (not a conversion experiment)
 
