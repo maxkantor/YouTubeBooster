@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildRedirectsFile } from './hosting-redirect-rules.mjs';
 
 import { BRAND } from '../src/config/brand';
 import { getSiteUrl } from '../src/config/site';
@@ -530,19 +531,36 @@ function writeRoute(baseHtml: string, pathname: string): void {
 }
 
 function writeNeutralSpaFallback(baseHtml: string): void {
-  // Amplify's catch-all can serve this document for unknown/deep SPA paths.
-  // Keep it crawlable, but do not bake in a homepage canonical for every URL.
-  fs.writeFileSync(distIndexPath, replaceFallback(baseHtml, '/'), 'utf8');
+  // Only private SPA routes should hit this document. Do not clone homepage SEO.
+  const spaHead = [
+    '    <title>YouTubeBooster AI</title>',
+    '    <meta name="description" content="YouTubeBooster AI account, dashboard, and checkout." />',
+    '    <meta name="robots" content="noindex, nofollow" />'
+  ].join('\n');
+  const withoutHomeSeo = baseHtml
+    .replace(/    <title>[\s\S]*?<\/title>\r?\n?/g, '')
+    .replace(/    <meta name="description"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <meta name="robots"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <link rel="canonical"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <meta property="og:url"[\s\S]*?\/>\r?\n?/g, '')
+    .replace(/    <script type="application\/ld\+json">[\s\S]*?<\/script>\r?\n?/g, '');
+  const withHead = withoutHomeSeo.replace(
+    /(\s*<meta name="viewport"[^>]*\/>\r?\n)/,
+    `$1${spaHead}\n`
+  );
+  fs.writeFileSync(distIndexPath, replaceFallback(withHead === withoutHomeSeo ? `${withoutHomeSeo.replace('</head>', `${spaHead}\n  </head>`)}` : withHead, '/'), 'utf8');
 }
 
 const baseHtml = fs.readFileSync(distIndexPath, 'utf8');
 const routes = allProgrammaticAndBlogPaths().map((entry) => normalizePath(entry.path));
-const uniqueRoutes = Array.from(new Set(routes));
+const uniqueRoutes = Array.from(new Set([...routes, '/unsubscribe']));
 
 writeNeutralSpaFallback(baseHtml);
 
 for (const route of uniqueRoutes.filter((route) => route !== '/')) {
   writeRoute(baseHtml, route);
 }
+
+fs.writeFileSync(path.join(distDir, '_redirects'), buildRedirectsFile(uniqueRoutes), 'utf8');
 
 console.log(`Wrote neutral SPA fallback plus static route HTML for ${uniqueRoutes.length - 1} routes`);

@@ -280,6 +280,38 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
     };
   }
 
+  if (path === '/share') {
+    return {
+      title: `Channel mini-audit | ${BRAND.name}`,
+      description:
+        'Open a public-data YouTube mini-audit and continue to a full channel audit with titles, descriptions, and packaging opportunities.',
+      canonicalPath: '/share',
+      keywords: ['youtube mini audit', 'share youtube audit'],
+      jsonLd: [...baseGraph()]
+    };
+  }
+
+  if (path === '/sample-report') {
+    return {
+      title: `Sample YouTube audit report | ${BRAND.name}`,
+      description:
+        'See a sanitized sample of a YouTubeBooster AI channel audit, then run a free audit on your own public channel.',
+      canonicalPath: '/sample-report',
+      keywords: ['sample youtube audit', 'youtube audit report example'],
+      jsonLd: [...baseGraph()]
+    };
+  }
+
+  if (path === '/unsubscribe') {
+    return {
+      title: `Unsubscribe | ${BRAND.name}`,
+      description: 'Unsubscribe from YouTubeBooster AI outreach email.',
+      canonicalPath: '/unsubscribe',
+      noindex: true,
+      jsonLd: []
+    };
+  }
+
   const comparisonPage = getComparisonByPath(path);
   if (comparisonPage) {
     const crumbs: BreadcrumbItem[] = [
@@ -512,9 +544,10 @@ export function resolveSeoForPath(pathname: string): ResolvedSeo {
   }
 
   return {
-    title: `${BRAND.name} – ${BRAND.tagline}`,
+    title: `Not found – ${BRAND.name}`,
     description: DEFAULT_DESC,
     canonicalPath: path,
-    jsonLd: [...baseGraph()]
+    noindex: true,
+    jsonLd: []
   };
 }

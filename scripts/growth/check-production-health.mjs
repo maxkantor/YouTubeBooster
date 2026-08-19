@@ -64,8 +64,8 @@ await check('youtube_channel_analyzer', async () => {
   const res = await fetch('https://youtubeboosterai.com/youtube-channel-analyzer', { redirect: 'follow' });
   if (!res.ok) throw new Error(`status ${res.status}`);
   const html = await res.text();
-  if (!/channel analyzer/i.test(html) && !/YouTubeBooster/i.test(html)) {
-    throw new Error('analyzer page missing expected content');
+  if (!/channel analyzer/i.test(html)) {
+    throw new Error('analyzer page missing expected content (not unique HTML)');
   }
   return { status: res.status, bytes: html.length };
 });
@@ -85,7 +85,28 @@ await check('sample_report', async () => {
 await check('pricing', async () => {
   const res = await fetch('https://youtubeboosterai.com/pricing', { redirect: 'follow' });
   if (!res.ok) throw new Error(`status ${res.status}`);
-  return { status: res.status };
+  const html = await res.text();
+  const title = (html.match(/<title>([^<]+)<\/title>/i) || [])[1] || '';
+  if (/AI-Powered YouTube Channel Audit &amp; Growth Platform/i.test(title) || /AI-Powered YouTube Channel Audit & Growth Platform/i.test(title)) {
+    throw new Error(`pricing still serving homepage title: ${title.slice(0, 120)}`);
+  }
+  return { status: res.status, title: title.slice(0, 120) };
+});
+
+await check('audit_unique_html', async () => {
+  const home = await fetch('https://youtubeboosterai.com/');
+  const audit = await fetch('https://youtubeboosterai.com/audit');
+  if (!audit.ok) throw new Error(`status ${audit.status}`);
+  const homeHtml = await home.text();
+  const auditHtml = await audit.text();
+  const homeTitle = (homeHtml.match(/<title>([^<]+)<\/title>/i) || [])[1] || '';
+  const auditTitle = (auditHtml.match(/<title>([^<]+)<\/title>/i) || [])[1] || '';
+  if (!auditTitle) throw new Error('audit missing title');
+  if (auditTitle === homeTitle) throw new Error('audit HTML still duplicates homepage title (SPA catch-all)');
+  if (!/canonical[^>]+\/audit/i.test(auditHtml) && !auditHtml.includes('youtubeboosterai.com/audit')) {
+    throw new Error('audit missing self canonical');
+  }
+  return { homeTitle: homeTitle.slice(0, 80), auditTitle: auditTitle.slice(0, 80) };
 });
 
 const failed = checks.filter((c) => !c.ok);

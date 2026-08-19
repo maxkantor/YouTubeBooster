@@ -872,6 +872,8 @@ function AppInner() {
         <Route path="/how-to-get-more-youtube-views" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-thumbnail-mistakes" element={<GrowthGuideRoutePage />} />
         <Route path="/low-click-through-rate-youtube" element={<Navigate to="/low-ctr-on-youtube" replace />} />
+        <Route path="/audit-youtube-channel" element={<Navigate to="/audit" replace />} />
+        <Route path="/how-did-youtubebooster-work" element={<Navigate to="/faq" replace />} />
         <Route path="/low-ctr-on-youtube" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-seo-for-small-channels" element={<GrowthGuideRoutePage />} />
         <Route path="/youtube-title-generator" element={<GrowthGuideRoutePage />} />

@@ -4,10 +4,9 @@
 
 ## What the repo does
 
-1. **Root `amplify.yml` (monorepo)** — `customRules` sit next to `appRoot` (same pattern as [monorepo custom headers](https://docs.aws.amazon.com/amplify/latest/userguide/custom-header-YAML-format.html)), with a single catch‑all rewrite:
-   - **`/<*>`** → **`/index.html`** — **`200`** (rewrite)
-2. **`frontend/public/_redirects`** — Netlify-style rules (copied to `dist/`): **`http` and `www` → canonical apex `https://youtubeboosterai.com` (301)**, then **`/home` `/index` → `/`**, then **`/* → /index.html 200`**. Confirm **Amplify → Domains** has both apex and `www` attached so redirects apply.
-3. **Terraform** (`enable_amplify_app`) — `aws_amplify_app` includes the same **`custom_rule`** so the rule exists in AWS even if Hosting ever ignores the YAML block.
+1. **Root `amplify.yml` (monorepo)** — `customRules` sit next to `appRoot`. **Indexable marketing URLs rewrite to `/path/index.html` (200).** Private app URLs (`/admin`, `/dashboard`, `/auth`, `/checkout`, …) rewrite to `/index.html`. There is **no** global `/<*>` → homepage rewrite — that made Google treat `/audit` and `/blog` as homepage duplicates (“Crawled - currently not indexed”).
+2. **`frontend/public/_redirects`** — Netlify-style www/http → apex. Build also writes `dist/_redirects` from `frontend/scripts/hosting-redirect-rules.mjs`.
+3. **Terraform** (`enable_amplify_app`) — same SEO + SPA rules as `amplify.yml`.
 
 After push, wait for the Amplify build + deploy to finish, then hard‑refresh or try an incognito window.
 
@@ -16,21 +15,8 @@ After push, wait for the Amplify build + deploy to finish, then hard‑refresh o
 ### 1. Rewrites must exist in the console
 
 1. AWS Console → **Amplify** → your app → **Hosting** → **Rewrites and redirects**.
-2. You should see at least **one** rule: source **`/<*>`**, target **`/index.html`**, type **Rewrite (200)**.
-3. If the list is **empty** or wrong, the build spec from Git is not driving redirects (or an old console spec is overriding it). **Add this rule manually** (open JSON/text editor):
-
-```json
-[
-  {
-    "source": "/<*>",
-    "status": "200",
-    "target": "/index.html",
-    "condition": null
-  }
-]
-```
-
-Save, then **Redeploy** the branch once.
+2. You should see **301s** for retired marketing URLs, **200s** for `/audit` → `/audit/index.html` (and the other public pages), and **200s** for `/admin/<*>` and `/dashboard/<*>` to `/index.html`. You should **not** see a single catch-all `/<*>` → `/index.html` for the whole site.
+3. If the list is **empty** or still has a sitewide `/<*>` → `/index.html` rewrite, the console is overriding Git. Copy **`customRules` from repo `amplify.yml`** (SEO 200s + SPA prefixes only). Do **not** add a global `/<*>` homepage rewrite.
 
 ### 2. Build specification must come from the repo
 

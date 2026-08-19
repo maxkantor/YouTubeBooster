@@ -54,7 +54,19 @@ For **hundreds/thousands** of pages, prefer generating JSON from a CMS, spreadsh
 
 Tune `Disallow` / crawl rules in `scripts/generate-sitemap.ts` if you add admin or non-indexable areas.
 
-## Google Search Console & indexing
+## Google Search Console: Crawled - currently not indexed
+
+Googlebot was receiving the **homepage HTML** for `/audit`, `/pricing`, `/blog`, and other marketing URLs because Amplify's SPA catch-all (`/<*>` → `/index.html` 200) ran instead of the generated `/path/index.html` files. Duplicate titles/canonicals cause Google to crawl those URLs and leave them out of the index.
+
+**Fix in this repo:**
+
+1. Each indexable path rewrites to its own `/path/index.html` (see `amplify.yml` + generated `dist/_redirects`).
+2. The SPA shell is only used for `/admin`, `/dashboard`, `/auth`, `/checkout`, and similar app routes.
+3. Retired URLs (`/audit-youtube-channel`, `/how-did-youtubebooster-work`, `/low-click-through-rate-youtube`, …) **301** to a live canonical page.
+4. `robots.txt` appearing under this GSC bucket is expected (it is not an HTML page). `www` should 301 to apex.
+
+After Amplify deploys, confirm View Source on `/audit` shows a unique `<title>` and `<link rel="canonical" href="https://youtubeboosterai.com/audit">`. Then in Search Console use **Validate fix**.
+
 
 - **Verification:** Use DNS or HTML file, or set `VITE_GOOGLE_SITE_VERIFICATION`.
 - **Sitemap:** Submit as above.

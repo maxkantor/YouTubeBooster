@@ -29,10 +29,14 @@ locals {
     { source = "/privacy-policy", target = "/privacy", status = "301" },
     { source = "/why-your-youtube-channel-gets-no-views", target = "/why-your-channel-gets-no-views", status = "301" },
     { source = "/low-click-through-rate-youtube", target = "/low-ctr-on-youtube", status = "301" },
-    { source = "/how-to-increase-youtube-watch-time", target = "/increase-youtube-watch-time", status = "301" },
+    { source = "/audit-youtube-channel", target = "/audit", status = "301" },
+    { source = "/how-did-youtubebooster-work", target = "/faq", status = "301" },
 
     # Public SEO routes: serve generated static HTML before the SPA fallback.
-    { source = "/demo", target = "/demo/index.html", status = "200" },
+    { source = "/share", target = "/share/index.html", status = "200" },
+    { source = "/sample-report", target = "/sample-report/index.html", status = "200" },
+    { source = "/unsubscribe", target = "/unsubscribe/index.html", status = "200" },
+    { source = "/youtube-channel-analyzer", target = "/youtube-channel-analyzer/index.html", status = "200" },
     { source = "/pricing", target = "/pricing/index.html", status = "200" },
     { source = "/faq", target = "/faq/index.html", status = "200" },
     { source = "/about", target = "/about/index.html", status = "200" },
@@ -755,9 +759,14 @@ resource "aws_amplify_app" "frontend" {
     target = "/"
   }
   custom_rule {
-    source = "/index.html"
+    source = "/audit-youtube-channel"
     status = "301"
-    target = "/"
+    target = "/audit"
+  }
+  custom_rule {
+    source = "/how-did-youtubebooster-work"
+    status = "301"
+    target = "/faq"
   }
   dynamic "custom_rule" {
     for_each = local.amplify_seo_route_rules
@@ -769,7 +778,77 @@ resource "aws_amplify_app" "frontend" {
     }
   }
   custom_rule {
-    source = "/<*>"
+    source = "/admin"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/admin/<*>"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/dashboard"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/dashboard/<*>"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/auth/<*>"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/signin"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/signup"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/account"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/account/<*>"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/app"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/app/<*>"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/checkout"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/checkout/<*>"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/payment-success"
+    status = "200"
+    target = "/index.html"
+  }
+  custom_rule {
+    source = "/payment-cancel"
     status = "200"
     target = "/index.html"
   }
