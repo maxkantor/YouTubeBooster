@@ -149,8 +149,13 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
         if (!cancelled) {
           setApiDemoData(data);
           setDemoError(null);
-          // Showcase demo is not an audit completion. Dedupe by attempt id across remounts.
-          if (shouldCountAsUserAudit(isDefaultChannelDemo) && typeof window !== 'undefined') {
+          // Paid dashboard audits are entitled users, not acquisition funnel events.
+          // Completions require a prior start on the same attempt id.
+          if (
+            variant === 'marketing' &&
+            shouldCountAsUserAudit(isDefaultChannelDemo) &&
+            typeof window !== 'undefined'
+          ) {
             const channelKey = inputNormalized || inputHandle || 'unknown';
             const { attemptId } = ensureAuditAttemptForDemoLanding(window.sessionStorage, channelKey);
             if (claimAuditCompletion(window.sessionStorage, attemptId)) {
@@ -171,7 +176,7 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
     return () => {
       cancelled = true;
     };
-  }, [channelInput, isDefaultChannelDemo, inputNormalized, inputHandle]);
+  }, [channelInput, isDefaultChannelDemo, inputNormalized, inputHandle, variant]);
 
   if (variant === 'paid') {
     if (!authSession?.idToken) {

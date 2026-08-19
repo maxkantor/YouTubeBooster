@@ -7,7 +7,7 @@ Agents must append every experiment here. Do not delete history.
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive**; **2026-08-19** growth report now reads `ybai-purchases` + `ybai-users` entitlements (no PII). Still **0** verified product-attributed payments. Next eval on first verified checkout/payment or **2026-08-24**. Funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO (**main** treatment)
 - **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
-- **EXP-004** — mini-audit share + sample paid report — **ACTIVE / COLLECTING**. COOK-001 weekday sending **enabled** 2026-08-19 (`CreatorAcquisition:MarketingSendingEnabled=true`, max 5/day). Conservative batch **2 SENT** (approval `APR-20260819-529e31b7`). P05 founder send earlier the same day. P04 form-only skipped.
+- **EXP-004** — mini-audit share + sample paid report — **ACTIVE / COLLECTING** until **100 qualified COOK-001 sends or 2026-08-27** (14 days from 2026-08-13), unless deliverability STOP. COOK-001 ramp **10→20→30**/day enabled 2026-08-19. Conservative batch **2 SENT** (`APR-20260819-529e31b7`). Do not backfill. P05 founder send earlier the same day. P04 form-only skipped.
 
 ## Locked stages (do not launch overlapping treatments)
 
@@ -41,6 +41,16 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-19 — COOK-001 aggressive growth automation (ramp 10→20→30)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 **COLLECTING**. Code + config for 10/day default, max 30, ramp after 3 healthy sending days, A/B copy, cohort reporting, SES health gates. |
+| Distribution | **Not executed this change.** Future weekday scheduled runs use the new limit. No historical backfill. |
+| Evaluation | Remain COLLECTING until 100 qualified sends or 2026-08-27 unless deliverability STOP. |
+| Verified customers | **0** |
+| Verified revenue | **$0** |
 
 ### 2026-08-19 — COOK-001 weekday sending enabled; first conservative batch sent
 
@@ -162,14 +172,14 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 | Guardrail | Do not inflate EXP-002/003 page metrics; no auto-send outreach; Stripe remains product-attributed only. |
 | Baseline | ~16 sessions/7d; 0 verified external paying customers. |
 | Target | Directional: founder-sent links produce mini-audit views + full audit starts within 7 days. |
-| Evaluation date | 2026-08-20 |
+| Evaluation date | 2026-08-27 |
 | Stop rule | Share/demo failures or spam complaints within 48h → revert routes. |
 | Rollback | `git revert` EXP-004 commit on `main`. |
 | Funnel stage | acquisition / distribution (outreach enablement; independent of EXP-002 form treatment) |
 | Commit | `78b2429` |
 | Amplify | job **238** SUCCEED |
 
-**Outreach:** A Cursor task prompt is **not** approval of recipients or copy. The 2026-08-13 list (Budget Bytes, Damn Delicious, Simply Recipes, and other drafts) remains **not approved**. Replacement review: `docs/growth/outreach/2026-08-14-review.md`. Named-recipient approval `APR-2026-08-19-P04-P05`: **P05 SENT**; **P04 SKIPPED_FORM_ONLY**. Do not send other drafts, submit forms, or enable COOK-001 weekday automation.
+**Outreach:** COOK-001 weekday automation is **enabled** with ramp 10→20→30 and A/B copy. Do not send historical/backfill batches. Named-recipient approval `APR-2026-08-19-P04-P05`: **P05 SENT**; **P04 SKIPPED_FORM_ONLY**.
 
 ### 2026-08-13 — Measurement repair (not a conversion experiment)
 

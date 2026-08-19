@@ -52,6 +52,13 @@ function parseArgs(argv) {
   return out;
 }
 
+export function jsonForAwsCli(obj) {
+  return JSON.stringify(obj).replace(/[\u007f-\uffff]/g, (ch) => {
+    const hex = ch.charCodeAt(0).toString(16).padStart(4, '0');
+    return `\\u${hex}`;
+  });
+}
+
 export function sendAdminGrowthEmail({ subject, body, htmlBody }) {
   if (!subject?.trim()) throw new Error('subject required');
   if (!body?.trim()) throw new Error('body required');
@@ -76,10 +83,10 @@ export function sendAdminGrowthEmail({ subject, body, htmlBody }) {
   const destPath = path.join(tmpDir, 'dest.json');
   const msgPath = path.join(tmpDir, 'msg.json');
   try {
-    fs.writeFileSync(destPath, JSON.stringify({ ToAddresses: [to] }), 'utf8');
+    fs.writeFileSync(destPath, jsonForAwsCli({ ToAddresses: [to] }), 'utf8');
     fs.writeFileSync(
       msgPath,
-      JSON.stringify({
+      jsonForAwsCli({
         Subject: { Data: subject, Charset: 'UTF-8' },
         Body: bodyPayload
       }),

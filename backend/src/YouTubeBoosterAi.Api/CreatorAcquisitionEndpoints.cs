@@ -41,7 +41,14 @@ public static class CreatorAcquisitionEndpoints
             if (p is null) return Results.NotFound();
             await acq.RecordFunnelAsync(token, "acq_click", cancellationToken);
             var handle = p.Handle.StartsWith('@') ? p.Handle : "@" + p.Handle.TrimStart('@');
-            var dest = $"https://youtubeboosterai.com/share?channel={Uri.EscapeDataString(handle)}&utm_source=creator_outreach&utm_medium=email&utm_campaign=cook_001&utm_content={Uri.EscapeDataString(p.ProspectId)}";
+            var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
+            var runYmd = p.CohortRunId is { Length: >= 10 } ? p.CohortRunId[^10..] : CreatorAcquisitionScoring.EasternDate(DateTimeOffset.UtcNow).ToString("yyyy-MM-dd");
+            var dest = $"https://youtubeboosterai.com/share?channel={Uri.EscapeDataString(handle)}"
+                + "&utm_source=founder_outreach&utm_medium=email&utm_campaign=cook_001"
+                + $"&utm_content={Uri.EscapeDataString(variant)}"
+                + $"&utm_term={Uri.EscapeDataString(p.ProspectId)}"
+                + $"&utm_id={Uri.EscapeDataString(runYmd)}"
+                + "&exp=004&seg=cooking";
             return Results.Redirect(dest);
         });
         publicApi.MapPost("/weekday-send", async (

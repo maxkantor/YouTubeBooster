@@ -86,11 +86,31 @@ export const EXPERIMENT_DECISIONS = Object.freeze([
 export function classifyExperiment(ex, opts = {}) {
   const reportYmd = opts.reportYmd || '';
   const override = opts.evaluations?.[ex.id] || {};
+  const recorded = override.decision || ex.evaluationDecision || '';
   const awaiting = /awaiting owner approval/i.test(ex.status);
   const due = Boolean(reportYmd && ex.evalDate && ex.evalDate <= reportYmd);
+  const exp004CollectingHold =
+    ex.id === 'EXP-004' &&
+    !recorded &&
+    /active/i.test(ex.status);
+  if (exp004CollectingHold) {
+    const startYmd = '2026-08-13';
+    const days = reportYmd && startYmd ? Math.floor((Date.parse(`${reportYmd}T12:00:00Z`) - Date.parse(`${startYmd}T12:00:00Z`)) / 86400000) : 0;
+    const sends = Number(opts.outreachSends ?? 0);
+    if (sends < 100 && days < 14) {
+      return {
+        ...ex,
+        decision: 'Keep',
+        decisionReason: override.reason || ex.evaluationReason || 'COLLECTING until 100 qualified sends or 14 calendar days',
+        collecting: true,
+        dueUnevaluated: false,
+        nested: false,
+        independentCollecting: true
+      };
+    }
+  }
   const nested =
     /^nested$/i.test(ex.status) || /nested/i.test(ex.funnelStage || '') || ex.id === 'EXP-003';
-  const recorded = override.decision || ex.evaluationDecision || '';
   const allowed = new Set(EXPERIMENT_DECISIONS);
 
   let decision = recorded;

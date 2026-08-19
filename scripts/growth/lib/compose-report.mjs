@@ -135,7 +135,7 @@ function experimentCopy(ex, snapshot) {
     return {
       stage: 'Founder outreach',
       eligible: collecting
-        ? '/share + /sample-report; COOK-001 weekday SES (verified public emails, max 5/day)'
+        ? '/share + /sample-report; COOK-001 weekday SES (verified public emails, ramp 10→20→30/day)'
         : '/share and /sample-report (distribution asset; not send approval)',
       primary: collecting
         ? 'Collecting named-recipient + COOK-001 weekday outreach (drafts are not distribution)'
@@ -154,7 +154,7 @@ function experimentCopy(ex, snapshot) {
 function exp004OverlapNote(classified) {
   const collecting = classified.some((e) => e.id === 'EXP-004' && e.collecting);
   return collecting
-    ? 'EXP-004 is ACTIVE/COLLECTING. COOK-001 weekday sending is enabled with verified-email and approval gates (max 5/day).'
+    ? 'EXP-004 is ACTIVE/COLLECTING. COOK-001 weekday sending ramps 10→20→30/day when delivery health is acceptable (bounce <3%, complaint <0.1%, unsub <2%; ≥30 sends before rates).'
     : 'EXP-004 is awaiting owner approval and is not collecting outreach data.';
 }
 
@@ -197,7 +197,77 @@ export function emptyDistribution() {
       delivered: 'Unknown',
       clicked: 'Unknown',
       converted: 0
-    }
+    },
+    cohort: emptyCohort(),
+    deliverability: emptyDeliverability()
+  };
+}
+
+export function emptyCohort() {
+  return {
+    runId: 'COOK-001',
+    qualifiedProspects: 0,
+    emailsAttempted: 0,
+    emailsSent: 0,
+    deliveryFailures: 0,
+    hardBounces: 0,
+    unsubscribes: 0,
+    auditClicks: 0,
+    auditStarts: 0,
+    auditCompletions: 0,
+    signups: 0,
+    checkoutStarts: 0,
+    verifiedCustomers: 0,
+    verifiedRevenue: 0,
+    dailyLimit: 10,
+    nextRamp: 20,
+    rampBlockReason: 'sample_too_small',
+    variants: { A: { sent: 0, clicks: 0 }, B: { sent: 0, clicks: 0 } }
+  };
+}
+
+export function emptyDeliverability() {
+  return {
+    bounceRate: 'N/A',
+    complaintRate: 'N/A',
+    unsubscribeRate: 'N/A',
+    dailyLimit: 10,
+    nextRampDecision: 'Hold at 10/day until 3 healthy sending days and ≥30 sends.'
+  };
+}
+
+export function rateOrNa(numerator, denominator) {
+  const n = Number(numerator);
+  const d = Number(denominator);
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return 'N/A';
+  return `${((100 * n) / d).toFixed(1)}%`;
+}
+
+export function revenuePer100(revenueUsd, sent) {
+  const r = Number(revenueUsd);
+  const s = Number(sent);
+  if (!Number.isFinite(r) || !Number.isFinite(s) || s <= 0) return 'N/A';
+  return `$${((r * 100) / s).toFixed(2)}`;
+}
+
+export function cohortConversionLines(c) {
+  const sent = Number(c?.emailsSent || 0);
+  const clicks = Number(c?.auditClicks || 0);
+  const starts = Number(c?.auditStarts || 0);
+  const completes = Number(c?.auditCompletions || 0);
+  const signups = Number(c?.signups || 0);
+  const checkout = Number(c?.checkoutStarts || 0);
+  const paid = Number(c?.verifiedCustomers || 0);
+  const revenue = Number(c?.verifiedRevenue || 0);
+  return {
+    sendToClick: rateOrNa(clicks, sent),
+    clickToStart: rateOrNa(starts, clicks),
+    startToComplete: rateOrNa(completes, starts),
+    completeToSignup: rateOrNa(signups, completes),
+    signupToCheckout: rateOrNa(checkout, signups),
+    checkoutToPaid: rateOrNa(paid, checkout),
+    sendToPaid: rateOrNa(paid, sent),
+    revenuePer100: revenuePer100(revenue, sent)
   };
 }
 
@@ -222,6 +292,8 @@ export function normalizeDistribution(input, ctx = {}) {
   d.executed = d.executed === true;
   d.newCustomersThisRun = Number(d.newCustomersThisRun) || 0;
   d.customersObservedInWindow = Number(d.customersObservedInWindow) || 0;
+  d.cohort = { ...emptyCohort(), ...(input?.cohort || d.cohort || {}) };
+  d.deliverability = { ...emptyDeliverability(), ...(input?.deliverability || d.deliverability || {}) };
   if (d.executed) d.blockingApproval = false;
   else if (input?.blockingApproval === false) d.blockingApproval = false;
   else d.blockingApproval = true;
@@ -308,64 +380,92 @@ export function defaultDecisionText({
   const exp001 = classified.find((e) => e.id === 'EXP-001');
   const d = dist || emptyDistribution();
 
-  const parts = [];
+  const c = d.cohort || emptyCohort();
+  const rates = cohortConversionLines(c);
+  const exp004 = classified.find((e) => e.id === 'EXP-004');
+  const exp004State = exp004?.collecting
+    ? 'COLLECTING'
+    : exp004?.decision
+      ? String(exp004.decision).toUpperCase()
+      : d.executed
+        ? 'COLLECTING'
+        : 'n/a';
+  const funnel = `${c.emailsSent} sent → ${c.auditClicks} clicks → ${c.auditCompletions} completed audit → ${c.verifiedCustomers} paid`;
+  const compact = [
+    `Decision: ${d.blockingApproval ? 'BLOCKING APPROVAL' : d.executed ? exp004State : 'NO DISTRIBUTION'}`,
+    '',
+    `COOK-001 sent ${c.emailsSent} qualified creator emails today.`,
+    `${c.verifiedCustomers} verified customers / $${Number(c.verifiedRevenue || 0).toFixed(0)} revenue this run.`,
+    '',
+    `Current funnel:`,
+    funnel,
+    '',
+    `Daily limit: ${d.deliverability?.dailyLimit ?? c.dailyLimit ?? 10}`,
+    `Next eligible ramp: ${d.deliverability?.nextRampDecision || `hold; ${c.rampBlockReason || 'sample_too_small'}`}`,
+    '',
+    `EXP-004 remains ${exp004State}.`
+  ].join('\n');
+
+  const diagnostics = [];
 
   if (d.blockingApproval) {
-    parts.push(`BLOCKING OWNER APPROVAL: ${d.requiredOwnerApproval}`);
+    diagnostics.push(`BLOCKING OWNER APPROVAL: ${d.requiredOwnerApproval}`);
     if (d.exactActionPrepared && d.exactActionPrepared !== 'none') {
-      parts.push(`Exact action prepared: ${d.exactActionPrepared}`);
+      diagnostics.push(`Exact action prepared: ${d.exactActionPrepared}`);
     }
   } else if (d.executed) {
-    parts.push(
+    diagnostics.push(
       `Distribution executed via ${d.channel} to ${d.audience}. New customers acquired by this run: ${d.newCustomersThisRun}.`
     );
   } else {
-    parts.push(
+    diagnostics.push(
       'Distribution was not executed. This run is not successful unless a proven funnel blocker was removed.'
     );
   }
 
-  parts.push(
+  diagnostics.push(
     `New customers this run: ${d.newCustomersThisRun}. Existing customers: ${d.existingCustomers}. Observed in window: ${d.customersObservedInWindow}. Experiment-attributed: ${d.experimentAttributedCustomers}. Verified net revenue: ${d.verifiedRevenue}.`
+  );
+  diagnostics.push(
+    `Send→Click ${rates.sendToClick}; Click→Start ${rates.clickToStart}; Start→Complete ${rates.startToComplete}; Complete→Signup ${rates.completeToSignup}; Signup→Checkout ${rates.signupToCheckout}; Checkout→Paid ${rates.checkoutToPaid}; Send→Paid ${rates.sendToPaid}; Revenue/100 emails ${rates.revenuePer100}.`
   );
 
   if (shipped && ship?.change && ship.change !== 'none this run') {
     const owner = ship.experiment && ship.experiment !== 'n/a' ? ` under ${ship.experiment}` : '';
-    parts.push(`Production change (not distribution by itself): ${ship.change}${owner}.`);
+    diagnostics.push(`Production change (not distribution by itself): ${ship.change}${owner}.`);
   }
 
   if (dueMissed.length) {
-    parts.push(
+    diagnostics.push(
       `${dueMissed.map((e) => e.id).join(', ')} ${dueMissed.length === 1 ? 'was' : 'were'} due on ${formatMonthDayYear(reportYmd)} and ${dueMissed.length === 1 ? 'was' : 'were'} not evaluated - this violates the run sequence.`
     );
   } else if (exp001 && (exp001.decision === 'Inconclusive' || exp001.evaluationDecision === 'Inconclusive')) {
     const reason =
       exp001.decisionReason ||
       'Admin CRM activation data remains unavailable and verified attributed payments are 0';
-    parts.push(
+    diagnostics.push(
       `EXP-001 was evaluated and marked Inconclusive because ${reason}; its treatment remains unchanged.`
     );
   } else if (exp001 && exp001.decision && exp001.decision !== 'Keep' && exp001.decision !== 'Due - not evaluated') {
-    parts.push(`EXP-001 was evaluated as ${exp001.decision}; treatment per experiment log.`);
+    diagnostics.push(`EXP-001 was evaluated as ${exp001.decision}; treatment per experiment log.`);
   }
 
-  const exp004 = classified.find((e) => e.id === 'EXP-004');
   const outreachBit = exp004?.collecting
     ? `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic. EXP-004 COOK-001 weekday outreach is enabled under send gates.`
     : nAwaiting > 0
       ? `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic, while outreach remains paused pending owner approval.`
       : `${nCollecting} experiment${nCollecting === 1 ? '' : 's'} ${nCollecting === 1 ? 'is' : 'are'} collecting attributable traffic.`;
-  parts.push(outreachBit);
+  diagnostics.push(outreachBit);
 
   if (health?.ok === false) {
-    parts.push('Production health reported a failure - see Production Health.');
+    diagnostics.push('Production health reported a failure - see Production Health.');
   }
 
   if (nextFuture) {
-    parts.push(`The next scheduled evaluation is ${nextFuture.id} on ${nextFuture.evalDateLabel}.`);
+    diagnostics.push(`The next scheduled evaluation is ${nextFuture.id} on ${nextFuture.evalDateLabel}.`);
   }
 
-  return typographicNormalize(parts.join(' '));
+  return typographicNormalize(`${compact}\n\n${diagnostics.join(' ')}`);
 }
 
 export function buildSubject({ prefix, et, dist }) {
@@ -377,7 +477,7 @@ export function buildSubject({ prefix, et, dist }) {
       ? 'Blocking approval required'
       : 'Distribution not executed';
   return typographicNormalize(
-    `${prefix || 'YouTubeBooster Growth'} - ${lead} · ${newCust} new customers this run · ${et.date}`
+    `${prefix || 'YouTubeBooster Growth'} · ${lead} · ${newCust} new customers this run · ${et.date}`
   );
 }
 
@@ -538,18 +638,67 @@ export function composeGrowthReport(opts) {
   t.push(`Site: https://youtubeboosterai.com/`);
   t.push(`Admin: https://youtubeboosterai.com/admin/orders`);
   t.push('');
+  const cohort = dist.cohort || emptyCohort();
+  const rates = cohortConversionLines(cohort);
+  const deliv = dist.deliverability || emptyDeliverability();
+
+  t.push('TODAY');
+  t.push('-----');
+  t.push(`Sent: ${cohort.emailsSent}`);
+  t.push(`Clicks: ${cohort.auditClicks}`);
+  t.push(`Audits: ${cohort.auditStarts} start / ${cohort.auditCompletions} complete`);
+  t.push(`Signups: ${cohort.signups}`);
+  t.push(`Customers: ${cohort.verifiedCustomers}`);
+  t.push(`Revenue: $${Number(cohort.verifiedRevenue || 0).toFixed(2)}`);
+  t.push(`Send → Click: ${rates.sendToClick}`);
+  t.push(`Click → Audit start: ${rates.clickToStart}`);
+  t.push(`Audit start → Complete: ${rates.startToComplete}`);
+  t.push(`Checkout → Paid: ${rates.checkoutToPaid}`);
+  t.push(`Send → Paid: ${rates.sendToPaid}`);
+  t.push(`Revenue per 100 emails: ${rates.revenuePer100}`);
+  t.push(`Cohort: ${cohort.runId}`);
+  t.push('');
+  t.push('DELIVERABILITY');
+  t.push('--------------');
+  t.push(`Bounce rate: ${deliv.bounceRate}`);
+  t.push(`Complaint rate: ${deliv.complaintRate}`);
+  t.push(`Unsubscribe rate: ${deliv.unsubscribeRate}`);
+  t.push(`Current daily limit: ${deliv.dailyLimit}`);
+  t.push(`Next ramp decision: ${deliv.nextRampDecision}`);
+  t.push('');
   t.push('1) DECISION');
   t.push('-----------');
   t.push(decision);
   t.push('');
+  t.push('EXPERIMENTS');
+  t.push('-----------');
+  if (!classified.length) t.push('(none marked active)');
+  else {
+    for (const ex of classified) {
+      const copy = experimentCopy(ex, opts.snapshot);
+      t.push(`${ex.id || ex.idLine}`);
+      t.push(`  Stage: ${copy.stage}`);
+      t.push(`  Status: ${typographicNormalize(ex.status)}`);
+      t.push(`  Decision: ${ex.decision}`);
+      t.push(`  Eligible traffic: ${copy.eligible}`);
+      t.push(`  Primary result: ${copy.primary}`);
+      t.push(`  Sample: ${copy.sample}`);
+      t.push(`  Evaluation date: ${ex.evalDateLabel || ex.evalDate || 'n/a'}`);
+      t.push('');
+    }
+    t.push(`Overlap: ${EXP_OVERLAP_POLICY.summary}`);
+    t.push(
+      `At current volume, EXP-002 is the main Acquisition/SEO treatment; EXP-003 is a nested URL; ${exp004OverlapNote(classified)}`
+    );
+  }
+  t.push('');
   if (warnings.length) {
-    t.push('2) DATA QUALITY WARNING');
-    t.push('-----------------------');
+    t.push('DATA QUALITY WARNING');
+    t.push('--------------------');
     for (const w of warnings) t.push(`* ${typographicNormalize(w)}`);
     t.push('');
   }
-  const scoreN = warnings.length ? 3 : 2;
-  t.push(`${scoreN}) SCOREBOARD (raw events unless noted)`);
+  t.push('SCOREBOARD (raw events unless noted)');
   t.push('-'.repeat(40));
   t.push(AUDIT_LANDING_DEFINITION);
   t.push(
@@ -572,32 +721,7 @@ export function composeGrowthReport(opts) {
   );
   t.push('');
 
-  const expN = scoreN + 1;
-  t.push(`${expN}) EXPERIMENT RESULTS`);
-  t.push('--------------------');
-  if (!classified.length) t.push('(none marked active)');
-  else {
-    for (const ex of classified) {
-      const copy = experimentCopy(ex, opts.snapshot);
-      t.push(`${ex.id || ex.idLine}`);
-      t.push(`  Stage: ${copy.stage}`);
-      t.push(`  Status: ${typographicNormalize(ex.status)}`);
-      t.push(`  Decision: ${ex.decision}`);
-      t.push(`  Eligible traffic: ${copy.eligible}`);
-      t.push(`  Primary result: ${copy.primary}`);
-      t.push(`  Sample: ${copy.sample}`);
-      t.push(`  Evaluation date: ${ex.evalDateLabel || ex.evalDate || 'n/a'}`);
-      t.push('');
-    }
-    t.push(`Overlap: ${EXP_OVERLAP_POLICY.summary}`);
-    t.push(
-      `At current volume, EXP-002 is the main Acquisition/SEO treatment; EXP-003 is a nested URL; ${exp004OverlapNote(classified)}`
-    );
-  }
-  t.push('');
-
-  const acqN = expN + 1;
-  t.push(`${acqN}) ACQUISITION ACTION`);
+  t.push('ACQUISITION ACTION');
   t.push('--------------------');
   t.push(`Distribution executed: ${dist.executed ? 'yes' : 'no'}`);
   t.push(`Audience/channel: ${dist.audience} / ${dist.channel}`);
@@ -633,8 +757,7 @@ export function composeGrowthReport(opts) {
   t.push(`  New customers acquired by the current run: ${dist.newCustomersThisRun}`);
   t.push('');
 
-  const nextN = acqN + 1;
-  t.push(`${nextN}) NEXT ACTIONS`);
+  t.push('NEXT ACTIONS');
   t.push('---------------');
   actions.forEach((a, i) => t.push(`${i + 1}. ${a}`));
   if (noteText) {
@@ -644,8 +767,7 @@ export function composeGrowthReport(opts) {
   }
   t.push('');
 
-  const healthN = nextN + 1;
-  t.push(`${healthN}) PRODUCTION HEALTH`);
+  t.push('PRODUCTION HEALTH');
   t.push('---------------------');
   t.push(`Overall: ${opts.health?.ok ? 'OK' : 'FAILED / unavailable'}`);
   for (const c of opts.health?.checks || []) {
@@ -653,8 +775,7 @@ export function composeGrowthReport(opts) {
   }
   t.push('');
 
-  const srcN = healthN + 1;
-  t.push(`${srcN}) DATA SOURCES`);
+  t.push('DATA SOURCES');
   t.push('--------------');
   const crmSrc = opts.snapshot?.sources?.crm ?? 'unavailable';
   t.push(
@@ -666,8 +787,7 @@ export function composeGrowthReport(opts) {
   t.push('Truth: GA4 is directional funnel signal.');
   t.push('');
 
-  const techN = srcN + 1;
-  t.push(`${techN}) TECHNICAL DETAILS`);
+  t.push('TECHNICAL DETAILS');
   t.push('--------------------');
   t.push(`UTC generatedAt: ${now.toISOString()}`);
   t.push(`ET calendar day: ${etDateParts(now).ymd}`);
@@ -812,8 +932,25 @@ export function composeGrowthReport(opts) {
           </div>
         </td></tr>
         <tr><td style="padding:24px 28px 32px;">
+          <h2 style="font-size:18px;margin:0 0 10px;">Today</h2>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #cbd5e1;border-radius:8px;border-collapse:separate;font-size:15px;">
+            <tr>
+              <td style="padding:10px 12px;">Sent<br/><b>${escapeHtml(String(cohort.emailsSent))}</b></td>
+              <td style="padding:10px 12px;">Clicks<br/><b>${escapeHtml(String(cohort.auditClicks))}</b></td>
+              <td style="padding:10px 12px;">Audits<br/><b>${escapeHtml(String(cohort.auditStarts))}/${escapeHtml(String(cohort.auditCompletions))}</b></td>
+              <td style="padding:10px 12px;">Signups<br/><b>${escapeHtml(String(cohort.signups))}</b></td>
+              <td style="padding:10px 12px;">Customers<br/><b>${escapeHtml(String(cohort.verifiedCustomers))}</b></td>
+              <td style="padding:10px 12px;">Revenue<br/><b>$${escapeHtml(Number(cohort.verifiedRevenue || 0).toFixed(2))}</b></td>
+            </tr>
+          </table>
+          <h2 style="font-size:18px;margin:0 0 10px;">Deliverability</h2>
+          <p style="margin:0 0 16px;font-size:15px;">Bounce ${escapeHtml(deliv.bounceRate)} · Complaint ${escapeHtml(deliv.complaintRate)} · Unsubscribe ${escapeHtml(deliv.unsubscribeRate)} · Daily limit ${escapeHtml(String(deliv.dailyLimit))} · Next ramp: ${escapeHtml(deliv.nextRampDecision)}</p>
           <h2 style="font-size:18px;margin:0 0 10px;">Decision</h2>
-          <p style="margin:0;padding:16px 18px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:16px;line-height:1.55;">${escapeHtml(decision)}</p>
+          <p style="margin:0;padding:16px 18px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:16px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(decision)}</p>
+
+          <h2 style="font-size:18px;margin:28px 0 10px;">Experiment results</h2>
+          ${expCards}
+          <p style="margin:8px 0 0;font-size:14px;color:#475569;">${escapeHtml(EXP_OVERLAP_POLICY.summary)} ${escapeHtml(exp004OverlapNote(classified))}</p>
 
           ${warnHtml}
 
@@ -863,10 +1000,6 @@ export function composeGrowthReport(opts) {
             owner/self or smoke: <b>${escapeHtml(stripe30.ownerSelfPayments)}</b>;
             unverified/unattributed: <b>${escapeHtml(stripe30.unverifiedPayments)}</b>.
           </p>
-
-          <h2 style="font-size:18px;margin:28px 0 10px;">Experiment results</h2>
-          ${expCards}
-          <p style="margin:8px 0 0;font-size:14px;color:#475569;">${escapeHtml(EXP_OVERLAP_POLICY.summary)} ${escapeHtml(exp004OverlapNote(classified))}</p>
 
           <h2 style="font-size:18px;margin:28px 0 10px;">Acquisition action</h2>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid ${distLeadBorder};background:${distLeadBg};border-radius:8px;border-collapse:separate;font-size:15px;">

@@ -34,12 +34,17 @@ public static class CreatorAcquisitionMail
         var replyTo = string.IsNullOrWhiteSpace(state.ReplyTo) ? fromEmail : state.ReplyTo.Trim();
         var to = prospect.PublicBusinessEmail!.Trim();
         var creator = string.IsNullOrWhiteSpace(prospect.ChannelName) ? prospect.Handle : prospect.ChannelName;
-        var subject = string.IsNullOrWhiteSpace(prospect.Subject)
-            ? CreatorAcquisitionCampaigns.DefaultSubject
-            : prospect.Subject.Trim();
-
-        var text = BuildText(creator, prospect.ChannelName, prospect.Observation ?? "", trackedAbsoluteUrl, prospect.ChannelName, unsubscribeUrl, state.PostalAddress ?? "");
-        var html = BuildHtml(creator, prospect.ChannelName, prospect.Observation ?? "", trackedAbsoluteUrl, prospect.ChannelName, unsubscribeUrl, state.PostalAddress ?? "");
+        var variant = OutreachPolicy.PersistVariant(prospect.EmailVariant, prospect.ProspectId);
+        var (copySubject, copyBody) = CreatorAcquisitionCopy.Build(
+            variant,
+            creator,
+            prospect.ChannelName,
+            prospect.Observation ?? "",
+            prospect.SuggestedImprovement ?? "",
+            trackedAbsoluteUrl);
+        var subject = string.IsNullOrWhiteSpace(prospect.Subject) ? copySubject : prospect.Subject.Trim();
+        var text = CreatorAcquisitionCopy.WithComplianceFooter(copyBody, prospect.ChannelName, unsubscribeUrl, state.PostalAddress ?? "");
+        var html = BuildHtmlFromText(copyBody, trackedAbsoluteUrl, prospect.ChannelName, unsubscribeUrl, state.PostalAddress ?? "", subject);
 
         foreach (var needle in MojibakeNeedles)
         {
@@ -54,59 +59,25 @@ public static class CreatorAcquisitionMail
         var tags = new Dictionary<string, string>
         {
             ["campaign"] = SanitizeTag(prospect.Campaign),
-            ["purpose"] = "creator_acquisition"
+            ["purpose"] = "creator_acquisition",
+            ["variant"] = SanitizeTag(variant)
         };
         return new AcqMimeMessage(fromHeader, replyTo, to, subject, text, html, listUnsub, raw, tags);
     }
 
-    public static string BuildText(
-        string greetingName,
-        string channelName,
-        string observation,
+    public static string BuildHtmlFromText(
+        string copyBody,
         string trackedUrl,
         string channelForFooter,
         string unsubscribeUrl,
-        string postalAddress)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"Hi {greetingName},");
-        sb.AppendLine();
-        sb.AppendLine("I'm Max, the founder of YouTubeBooster AI. I also run a cooking channel, so I spend a lot of time working on recipe titles, thumbnails and descriptions.");
-        sb.AppendLine();
-        sb.AppendLine($"I looked at the public presentation of {channelName} and noticed one possible opportunity:");
-        sb.AppendLine();
-        sb.AppendLine(observation);
-        sb.AppendLine();
-        sb.AppendLine("I built YouTubeBooster to give independent creators a structured channel audit with practical recommendations for titles, thumbnails, descriptions and discoverability.");
-        sb.AppendLine();
-        sb.AppendLine("You can try the channel audit here:");
-        sb.AppendLine(trackedUrl);
-        sb.AppendLine();
-        sb.AppendLine("No pressure—I thought the observation might be useful.");
-        sb.AppendLine();
-        sb.AppendLine("Thanks,");
-        sb.AppendLine("Max");
-        sb.AppendLine("Founder, YouTubeBooster AI");
-        sb.AppendLine("https://youtubeboosterai.com/");
-        sb.AppendLine();
-        sb.AppendLine($"You received this one-time business email because a contact address was publicly listed for {channelForFooter}. YouTubeBooster AI is not affiliated with YouTube or Google.");
-        sb.AppendLine();
-        sb.AppendLine($"Unsubscribe: {unsubscribeUrl}");
-        sb.AppendLine();
-        sb.AppendLine(postalAddress);
-        return sb.ToString().Replace("\r\n", "\n");
-    }
-
-    public static string BuildHtml(
-        string greetingName,
-        string channelName,
-        string observation,
-        string trackedUrl,
-        string channelForFooter,
-        string unsubscribeUrl,
-        string postalAddress)
+        string postalAddress,
+        string subject)
     {
         string E(string s) => WebUtility.HtmlEncode(s);
+        var paras = copyBody.Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(p => p.Contains(trackedUrl, StringComparison.Ordinal)
+                ? $"<p style=\"margin:0 0 16px;\"><a href=\"{E(trackedUrl)}\" style=\"display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;\">Open your free audit</a></p><p style=\"margin:0 0 16px;font-size:14px;color:#4b5563;\">{E(trackedUrl)}</p>"
+                : $"<p style=\"margin:0 0 16px;\">{E(p).Replace("\n", "<br/>")}</p>");
         return $$"""
             <!DOCTYPE html>
             <html lang="en">
@@ -114,7 +85,7 @@ public static class CreatorAcquisitionMail
               <meta charset="UTF-8" />
               <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1" />
-              <title>{{E(CreatorAcquisitionCampaigns.DefaultSubject)}}</title>
+              <title>{{E(subject)}}</title>
             </head>
             <body style="margin:0;padding:0;background:#f8fafc;color:#111827;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;">
@@ -123,20 +94,7 @@ public static class CreatorAcquisitionMail
                     <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;width:100%;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;">
                       <tr>
                         <td style="padding:28px 28px 8px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.55;">
-                          <p style="margin:0 0 16px;">Hi {{E(greetingName)}},</p>
-                          <p style="margin:0 0 16px;">I'm Max, the founder of YouTubeBooster AI. I also run a cooking channel, so I spend a lot of time working on recipe titles, thumbnails and descriptions.</p>
-                          <p style="margin:0 0 16px;">I looked at the public presentation of {{E(channelName)}} and noticed one possible opportunity:</p>
-                          <p style="margin:0 0 16px;">{{E(observation)}}</p>
-                          <p style="margin:0 0 16px;">I built YouTubeBooster to give independent creators a structured channel audit with practical recommendations for titles, thumbnails, descriptions and discoverability.</p>
-                          <p style="margin:0 0 20px;">You can try the channel audit here:</p>
-                          <p style="margin:0 0 20px;">
-                            <a href="{{E(trackedUrl)}}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;">Open the public mini-review</a>
-                          </p>
-                          <p style="margin:0 0 16px;font-size:14px;color:#4b5563;">Plain URL: {{E(trackedUrl)}}</p>
-                          <p style="margin:0 0 16px;">No pressure—I thought the observation might be useful.</p>
-                          <p style="margin:0 0 4px;">Thanks,</p>
-                          <p style="margin:0 0 2px;"><strong>Max</strong></p>
-                          <p style="margin:0 0 16px;">Founder, YouTubeBooster AI<br /><a href="https://youtubeboosterai.com/" style="color:#111827;">https://youtubeboosterai.com/</a></p>
+                          {{string.Join("\n", paras)}}
                         </td>
                       </tr>
                       <tr>
@@ -153,6 +111,32 @@ public static class CreatorAcquisitionMail
             </body>
             </html>
             """;
+    }
+
+    public static string BuildText(
+        string greetingName,
+        string channelName,
+        string observation,
+        string trackedUrl,
+        string channelForFooter,
+        string unsubscribeUrl,
+        string postalAddress)
+    {
+        var (_, body) = CreatorAcquisitionCopy.Build("A", greetingName, channelName, observation, "", trackedUrl);
+        return CreatorAcquisitionCopy.WithComplianceFooter(body, channelForFooter, unsubscribeUrl, postalAddress);
+    }
+
+    public static string BuildHtml(
+        string greetingName,
+        string channelName,
+        string observation,
+        string trackedUrl,
+        string channelForFooter,
+        string unsubscribeUrl,
+        string postalAddress)
+    {
+        var (subject, body) = CreatorAcquisitionCopy.Build("A", greetingName, channelName, observation, "", trackedUrl);
+        return BuildHtmlFromText(body, trackedUrl, channelForFooter, unsubscribeUrl, postalAddress, subject);
     }
 
     private static string BuildRaw(

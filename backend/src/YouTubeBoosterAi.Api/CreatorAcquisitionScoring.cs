@@ -93,16 +93,23 @@ public static class CreatorAcquisitionScoring
             return new AcqSendGateResult(false, "public_email_unverified");
         if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
             return new AcqSendGateResult(false, "suppressed");
-        if (alreadyContacted || p.LastContactedAt is not null)
+        if (OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
+            return new AcqSendGateResult(false, "invalid_or_spamtrap");
+        var cooldownDays = state.CooldownDays > 0 ? state.CooldownDays : OutreachPolicy.DefaultCooldownDays;
+        if (alreadyContacted && p.LastContactedAt is null)
             return new AcqSendGateResult(false, "already_contacted");
+        if (OutreachPolicy.InCooldown(p.LastContactedAt, nowUtc, cooldownDays))
+            return new AcqSendGateResult(false, "cooldown");
         if (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60)
             return new AcqSendGateResult(false, "stale_upload");
-        if (string.IsNullOrWhiteSpace(p.ApprovalId) || string.IsNullOrWhiteSpace(p.ContentHash))
+        var standing = state.StandingCampaignApproval || state.MarketingSendingEnabled;
+        if (!standing && (string.IsNullOrWhiteSpace(p.ApprovalId) || string.IsNullOrWhiteSpace(p.ContentHash)))
             return new AcqSendGateResult(false, "not_approved");
-        if (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body) || string.IsNullOrWhiteSpace(p.Observation))
+        if (string.IsNullOrWhiteSpace(p.Observation))
             return new AcqSendGateResult(false, "draft_incomplete");
-        var liveHash = ContentHash(p);
-        if (!string.Equals(liveHash, p.ContentHash, StringComparison.Ordinal))
+        if (!standing && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body)))
+            return new AcqSendGateResult(false, "draft_incomplete");
+        if (!string.IsNullOrWhiteSpace(p.ContentHash) && !string.Equals(ContentHash(p), p.ContentHash, StringComparison.Ordinal))
             return new AcqSendGateResult(false, "content_hash_changed");
         if (p.SubscriberCount < 1000 || p.SubscriberCount > 100000)
             return new AcqSendGateResult(false, "subscriber_out_of_band");

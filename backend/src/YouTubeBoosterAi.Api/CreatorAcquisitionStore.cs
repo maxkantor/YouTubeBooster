@@ -18,6 +18,10 @@ public interface ICreatorAcquisitionStore
     Task<bool> TryClaimIdempotencyAsync(string key, CancellationToken cancellationToken);
     Task SaveCampaignFlagsAsync(string campaign, bool marketingSendingEnabled, bool complaintPause, CancellationToken cancellationToken);
     Task<(bool SendingEnabled, bool ComplaintPause)> GetCampaignFlagsAsync(string campaign, CancellationToken cancellationToken);
+    Task<AcqRampPersist> GetRampAsync(string campaign, CancellationToken cancellationToken);
+    Task SaveRampAsync(string campaign, AcqRampPersist ramp, CancellationToken cancellationToken);
+    Task SaveCohortRunAsync(string campaign, string runId, string json, CancellationToken cancellationToken);
+    Task<string?> GetCohortRunAsync(string campaign, string runId, CancellationToken cancellationToken);
 }
 
 public sealed class InMemoryCreatorAcquisitionStore : ICreatorAcquisitionStore
@@ -26,6 +30,8 @@ public sealed class InMemoryCreatorAcquisitionStore : ICreatorAcquisitionStore
     private readonly ConcurrentDictionary<string, AcqApprovalRecord> _approvals = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _idempotency = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, (bool Sending, bool Pause)> _flags = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AcqRampPersist> _ramps = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _cohorts = new(StringComparer.OrdinalIgnoreCase);
 
     public Task UpsertProspectAsync(AcqProspectRecord prospect, CancellationToken cancellationToken)
     {
@@ -94,6 +100,30 @@ public sealed class InMemoryCreatorAcquisitionStore : ICreatorAcquisitionStore
     {
         if (_flags.TryGetValue(campaign, out var v)) return Task.FromResult(v);
         return Task.FromResult((false, false));
+    }
+
+    public Task<AcqRampPersist> GetRampAsync(string campaign, CancellationToken cancellationToken)
+    {
+        if (_ramps.TryGetValue(campaign, out var ramp)) return Task.FromResult(ramp);
+        return Task.FromResult(new AcqRampPersist(OutreachPolicy.DefaultDailyLimit, 0, null, null));
+    }
+
+    public Task SaveRampAsync(string campaign, AcqRampPersist ramp, CancellationToken cancellationToken)
+    {
+        _ramps[campaign] = ramp;
+        return Task.CompletedTask;
+    }
+
+    public Task SaveCohortRunAsync(string campaign, string runId, string json, CancellationToken cancellationToken)
+    {
+        _cohorts[$"{campaign}#{runId}"] = json;
+        return Task.CompletedTask;
+    }
+
+    public Task<string?> GetCohortRunAsync(string campaign, string runId, CancellationToken cancellationToken)
+    {
+        _cohorts.TryGetValue($"{campaign}#{runId}", out var json);
+        return Task.FromResult<string?>(json);
     }
 
     public static string NormalizeHandle(string? handle) =>
@@ -307,6 +337,66 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
         var sending = string.Equals(res.Item?.GetValueOrDefault("sending")?.S, "true", StringComparison.OrdinalIgnoreCase);
         var pause = string.Equals(res.Item?.GetValueOrDefault("pause")?.S, "true", StringComparison.OrdinalIgnoreCase);
         return (sending, pause);
+    }
+
+    public async Task<AcqRampPersist> GetRampAsync(string campaign, CancellationToken cancellationToken)
+    {
+        var res = await _db.GetItemAsync(new GetItemRequest
+        {
+            TableName = Table,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = S($"ACQRAMP#{campaign}"),
+                ["sk"] = S("META")
+            }
+        }, cancellationToken);
+        var json = res.Item?.GetValueOrDefault("payload")?.S;
+        if (string.IsNullOrWhiteSpace(json))
+            return new AcqRampPersist(OutreachPolicy.DefaultDailyLimit, 0, null, null);
+        return JsonSerializer.Deserialize<AcqRampPersist>(json, AcqJson.Options)
+            ?? new AcqRampPersist(OutreachPolicy.DefaultDailyLimit, 0, null, null);
+    }
+
+    public async Task SaveRampAsync(string campaign, AcqRampPersist ramp, CancellationToken cancellationToken)
+    {
+        await _db.PutItemAsync(new PutItemRequest
+        {
+            TableName = Table,
+            Item = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = S($"ACQRAMP#{campaign}"),
+                ["sk"] = S("META"),
+                ["payload"] = S(JsonSerializer.Serialize(ramp, AcqJson.Options))
+            }
+        }, cancellationToken);
+    }
+
+    public async Task SaveCohortRunAsync(string campaign, string runId, string json, CancellationToken cancellationToken)
+    {
+        await _db.PutItemAsync(new PutItemRequest
+        {
+            TableName = Table,
+            Item = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = S($"ACQRUN#{campaign}#{runId}"),
+                ["sk"] = S("META"),
+                ["payload"] = S(json ?? "{}")
+            }
+        }, cancellationToken);
+    }
+
+    public async Task<string?> GetCohortRunAsync(string campaign, string runId, CancellationToken cancellationToken)
+    {
+        var res = await _db.GetItemAsync(new GetItemRequest
+        {
+            TableName = Table,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = S($"ACQRUN#{campaign}#{runId}"),
+                ["sk"] = S("META")
+            }
+        }, cancellationToken);
+        return res.Item?.GetValueOrDefault("payload")?.S;
     }
 
     private static AcqProspectRecord? ReadProspect(Dictionary<string, AttributeValue>? item)

@@ -66,7 +66,9 @@ public sealed record AcqProspectRecord(
     string? Notes,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    bool PreviewPlaceholder
+    bool PreviewPlaceholder,
+    string? EmailVariant = null,
+    string? CohortRunId = null
 );
 
 public sealed record AcqApprovalRecord(
@@ -91,7 +93,13 @@ public sealed record AcqCampaignState(
     string? FromEmail,
     string? FromName,
     string? ReplyTo,
-    string? ConfigSet
+    string? ConfigSet,
+    int MaxDailyLimit = 30,
+    bool RampEnabled = true,
+    int CooldownDays = 30,
+    int RampStage = 10,
+    bool StandingCampaignApproval = false,
+    string? RampBlockReason = null
 );
 
 public sealed record AcqSendGateResult(bool Ok, string Reason);
@@ -156,7 +164,10 @@ public sealed record AcqWeekdaySendResult(
     int Attempted,
     int Sent,
     int Skipped,
-    IReadOnlyList<string> Reasons
+    IReadOnlyList<string> Reasons,
+    int DailyLimit = 10,
+    string? CohortRunId = null,
+    string? RampBlockReason = null
 );
 
 public static class AcqJson

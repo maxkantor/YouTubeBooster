@@ -21,6 +21,10 @@ const cfg = awsJson(['lambda', 'get-function-configuration', '--function-name', 
 const vars = { ...(cfg.Environment?.Variables || {}) };
 vars.CreatorAcquisition__MarketingSendingEnabled = 'true';
 vars.CreatorAcquisition__ConfigSet = 'yb-creator-acquisition';
+vars.YTB_OUTREACH_DAILY_LIMIT = vars.YTB_OUTREACH_DAILY_LIMIT || '10';
+vars.YTB_OUTREACH_MAX_LIMIT = '30';
+vars.YTB_OUTREACH_RAMP_ENABLED = 'true';
+vars.YTB_OUTREACH_COOLDOWN_DAYS = vars.YTB_OUTREACH_COOLDOWN_DAYS || '30';
 const payloadPath = path.join(os.tmpdir(), 'yb-lambda-acq-env.json');
 fs.writeFileSync(
   payloadPath,

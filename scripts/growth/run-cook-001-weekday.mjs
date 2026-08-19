@@ -2,7 +2,7 @@
 /**
  * Conservative COOK-001 weekday send.
  * Uses only official-site mailto addresses. Never prints emails.
- * Approves at most --max (default 2) verified contacts, then calls weekday-send.
+ * Approves at most --max (default 10) verified contacts, then calls weekday-send.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -13,7 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '../..');
 const API = process.env.YB_API_BASE || 'https://yri8sw6k1h.execute-api.us-east-1.amazonaws.com';
 const REGION = process.env.AWS_REGION || 'us-east-1';
-const MAX_DEFAULT = 2;
+const MAX_DEFAULT = 10;
 
 const SKIP_HANDLES = new Set(['@sohlaandham', '@kelvinskitchen']);
 
@@ -21,7 +21,7 @@ function parseArgs(argv) {
   const out = { max: MAX_DEFAULT, dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--max') out.max = Math.max(1, Math.min(5, Number(argv[++i] || MAX_DEFAULT)));
+    if (a === '--max') out.max = Math.max(1, Math.min(30, Number(argv[++i] || MAX_DEFAULT)));
     else if (a === '--dry-run') out.dryRun = true;
   }
   return out;

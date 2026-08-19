@@ -140,10 +140,12 @@ public class CreatorAcquisitionTests
     }
 
     [Fact]
-    public void AlreadyContacted_BlocksSecondEmail()
+    public void AlreadyContacted_UsesCooldownWindow()
     {
         var p = Prospect(lastContacted: DateTimeOffset.UtcNow.AddDays(-2));
-        Assert.Equal("already_contacted", CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, State(), true).Reason);
+        Assert.Equal("cooldown", CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, State(), true).Reason);
+        var cooled = Prospect(lastContacted: DateTimeOffset.UtcNow.AddDays(-31));
+        Assert.True(CreatorAcquisitionScoring.ExplainSendEligibility(cooled, DateTimeOffset.UtcNow, State(), true).Ok);
     }
 
     [Fact]
@@ -159,6 +161,8 @@ public class CreatorAcquisitionTests
         Assert.Contains("List-Unsubscribe:", mime.RawRfc822);
         Assert.Contains("List-Unsubscribe-Post:", mime.RawRfc822);
         Assert.Contains("Hi Example Cook", mime.TextBody);
+        Assert.Contains("I ran", mime.TextBody);
+        Assert.Contains("YouTubeBooster", mime.TextBody);
         Assert.DoesNotContain("<script", mime.HtmlBody, StringComparison.OrdinalIgnoreCase);
         Assert.False(CreatorAcquisitionMail.TagsContainPii(mime.SesTags));
         Assert.DoesNotContain("hello@example-creator.test", string.Join(',', mime.SesTags.Select(kv => kv.Key + kv.Value)));
@@ -219,5 +223,110 @@ public class CreatorAcquisitionTests
         Assert.Equal(8, titles);
         Assert.Equal(14, descriptions);
         Assert.Equal(5.2, cadence);
+    }
+}
+
+public class OutreachPolicyTests
+{
+    [Fact]
+    public void DailyLimit_DefaultsToTenAndCapsAtThirty()
+    {
+        Assert.Equal(10, OutreachPolicy.ClampDailyLimit(10));
+        Assert.Equal(30, OutreachPolicy.ClampDailyLimit(99));
+        Assert.Equal(10, OutreachPolicy.ResolveDailyLimit(null, null, null, 30));
+    }
+
+    [Fact]
+    public void Ramp_AdvancesAfterThreeHealthyDays()
+    {
+        var health = OutreachPolicy.HealthFromCounts(30, 0, 0, 0);
+        var d = OutreachPolicy.DecideRamp(10, 3, health, true, 30);
+        Assert.True(d.Advance);
+        Assert.Equal(20, d.NextStage);
+        var d2 = OutreachPolicy.DecideRamp(20, 3, health, true, 30);
+        Assert.Equal(30, d2.NextStage);
+        var d3 = OutreachPolicy.DecideRamp(30, 3, health, true, 30);
+        Assert.False(d3.Advance);
+    }
+
+    [Fact]
+    public void Ramp_BlockedByBounceAndComplaint()
+    {
+        var bounce = OutreachPolicy.HealthFromCounts(100, 3, 0, 0);
+        Assert.True(bounce.Unhealthy);
+        Assert.Equal("bounce_rate", bounce.Reason);
+        Assert.False(OutreachPolicy.DecideRamp(10, 3, bounce, true, 30).Advance);
+        var complaint = OutreachPolicy.HealthFromCounts(1000, 0, 1, 0);
+        Assert.Equal("complaint_rate", complaint.Reason);
+        Assert.False(OutreachPolicy.DecideRamp(10, 3, complaint, true, 30).Advance);
+    }
+
+    [Fact]
+    public void SmallSample_DoesNotRamp()
+    {
+        var health = OutreachPolicy.HealthFromCounts(2, 0, 0, 0);
+        Assert.False(health.EnoughSample);
+        Assert.False(OutreachPolicy.DecideRamp(10, 3, health, true, 30).Advance);
+        Assert.Equal("sample_too_small", OutreachPolicy.DecideRamp(10, 3, health, true, 30).Reason);
+    }
+
+    [Fact]
+    public void Variant_PersistsAndIsDeterministic()
+    {
+        var a = OutreachPolicy.AssignVariant("COOK-001-P001");
+        Assert.Equal(a, OutreachPolicy.AssignVariant("COOK-001-P001"));
+        Assert.Equal("A", OutreachPolicy.PersistVariant("A", "COOK-001-P099"));
+        Assert.Equal("B", OutreachPolicy.PersistVariant("B", "COOK-001-P001"));
+        Assert.Contains(a, new[] { "A", "B" });
+    }
+
+    [Fact]
+    public void TrackedUrl_HasFounderAttribution()
+    {
+        var url = OutreachPolicy.BuildTrackedUrl("https://youtubeboosterai.com", "tok", "COOK-001-P001", "A", "2026-08-19");
+        Assert.Contains("utm_source=founder_outreach", url);
+        Assert.Contains("utm_medium=email", url);
+        Assert.Contains("utm_campaign=cook_001", url);
+        Assert.Contains("utm_content=A", url);
+        Assert.Contains("utm_id=2026-08-19", url);
+        Assert.Contains("/api/public/acq/go/tok", url);
+    }
+
+    [Fact]
+    public void ConversionRates_ZeroDenominatorIsNa()
+    {
+        Assert.Equal("N/A", OutreachPolicy.RateOrNa(1, 0));
+        Assert.Equal("50.0%", OutreachPolicy.RateOrNa(1, 2));
+        Assert.Equal("N/A", OutreachPolicy.RevenuePer100(10, 0));
+        Assert.Equal("$10.00", OutreachPolicy.RevenuePer100(1, 10));
+    }
+
+    [Fact]
+    public void EvaluateOutreach_StaysCollectingUntilEvidence()
+    {
+        var ok = OutreachPolicy.HealthFromCounts(30, 0, 0, 0);
+        Assert.Equal("COLLECTING", OutreachPolicy.EvaluateOutreach(10, 6, ok, 1, 1, 0, 0));
+        Assert.Equal("INCONCLUSIVE", OutreachPolicy.EvaluateOutreach(100, 14, ok, 2, 1, 0, 0));
+        Assert.Equal("KEEP", OutreachPolicy.EvaluateOutreach(100, 14, ok, 5, 3, 1, 1));
+        var bad = OutreachPolicy.HealthFromCounts(100, 5, 0, 0);
+        Assert.Equal("STOP", OutreachPolicy.EvaluateOutreach(100, 14, bad, 0, 0, 0, 0));
+    }
+
+    [Fact]
+    public void SpamTrap_AndCustomerLikeInvalid()
+    {
+        Assert.True(OutreachPolicy.IsSpamTrapOrInvalid("noreply@brand.com"));
+        Assert.False(OutreachPolicy.IsSpamTrapOrInvalid("hello@example-creator.test"));
+    }
+
+    [Fact]
+    public void Subject_EncodesUtf8Middot()
+    {
+        var encoded = CreatorAcquisitionMail.EncodeSubject("YouTubeBooster Growth · Distribution executed");
+        Assert.StartsWith("=?UTF-8?B?", encoded);
+        var b64 = encoded["=?UTF-8?B?".Length..^2];
+        var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+        Assert.Contains("·", decoded);
+        Assert.DoesNotContain("Â", decoded);
     }
 }

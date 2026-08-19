@@ -1,16 +1,50 @@
 # Creator Acquisition Center
 
-**Status:** Implemented. COOK-001 weekday sending is **enabled** under send gates (verified public business email, named approval, postal footer, unsubscribe, suppression, max 5/weekday). A draft is not distribution.
+**Status:** Implemented. COOK-001 weekday sending is **enabled**. Daily volume ramps **10 → 20 → 30** qualified emails on weekdays when SES health is acceptable. A draft is not distribution.
 
 Admin UI: https://youtubeboosterai.com/admin/marketing/creator-acquisition
+
+## Volume, ramp, and safety
+
+Configuration (env, then Lambda `CreatorAcquisition:*`, then SSM `/youtubebooster/outreach/*`):
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `YTB_OUTREACH_DAILY_LIMIT` | `10` | Used only when ramp is disabled |
+| `YTB_OUTREACH_MAX_LIMIT` | `30` | Hard cap; never auto-exceed |
+| `YTB_OUTREACH_RAMP_ENABLED` | `true` | Stage from persisted `ACQRAMP#COOK-001` |
+| `YTB_OUTREACH_COOLDOWN_DAYS` | `30` | Do not re-email the same prospect |
+
+Ramp stages: **10 / 20 / 30** per Eastern weekday. Advance after **3 sending days** at the current stage **only if** at least **30** prior sends exist and:
+
+- Bounce rate < 3%
+- Complaint rate < 0.1%
+- Unsubscribe rate < 2%
+
+If the sample is too small, stay at the current stage and record `sample_too_small`. Bounce/complaint above threshold **stops** the day's send. Never ramp when health is unknown or unhealthy.
+
+## Qualification (COOK-001 cooking segment)
+
+Every send requires: public YouTube channel, cooking niche, upload in last 60 days, verified public business email (official site, not guessed/form-only), observation from public videos, no unsubscribe/hard bounce/spam-trap, no existing paying customer, not in cooldown. Additional niches can reuse the same gates with a different `PrimaryNiche` / campaign id.
+
+## Copy and attribution
+
+Variants **A** (audit-first) and **B** (opportunity-first), sticky 50/50 by prospect id. CTA uses `/api/public/acq/go/{token}` with `utm_source=founder_outreach`, `utm_medium=email`, `utm_campaign=cook_001`, `utm_content={A|B}`, `utm_term={safe prospect id}`, `utm_id={run date}`, `exp=004`, `seg=cooking`.
+
+A customer counts only as a **verified YouTubeBooster-attributed** Stripe payment (see `STRIPE-PRODUCT-ALLOWLIST.md`). Audit completions, entitlements, and unattributed Stripe are not campaign customers.
+
+## Experiment evaluation (EXP-004)
+
+Remain **COLLECTING** until **100 qualified sends** or **14 calendar days** from 2026-08-13, unless deliverability forces STOP. Then KEEP / ITERATE / STOP / INCONCLUSIVE from click, audit, signup, checkout, verified customers, revenue, and delivery health.
 
 ## What shipped
 
 - Prospect data model, scoring, dedup, public-contact rules
-- Admin CRM views and bounded batch approval (max 25)
-- Personalized public mini-review drafts
+- Admin CRM views and bounded batch approval (max 30)
+- Personalized public mini-review drafts (A/B)
 - SES MIME builder (UTF-8, List-Unsubscribe, no open pixel, no PII tags)
-- Weekday sender endpoint that **sends zero** until every gate passes
+- Weekday sender with ramp + health gates
+- Cohort run ids (`COOK-001-yyyy-MM-dd`) persisted as `ACQRUN#…`
 - Inbound reply ingest (sanitized preview → CRM thread)
 - Sanitized CSVs with **no email addresses**
 
@@ -24,15 +58,16 @@ Admin UI: https://youtubeboosterai.com/admin/marketing/creator-acquisition
 6. Custom MAIL FROM `bounce.youtubeboosterai.com` (optional; do not block sends if domain identity is valid)
 7. SSM `/youtubebooster/business/postal-address` set
 8. Unsubscribe HMAC configured
-9. Named-batch approval, content hash unchanged
-10. Max **5** emails per weekday (America/New_York), no weekend sends; first batches should be **2**
-11. No guessed emails, no prior send, no suppression
+9. Standing campaign approval while sending is enabled (named batches still supported)
+10. Daily cap from ramp stage (default **10**, max **30**), weekdays only (America/New_York)
+11. No guessed emails, cooldown 30 days, no suppression, no existing customers
 
-Conservative operator:
+Operator (does not backfill historical campaigns):
 
 ```bash
 node scripts/growth/enable-cook-001-sending.mjs
-node scripts/growth/run-cook-001-weekday.mjs --max 2
+# Future weekday cron / scheduled growth run uses the new daily limit.
+# Do not run a one-off backfill send.
 ```
 
 ## Preferred sender (after SES is ready)
@@ -65,8 +100,8 @@ Do not use Max’s personal mailbox in campaign headers.
 1. SES identity `hello@youtubeboosterai.com` is covered by the verified domain. Custom MAIL FROM is optional.
 2. SES configuration set `yb-creator-acquisition` exists; add SNS/event destinations later for DELIVERED/bounce/complaint CRM updates.
 3. Postal address is in SSM. Unsubscribe HMAC is required.
-4. Conservative operator: `node scripts/growth/run-cook-001-weekday.mjs --max 2` (official mailto only; form-only skipped).
-5. Increase volume only while bounce/complaint rates stay healthy.
+4. Conservative operator is the weekday cron; do not backfill historical lists. `run-cook-001-weekday.mjs` default `--max` is 10 (cap 30).
+5. Increase volume only via the 10→20→30 ramp while bounce/complaint/unsubscribe rates stay healthy.
 
 Do **not** run `daily-outreach-send.mjs` against the old roster.
 

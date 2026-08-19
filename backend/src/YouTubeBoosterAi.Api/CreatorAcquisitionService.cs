@@ -6,8 +6,8 @@ namespace YouTubeBoosterAi.Api;
 
 public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
 {
-    public const int MaxBatchApprove = 25;
-    public const int DefaultDailyLimit = 5;
+    public const int MaxBatchApprove = 30;
+    public const int DefaultDailyLimit = OutreachPolicy.DefaultDailyLimit;
 
     private readonly ICreatorAcquisitionStore _store;
     public ICreatorAcquisitionStore Store => _store;
@@ -54,11 +54,34 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         var postal = await _secrets.GetValueAsync("business/postal-address", secure: false, cancellationToken);
         var pauseSecret = await _secrets.GetValueAsync("outreach/complaint-pause", secure: false, cancellationToken);
         var pause = flags.ComplaintPause || string.Equals(pauseSecret?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+        var maxLimit = OutreachPolicy.ResolveMaxLimit(
+            Environment.GetEnvironmentVariable("YTB_OUTREACH_MAX_LIMIT"),
+            _configuration["CreatorAcquisition:MaxDailyLimit"],
+            await _secrets.GetValueAsync("outreach/max-limit", secure: false, cancellationToken));
+        var rampEnabled = OutreachPolicy.ParseBool(
+            Environment.GetEnvironmentVariable("YTB_OUTREACH_RAMP_ENABLED")
+                ?? _configuration["CreatorAcquisition:RampEnabled"]
+                ?? await _secrets.GetValueAsync("outreach/ramp-enabled", secure: false, cancellationToken),
+            true);
+        var cooldown = OutreachPolicy.ParseInt(
+            Environment.GetEnvironmentVariable("YTB_OUTREACH_COOLDOWN_DAYS")
+                ?? _configuration["CreatorAcquisition:CooldownDays"]
+                ?? await _secrets.GetValueAsync("outreach/cooldown-days", secure: false, cancellationToken),
+            OutreachPolicy.DefaultCooldownDays);
+        var ramp = await _store.GetRampAsync(campaign, cancellationToken);
+        var stage = OutreachPolicy.Stages.Contains(ramp.Stage) ? ramp.Stage : OutreachPolicy.Stages[0];
+        var daily = rampEnabled
+            ? OutreachPolicy.ClampDailyLimit(stage, maxLimit)
+            : OutreachPolicy.ResolveDailyLimit(
+                Environment.GetEnvironmentVariable("YTB_OUTREACH_DAILY_LIMIT"),
+                _configuration["CreatorAcquisition:DailyLimit"],
+                await _secrets.GetValueAsync("outreach/daily-limit", secure: false, cancellationToken),
+                maxLimit);
 
         return new AcqCampaignState(
             MarketingSendingEnabled: sending,
             ComplaintPause: pause,
-            DailyLimit: DefaultDailyLimit,
+            DailyLimit: daily,
             LastSendDayEt: null,
             SentTodayEt: 0,
             PostalAddress: postal?.Trim(),
@@ -67,7 +90,13 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             ReplyTo: reply?.Trim(),
             ConfigSet: string.IsNullOrWhiteSpace(_configuration["CreatorAcquisition:ConfigSet"])
                 ? null
-                : _configuration["CreatorAcquisition:ConfigSet"]!.Trim()
+                : _configuration["CreatorAcquisition:ConfigSet"]!.Trim(),
+            MaxDailyLimit: maxLimit,
+            RampEnabled: rampEnabled,
+            CooldownDays: cooldown,
+            RampStage: stage,
+            StandingCampaignApproval: sending,
+            RampBlockReason: ramp.BlockReason
         );
     }
 
@@ -251,7 +280,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             included,
             hashes,
             request.AudienceQueryVersion ?? "v1",
-            Math.Clamp(request.MaximumSends, 1, DefaultDailyLimit),
+            Math.Clamp(request.MaximumSends, 1, OutreachPolicy.DefaultMaxLimit),
             DateTimeOffset.UtcNow.AddDays(7)
         );
         await _store.SaveApprovalAsync(approval, cancellationToken);
@@ -289,24 +318,46 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
 
         var all = await _store.ListProspectsAsync(cancellationToken);
         var today = CreatorAcquisitionScoring.EasternDate(DateTimeOffset.UtcNow).Date;
+        var runYmd = today.ToString("yyyy-MM-dd");
+        var cohortRunId = $"{campaign}-{runYmd}";
         var sentToday = all.Count(p => p.LastContactedAt is not null && CreatorAcquisitionScoring.EasternDate(p.LastContactedAt.Value).Date == today);
         var remaining = Math.Max(0, state.DailyLimit - sentToday);
         if (remaining == 0)
-            return new AcqWeekdaySendResult(true, 0, 0, 0, ["daily_limit_reached"]);
+            return new AcqWeekdaySendResult(true, 0, 0, 0, ["daily_limit_reached"], state.DailyLimit, cohortRunId, state.RampBlockReason);
+
+        var sentAll = all.Count(p => p.LastContactedAt is not null);
+        var bounced = all.Count(p => string.Equals(p.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase));
+        var complaints = all.Count(p => string.Equals(p.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase));
+        var unsubs = all.Count(p => string.Equals(p.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase));
+        var health = OutreachPolicy.HealthFromCounts(sentAll, bounced, complaints, unsubs);
+        if (health.Unhealthy)
+        {
+            await _store.SaveRampAsync(campaign, new AcqRampPersist(state.RampStage, 0, runYmd, health.Reason), cancellationToken);
+            if (health.Reason is "bounce_rate" or "complaint_rate")
+                return new AcqWeekdaySendResult(true, 0, 0, 0, [$"health_stop:{health.Reason}"], 0, cohortRunId, health.Reason);
+            remaining = Math.Min(remaining, Math.Max(1, state.RampStage / 2));
+            reasons.Add($"health_reduce:{health.Reason}");
+        }
 
         var candidates = all
             .Where(p => string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
-            .Where(p => string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+            .Where(p => string.Equals(p.PrimaryNiche, "cooking", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(p.PrimaryNiche))
+            .Where(p =>
+                string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                || (!string.IsNullOrWhiteSpace(p.Observation) && CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)))
+            .OrderByDescending(p => p.PriorityScore)
             .ToList();
 
         var sent = 0;
         var skipped = 0;
         var attempted = 0;
         var sentThisRunByApproval = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in candidates)
+        foreach (var candidate in candidates)
         {
             if (sent >= remaining) break;
             attempted++;
+            var p = candidate;
             var outreach = EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
                 ? await _appDataStore.GetOutreachContactAsync(p.PublicBusinessEmail!, cancellationToken)
                 : null;
@@ -315,6 +366,23 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 skipped++;
                 reasons.Add($"{p.ProspectId}:unsubscribed");
                 continue;
+            }
+            if (outreach is not null && outreach.Status.Contains("bounce", StringComparison.OrdinalIgnoreCase))
+            {
+                skipped++;
+                reasons.Add($"{p.ProspectId}:hard_bounce");
+                continue;
+            }
+            if (EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
+            {
+                var user = await _appDataStore.GetUserByEmailAsync(p.PublicBusinessEmail!, cancellationToken);
+                var entitled = user is not null && await _appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken);
+                if (user is not null && (user.Purchased || entitled))
+                {
+                    skipped++;
+                    reasons.Add($"{p.ProspectId}:existing_customer");
+                    continue;
+                }
             }
 
             var gate = CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, state, alreadyContacted: p.LastContactedAt is not null);
@@ -325,32 +393,42 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 continue;
             }
 
-            var approval = p.ApprovalId is null ? null : await _store.GetApprovalAsync(p.ApprovalId, cancellationToken);
-            if (approval is null || approval.ExpiresAt < DateTimeOffset.UtcNow)
+            var extraThisRun = 0;
+            if (!state.StandingCampaignApproval)
             {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:approval_expired");
-                continue;
-            }
-            var priorForApproval = all.Count(x =>
-                string.Equals(x.ApprovalId, approval.ApprovalId, StringComparison.OrdinalIgnoreCase)
-                && x.LastContactedAt is not null);
-            var extraThisRun = sentThisRunByApproval.GetValueOrDefault(approval.ApprovalId);
-            if (priorForApproval + extraThisRun >= approval.MaximumSends)
-            {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:approval_cap");
-                continue;
-            }
-            if (!approval.ContentHashes.TryGetValue(p.ProspectId, out var approvedHash)
-                || !string.Equals(approvedHash, CreatorAcquisitionScoring.ContentHash(p), StringComparison.Ordinal))
-            {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:approval_invalidated");
-                continue;
+                var approval = p.ApprovalId is null ? null : await _store.GetApprovalAsync(p.ApprovalId, cancellationToken);
+                if (approval is null || approval.ExpiresAt < DateTimeOffset.UtcNow)
+                {
+                    skipped++;
+                    reasons.Add($"{p.ProspectId}:approval_expired");
+                    continue;
+                }
+                var priorForApproval = all.Count(x =>
+                    string.Equals(x.ApprovalId, approval.ApprovalId, StringComparison.OrdinalIgnoreCase)
+                    && x.LastContactedAt is not null);
+                extraThisRun = sentThisRunByApproval.GetValueOrDefault(approval.ApprovalId);
+                if (priorForApproval + extraThisRun >= approval.MaximumSends)
+                {
+                    skipped++;
+                    reasons.Add($"{p.ProspectId}:approval_cap");
+                    continue;
+                }
+                if (!approval.ContentHashes.TryGetValue(p.ProspectId, out var approvedHash)
+                    || !string.Equals(approvedHash, CreatorAcquisitionScoring.ContentHash(p), StringComparison.Ordinal))
+                {
+                    skipped++;
+                    reasons.Add($"{p.ProspectId}:approval_invalidated");
+                    continue;
+                }
             }
 
-            var idem = $"{p.ProspectId}:{p.ApprovalId}:{p.ContentHash}";
+            var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
+            if (!string.Equals(p.EmailVariant, variant, StringComparison.Ordinal))
+            {
+                p = p with { EmailVariant = variant, UpdatedAt = DateTimeOffset.UtcNow };
+                await _store.UpsertProspectAsync(p, cancellationToken);
+            }
+            var idem = $"{p.ProspectId}:{cohortRunId}";
             if (!await _store.TryClaimIdempotencyAsync(idem, cancellationToken))
             {
                 skipped++;
@@ -360,8 +438,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
 
             var unsub = UnsubscribeUrl(p.PublicBusinessEmail!, hmac);
             var site = Site();
-            var tracked = $"{site}{p.TrackedPath}";
-            var mime = CreatorAcquisitionMail.Build(p, state, site, unsub, tracked);
+            var tracked = OutreachPolicy.BuildTrackedUrl(site, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
+            var prepared = p with { EmailVariant = variant, CohortRunId = cohortRunId, Subject = p.Subject, Body = p.Body };
+            var mime = CreatorAcquisitionMail.Build(prepared, state, site, unsub, tracked);
             if (CreatorAcquisitionMail.TagsContainPii(mime.SesTags))
             {
                 skipped++;
@@ -396,20 +475,25 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     cancellationToken);
                 await _appDataStore.SaveSupportReplyAsync(ticketId, p.Subject!, p.Body ?? "", sesRes.MessageId, "queued", cancellationToken);
                 await _appDataStore.MarkOutreachSentAsync(p.PublicBusinessEmail!, DateTimeOffset.UtcNow, cancellationToken);
-                await _store.UpsertProspectAsync(p with
+                await _store.UpsertProspectAsync(prepared with
                 {
                     OutreachStatus = "sent",
                     LastContactedAt = DateTimeOffset.UtcNow,
                     TicketId = ticketId,
+                    EmailVariant = variant,
+                    CohortRunId = cohortRunId,
                     UpdatedAt = DateTimeOffset.UtcNow
                 }, cancellationToken);
                 await _appDataStore.TrackEventAsync("acq_email_sent", p.ProspectId, new Dictionary<string, string?>
                 {
                     ["campaign"] = campaign,
-                    ["token"] = p.OpaqueToken
+                    ["token"] = p.OpaqueToken,
+                    ["variant"] = variant,
+                    ["run"] = cohortRunId
                 }, cancellationToken);
                 sent++;
-                sentThisRunByApproval[approval.ApprovalId] = extraThisRun + 1;
+                if (p.ApprovalId is not null)
+                    sentThisRunByApproval[p.ApprovalId] = extraThisRun + 1;
             }
             catch (Exception ex)
             {
@@ -418,7 +502,26 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             }
         }
 
-        return new AcqWeekdaySendResult(true, attempted, sent, skipped, reasons);
+        var ramp = await _store.GetRampAsync(campaign, cancellationToken);
+        var healthAfter = OutreachPolicy.HealthFromCounts(sentAll + sent, bounced, complaints, unsubs);
+        var days = string.Equals(ramp.LastSendYmdEt, runYmd, StringComparison.Ordinal) ? ramp.SendingDaysAtStage : ramp.SendingDaysAtStage + (sent > 0 ? 1 : 0);
+        var decision = OutreachPolicy.DecideRamp(state.RampStage, days, healthAfter, state.RampEnabled, state.MaxDailyLimit);
+        await _store.SaveRampAsync(campaign, new AcqRampPersist(
+            decision.Advance ? decision.NextStage : decision.CurrentStage,
+            decision.Advance ? 0 : days,
+            sent > 0 ? runYmd : ramp.LastSendYmdEt,
+            decision.Advance ? null : decision.Reason), cancellationToken);
+        await _store.SaveCohortRunAsync(campaign, cohortRunId, System.Text.Json.JsonSerializer.Serialize(new
+        {
+            runId = cohortRunId,
+            sent,
+            attempted,
+            skipped,
+            dailyLimit = state.DailyLimit,
+            variantSplit = true
+        }), cancellationToken);
+
+        return new AcqWeekdaySendResult(true, attempted, sent, skipped, reasons, state.DailyLimit, cohortRunId, decision.Advance ? null : decision.Reason);
     }
 
     public async Task UnsubscribeAsync(string email, CancellationToken cancellationToken)

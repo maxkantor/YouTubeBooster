@@ -12,6 +12,7 @@ export type StorageLike = {
 
 const CURRENT_ATTEMPT_KEY = 'yb_ga4_audit_attempt_current';
 const COMPLETED_IDS_KEY = 'yb_ga4_audit_completed_ids';
+const STARTED_IDS_KEY = 'yb_ga4_audit_started_ids';
 const STARTED_ORPHAN_KEY = 'yb_ga4_audit_orphan_started';
 
 function readIdSet(storage: StorageLike, key: string): Set<string> {
@@ -48,6 +49,9 @@ export function beginAuditAttempt(
 ): { attemptId: string; isNew: true } {
   const attemptId = createAuditAttemptId(randomUuid);
   storage.setItem(CURRENT_ATTEMPT_KEY, attemptId);
+  const started = readIdSet(storage, STARTED_IDS_KEY);
+  started.add(attemptId);
+  writeIdSet(storage, STARTED_IDS_KEY, started);
   return { attemptId, isNew: true };
 }
 
@@ -89,6 +93,8 @@ export function ensureAuditAttemptForDemoLanding(
  */
 export function claimAuditCompletion(storage: StorageLike, attemptId: string | null): boolean {
   if (!attemptId) return false;
+  const started = readIdSet(storage, STARTED_IDS_KEY);
+  if (!started.has(attemptId)) return false;
   const done = readIdSet(storage, COMPLETED_IDS_KEY);
   if (done.has(attemptId)) return false;
   done.add(attemptId);
@@ -107,5 +113,6 @@ export function shouldCountAsUserAudit(isDefaultChannelDemo: boolean): boolean {
 export const auditGateKeys = {
   CURRENT_ATTEMPT_KEY,
   COMPLETED_IDS_KEY,
+  STARTED_IDS_KEY,
   STARTED_ORPHAN_KEY
 };
