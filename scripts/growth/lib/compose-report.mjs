@@ -100,7 +100,7 @@ function cell(m) {
   return formatMetricValue(m);
 }
 
-function experimentCopy(ex) {
+function experimentCopy(ex, snapshot) {
   if (ex.id === 'EXP-002') {
     return {
       stage: 'Acquisition / SEO (main)',
@@ -118,10 +118,15 @@ function experimentCopy(ex) {
     };
   }
   if (ex.id === 'EXP-001') {
+    const act = snapshot?.windows?.['7d']?.crm?.paidToEntitledWithin24h;
+    const primary =
+      snapshot?.sources?.crm === 'ok'
+        ? `Paid-to-entitled within 24h: ${act == null ? 'Unknown (missing entitlement timestamps)' : `${act} users (Admin CRM Dynamo)`}`
+        : 'Paid-to-entitled within 24h: Unavailable - Admin CRM connection required';
     return {
       stage: 'Post-purchase activation',
       eligible: 'Post-checkout guests',
-      primary: 'Paid-to-entitled within 24h: Unavailable - Admin CRM connection required',
+      primary,
       sample: '0 verified payments'
     };
   }
@@ -386,7 +391,11 @@ export function buildCanonicalFromSnapshot(snapshot) {
     };
   }
 
-  const warnings = consolidateQualityWarnings({ windows, snapshot, crmUnavailable: true });
+  const warnings = consolidateQualityWarnings({
+    windows,
+    snapshot,
+    crmUnavailable: snapshot?.sources?.crm !== 'ok'
+  });
   const recon = reconcileCanonicalWindows({
     '7d': windows['7d']?.metrics,
     '30d': windows['30d']?.metrics
@@ -545,7 +554,7 @@ export function composeGrowthReport(opts) {
   if (!classified.length) t.push('(none marked active)');
   else {
     for (const ex of classified) {
-      const copy = experimentCopy(ex);
+      const copy = experimentCopy(ex, opts.snapshot);
       t.push(`${ex.id || ex.idLine}`);
       t.push(`  Stage: ${copy.stage}`);
       t.push(`  Status: ${typographicNormalize(ex.status)}`);
@@ -615,8 +624,9 @@ export function composeGrowthReport(opts) {
   const srcN = healthN + 1;
   t.push(`${srcN}) DATA SOURCES`);
   t.push('--------------');
+  const crmSrc = opts.snapshot?.sources?.crm ?? 'unavailable';
   t.push(
-    `GA4=${opts.snapshot?.sources?.ga4 ?? '?'}; Stripe=${opts.snapshot?.sources?.stripe ?? '?'}; Admin CRM entitlement=unavailable`
+    `GA4=${opts.snapshot?.sources?.ga4 ?? '?'}; Stripe=${opts.snapshot?.sources?.stripe ?? '?'}; Admin CRM entitlement=${crmSrc}`
   );
   t.push(
     'Stripe truth: only YouTubeBooster-attributed verified payments count. Account-wide Stripe is never product revenue. See docs/growth/STRIPE-PRODUCT-ALLOWLIST.md.'
@@ -714,7 +724,7 @@ export function composeGrowthReport(opts) {
   const expCards = classified.length
     ? classified
         .map((ex) => {
-          const copy = experimentCopy(ex);
+          const copy = experimentCopy(ex, opts.snapshot);
           const decisionColor =
             ex.decision === 'Due - not evaluated'
               ? '#b91c1c'
@@ -798,7 +808,15 @@ export function composeGrowthReport(opts) {
           <p style="margin:12px 0 0;font-size:14px;color:#334155;">
             Audit start-to-completion conversion: <b>Unavailable</b> until same-cohort audit tracking exists.
             Experiment-attributed paid: <b>Unknown</b>.
-            Paid to entitled within 24h: <b>Unavailable - Admin CRM required</b>.
+            Paid to entitled within 24h: <b>${
+              opts.snapshot?.sources?.crm === 'ok'
+                ? escapeHtml(
+                    opts.snapshot?.windows?.['7d']?.crm?.paidToEntitledWithin24h == null
+                      ? 'Unknown (missing entitlement timestamps)'
+                      : String(opts.snapshot.windows['7d'].crm.paidToEntitledWithin24h)
+                  )
+                : 'Unavailable - Admin CRM required'
+            }</b>.
           </p>
           <p style="margin:8px 0 0;font-size:14px;color:#334155;">
             Stripe 30d - attributed live payments: <b>${escapeHtml(stripe30.attributedLivePayments)}</b>;
@@ -836,7 +854,7 @@ export function composeGrowthReport(opts) {
           <p style="margin:0;font-size:15px;line-height:1.5;">
             GA4=${escapeHtml(opts.snapshot?.sources?.ga4 ?? '?')};
             Stripe=${escapeHtml(opts.snapshot?.sources?.stripe ?? '?')};
-            Admin CRM entitlement=unavailable.
+            Admin CRM entitlement=${escapeHtml(opts.snapshot?.sources?.crm ?? 'unavailable')}.
             Verified YouTubeBooster Stripe only. Account-wide Stripe is diagnostic, not product revenue.
           </p>
 

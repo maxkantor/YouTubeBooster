@@ -35,12 +35,18 @@ public static class SupportCrmEmail
         string body,
         string publicSiteUrl,
         CancellationToken cancellationToken,
-        string? unsubscribeUrl = null)
+        string? unsubscribeUrl = null,
+        string? postalAddress = null,
+        bool requireMarketingCompliance = false)
     {
         if (!EmailAddressHelpers.LooksLikeEmail(fromAddress))
             return new SupportCrmSendResult(false, null, "SES from-email is not configured.");
         if (!EmailAddressHelpers.LooksLikeEmail(recipientEmail))
             return new SupportCrmSendResult(false, null, "Recipient email is invalid.");
+        if (requireMarketingCompliance && string.IsNullOrWhiteSpace(unsubscribeUrl))
+            return new SupportCrmSendResult(false, null, "Unsubscribe URL is required for marketing outreach.");
+        if (requireMarketingCompliance && string.IsNullOrWhiteSpace(postalAddress))
+            return new SupportCrmSendResult(false, null, "Business postal address is not configured (SSM business/postal-address).");
 
         var site = (publicSiteUrl ?? "https://youtubeboosterai.com").TrimEnd('/');
         var crmUrl = $"{site}/admin/contacts/{Uri.EscapeDataString(ticketId)}";
@@ -48,13 +54,15 @@ public static class SupportCrmEmail
             ? subject
             : $"{subject} [{ticketId}]";
 
-        var footer = $"""
-
-            ---
-            YouTubeBooster Admin CRM thread: {crmUrl}
-            Please reply to this email. Replies go to the YouTubeBooster admin inbox.
-            {(string.IsNullOrWhiteSpace(unsubscribeUrl) ? "" : $"Unsubscribe: {unsubscribeUrl}")}
-            """;
+        var unsubLine = string.IsNullOrWhiteSpace(unsubscribeUrl) ? "" : $"Unsubscribe: {unsubscribeUrl}\n";
+        var postalLine = string.IsNullOrWhiteSpace(postalAddress) ? "" : $"{postalAddress.Trim()}\n";
+        var footer =
+            "\n---\n" +
+            "YouTubeBooster AI is not affiliated with YouTube or Google.\n" +
+            $"YouTubeBooster Admin CRM thread: {crmUrl}\n" +
+            "Please reply to this email. Replies go to the YouTubeBooster admin inbox.\n" +
+            unsubLine +
+            postalLine;
 
         var textBody = body + footer;
         var htmlBody = $"""
@@ -63,7 +71,7 @@ public static class SupportCrmEmail
             <body style="font-family:Segoe UI,Arial,sans-serif;color:#111827;line-height:1.5;">
             <div style="white-space:pre-wrap;">{WebUtility.HtmlEncode(body)}</div>
             <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
-            <p style="font-size:12px;color:#6b7280;">YouTubeBooster Admin CRM thread: <a href="{WebUtility.HtmlEncode(crmUrl)}">{WebUtility.HtmlEncode(crmUrl)}</a><br/>Please reply to this email. Replies go to the YouTubeBooster admin inbox.{(string.IsNullOrWhiteSpace(unsubscribeUrl) ? "" : $"<br/><a href=\"{WebUtility.HtmlEncode(unsubscribeUrl)}\">Unsubscribe from YouTubeBooster outreach</a>")}</p>
+            <p style="font-size:12px;color:#6b7280;">YouTubeBooster AI is not affiliated with YouTube or Google.<br/>YouTubeBooster Admin CRM thread: <a href="{WebUtility.HtmlEncode(crmUrl)}">{WebUtility.HtmlEncode(crmUrl)}</a><br/>Please reply to this email. Replies go to the YouTubeBooster admin inbox.{(string.IsNullOrWhiteSpace(unsubscribeUrl) ? "" : $"<br/><a href=\"{WebUtility.HtmlEncode(unsubscribeUrl)}\">Unsubscribe from YouTubeBooster outreach</a>")}{(string.IsNullOrWhiteSpace(postalAddress) ? "" : $"<br/>{WebUtility.HtmlEncode(postalAddress.Trim())}")}</p>
             </body></html>
             """;
 

@@ -4,10 +4,10 @@ Agents must append every experiment here. Do not delete history.
 
 ## Active
 
-- **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive** (treatment unchanged; Admin CRM activation unavailable; 0 verified payments; next eval when a verified checkout/payment occurs or 2026-08-24) — funnel stage: post-purchase activation
+- **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive**; **2026-08-19** growth report now reads `ybai-purchases` + `ybai-users` entitlements (no PII). Still **0** verified product-attributed payments. Next eval on first verified checkout/payment or **2026-08-24**. Funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO (**main** treatment)
 - **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
-- **EXP-004** — mini-audit share + sample paid report — status **awaiting owner approval** for sends; **2026-08-17 sample-report iterate** (above-the-fold Audit my channel CTA) — not collecting outreach data
+- **EXP-004** — mini-audit share + sample paid report — **awaiting owner completion**: P04/P05 approved (`APR-2026-08-19-P04-P05`) but **0 emails sent** (P04 has no public email; marketing send blocked without postal address). Not collecting outreach click data yet
 
 ## Locked stages (do not launch overlapping treatments)
 
@@ -41,6 +41,19 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-19 — EXP-004 P04/P05 approval recorded; sends blocked
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 still **not collecting** outreach sends. Approval ID `APR-2026-08-19-P04-P05`. |
+| Distribution | **Not executed.** P04: no public business email (contact form only). P05: public business mailto confirmed on hellosohla.com; send blocked until SSM `/youtubebooster/business/postal-address` is set. |
+| SSM | `/youtubebooster/outreach/marketing-sending-enabled` = `true`. Weekday COOK-001 sender still requires Lambda config `CreatorAcquisition:MarketingSendingEnabled` (unset) plus named batch approval. |
+| SES | Domain `youtubeboosterai.com` verified. `hello@youtubeboosterai.com` covered by domain identity. Custom MAIL FROM `bounce.youtubeboosterai.com` not configured. |
+| CRM reporting | Growth snapshot now scans Dynamo `ybai-purchases` + `ybai-users` entitlements (no emails in snapshots). |
+| Emails sent | **0** |
+| Verified customers | **0** |
+
 
 ### 2026-08-17 — Creator Acquisition Center (EXP-004 distribution system; sending disabled)
 

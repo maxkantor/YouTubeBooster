@@ -412,6 +412,9 @@ publicApi.MapPost("/outreach/daily-send", async (
     var hmac = (await secrets.GetValueAsync("outreach/unsubscribe-hmac", secure: true, cancellationToken))?.Trim();
     if (string.IsNullOrWhiteSpace(hmac))
         return Results.Problem("Unsubscribe signing key is not configured.");
+    var postal = (await secrets.GetValueAsync("business/postal-address", secure: false, cancellationToken))?.Trim();
+    if (string.IsNullOrWhiteSpace(postal))
+        return Results.Problem("Business postal address is not configured (SSM /youtubebooster/business/postal-address).");
 
     var site = configuration["App:PublicSiteUrl"] ?? configuration["PUBLIC_SITE_URL"] ?? "https://youtubeboosterai.com";
     var seeds = request?.Contacts ?? [];
@@ -452,7 +455,7 @@ publicApi.MapPost("/outreach/daily-send", async (
 
         var unsub = $"{site.TrimEnd('/')}/unsubscribe?token={Uri.EscapeDataString(OutreachUnsubscribeToken.Create(contact.Email, hmac))}";
         var send = await SupportCrmEmail.SendToRecipientAsync(
-            ses, fromAddress, adminEmail ?? "", contact.Email, ticketId, subject, body, site, cancellationToken, unsub);
+            ses, fromAddress, adminEmail ?? "", contact.Email, ticketId, subject, body, site, cancellationToken, unsub, postal, requireMarketingCompliance: true);
         if (!send.Ok)
         {
             skipped.Add(new { email = contact.Email, reason = send.Error });
@@ -1461,8 +1464,15 @@ adminProtectedApi.MapPost("/crm/support/tickets", async (
         return Results.Problem("SES sender identity is not configured.");
 
     var site = configuration["App:PublicSiteUrl"] ?? configuration["PUBLIC_SITE_URL"] ?? "https://youtubeboosterai.com";
+    var hmac = (await secretValueProvider.GetValueAsync("outreach/unsubscribe-hmac", secure: true, cancellationToken))?.Trim();
+    if (string.IsNullOrWhiteSpace(hmac))
+        return Results.Problem("Unsubscribe signing key is not configured.");
+    var postal = (await secretValueProvider.GetValueAsync("business/postal-address", secure: false, cancellationToken))?.Trim();
+    if (string.IsNullOrWhiteSpace(postal))
+        return Results.Problem("Business postal address is not configured (SSM /youtubebooster/business/postal-address).");
+    var unsub = $"{site.TrimEnd('/')}/unsubscribe?token={Uri.EscapeDataString(OutreachUnsubscribeToken.Create(request.Email.Trim(), hmac))}";
     var send = await SupportCrmEmail.SendToRecipientAsync(
-        ses, fromAddress, adminEmail ?? "", request.Email.Trim(), ticketId, request.Subject.Trim(), request.Body.Trim(), site, cancellationToken);
+        ses, fromAddress, adminEmail ?? "", request.Email.Trim(), ticketId, request.Subject.Trim(), request.Body.Trim(), site, cancellationToken, unsub, postal, requireMarketingCompliance: true);
     if (!send.Ok)
     {
         await appDataStore.TrackEventAsync("support_reply_failed", ticketId, new Dictionary<string, string?>

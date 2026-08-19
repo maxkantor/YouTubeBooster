@@ -12,6 +12,7 @@ import { summarizeStripeSessions } from './lib/stripe-metrics.mjs';
 import { loadStripeAllowlist } from './lib/stripe-allowlist.mjs';
 import { daysBeforeYmd, etDateParts, ga4DataThroughYmd, inclusiveWindowStart } from './lib/time.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
+import { loadCrmEntitlementTables, summarizeCrmEntitlements } from './lib/crm-entitlements.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -32,7 +33,7 @@ const report = {
   reportDateEt: stamp,
   ga4DataThrough: dataThrough,
   ssm: ssmLoad,
-  sources: { ga4: 'missing', stripe: 'missing' },
+  sources: { ga4: 'missing', stripe: 'missing', crm: 'missing' },
   windows: {},
   notes: [],
   metricDefinitions: {
@@ -256,6 +257,14 @@ if (stripeKey) {
   report.notes.push('STRIPE_RESTRICTED_READ_KEY missing — use read-only restricted key only.');
 }
 
+const crmTables = loadCrmEntitlementTables();
+if (crmTables.ok) {
+  report.sources.crm = 'ok';
+} else {
+  report.sources.crm = 'unavailable';
+  report.notes.push(`Admin CRM entitlement scan failed: ${crmTables.error || 'unknown'}`);
+}
+
 let token = null;
 if (report.sources.ga4 === 'configured') {
   try {
@@ -300,6 +309,34 @@ for (const w of windows) {
       entry.stripe = summarizeStripeSessions(raw, { endUnix, allowlist: stripeAllowlist });
     } catch (e) {
       report.notes.push(`Stripe ${w.label} failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  if (crmTables.ok) {
+    const crm = summarizeCrmEntitlements({
+      payments: crmTables.payments,
+      entitlements: crmTables.entitlements,
+      startYmd: w.start,
+      endYmd: w.end
+    });
+    entry.crm = {
+      source: crmTables.source,
+      livePaidPayments: crm.livePaidPayments,
+      entitledPaidUsers: crm.entitledPaidUsers,
+      paymentEntitlementMatches: crm.paymentEntitlementMatches,
+      paidToEntitledWithin24h: crm.paidToEntitledWithin24h
+    };
+    if (entry.stripe) {
+      entry.stripe.entitledPaidUsers = crm.entitledPaidUsers;
+      entry.stripe.activationWithin24h = crm.paidToEntitledWithin24h;
+    } else {
+      entry.stripe = {
+        successfulLivePayments: null,
+        uniquePayingCustomers: null,
+        netLiveRevenueUsd: null,
+        entitledPaidUsers: crm.entitledPaidUsers,
+        activationWithin24h: crm.paidToEntitledWithin24h
+      };
     }
   }
 
