@@ -8,7 +8,8 @@ test('hosting redirects send SEO paths to unique HTML, not the SPA shell', () =>
   assert.match(file, /\/pricing {2}\/pricing\/index\.html {2}200/);
   assert.match(file, /\/blog\/ai-channel-audit-explained {2}\/blog\/ai-channel-audit-explained\/index\.html {2}200/);
   assert.doesNotMatch(file, /\/audit {2}\/index\.html {2}200/);
-  assert.match(file, /\/admin\/\* {2}\/index\.html {2}200/);
+  assert.match(file, /\/admin\/\* {2}\/spa\.html {2}200/);
+  assert.doesNotMatch(file, /\/admin\/\* {2}\/index\.html {2}200/);
   assert.doesNotMatch(file, /^\/\* {2}\/index\.html {2}200$/m);
 });
 

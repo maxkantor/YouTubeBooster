@@ -42,6 +42,19 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-21 — Homepage noindex blocker removed (SPA shell)
+
+| Field | Value |
+|-------|--------|
+| Status | Production health repair. EXP-001 **Inconclusive** (unchanged; next eval 2026-08-24). EXP-002 **Keep / collecting** until 2026-08-25. EXP-004 **ACTIVE / COLLECTING**. |
+| Proven blocker | Live `/` served `meta robots=noindex,nofollow` and no canonical because `generate-static-route-html.ts` overwrote `dist/index.html` with the private SPA shell. |
+| Exact change | Write private SPA shell to `spa.html`; write indexable homepage SEO to `dist/index.html`; point Amplify/`_redirects` private routes at `/spa.html`. |
+| Funnel stage | Acquisition / SEO health (blocker removal; does not add a new CRO experiment). |
+| Distribution | Blocker removal counts as the successful run. COOK-001 weekday send not executed in this run (no new named-batch approval for 2026-08-21). |
+| Primary metric | Homepage document robots = `index, follow` + self canonical on live apex. |
+| Verified customers | **0** |
+| Verified revenue | **$0** |
+
 ### 2026-08-19 — COOK-001 aggressive growth automation (ramp 10→20→30)
 
 | Field | Value |

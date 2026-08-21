@@ -15,23 +15,23 @@ export const LEGACY_301 = [
   ['/how-did-youtubebooster-work', '/faq']
 ];
 
-/** SPA client routes only. Unknown marketing URLs must 404, not clone the homepage. */
+/** SPA client routes only — spa.html is noindex. Never point these at /index.html (homepage). */
 export const SPA_200_LINES = [
-  '/admin  /index.html  200',
-  '/admin/*  /index.html  200',
-  '/dashboard  /index.html  200',
-  '/dashboard/*  /index.html  200',
-  '/auth/*  /index.html  200',
-  '/signin  /index.html  200',
-  '/signup  /index.html  200',
-  '/account  /index.html  200',
-  '/account/*  /index.html  200',
-  '/app  /index.html  200',
-  '/app/*  /index.html  200',
-  '/checkout  /index.html  200',
-  '/checkout/*  /index.html  200',
-  '/payment-success  /index.html  200',
-  '/payment-cancel  /index.html  200'
+  '/admin  /spa.html  200',
+  '/admin/*  /spa.html  200',
+  '/dashboard  /spa.html  200',
+  '/dashboard/*  /spa.html  200',
+  '/auth/*  /spa.html  200',
+  '/signin  /spa.html  200',
+  '/signup  /spa.html  200',
+  '/account  /spa.html  200',
+  '/account/*  /spa.html  200',
+  '/app  /spa.html  200',
+  '/app/*  /spa.html  200',
+  '/checkout  /spa.html  200',
+  '/checkout/*  /spa.html  200',
+  '/payment-success  /spa.html  200',
+  '/payment-cancel  /spa.html  200'
 ];
 
 export function buildRedirectsFile(indexablePaths) {

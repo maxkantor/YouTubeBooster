@@ -530,8 +530,10 @@ function writeRoute(baseHtml: string, pathname: string): void {
   fs.writeFileSync(out, html, 'utf8');
 }
 
+const spaFallbackPath = path.join(distDir, 'spa.html');
+
 function writeNeutralSpaFallback(baseHtml: string): void {
-  // Only private SPA routes should hit this document. Do not clone homepage SEO.
+  // Private SPA routes only. Never overwrite dist/index.html (that is the homepage).
   const spaHead = [
     '    <title>YouTubeBooster AI</title>',
     '    <meta name="description" content="YouTubeBooster AI account, dashboard, and checkout." />',
@@ -548,7 +550,11 @@ function writeNeutralSpaFallback(baseHtml: string): void {
     /(\s*<meta name="viewport"[^>]*\/>\r?\n)/,
     `$1${spaHead}\n`
   );
-  fs.writeFileSync(distIndexPath, replaceFallback(withHead === withoutHomeSeo ? `${withoutHomeSeo.replace('</head>', `${spaHead}\n  </head>`)}` : withHead, '/'), 'utf8');
+  const html =
+    withHead === withoutHomeSeo
+      ? withoutHomeSeo.replace('</head>', `${spaHead}\n  </head>`)
+      : withHead;
+  fs.writeFileSync(spaFallbackPath, replaceFallback(html, '/'), 'utf8');
 }
 
 const baseHtml = fs.readFileSync(distIndexPath, 'utf8');
@@ -556,6 +562,7 @@ const routes = allProgrammaticAndBlogPaths().map((entry) => normalizePath(entry.
 const uniqueRoutes = Array.from(new Set([...routes, '/unsubscribe']));
 
 writeNeutralSpaFallback(baseHtml);
+writeRoute(baseHtml, '/');
 
 for (const route of uniqueRoutes.filter((route) => route !== '/')) {
   writeRoute(baseHtml, route);
@@ -563,4 +570,6 @@ for (const route of uniqueRoutes.filter((route) => route !== '/')) {
 
 fs.writeFileSync(path.join(distDir, '_redirects'), buildRedirectsFile(uniqueRoutes), 'utf8');
 
-console.log(`Wrote neutral SPA fallback plus static route HTML for ${uniqueRoutes.length - 1} routes`);
+console.log(
+  `Wrote indexable homepage, spa.html fallback, and static route HTML for ${uniqueRoutes.length - 1} routes`
+)
