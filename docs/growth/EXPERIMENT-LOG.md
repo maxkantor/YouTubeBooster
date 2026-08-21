@@ -42,16 +42,16 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
-### 2026-08-21 — Homepage noindex blocker removed (SPA shell)
+### 2026-08-21 — Homepage noindex + Amplify catch-all blocker removed
 
 | Field | Value |
 |-------|--------|
 | Status | Production health repair. EXP-001 **Inconclusive** (unchanged; next eval 2026-08-24). EXP-002 **Keep / collecting** until 2026-08-25. EXP-004 **ACTIVE / COLLECTING**. |
-| Proven blocker | Live `/` served `meta robots=noindex,nofollow` and no canonical because `generate-static-route-html.ts` overwrote `dist/index.html` with the private SPA shell. |
-| Exact change | Write private SPA shell to `spa.html`; write indexable homepage SEO to `dist/index.html`; point Amplify/`_redirects` private routes at `/spa.html`. |
+| Proven blockers | (1) Live `/` served `meta robots=noindex,nofollow` because `generate-static-route-html.ts` overwrote `dist/index.html` with the private SPA shell. (2) Amplify console catch-all regex rewrote almost all paths (including `.html`) to homepage HTML; custom-domain CloudFront cached that. |
+| Exact change | Write private SPA shell to `spa.html`; write indexable homepage to `dist/index.html`; point private routes at `/spa.html`. Replace Amplify app `customRules` with explicit SEO 200s + SPA → `spa.html` (no sitewide catch-all). Amplify job **257** SUCCEED; RELEASE **258** cleared custom-domain cache. |
 | Funnel stage | Acquisition / SEO health (blocker removal; does not add a new CRO experiment). |
-| Distribution | Blocker removal counts as the successful run. COOK-001 weekday send not executed in this run (no new named-batch approval for 2026-08-21). |
-| Primary metric | Homepage document robots = `index, follow` + self canonical on live apex. |
+| Distribution | Blocker removal is the successful run. COOK-001 weekday send not executed (no new named-batch approval for 2026-08-21). |
+| Verification | Live health `ok:true`. `/` = `index, follow` + canonical. `/audit` unique title. `/pricing` unique title. `/spa.html` = `noindex, nofollow`. |
 | Verified customers | **0** |
 | Verified revenue | **$0** |
 

@@ -4,9 +4,10 @@
 
 ## What the repo does
 
-1. **Root `amplify.yml` (monorepo)** — `customRules` sit next to `appRoot`. **Indexable marketing URLs rewrite to `/path/index.html` (200).** Private app URLs (`/admin`, `/dashboard`, `/auth`, `/checkout`, …) rewrite to `/index.html`. There is **no** global `/<*>` → homepage rewrite — that made Google treat `/audit` and `/blog` as homepage duplicates (“Crawled - currently not indexed”).
+1. **Root `amplify.yml` (monorepo)** — `customRules` sit next to `appRoot`. **Indexable marketing URLs rewrite to `/path/index.html` (200).** Private app URLs (`/admin`, `/dashboard`, `/auth`, `/checkout`, …) rewrite to **`/spa.html`** (noindex shell). There is **no** global `/<*>` → homepage rewrite — that made Google treat `/audit` and `/blog` as homepage duplicates (“Crawled - currently not indexed”).
 2. **`frontend/public/_redirects`** — Netlify-style www/http → apex. Build also writes `dist/_redirects` from `frontend/scripts/hosting-redirect-rules.mjs`.
 3. **Terraform** (`enable_amplify_app`) — same SEO + SPA rules as `amplify.yml`.
+4. **Amplify console `customRules`** — must match the repo. A SPA catch-all regex that excludes only image/font extensions (but **not** `.html`) will rewrite `/audit/index.html` and `/spa.html` back to the homepage. After changing rules, run an Amplify **RELEASE** if the custom domain still CloudFront-Hits stale HTML while `*.amplifyapp.com` is correct.
 
 After push, wait for the Amplify build + deploy to finish, then hard‑refresh or try an incognito window.
 
