@@ -48,6 +48,36 @@ export function MiniAuditSharePage() {
   const [preview, setPreview] = useState<DemoPreview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [copied, setCopied] = useState(false);
+
+  const shareUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const channel = preview?.channelInput || channelParam || '';
+    if (!channel) return '';
+    const q = new URLSearchParams();
+    q.set('channel', channel);
+    q.set('utm_source', params.get('utm_source') || 'creator_referral');
+    q.set('utm_medium', 'share_link');
+    q.set('utm_campaign', params.get('utm_campaign') || 'acq_share');
+    return `${window.location.origin}/share?${q.toString()}`;
+  }, [preview, channelParam, params]);
+
+  async function copyShareLink() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      trackEvent('share_link_copied', {
+        destination: 'share',
+        utm_campaign: params.get('utm_campaign') || 'acq_share'
+      });
+      trackEvent('share_attempt', { method: 'clipboard' });
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      trackEvent('share_attempt', { method: 'clipboard_failed' });
+    }
+  }
+
   const observation = useMemo(() => pickObservation(preview), [preview]);
   const demoHref = preview
     ? buildTrackedDemoUrl(preview.channelInput || preview.channelHandle || channelParam, params)
@@ -209,16 +239,16 @@ export function MiniAuditSharePage() {
               <button type="button" className="btn btn-primary btn-lg" onClick={startFullAudit}>
                 Run the free full audit
               </button>
+              <button type="button" className="btn btn-secondary" onClick={() => void copyShareLink()} disabled={!shareUrl}>
+                {copied ? 'Link copied' : 'Copy share link for another creator'}
+              </button>
               <Link className="btn btn-secondary" to={`/pricing?utm_source=mini_audit_share&utm_campaign=acq_share`}>
                 See full report ({oneTimePrice})
               </Link>
             </div>
             <p className="mini-audit-share-hint">
-              Share this page:{' '}
-              <code>
-                /share?channel={encodeURIComponent(preview.channelInput || channelParam)}
-                &utm_source=founder_outreach
-              </code>
+              Product-led referral: send the share link to another creator. Copies are tracked; acquisition only counts
+              when they land and start an audit.
             </p>
             <p className="mini-audit-tracked">
               Full audit link (tracked): <Link to={demoHref}>{demoHref}</Link>

@@ -42,6 +42,19 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-21 — Acquisition run: COOK-001 sends + audit cohort fix
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 **COLLECTING** (real distribution). EXP-001 **Inconclusive**. EXP-002 **Keep**. |
+| Distribution | **Executed:** 2 SES-accepted COOK-001 emails today (approvals `APR-20260821-a8f61f34`, `APR-20260821-8170c2e3`). Lifetime SENT **4**. |
+| Exact blocker for volume | Prior recipients **cooldown**; most contact pages **form-only**; mega channels (`over_350k`) **score_below_70**. |
+| Prospecting | Probed 20 cooking contact pages → 3 official mailto; 2 skipped oversize; 1 sent (@whatsgabycooking). |
+| Product | Fixed audit_started/completed race (completion could fire without start). Share page: `share_link_copied` CTA. |
+| Funnel CRM | drafts 78 · approved 4 · sent 4 · marketingSendingEnabled true |
+| Verified customers | **0** |
+| Verified revenue | **$0** |
+
 ### 2026-08-21 — Homepage noindex + Amplify catch-all blocker removed
 
 | Field | Value |

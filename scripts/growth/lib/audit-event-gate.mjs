@@ -55,6 +55,11 @@ export function ensureAuditAttemptForDemoLanding(storage, channelKey, randomUuid
   if (orphans.has(orphanKey)) {
     const stable = `orphan_${channelKey}`.slice(0, 80);
     storage.setItem(CURRENT_ATTEMPT_KEY, stable);
+    const started = readIdSet(storage, STARTED_IDS_KEY);
+    if (!started.has(stable)) {
+      started.add(stable);
+      writeIdSet(storage, STARTED_IDS_KEY, started);
+    }
     return { attemptId: stable, shouldTrackStart: false };
   }
   const { attemptId } = beginAuditAttempt(storage, randomUuid);

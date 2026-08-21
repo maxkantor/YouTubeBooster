@@ -76,9 +76,15 @@ export function ensureAuditAttemptForDemoLanding(
   const orphanKey = `ch:${channelKey}`;
   if (orphans.has(orphanKey)) {
     // Already started once this session for this channel without a form id —
-    // reuse a stable synthetic id so completion can dedupe.
+    // reuse a stable synthetic id so completion can dedupe. Must stay in STARTED_IDS
+    // or remount completions are dropped while historical GA4 still shows imbalance.
     const stable = `orphan_${channelKey}`.slice(0, 80);
     storage.setItem(CURRENT_ATTEMPT_KEY, stable);
+    const started = readIdSet(storage, STARTED_IDS_KEY);
+    if (!started.has(stable)) {
+      started.add(stable);
+      writeIdSet(storage, STARTED_IDS_KEY, started);
+    }
     return { attemptId: stable, shouldTrackStart: false };
   }
   const { attemptId } = beginAuditAttempt(storage, randomUuid);

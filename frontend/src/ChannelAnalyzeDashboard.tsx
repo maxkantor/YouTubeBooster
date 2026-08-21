@@ -157,7 +157,17 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
             typeof window !== 'undefined'
           ) {
             const channelKey = inputNormalized || inputHandle || 'unknown';
-            const { attemptId } = ensureAuditAttemptForDemoLanding(window.sessionStorage, channelKey);
+            const { attemptId, shouldTrackStart } = ensureAuditAttemptForDemoLanding(
+              window.sessionStorage,
+              channelKey
+            );
+            // Completion effect can race ahead of the orphan-start effect. Always
+            // emit audit_started before claiming completion on a new attempt.
+            if (shouldTrackStart) {
+              const auditSource =
+                (location.state as { auditSource?: string } | null)?.auditSource || 'demo_landing';
+              analytics.auditStarted(auditSource, { auditAttemptId: attemptId });
+            }
             if (claimAuditCompletion(window.sessionStorage, attemptId)) {
               analytics.auditCompleted({ auditAttemptId: attemptId });
             }

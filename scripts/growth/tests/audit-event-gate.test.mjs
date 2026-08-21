@@ -56,6 +56,15 @@ test('orphan demo landing tracks start once per channel key', () => {
   assert.equal(second.shouldTrackStart, false);
 });
 
+test('orphan remount without current attempt still allows completion claim', () => {
+  const s = memoryStorage();
+  s.setItem('yb_ga4_audit_orphan_started', JSON.stringify(['ch:acme']));
+  const again = ensureAuditAttemptForDemoLanding(s, 'acme', () => 'should-not');
+  assert.equal(again.shouldTrackStart, false);
+  assert.equal(again.attemptId.startsWith('orphan_'), true);
+  assert.equal(claimAuditCompletion(s, again.attemptId), true);
+});
+
 test('cached-result / retry path: claim blocks second completion fire', () => {
   const s = memoryStorage();
   const { attemptId } = beginAuditAttempt(s, () => 'retry-1');
