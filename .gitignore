@@ -61,6 +61,8 @@ Thumbs.db
 # Growth Stripe allowlist (non-secret product/price IDs)
 !scripts/growth/config/
 !scripts/growth/config/*.json
+# Locked growth strategy calendar (non-secret)
+!docs/growth/strategy-lock.json
 results/
 output/
 runner_data/
