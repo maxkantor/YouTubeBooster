@@ -275,6 +275,12 @@ export function cohortConversionLines(c) {
  * @param {object|undefined} input
  * @param {{ stripe30?: object, m7?: object }} [ctx]
  */
+/**
+ * Authoritative outreach send ledger fields on distribution JSON:
+ * - sesAcceptedThisRun / emailsSentThisRun / cohort.emailsSent → TODAY (this run)
+ * - outreachFunnel.sent → LIFETIME CRM sent (must be labeled lifetime in the report)
+ * Never leave TODAY Sent=0 when sesAcceptedThisRun>0.
+ */
 export function normalizeDistribution(input, ctx = {}) {
   const d = { ...emptyDistribution(), ...(input || {}) };
   const stripe30 = ctx.stripe30 || {};
@@ -292,8 +298,22 @@ export function normalizeDistribution(input, ctx = {}) {
   d.executed = d.executed === true;
   d.newCustomersThisRun = Number(d.newCustomersThisRun) || 0;
   d.customersObservedInWindow = Number(d.customersObservedInWindow) || 0;
+  d.outreachFunnel = { ...emptyDistribution().outreachFunnel, ...(input?.outreachFunnel || d.outreachFunnel || {}) };
   d.cohort = { ...emptyCohort(), ...(input?.cohort || d.cohort || {}) };
   d.deliverability = { ...emptyDeliverability(), ...(input?.deliverability || d.deliverability || {}) };
+
+  const todaySes = Number(
+    input?.sesAcceptedThisRun ?? input?.emailsSentThisRun ?? input?.cohort?.emailsSent ?? d.cohort?.emailsSent
+  );
+  if (Number.isFinite(todaySes) && todaySes >= 0) {
+    d.cohort.emailsSent = todaySes;
+    d.sesAcceptedThisRun = todaySes;
+  } else {
+    d.sesAcceptedThisRun = Number(d.cohort.emailsSent) || 0;
+  }
+  d.lifetimeCrmSent = Number(d.outreachFunnel?.sent);
+  if (!Number.isFinite(d.lifetimeCrmSent)) d.lifetimeCrmSent = null;
+
   if (d.executed) d.blockingApproval = false;
   else if (input?.blockingApproval === false) d.blockingApproval = false;
   else d.blockingApproval = true;
@@ -638,14 +658,25 @@ export function composeGrowthReport(opts) {
   t.push(`Site: https://youtubeboosterai.com/`);
   t.push(`Admin: https://youtubeboosterai.com/admin/orders`);
   t.push('');
+  // Strategy lock (authoritative during 7-day window)
+  const lock = opts.strategyLock || null;
+  if (lock?.status === 'LOCKED') {
+    const day = lock.lockDay ?? '?';
+    t.push('STRATEGY STATUS: LOCKED');
+    t.push(`LOCK DAY: ${day} / ${lock.totalLockDays || 7}`);
+    t.push(`Lock window: ${lock.lockStartYmd} → ${lock.lockEndYmdInclusive} (review ${lock.reviewYmd})`);
+    t.push('Do not rewrite overall strategy until end-of-lock review.');
+    t.push('');
+  }
   const cohort = dist.cohort || emptyCohort();
   const rates = cohortConversionLines(cohort);
   const deliv = dist.deliverability || emptyDeliverability();
 
-  t.push('TODAY');
-  t.push('-----');
-  t.push(`Sent: ${cohort.emailsSent}`);
-  t.push(`Clicks: ${cohort.auditClicks}`);
+  t.push('TODAY (this-run SES ledger)');
+  t.push('---------------------------');
+  t.push(`SES accepted this run: ${dist.sesAcceptedThisRun ?? cohort.emailsSent}`);
+  t.push(`Lifetime CRM SENT (not today): ${dist.lifetimeCrmSent ?? dist.outreachFunnel?.sent ?? 'Unknown'}`);
+  t.push(`Clicks (this-run cohort): ${cohort.auditClicks}`);
   t.push(`Audits: ${cohort.auditStarts} start / ${cohort.auditCompletions} complete`);
   t.push(`Signups: ${cohort.signups}`);
   t.push(`Customers: ${cohort.verifiedCustomers}`);
@@ -735,10 +766,11 @@ export function composeGrowthReport(opts) {
   );
   t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
   const funnel = dist.outreachFunnel || emptyDistribution().outreachFunnel;
-  t.push('COOK-001 outreach funnel (counts; a draft is not distribution):');
-  t.push(`  DRAFTED: ${funnel.drafted}`);
-  t.push(`  APPROVED: ${funnel.approved}`);
-  t.push(`  SENT: ${funnel.sent}`);
+  t.push('COOK-001 outreach funnel (CRM lifetime unless labeled; a draft is not distribution):');
+  t.push(`  DRAFTED (CRM): ${funnel.drafted}`);
+  t.push(`  APPROVED (CRM): ${funnel.approved}`);
+  t.push(`  SES ACCEPTED TODAY: ${dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0}`);
+  t.push(`  SENT LIFETIME (CRM): ${dist.lifetimeCrmSent ?? funnel.sent}`);
   t.push(`  DELIVERED: ${funnel.delivered}`);
   t.push(`  CLICKED: ${funnel.clicked}`);
   t.push(`  CONVERTED: ${funnel.converted}`);
@@ -845,9 +877,10 @@ export function composeGrowthReport(opts) {
       String(dist.experimentAttributedCustomers)
     ],
     ['New customers acquired by the current run', String(dist.newCustomersThisRun)],
-    ['COOK-001 DRAFTED', String(dist.outreachFunnel?.drafted ?? 0)],
-    ['COOK-001 APPROVED', String(dist.outreachFunnel?.approved ?? 0)],
-    ['COOK-001 SENT', String(dist.outreachFunnel?.sent ?? 0)],
+    ['COOK-001 DRAFTED (CRM)', String(dist.outreachFunnel?.drafted ?? 0)],
+    ['COOK-001 APPROVED (CRM)', String(dist.outreachFunnel?.approved ?? 0)],
+    ['COOK-001 SES ACCEPTED TODAY', String(dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0)],
+    ['COOK-001 SENT LIFETIME (CRM)', String(dist.lifetimeCrmSent ?? dist.outreachFunnel?.sent ?? 0)],
     ['COOK-001 DELIVERED', String(dist.outreachFunnel?.delivered ?? 'Unknown')],
     ['COOK-001 CLICKED', String(dist.outreachFunnel?.clicked ?? 'Unknown')],
     ['COOK-001 CONVERTED', String(dist.outreachFunnel?.converted ?? 0)]
@@ -935,7 +968,7 @@ export function composeGrowthReport(opts) {
           <h2 style="font-size:18px;margin:0 0 10px;">Today</h2>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #cbd5e1;border-radius:8px;border-collapse:separate;font-size:15px;">
             <tr>
-              <td style="padding:10px 12px;">Sent<br/><b>${escapeHtml(String(cohort.emailsSent))}</b></td>
+              <td style="padding:10px 12px;">SES accepted today<br/><b>${escapeHtml(String(dist.sesAcceptedThisRun ?? cohort.emailsSent))}</b></td>
               <td style="padding:10px 12px;">Clicks<br/><b>${escapeHtml(String(cohort.auditClicks))}</b></td>
               <td style="padding:10px 12px;">Audits<br/><b>${escapeHtml(String(cohort.auditStarts))}/${escapeHtml(String(cohort.auditCompletions))}</b></td>
               <td style="padding:10px 12px;">Signups<br/><b>${escapeHtml(String(cohort.signups))}</b></td>

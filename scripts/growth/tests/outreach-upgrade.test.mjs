@@ -78,10 +78,51 @@ test('report renders TODAY and cohort rates', () => {
       }
     }
   });
-  assert.match(report.text, /TODAY/);
+  assert.match(report.text, /TODAY \(this-run SES ledger\)/);
+  assert.match(report.text, /SES accepted this run: 10/);
   assert.match(report.text, /DELIVERABILITY/);
-  assert.match(report.html, />Today</);
+  assert.match(report.html, /SES accepted today/);
   assert.match(report.decision, /10 sent/);
   assert.match(report.text, /Send → Click: 20.0%/);
   assert.match(report.text, /Checkout → Paid: N\/A/);
+});
+
+test('sesAcceptedThisRun reconciles TODAY with lifetime CRM SENT', async () => {
+  const { normalizeDistribution } = await import('../lib/compose-report.mjs');
+  const d = normalizeDistribution({
+    executed: true,
+    sesAcceptedThisRun: 1,
+    outreachFunnel: { drafted: 79, approved: 5, sent: 5, delivered: 'Unknown', clicked: 'Unknown', converted: 0 }
+  });
+  assert.equal(d.sesAcceptedThisRun, 1);
+  assert.equal(d.cohort.emailsSent, 1);
+  assert.equal(d.lifetimeCrmSent, 5);
+  const report = composeGrowthReport({
+    snapshot: explicitFunnelFixture,
+    health: { ok: true, checks: [] },
+    experiments: [],
+    generatedAt: '2026-08-24T16:00:00.000Z',
+    distribution: {
+      executed: true,
+      sesAcceptedThisRun: 1,
+      outreachFunnel: { drafted: 79, approved: 5, sent: 5, delivered: 'Unknown', clicked: 'Unknown', converted: 0 },
+      blockingApproval: false,
+      newCustomersThisRun: 0
+    },
+    strategyLock: {
+      status: 'LOCKED',
+      lockDay: 1,
+      totalLockDays: 7,
+      lockStartYmd: '2026-08-24',
+      lockEndYmdInclusive: '2026-08-30',
+      reviewYmd: '2026-08-31'
+    }
+  });
+  assert.match(report.text, /STRATEGY STATUS: LOCKED/);
+  assert.match(report.text, /LOCK DAY: 1 \/ 7/);
+  assert.match(report.text, /SES accepted this run: 1/);
+  assert.match(report.text, /Lifetime CRM SENT \(not today\): 5/);
+  assert.match(report.text, /SES ACCEPTED TODAY: 1/);
+  assert.match(report.text, /SENT LIFETIME \(CRM\): 5/);
+  assert.doesNotMatch(report.text, /^Sent: 0$/m);
 });

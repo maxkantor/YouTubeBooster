@@ -4,26 +4,25 @@
 **Schedule:** Monday–Friday **8:00 AM America/New_York**  
 **Repo:** `maxkantor/YouTubeBooster` · branch `main`  
 **Notify:** Full Admin email after every run → `scripts/growth/compose-and-send-growth-email.mjs`  
-**North star:** 1000+ verified paying customers (scoreboard, not a promise)  
-**Immediate milestone:** the next newly attributed external customer  
-**Mode:** **Customer acquisition override** — a run succeeds only with approved external distribution or removal of a proven funnel blocker
+**North star:** verified external paying customers (product Stripe only)  
+**Strategy lock:** See `docs/growth/LOCKED-STRATEGY.md` + `docs/growth/strategy-lock.json`. While LOCKED, do not rewrite the overall plan — execute, distribute, measure, learn.
 
 ---
 
 ## Rate limits / concurrent runs
 
-Cursor may fail a scheduled run with **Rate limited — too many concurrent runs**.
+Cursor may fail a scheduled run with **Rate limited — too many concurrent runs** or **Automation run rate limit exceeded** (shared global cap across all Automations).
 
-This happens when another YouTubeBooster Cloud Agent or chat is already running (for example this IDE chat plus the 8:00 AM automation).
+This is an **infrastructure** constraint, not a YouTubeBooster growth failure. Do **not** change product strategy because of it.
 
 **Do this:**
 
-1. Let other YouTubeBooster agents finish (or stop extra ones).
-2. Open **YouTubeBooster daily paid growth** → **Run now**.
+1. Let other agents/automations finish; stagger schedules across products.
+2. Open **YouTubeBooster daily paid growth** → **Run now** when the cap clears — or run the growth skill **manually in chat**.
 3. Do **not** start a second growth automation in parallel.
 4. Prefer **one** YouTubeBooster cloud/agent job at a time on weekdays at 8:00 AM.
 
-If a weekday 8:00 AM run fails for rate limit, treat it as a missed run: retry once after a few minutes. Do not spawn extra parallel retries.
+If a weekday 8:00 AM run fails for rate limit, treat it as a missed scheduled trigger: retry once after a few minutes or execute manually. Do not spawn extra parallel retries.
 
 **Growth-run lock:** Before collecting data or changing files, acquire the repo lock via `node scripts/growth/growth-run-lock.mjs acquire`. If a **non-stale** lock exists, stop without sending a second report. Never bypass or delete an active lock. Stale lock age is **120 minutes**. Release with `node scripts/growth/growth-run-lock.mjs release` only after the Admin email (or failure report) is sent.
 

@@ -20,6 +20,19 @@ Preserve GA4 `G-P02EPD7EDB` (`frontend/index.html` + `frontend/src/lib/analytics
 **North star** (scoreboard, not a promise): **1000+ verified YouTubeBooster paying customers**.  
 **Immediate milestone:** the **next newly attributed external customer**.
 
+Also follow **`docs/growth/LOCKED-STRATEGY.md`** and **`docs/growth/strategy-lock.json`** when status is LOCKED.
+
+## Strategy lock (mandatory when LOCKED)
+
+When `docs/growth/strategy-lock.json` has `"status": "LOCKED"`:
+
+- **Do not rewrite or replace the overall growth strategy** until `reviewYmd`.
+- Execute COOK-001 + EXP-002/003 measurement; discover new 1k–100k cooking mailto prospects; respect cooldown.
+- Product/code changes only under lock exceptions (confirmed bugs, broken audit/checkout/attribution/signup/entitlement, scheduled eval, or evidence that cannot wait).
+- A day with **no product change** is valid if distribution/measurement ran.
+- Cursor automation rate limits are infrastructure — not a product/strategy failure.
+- Every report must reconcile **SES accepted this run** vs **lifetime CRM SENT** (never contradict Agent Notes).
+
 Also follow **`docs/growth/AUTOMATION.md`**.
 
 ## Customer acquisition override (mandatory)

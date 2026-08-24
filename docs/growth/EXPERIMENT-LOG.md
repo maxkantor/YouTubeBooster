@@ -42,6 +42,15 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-24 — Strategy LOCKED for 7 days (FINAL growth system)
+
+| Field | Value |
+|-------|--------|
+| Status | **STRATEGY LOCKED** through 2026-08-30; review 2026-08-31. Authority: `docs/growth/LOCKED-STRATEGY.md` + `strategy-lock.json`. |
+| Rule | No overall strategy rewrite. COOK-001 + EXP-002/003 continue. Code only on lock exceptions. |
+| Report fix | Growth email now separates **SES accepted this run** vs **lifetime CRM SENT** so scoreboard cannot say Sent=0 while notes claim a send. |
+| Day 1 distribution | Already recorded in prior 2026-08-24 log entry (1 SES send). |
+
 ### 2026-08-24 — Manual run (Cursor automation rate-limited)
 
 | Field | Value |

@@ -152,6 +152,27 @@ if (invokedAsCli) {
     ? JSON.parse(fs.readFileSync(args.distributionFile, 'utf8'))
     : undefined;
 
+  const lockPath = path.join(ROOT, 'docs/growth/strategy-lock.json');
+  let strategyLock = undefined;
+  if (fs.existsSync(lockPath)) {
+    const raw = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    if (raw.status === 'LOCKED') {
+      const etYmd = new Intl.DateTimeFormat('en-CA', {
+        timeZone: raw.timezone || 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(now);
+      const start = Date.parse(`${raw.lockStartYmd}T12:00:00Z`);
+      const today = Date.parse(`${etYmd}T12:00:00Z`);
+      const day =
+        Number.isFinite(start) && Number.isFinite(today)
+          ? Math.max(1, Math.floor((today - start) / 86400000) + 1)
+          : 1;
+      strategyLock = { ...raw, lockDay: Math.min(day, raw.totalLockDays || 7), etYmd };
+    }
+  }
+
   const report = composeGrowthReport({
     snapshot,
     health,
@@ -162,6 +183,7 @@ if (invokedAsCli) {
     ship,
     evaluations,
     distribution,
+    strategyLock,
     generatedAt: now,
     subjectPrefix: args.subjectPrefix
   });
