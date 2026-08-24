@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-24 — Manual run (Cursor automation rate-limited)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 **COLLECTING**. EXP-001 **Inconclusive** (eval due today; 0 checkout_started, 0 verified customers; treatment unchanged). EXP-002 **Keep** until 2026-08-25. |
+| Cursor automations | **Not runnable.** Platform error: Automation run rate limit exceeded (global 4000/min, current_count=5316). Manual local run used instead. |
+| Distribution | **Executed:** 1 SES-accepted COOK-001 email (`APR-20260824-27b8eef4`, @itdoesnttastelikechicken). First weekday-send this run sent 0 (all verified mailto on cooldown). |
+| Exact volume blocker | Cooldown on prior 4 sends; most contact pages form-only; score_below_70 including @mynewroots (mailto found). |
+| Prospecting | 18 new contact pages probed; 2 official mailto; 1 scored ≥70 and sent. |
+| Funnel CRM | drafts 79 · approved 5 · sent 5 · marketingSendingEnabled true |
+| GA4 7d | session_start 25 · audit_started 1 · audit_completed 1 · pricing_viewed 1 · checkout_started 0 |
+| Verified customers | **0** |
+| Verified revenue | **$0** |
+
 ### 2026-08-21 — Acquisition run: COOK-001 sends + audit cohort fix
 
 | Field | Value |
