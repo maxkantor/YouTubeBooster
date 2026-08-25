@@ -42,7 +42,21 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
-### 2026-08-24 — Strategy LOCKED for 7 days (FINAL growth system)
+### 2026-08-25 — Scheduled run: EXP-002 full eval + COOK-001 distribution
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-001 **Inconclusive** (0 checkout_started 7d/30d; 0 verified customers; treatment unchanged). EXP-002 **Keep** (full eval due today). EXP-003 **Keep** (0 analyzer sessions). EXP-004 **COLLECTING**. |
+| EXP-002 evidence (GA4 through 2026-08-24) | 7d: 22 session_start events, EXP-002 landing sessions **6**, 1 audit_started, 1 audit_completed, 1 pricing_viewed, 0 checkout_started. 30d: 59 sessions, EXP-002 landing **9**, 4 audit_started, 11 audit_completed, 3 pricing_viewed, 0 checkout_started. |
+| EXP-002 decision | **Keep** — directional ↑ SEO landing sessions vs early baseline; no checkout regression; continue collecting until first verified payment or 2026-08-27. |
+| EXP-001 decision | **Inconclusive** — primary metric still unmeasurable; re-evaluate on first verified checkout/payment. |
+| Distribution | **Executed:** 3 SES-accepted COOK-001 emails (`APR-20260825-df69fccf`). New prospects probed from cook-extra discovery; 3 new official mailto contacts added to CSV (P043–P045). Prior 5 recipients on cooldown. |
+| Prospecting | 11 new in-band channels from extra discovery; 18 contact pages probed; 3 official mailto (The Café Sucre Farine, smitten kitchen, Swasthi's Recipes). |
+| Funnel CRM | drafts 82 · approved 8 · sent 8 (lifetime) · SES accepted this run **3** · marketingSendingEnabled true |
+| GA4 7d | session_start 22 · audit_started 1 · audit_completed 1 · pricing_viewed 1 · checkout_started 0 |
+| Verified customers | **0** |
+| Verified revenue | **$0** |
+
 
 | Field | Value |
 |-------|--------|
