@@ -5,7 +5,7 @@ Agents must append every experiment here. Do not delete history.
 ## Active
 
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive**; **2026-08-19** growth report now reads `ybai-purchases` + `ybai-users` entitlements (no PII). Still **0** verified product-attributed payments. Next eval on first verified checkout/payment or **2026-08-24**. Funnel stage: post-purchase activation
-- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO (**main** treatment)
+- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **2026-08-25 Keep** — 3 EXP-002 landing sessions/7d, 9/30d; 0 checkout_started; treatment unchanged) — funnel stage: acquisition / SEO (**main** treatment)
 - **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
 - **EXP-004** — mini-audit share + sample paid report — **ACTIVE / COLLECTING** until **100 qualified COOK-001 sends or 2026-08-27** (14 days from 2026-08-13), unless deliverability STOP. COOK-001 ramp **10→20→30**/day enabled 2026-08-19. Conservative batch **2 SENT** (`APR-20260819-529e31b7`). Do not backfill. P05 founder send earlier the same day. P04 form-only skipped.
 
@@ -41,6 +41,19 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-26 — COOK-001 weekday send + EXP-002 full eval Keep
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 **COLLECTING** (eval **2026-08-27**). EXP-001 **Inconclusive** (0 checkout_started; next eval on first payment). EXP-002 **Keep** (full eval due 2026-08-25: 3 EXP-002 landing sessions/7d, 9/30d; 0 checkout; treatment unchanged). EXP-003 **Keep** (0 analyzer sessions/7d). |
+| Distribution | **Executed:** 2 SES-accepted COOK-001 emails (`APR-20260826-7bbb0deb`) to @noracooksvegan, @sudachirecipes. Lifetime CRM SENT **10** (+2 this run). |
+| Prospecting | 11 new in-band channels from extra discovery; verified public contact emails on noracooks.com + sudachirecipes.com; added 3 CSV contact routes. @themodernproper skipped (score 0). First weekday-send pass 0 (cooldown on all prior mailto). |
+| GA4 7d (through 2026-08-25) | session_start **17** · audit_started **1** · audit_completed **1** · pricing_viewed **1** · checkout_started **0** |
+| GA4 30d | session_start **58** · audit_started **4** · audit_completed **11** · pricing_viewed **3** · checkout_started **0** |
+| EXP-002 landing sessions | 3/7d · 9/30d |
+| Verified customers | **0** (product-attributed baseline) |
+| Verified revenue | **$0** |
 
 ### 2026-08-24 — Strategy LOCKED for 7 days (FINAL growth system)
 
