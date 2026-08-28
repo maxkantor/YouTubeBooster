@@ -42,6 +42,22 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-28 — Weekday COOK-001 send after mailto prospecting
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-004 eval **Keep** (11/100 qualified sends; 0 conversions; deliverability OK). EXP-002 eval **Keep** (0 EXP-002 landing sessions/7d, 9/30d; treatment unchanged). EXP-003 **Keep** (0 analyzer sessions/7d). EXP-001 **Inconclusive** (0 checkout_started; re-eval on first payment). |
+| Distribution | **Executed:** 1 SES-accepted COOK-001 email (`APR-20260828-b7d84d08`, @skinnytaste official mailto). First weekday-send pass sent 0 (all prior verified mailto on cooldown). Prospected 20 contact pages → 3 official mailto; @preppykitchen skipped (over_350k, score 0); @smittenkitchen skipped (cooldown). |
+| Exact volume blocker | 30-day cooldown on prior 10 sends; most cooking contact pages form-only. |
+| Funnel CRM | drafts 103 · approved 10 · sent 11 · marketingSendingEnabled true |
+| GA4 7d (through 2026-08-27) | session_start 9 · audit_started 2 · audit_completed 2 · pricing_viewed 1 · checkout_started 0 |
+| GA4 30d | session_start 60 · audit_started 6 · audit_completed 13 · pricing_viewed 3 · checkout_started 0 |
+| EXP-002 landing sessions | 0/7d · 9/30d |
+| EXP-003 landing sessions | 0/7d · 0/30d |
+| Verified customers | **0** |
+| Verified revenue | **$0** |
+| New customers this run | **0** |
+
 ### 2026-08-24 — Strategy LOCKED for 7 days (FINAL growth system)
 
 | Field | Value |
