@@ -1,0 +1,16 @@
+---
+description: Commit and push completed work to main without waiting to be asked
+alwaysApply: true
+---
+
+# Commit and push (default)
+
+When you finish a task that changes tracked source files:
+
+1. **Commit and push** to the current branch (usually `main`) as part of completing the task — do not wait for the user to ask.
+2. **Exclude** from commits: `bin/`, `obj/`, `node_modules/`, build artifacts, gitignored zips, and local-only growth notes/previews under `docs/growth/` unless the user asked to version them.
+3. Use a concise commit message focused on **why** (1–2 sentences).
+4. **Do not** force-push, amend pushed commits, or skip hooks unless the user explicitly requests it.
+5. If the user said **only** to explain/review (no code changes), or the working tree has no intentional changes, skip commit/push.
+
+After push, mention the commit hash briefly when relevant (e.g. Amplify/Lambda follow-up).
