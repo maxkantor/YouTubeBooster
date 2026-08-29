@@ -132,9 +132,9 @@ a {
   height: 22px;
   margin-right: 0.45em;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
   border-radius: 7px;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.38);
   opacity: 1;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }

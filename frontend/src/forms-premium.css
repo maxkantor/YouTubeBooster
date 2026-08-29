@@ -120,24 +120,23 @@ textarea:focus-visible,
   letter-spacing: 0.01em;
 }
 
-.landing-hero-audit-row input.landing-hero-audit-input {
-  width: auto;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 48px;
-  padding: 0 16px;
-  border: 0 !important;
-  border-radius: 12px;
-  background: transparent !important;
-  box-shadow: none !important;
-  font-size: 16px;
+.landing-hero-audit > .landing-hero-audit-input {
+  width: 100%;
+  min-height: 56px;
+  background: rgba(8, 10, 20, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
 }
 
-.landing-hero-audit-row input.landing-hero-audit-input:focus,
-.landing-hero-audit-row input.landing-hero-audit-input:focus-visible {
-  outline: none;
-  box-shadow: none !important;
-  background: transparent !important;
+.landing-hero-audit > .landing-hero-audit-input:focus,
+.landing-hero-audit > .landing-hero-audit-input:focus-visible {
+  background: rgba(10, 12, 24, 0.92) !important;
+  border-color: rgba(167, 139, 250, 0.55) !important;
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.28),
+    0 0 0 4px rgba(109, 93, 246, 0.22) !important;
 }
 
 .landing-hero-audit-submit {
@@ -334,14 +333,6 @@ textarea:focus-visible,
     max-height: min(92dvh, 92vh);
     border-radius: 22px 22px 0 0;
     padding: 22px 18px calc(18px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .landing-hero-audit-row {
-    flex-direction: column;
-  }
-
-  .landing-hero-audit-submit {
-    width: 100% !important;
   }
 }
 

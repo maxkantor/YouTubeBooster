@@ -977,13 +977,14 @@ export function LandingPage() {
       <section className="landing-hero" aria-labelledby="hero-heading">
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
-            <p className="landing-hero-kicker">{BRAND.name}</p>
+            <p className="landing-hero-kicker">AI YouTube Channel Audit</p>
             <h1 className="landing-hero-title landing-hero-display-h1" id="hero-heading">
               Find what&apos;s killing
-              <span className="landing-hero-title-break">your views</span>
+              <br />
+              your views
             </h1>
             <p className="landing-hero-sub">
-              Paste a public channel. Get a prioritized audit for CTR, titles, SEO, and packaging — then unlock the full growth plan.
+              AI-powered audits that show what is limiting CTR, titles, SEO, and packaging — from public YouTube data, with a full growth plan when you unlock.
             </p>
             <form
               className="landing-hero-audit"
@@ -994,64 +995,61 @@ export function LandingPage() {
                 handleAnalyzeUserChannel();
               }}
             >
-              <div className="landing-hero-audit-row">
-                <input
-                  type="text"
-                  className="landing-hero-audit-input"
-                  placeholder="Paste a YouTube URL or @handle"
-                  value={demoInput}
-                  onChange={(e) => {
-                    setDemoInput(e.target.value);
-                    setDemoError('');
-                  }}
-                  autoComplete="url"
-                  inputMode="url"
-                  aria-label="YouTube channel URL or @handle"
-                  aria-invalid={!!demoError}
-                  aria-describedby={demoError ? 'audit-channel-error' : 'hero-audit-hint'}
-                />
-                <button
-                  type="submit"
-                  className="btn btn-primary landing-hero-audit-submit landing-cta-premium"
-                  disabled={auditSubmitting}
-                >
-                  {auditSubmitting ? 'Starting…' : 'Analyze Channel'}
-                </button>
-              </div>
+              <input
+                type="text"
+                className="landing-hero-audit-input"
+                placeholder="Paste a YouTube channel URL or @handle"
+                value={demoInput}
+                onChange={(e) => {
+                  setDemoInput(e.target.value);
+                  setDemoError('');
+                }}
+                autoComplete="url"
+                inputMode="url"
+                aria-label="YouTube channel URL or @handle"
+                aria-invalid={!!demoError}
+                aria-describedby={demoError ? 'audit-channel-error' : 'hero-audit-hint'}
+              />
               {demoError ? (
                 <p id="audit-channel-error" className="landing-demo-error" role="alert">
                   {demoError}
                 </p>
-              ) : (
-                <p className="landing-hero-audit-hint" id="hero-audit-hint">
-                  Free preview · public YouTube data only · no Studio login
-                </p>
-              )}
+              ) : null}
+              <div className="landing-hero-buttons">
+                <button
+                  type="submit"
+                  className="btn btn-lg landing-hero-cta-primary landing-cta-premium"
+                  disabled={auditSubmitting}
+                >
+                  {auditSubmitting ? 'Starting…' : 'Analyze Your Channel'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium"
+                  onClick={handleOpenInstantDemo}
+                >
+                  See Instant Demo
+                </button>
+              </div>
+              <p className="landing-hero-audit-hint" id="hero-audit-hint">
+                Instant demo runs on{' '}
+                <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
+                  {heroChannelLabel}
+                </a>
+                . Free preview — no Studio login.
+              </p>
             </form>
-            <p className="landing-hero-alt">
-              Prefer a sample?{' '}
-              <button type="button" className="landing-hero-alt-link" onClick={handleOpenInstantDemo}>
-                See instant demo
-              </button>{' '}
-              on{' '}
-              <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
-                {heroChannelLabel}
-              </a>
-            </p>
-            <ul className="landing-hero-trust" aria-label="Trust signals">
-              <li>
-                <span className="landing-trust-check" aria-hidden />
-                Free preview before you pay
-              </li>
-              <li>
-                <span className="landing-trust-check" aria-hidden />
-                Secure Stripe checkout
-              </li>
-              <li>
-                <span className="landing-trust-check" aria-hidden />
-                One-time payment
-              </li>
-            </ul>
+            <div className="landing-hero-proof-strip" aria-label="Trust signals">
+              <span>
+                <strong>Free preview</strong> before you pay
+              </span>
+              <span>
+                <strong>Public YouTube data</strong>
+              </span>
+              <span>
+                <strong>One-time payment</strong>
+              </span>
+            </div>
           </div>
           <div className="landing-hero-preview">
             <div className="landing-hero-insight-panel landing-insight-glass">
