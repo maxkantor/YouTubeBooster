@@ -85,7 +85,7 @@ variable "cors_allowed_origins" {
 variable "one_time_price" {
   description = "Default one-time purchase price."
   type        = string
-  default     = "19.99"
+  default     = "9.99"
 }
 
 variable "currency" {

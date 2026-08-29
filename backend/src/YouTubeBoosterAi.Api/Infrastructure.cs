@@ -129,7 +129,7 @@ public sealed class ParameterStoreAppSettingsProvider : IAppSettingsProvider
             ?? _configuration["Features:DemoRateLimitPerHour"];
 
         var settings = new AppSettings(
-            OneTimePrice: decimal.TryParse(oneTimePriceRaw, out var price) ? price : 19.99m,
+            OneTimePrice: decimal.TryParse(oneTimePriceRaw, out var price) ? price : 9.99m,
             Currency: currency,
             StripePriceLookupKey: priceLookupKey,
             StripePublishableKey: publishableKey,

@@ -13,7 +13,13 @@ import {
 import type { DemoPreview } from './types';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
 import { billingApi, meApi, publicApi } from './lib/api';
-import { isCheckoutEmailValid, resolveCheckoutUrl, startPremiumCheckout } from './lib/startCheckout';
+import { resolveCheckoutUrl, startPremiumCheckout } from './lib/startCheckout';
+import {
+  buildUnlockReturnTo,
+  clearUnlockCheckoutParam,
+  shouldAutoStartUnlockCheckout,
+  unlockSignupPath
+} from './lib/unlockFlow';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
 import { AiGrowthStudio } from './components/AiGrowthStudio';
@@ -331,8 +337,6 @@ function FullGrowthPlanSection({
   userState,
   auditPreview,
   pricingLoading,
-  checkoutEmail,
-  onCheckoutEmailChange,
   pricingError,
   onUnlock,
   onViewFullReport
@@ -340,8 +344,6 @@ function FullGrowthPlanSection({
   userState: FullGrowthPlanUserState;
   auditPreview: AuditPreviewData;
   pricingLoading: boolean;
-  checkoutEmail: string;
-  onCheckoutEmailChange: (value: string) => void;
   pricingError: string;
   onUnlock: () => void;
   onViewFullReport: () => void;
@@ -450,52 +452,25 @@ function FullGrowthPlanSection({
       </div>
 
       <div className="landing-growth-plan-footer">
-        {isDemo ? (
-          <form
-            className="landing-growth-plan-checkout"
-            onSubmit={(e) => {
-              e.preventDefault();
-              onUnlock();
-            }}
-          >
-            <label className="field-label" htmlFor="growth-unlock-email">
-              Email for checkout
-            </label>
-            <input
-              id="growth-unlock-email"
-              type="email"
-              className="premium-input"
-              placeholder="you@example.com"
-              value={checkoutEmail}
-              onChange={(e) => onCheckoutEmailChange(e.target.value)}
-              autoComplete="email"
-              inputMode="email"
-              required
-              aria-invalid={!!pricingError}
-            />
-            {pricingError ? (
-              <p className="landing-pricing-error" role="alert">
-                {pricingError}
-              </p>
-            ) : null}
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg landing-growth-plan-cta"
-              disabled={pricingLoading}
-            >
-              {pricingLoading ? 'Starting checkout…' : 'Unlock My Full AI Audit →'}
-            </button>
-          </form>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary btn-lg landing-growth-plan-cta"
-            onClick={onUnlock}
-            disabled={pricingLoading}
-          >
-            {pricingLoading ? 'Starting checkout…' : 'Unlock Full Plan →'}
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn btn-primary btn-lg landing-growth-plan-cta"
+          onClick={onUnlock}
+          disabled={pricingLoading}
+        >
+          {pricingLoading
+            ? isDemo
+              ? 'Redirecting…'
+              : 'Starting checkout…'
+            : isDemo
+              ? 'Sign up to unlock →'
+              : 'Unlock Full Plan →'}
+        </button>
+        {pricingError ? (
+          <p className="landing-pricing-error" role="alert">
+            {pricingError}
+          </p>
+        ) : null}
 
         {isDemo ? (
           <>
@@ -533,7 +508,6 @@ export function LandingPage() {
   const [demoPreviewByChannel, setDemoPreviewByChannel] = useState<Record<string, DemoPreview>>({});
   const [productPreviewLoading, setProductPreviewLoading] = useState(false);
   const [productPreviewError, setProductPreviewError] = useState('');
-  const [checkoutEmail, setCheckoutEmail] = useState('');
   const pricingViewedRef = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
   const stickyCtaRef = useRef<HTMLDivElement>(null);
@@ -595,6 +569,7 @@ export function LandingPage() {
   const pricingUnlockModules =
     (productDemo ?? heroDemo)?.gatedModules?.filter(Boolean) ?? FULL_UNLOCK_FALLBACK_MODULES;
   const purchaseCompletedTrackedRef = useRef(false);
+  const unlockAutoStartedRef = useRef(false);
 
   useEffect(() => {
     analytics.landingPageView();
@@ -699,6 +674,14 @@ export function LandingPage() {
       cancelled = true;
     };
   }, [authSession?.idToken]);
+
+  useEffect(() => {
+    if (!authSession?.idToken || hasPremium || !shouldAutoStartUnlockCheckout()) return;
+    if (unlockAutoStartedRef.current) return;
+    unlockAutoStartedRef.current = true;
+    clearUnlockCheckoutParam();
+    void handleUnlockReport();
+  }, [authSession?.idToken, hasPremium]);
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, '');
@@ -809,13 +792,9 @@ export function LandingPage() {
   }
 
   async function handleUnlockReport() {
-    const revealCheckoutEmail = (message: string) => {
+    const showPricingError = (message: string) => {
       setPricingError(message);
-      const growthEmail = document.getElementById('growth-unlock-email') as HTMLInputElement | null;
-      const pricingEmail = document.getElementById('landing-checkout-email') as HTMLInputElement | null;
-      const target = growthEmail ?? pricingEmail;
-      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      window.setTimeout(() => target?.focus(), 280);
+      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
     try {
@@ -837,26 +816,13 @@ export function LandingPage() {
         enteredValid?.ok ? enteredValid.normalized : channelInput || getStoredDemoChannel() || 'account';
 
       if (!authSession) {
-        if (!isCheckoutEmailValid(checkoutEmail)) {
-          revealCheckoutEmail('Enter your email to continue to secure checkout.');
-          return;
-        }
-        setPricingLoading(true);
         setPricingError('');
-        analytics.checkoutStarted(checkoutChannel);
-        const checkout = await startPremiumCheckout({ channelInput: checkoutChannel, email: checkoutEmail });
-        const checkoutUrl = resolveCheckoutUrl(checkout);
-        if (!checkoutUrl) {
-          revealCheckoutEmail('Could not start checkout. Please try again.');
-          return;
-        }
-        window.location.assign(checkoutUrl);
+        navigate(unlockSignupPath(buildUnlockReturnTo('/', '', 'pricing')));
         return;
       }
 
       if (hasPremium) {
-        setPricingError('You already have premium access.');
-        document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showPricingError('You already have premium access.');
         return;
       }
 
@@ -871,12 +837,12 @@ export function LandingPage() {
       });
       const checkoutUrl = resolveCheckoutUrl(checkout);
       if (!checkoutUrl) {
-        revealCheckoutEmail('Could not start checkout. Please try again.');
+        showPricingError('Could not start checkout. Please try again.');
         return;
       }
       window.location.assign(checkoutUrl);
     } catch (err) {
-      revealCheckoutEmail(err instanceof Error ? err.message : 'Could not start checkout.');
+      showPricingError(err instanceof Error ? err.message : 'Could not start checkout.');
     } finally {
       setPricingLoading(false);
     }
@@ -1375,11 +1341,6 @@ export function LandingPage() {
             userState={fullGrowthPlanUserState}
             auditPreview={auditPreview}
             pricingLoading={pricingLoading}
-            checkoutEmail={checkoutEmail}
-            onCheckoutEmailChange={(value) => {
-              setCheckoutEmail(value);
-              setPricingError('');
-            }}
             pricingError={pricingError}
             onUnlock={handleUnlockReport}
             onViewFullReport={handleViewFullReport}
@@ -1467,30 +1428,14 @@ export function LandingPage() {
                 void handleUnlockReport();
               }}
             >
-              {!authSession && (
-                <>
-                  <label className="field-label" htmlFor="landing-checkout-email">
-                    Email for checkout
-                  </label>
-                  <input
-                    id="landing-checkout-email"
-                    type="email"
-                    className="premium-input"
-                    placeholder="you@example.com"
-                    value={checkoutEmail}
-                    onChange={(e) => {
-                      setCheckoutEmail(e.target.value);
-                      setPricingError('');
-                    }}
-                    autoComplete="email"
-                    inputMode="email"
-                    required
-                    aria-invalid={!!pricingError}
-                  />
-                  <p className="muted" style={{ margin: 0 }}>
-                    Pay with Stripe first, then sign up with the same email to access your full report.
-                  </p>
-                </>
+              {!authSession ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  Create a free account first, then complete secure one-time checkout to unlock your full report.
+                </p>
+              ) : (
+                <p className="muted" style={{ margin: 0 }}>
+                  One-time secure checkout via Stripe unlocks the account you&apos;re signed into.
+                </p>
               )}
               {pricingError && (
                 <p className="landing-pricing-error" role="alert">
@@ -1505,8 +1450,12 @@ export function LandingPage() {
                 {hasPremium
                   ? 'Already unlocked'
                   : pricingLoading
-                    ? 'Starting checkout…'
-                    : `Get My Full Growth Fix — ${oneTimePriceLabel}`}
+                    ? authSession
+                      ? 'Starting checkout…'
+                      : 'Redirecting…'
+                    : authSession
+                      ? `Get My Full Growth Fix — ${oneTimePriceLabel}`
+                      : `Sign up to unlock — ${oneTimePriceLabel}`}
               </button>
               <ul className="landing-pricing-trust-list" aria-label="Pricing trust signals">
                 <li>One-time payment</li>

@@ -14,7 +14,7 @@ amplify_repository_url = "https://github.com/your-org/your-repo"
 amplify_access_token   = "replace-me"
 amplify_branch_name    = "main"
 
-one_time_price = "19.99"
+one_time_price = "9.99"
 currency       = "USD"
 
 # Admin CRM login email (SSM …/admin/email). After first apply, value is ignored by Terraform — change in AWS Console anytime.

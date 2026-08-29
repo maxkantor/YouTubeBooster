@@ -36,6 +36,9 @@ function isBuiltInShowcaseChannel(channelInput: string): boolean {
 }
 import { publicApi } from './lib/api';
 import { analytics } from './lib/analytics';
+import { useAuth } from './AuthContext';
+import { resolveCheckoutUrl } from './lib/startCheckout';
+import { clearUnlockCheckoutParam, shouldAutoStartUnlockCheckout } from './lib/unlockFlow';
 import { PaywallModal } from './PaywallModal';
 import { DemoAnalysisLoadingPanel } from './components/DemoAnalysisLoadingPanel';
 import type { CheckoutSession } from './types';
@@ -207,11 +210,13 @@ export function UnifiedDashboard({
   onSignOut?: () => void;
 }) {
   const { oneTimePriceLabel } = usePricing();
+  const { session: authSession } = useAuth();
   const isPreviewMode = isDemo && !isFullDemo;
   const showLockedUI = isDemo && !isFullDemo;
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const unlockAutoStartedRef = useRef(false);
   const [displayScore, setDisplayScore] = useState(0);
   const [seoInput, setSeoInput] = useState('');
   const [seoResult, setSeoResult] = useState<LocalSeoResult | null>(null);
@@ -269,6 +274,23 @@ export function UnifiedDashboard({
   useEffect(() => {
     runnerRunningRef.current = runnerRunning;
   }, [runnerRunning]);
+
+  useEffect(() => {
+    if (!authSession?.idToken || premiumUnlocked || !shouldAutoStartUnlockCheckout()) return;
+    if (unlockAutoStartedRef.current) return;
+    unlockAutoStartedRef.current = true;
+    clearUnlockCheckoutParam();
+    const channel = channelInput.trim() || 'account';
+    analytics.checkoutStarted(channel);
+    setCheckoutLoading(true);
+    void onCreateCheckout(channel, authSession.email ?? '')
+      .then((session) => {
+        const checkoutUrl = resolveCheckoutUrl(session);
+        if (checkoutUrl) window.location.assign(checkoutUrl);
+      })
+      .finally(() => setCheckoutLoading(false));
+  }, [authSession?.idToken, authSession?.email, premiumUnlocked, channelInput, onCreateCheckout]);
+
   useEffect(() => {
     runnerSpeedRef.current = runnerSpeed;
     runnerSpeedClampLoggedRef.current = false;

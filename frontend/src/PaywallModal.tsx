@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { analytics } from './lib/analytics';
 import { useAuth } from './AuthContext';
 import { billingApi, meApi } from './lib/api';
 import { getSession as cognitoGetSession } from './lib/auth';
-import { isCheckoutEmailValid, resolveCheckoutUrl, startPremiumCheckout } from './lib/startCheckout';
+import { resolveCheckoutUrl } from './lib/startCheckout';
+import { unlockReturnFromWindow, unlockSigninPath, unlockSignupPath } from './lib/unlockFlow';
 import type { CheckoutSession } from './types';
 import { usePricing } from './PricingContext';
 
@@ -32,7 +34,6 @@ export function PaywallModal({
   const { session: authSession } = useAuth();
   const [error, setError] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
-  const [checkoutEmail, setCheckoutEmail] = useState('');
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -77,18 +78,6 @@ export function PaywallModal({
 
     try {
       if (!authSession) {
-        if (!isCheckoutEmailValid(checkoutEmail)) {
-          setError('Enter a valid email to continue to secure checkout.');
-          return;
-        }
-        analytics.checkoutStarted(channel);
-        const session = await startPremiumCheckout({ channelInput: channel, email: checkoutEmail });
-        const checkoutUrl = resolveCheckoutUrl(session);
-        if (!checkoutUrl) {
-          setError('Could not start checkout. Please try again.');
-          return;
-        }
-        window.location.assign(checkoutUrl);
         return;
       }
 
@@ -126,6 +115,8 @@ export function PaywallModal({
     }
   }
 
+  const unlockReturnTo = unlockReturnFromWindow();
+
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="paywall-title">
       <div className="modal-content paywall-modal" onClick={(e) => e.stopPropagation()}>
@@ -147,52 +138,39 @@ export function PaywallModal({
           <span className="paywall-price-amount">{oneTimePriceLabel}</span>{' '}
           <span className="paywall-price-note">one-time</span>
         </p>
-        <form
-          className="input-stack"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void handleUnlock();
-          }}
-        >
-          {authSession ? (
+        {authSession ? (
+          <form
+            className="input-stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleUnlock();
+            }}
+          >
             <p className="muted" style={{ margin: 0 }}>
               Your purchase unlocks the account you’re signed into (works across all devices).
             </p>
-          ) : (
-            <>
-              <label className="field-label" htmlFor="paywall-checkout-email">
-                Email for checkout and account access
-              </label>
-              <input
-                id="paywall-checkout-email"
-                type="email"
-                className="premium-input"
-                placeholder="you@example.com"
-                value={checkoutEmail}
-                onChange={(e) => {
-                  setCheckoutEmail(e.target.value);
-                  setError('');
-                }}
-                autoComplete="email"
-                inputMode="email"
-                required
-              />
-              <p className="muted" style={{ margin: 0 }}>
-                Pay with Stripe, then create your account with the same email to unlock your report.
-              </p>
-            </>
-          )}
-          {error && <p className="error-text">{error}</p>}
-          <button type="submit" className="btn btn-primary" disabled={isLoading || hasPremium}>
-            {hasPremium
-              ? 'Already unlocked'
-              : isLoading
-                ? 'Starting checkout…'
-                : authSession
-                  ? `Get My Full Growth Fix — ${oneTimePriceLabel}`
-                  : `Continue to Secure Checkout — ${oneTimePriceLabel}`}
-          </button>
-        </form>
+            {error && <p className="error-text">{error}</p>}
+            <button type="submit" className="btn btn-primary" disabled={isLoading || hasPremium}>
+              {hasPremium
+                ? 'Already unlocked'
+                : isLoading
+                  ? 'Starting checkout…'
+                  : `Get My Full Growth Fix — ${oneTimePriceLabel}`}
+            </button>
+          </form>
+        ) : (
+          <div className="input-stack">
+            <p className="muted" style={{ margin: 0 }}>
+              Create a free account first, then complete secure one-time checkout to unlock your full report.
+            </p>
+            <Link className="btn btn-primary" to={unlockSignupPath(unlockReturnTo)} onClick={onClose}>
+              Sign up to unlock — {oneTimePriceLabel}
+            </Link>
+            <Link className="btn btn-secondary" to={unlockSigninPath(unlockReturnTo)} onClick={onClose}>
+              Already have an account? Sign in
+            </Link>
+          </div>
+        )}
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>
           Continue Demo
         </button>
