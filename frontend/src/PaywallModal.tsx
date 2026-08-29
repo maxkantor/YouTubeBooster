@@ -35,6 +35,19 @@ export function PaywallModal({
   const [checkoutEmail, setCheckoutEmail] = useState('');
 
   useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
     let cancelled = false;
     if (!authSession?.idToken) {
       setHasPremium(false);
@@ -99,10 +112,10 @@ export function PaywallModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="paywall-title">
       <div className="modal-content paywall-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>See why your channel isn’t growing</h2>
+          <h2 id="paywall-title">See why your channel isn’t growing</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             ×
           </button>
@@ -110,7 +123,7 @@ export function PaywallModal({
         <p className="paywall-subtitle">
           Start with a free preview. Upgrade only if you want the full channel audit, recommendations, and growth plan.
         </p>
-        <ul className="feature-list paywall-list">
+        <ul className="paywall-list">
           {BENEFITS.map((item) => (
             <li key={item}>{item}</li>
           ))}
@@ -119,7 +132,13 @@ export function PaywallModal({
           <span className="paywall-price-amount">{oneTimePriceLabel}</span>{' '}
           <span className="paywall-price-note">one-time</span>
         </p>
-        <div className="input-stack">
+        <form
+          className="input-stack"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleUnlock();
+          }}
+        >
           {authSession ? (
             <p className="muted" style={{ margin: 0 }}>
               Your purchase unlocks the account you’re signed into (works across all devices).
@@ -132,7 +151,7 @@ export function PaywallModal({
               <input
                 id="paywall-checkout-email"
                 type="email"
-                className="landing-demo-input"
+                className="premium-input"
                 placeholder="you@example.com"
                 value={checkoutEmail}
                 onChange={(e) => {
@@ -140,6 +159,7 @@ export function PaywallModal({
                   setError('');
                 }}
                 autoComplete="email"
+                inputMode="email"
               />
               <p className="muted" style={{ margin: 0 }}>
                 Pay with Stripe, then create your account with the same email to unlock your report.
@@ -147,7 +167,7 @@ export function PaywallModal({
             </>
           )}
           {error && <p className="error-text">{error}</p>}
-          <button type="button" className="btn btn-primary" onClick={handleUnlock} disabled={isLoading || hasPremium}>
+          <button type="submit" className="btn btn-primary" disabled={isLoading || hasPremium}>
             {hasPremium
               ? 'Already unlocked'
               : isLoading
@@ -156,7 +176,7 @@ export function PaywallModal({
                   ? `Get My Full Growth Fix — ${oneTimePriceLabel}`
                   : `Continue to Secure Checkout — ${oneTimePriceLabel}`}
           </button>
-        </div>
+        </form>
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>
           Continue Demo
         </button>

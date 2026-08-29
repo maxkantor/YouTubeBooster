@@ -126,16 +126,27 @@ a {
 }
 
 .brand-play-icon {
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  margin-right: 0.4em;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 0.45em;
   flex-shrink: 0;
-  background: var(--brand-accent-red);
-  border-radius: 6px;
-  clip-path: polygon(6px 4px, 6px 16px, 16px 10px);
-  opacity: 0.95;
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  border-radius: 7px;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+  opacity: 1;
   transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.brand-play-icon::after {
+  content: '';
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-style: solid;
+  border-width: 5px 0 5px 8px;
+  border-color: transparent transparent transparent #fff;
 }
 
 .brand-with-play:hover .brand-play-icon {
@@ -1904,12 +1915,12 @@ html.is-scrolling .landing-section {
 .landing-nav-link {
   position: relative;
   color: #94a3b8;
-  font-size: 0.875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   text-decoration: none !important;
   padding: 10px 2px;
-  text-transform: uppercase;
+  text-transform: none;
   transition: color 0.15s ease, text-shadow 0.15s ease, transform 0.15s ease;
 }
 

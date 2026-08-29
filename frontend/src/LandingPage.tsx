@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { MarketingFooter } from './components/MarketingFooter';
@@ -977,49 +977,81 @@ export function LandingPage() {
       <section className="landing-hero" aria-labelledby="hero-heading">
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
-            <h1 className="landing-hero-title landing-hero-brand-h1" id="hero-heading">
-              {BRAND.name}
+            <p className="landing-hero-kicker">{BRAND.name}</p>
+            <h1 className="landing-hero-title landing-hero-display-h1" id="hero-heading">
+              Find what&apos;s killing
+              <span className="landing-hero-title-break">your views</span>
             </h1>
-            <h2 className="landing-hero-tagline-h2">
-              AI-Powered YouTube Channel Audit &amp; Growth Platform
-            </h2>
             <p className="landing-hero-sub">
-              {BRAND.heroSubtitle}
+              Paste a public channel. Get a prioritized audit for CTR, titles, SEO, and packaging — then unlock the full growth plan.
             </p>
-            <p className="landing-hero-outcome muted">
-              See what&apos;s limiting CTR, retention, and search visibility — from public YouTube data.
-            </p>
-            <div className="landing-hero-buttons">
-              <a
-                href="#audit"
-                className="btn btn-lg landing-hero-cta-primary landing-cta-premium"
-                aria-describedby="hero-cta-hint"
-                onClick={() => analytics.heroAuditCtaClicked()}
-              >
-                Analyze Your Channel
-              </a>
-              <button
-                type="button"
-                className="btn btn-lg landing-hero-cta-secondary landing-cta-secondary-premium"
-                onClick={handleOpenInstantDemo}
-                aria-describedby="hero-cta-hint"
-              >
-                See Instant Demo
-              </button>
-            </div>
-            <p className="landing-hero-cta-hint muted" id="hero-cta-hint">
-              Primary path: audit your channel. Instant demo shows the full product on{' '}
+            <form
+              className="landing-hero-audit"
+              id="audit"
+              onSubmit={(e) => {
+                e.preventDefault();
+                analytics.heroAuditCtaClicked();
+                handleAnalyzeUserChannel();
+              }}
+            >
+              <div className="landing-hero-audit-row">
+                <input
+                  type="text"
+                  className="landing-hero-audit-input"
+                  placeholder="Paste a YouTube URL or @handle"
+                  value={demoInput}
+                  onChange={(e) => {
+                    setDemoInput(e.target.value);
+                    setDemoError('');
+                  }}
+                  autoComplete="url"
+                  inputMode="url"
+                  aria-label="YouTube channel URL or @handle"
+                  aria-invalid={!!demoError}
+                  aria-describedby={demoError ? 'audit-channel-error' : 'hero-audit-hint'}
+                />
+                <button
+                  type="submit"
+                  className="btn btn-primary landing-hero-audit-submit landing-cta-premium"
+                  disabled={auditSubmitting}
+                >
+                  {auditSubmitting ? 'Starting…' : 'Analyze Channel'}
+                </button>
+              </div>
+              {demoError ? (
+                <p id="audit-channel-error" className="landing-demo-error" role="alert">
+                  {demoError}
+                </p>
+              ) : (
+                <p className="landing-hero-audit-hint" id="hero-audit-hint">
+                  Free preview · public YouTube data only · no Studio login
+                </p>
+              )}
+            </form>
+            <p className="landing-hero-alt">
+              Prefer a sample?{' '}
+              <button type="button" className="landing-hero-alt-link" onClick={handleOpenInstantDemo}>
+                See instant demo
+              </button>{' '}
+              on{' '}
               <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
                 {heroChannelLabel}
               </a>
-              .
             </p>
-            <div className="landing-hero-proof-strip" aria-label="Trust signals">
-              <span><strong>Free preview</strong> before you unlock the full report</span>
-              <span><strong>Public YouTube data</strong> — no Studio login</span>
-              <span><strong>Secure checkout</strong> via Stripe</span>
-              <span><strong>One-time payment</strong> — no subscription</span>
-            </div>
+            <ul className="landing-hero-trust" aria-label="Trust signals">
+              <li>
+                <span className="landing-trust-check" aria-hidden />
+                Free preview before you pay
+              </li>
+              <li>
+                <span className="landing-trust-check" aria-hidden />
+                Secure Stripe checkout
+              </li>
+              <li>
+                <span className="landing-trust-check" aria-hidden />
+                One-time payment
+              </li>
+            </ul>
           </div>
           <div className="landing-hero-preview">
             <div className="landing-hero-insight-panel landing-insight-glass">
@@ -1034,7 +1066,15 @@ export function LandingPage() {
                 <span className="landing-insight-panel-status">{heroDemo ? 'Live preview' : 'Loading'}</span>
               </div>
               <div className="landing-insight-health-row">
-                <div className="landing-insight-health-ring" aria-label={heroHealthScore != null ? `Channel health score ${heroHealthScore}` : 'Channel health score loading'}>
+                <div
+                  className="landing-insight-health-ring"
+                  style={
+                    heroHealthScore != null
+                      ? ({ '--health-score': String(heroHealthScore) } as CSSProperties)
+                      : undefined
+                  }
+                  aria-label={heroHealthScore != null ? `Channel health score ${heroHealthScore}` : 'Channel health score loading'}
+                >
                   <span>{heroHealthScore ?? '…'}</span>
                 </div>
                 <div className="landing-insight-health-meta">
@@ -1050,15 +1090,30 @@ export function LandingPage() {
               <ul className="landing-insight-list">
                 {heroInsights.length > 0 ? (
                   heroInsights.map((insight) => (
-                    <li key={`${insight.tag}-${insight.text}`} className="landing-insight-item landing-insight-item-pulse">
+                    <li
+                      key={`${insight.tag}-${insight.text}`}
+                      className={`landing-insight-item${insight.tagVariant === 'leak' ? ' landing-insight-item-pulse' : ''}`}
+                    >
                       <span className={`landing-insight-tag landing-insight-tag-${insight.tagVariant}`}>{insight.tag}</span>
                       <span className="landing-insight-text">{insight.text}</span>
                     </li>
                   ))
                 ) : (
-                  <li className="landing-insight-item">
-                    <span className="landing-insight-text muted">Loading channel insights…</span>
-                  </li>
+                  <>
+                    <li className="landing-insight-item landing-insight-skeleton" aria-hidden>
+                      <span className="landing-insight-tag landing-insight-tag-leak">CTR</span>
+                      <span className="landing-insight-skel-line" />
+                    </li>
+                    <li className="landing-insight-item landing-insight-skeleton" aria-hidden>
+                      <span className="landing-insight-tag landing-insight-tag-bad">Title</span>
+                      <span className="landing-insight-skel-line" />
+                    </li>
+                    <li className="landing-insight-item landing-insight-skeleton" aria-hidden>
+                      <span className="landing-insight-tag landing-insight-tag-opp">SEO</span>
+                      <span className="landing-insight-skel-line" />
+                    </li>
+                    <li className="sr-only">Loading channel insights…</li>
+                  </>
                 )}
               </ul>
               <p className="landing-insight-footer">
@@ -1066,64 +1121,9 @@ export function LandingPage() {
                 <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
                   {heroChannelLabel}
                 </a>
-                . Paste your channel above for your results.
+                . Paste your channel to see yours.
               </p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Audit entry */}
-      <section className="landing-demo-entry landing-audit-section" id="audit">
-        <div className="landing-demo-entry-inner">
-          <span className="landing-section-eyebrow">Free audit</span>
-          <h2 className="landing-section-title">Run your free channel audit now</h2>
-          <p className="landing-section-sub landing-nowrap-desktop">
-            Paste your channel URL or @handle to get an AI growth breakdown with your highest-impact next steps.
-          </p>
-          <p className="landing-audit-demo-hint muted">
-            New here? Try the live demo on{' '}
-            <button type="button" className="landing-audit-demo-link-inline" onClick={handleOpenInstantDemo}>
-              {heroChannelLabel}
-            </button>{' '}
-            first.
-          </p>
-
-          <div className="landing-audit-single-panel">
-            <div className="landing-demo-input-wrap">
-              <input
-                type="text"
-                className="landing-demo-input"
-                placeholder="Paste a YouTube channel URL or @handle"
-                value={demoInput}
-                onChange={(e) => {
-                  setDemoInput(e.target.value);
-                  setDemoError('');
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeUserChannel()}
-                aria-invalid={!!demoError}
-                aria-describedby={demoError ? 'audit-channel-error' : undefined}
-              />
-            </div>
-            <button
-              type="button"
-              className="btn btn-primary btn-lg landing-audit-cta"
-              onClick={handleAnalyzeUserChannel}
-              disabled={auditSubmitting}
-            >
-              {auditSubmitting ? 'Starting audit…' : 'Analyze My Channel'}
-            </button>
-            {demoError && (
-              <p id="audit-channel-error" className="landing-demo-error" role="alert">
-                {demoError}
-              </p>
-            )}
-            <p className="landing-audit-option-hint">
-              Examples: https://youtube.com/@channelname or @channelname
-            </p>
-            <button type="button" className="landing-audit-demo-link" onClick={handleOpenInstantDemo}>
-              Want a quick sample first? Open the instant demo.
-            </button>
           </div>
         </div>
       </section>
@@ -1138,7 +1138,7 @@ export function LandingPage() {
           {!productPreviewChannelInput.trim() ? (
             <div className="landing-dashboard-preview landing-dashboard-preview-empty">
               <p className="landing-dashboard-empty-copy">
-                Add your channel URL in the audit section above to load your live dashboard preview.
+                Paste your channel above to load your live dashboard preview.
               </p>
               <a href="#audit" className="btn btn-primary">
                 Analyze My Channel
@@ -1376,7 +1376,13 @@ export function LandingPage() {
                 </ul>
               </div>
             </div>
-            <div className="landing-pricing-form">
+            <form
+              className="landing-pricing-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleUnlockReport();
+              }}
+            >
               {!authSession && (
                 <>
                   <label className="field-label" htmlFor="landing-checkout-email">
@@ -1385,7 +1391,7 @@ export function LandingPage() {
                   <input
                     id="landing-checkout-email"
                     type="email"
-                    className="landing-demo-input"
+                    className="premium-input"
                     placeholder="you@example.com"
                     value={checkoutEmail}
                     onChange={(e) => {
@@ -1393,6 +1399,7 @@ export function LandingPage() {
                       setPricingError('');
                     }}
                     autoComplete="email"
+                    inputMode="email"
                   />
                   <p className="muted" style={{ margin: 0 }}>
                     Pay with Stripe first, then sign up with the same email to access your full report.
@@ -1401,9 +1408,8 @@ export function LandingPage() {
               )}
               {pricingError && <p className="landing-pricing-error">{pricingError}</p>}
               <button
-                type="button"
+                type="submit"
                 className="btn btn-primary btn-lg landing-pricing-cta"
-                onClick={handleUnlockReport}
                 disabled={pricingLoading || hasPremium}
               >
                 {hasPremium
@@ -1421,7 +1427,7 @@ export function LandingPage() {
                 <li>Secure checkout via Stripe</li>
               </ul>
               <p className="landing-pricing-microcopy">Unlock the full report after the free preview when you are ready.</p>
-            </div>
+            </form>
           </div>
         </div>
       </section>
