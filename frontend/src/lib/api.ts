@@ -250,10 +250,11 @@ export const premiumApi = {
 
 export const aiApi = {
   /** AI Growth Studio — backend enforces premium (Bedrock) vs preview (no Bedrock). */
-  async generateStudio(idToken: string, payload: AiGenerateRequest): Promise<AiStudioGenerateResponse> {
+  async generateStudio(idToken: string, payload: AiGenerateRequest, signal?: AbortSignal): Promise<AiStudioGenerateResponse> {
     return fetchJsonAuthed<AiStudioGenerateResponse>('/api/ai/generate', idToken, {
       method: 'POST',
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal
     });
   }
 };

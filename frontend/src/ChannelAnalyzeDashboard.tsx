@@ -59,7 +59,7 @@ export function ChannelAnalyzeDashboard({ variant }: { variant: 'marketing' | 'p
   const [paidPremiumAllowed, setPaidPremiumAllowed] = useState<boolean | null>(() => (variant === 'paid' ? null : true));
 
   const effectiveFullDemo = variant === 'paid' ? true : isDefaultChannelDemo || hasPremium;
-  const premiumUnlocked = variant === 'paid' ? true : hasPremium && !isDefaultChannelDemo;
+  const premiumUnlocked = variant === 'paid' || hasPremium;
 
   const [apiDemoData, setApiDemoData] = useState<DemoPreview | null>(null);
   const [demoLoading, setDemoLoading] = useState(false);

@@ -2,12 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { aiApi } from '../lib/api';
 import { analytics } from '../lib/analytics';
 import type { AiGenerateAction } from '../types';
+import { AiStudioLoadingProgress } from './AiStudioLoadingProgress';
 
 type AuditContext = {
   channelLabel: string;
   titleOriginal: string;
   keywords: string[];
   opportunities: Array<{ id: string; output: string[] }>;
+};
+
+type StudioResult = {
+  notes: string;
+  items: string[];
+  teaserLocked: boolean;
+  clientOnly: boolean;
 };
 
 function buildClientPreviewItems(action: AiGenerateAction, audit: AuditContext): string[] {
@@ -45,53 +53,106 @@ function buildRequestInput(audit: AuditContext) {
   };
 }
 
+function applyResult(
+  result: StudioResult,
+  setters: {
+    setAiNotes: (v: string) => void;
+    setAiItems: (v: string[]) => void;
+    setTeaserLocked: (v: boolean) => void;
+    setClientOnly: (v: boolean) => void;
+  }
+) {
+  setters.setAiNotes(result.notes);
+  setters.setAiItems(result.items);
+  setters.setTeaserLocked(result.teaserLocked);
+  setters.setClientOnly(result.clientOnly);
+}
+
 type AiGrowthStudioProps = {
   auditPreview: AuditContext;
   hasPremium: boolean;
+  /** Wait for Cognito/session bootstrap before the first AI request. */
+  authLoading?: boolean;
   idToken: string | null;
   onUnlock: () => void;
 };
 
-export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: AiGrowthStudioProps) {
+export function AiGrowthStudio({ auditPreview, hasPremium, authLoading = false, idToken, onUnlock }: AiGrowthStudioProps) {
   const [aiLoading, setAiLoading] = useState(false);
+  const [loadingStartedAtMs, setLoadingStartedAtMs] = useState<number | null>(null);
   const [aiError, setAiError] = useState('');
   const [aiNotes, setAiNotes] = useState('');
   const [aiItems, setAiItems] = useState<string[]>([]);
   const [aiAction, setAiAction] = useState<AiGenerateAction>('rewrite_titles');
-  /** Server-driven preview (no Bedrock) or client-only when logged out */
   const [teaserLocked, setTeaserLocked] = useState(true);
   const [clientOnly, setClientOnly] = useState(false);
+  const [resultCache, setResultCache] = useState<Partial<Record<AiGenerateAction, StudioResult>>>({});
+  const resultCacheRef = useRef(resultCache);
+  resultCacheRef.current = resultCache;
   const submittingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const requestGenRef = useRef(0);
+
+  const setters = { setAiNotes, setAiItems, setTeaserLocked, setClientOnly };
 
   const runGeneration = useCallback(
-    async (action: AiGenerateAction, options?: { trackUsage?: boolean }) => {
-      if (submittingRef.current) return;
+    async (action: AiGenerateAction, options?: { trackUsage?: boolean; force?: boolean }) => {
+      const force = options?.force === true;
+      const cached = resultCacheRef.current[action];
+      if (!force && cached) {
+        setAiAction(action);
+        setAiError('');
+        applyResult(cached, setters);
+        return;
+      }
+
+      if (submittingRef.current) {
+        abortRef.current?.abort();
+      }
+
+      const requestGen = ++requestGenRef.current;
       submittingRef.current = true;
+      abortRef.current = new AbortController();
       setAiAction(action);
       setAiError('');
       setAiLoading(true);
+      setLoadingStartedAtMs(Date.now());
 
       const input = buildRequestInput(auditPreview);
       const trackUsage = options?.trackUsage === true;
 
       try {
         if (!idToken) {
-          setClientOnly(true);
-          setTeaserLocked(true);
-          setAiNotes('Preview generated from your audit context. Upgrade for live AI on AWS Bedrock.');
-          setAiItems(buildClientPreviewItems(action, auditPreview));
+          const result: StudioResult = {
+            notes: 'Preview generated from your audit context. Upgrade for live AI on AWS Bedrock.',
+            items: buildClientPreviewItems(action, auditPreview),
+            teaserLocked: true,
+            clientOnly: true
+          };
+          if (requestGen !== requestGenRef.current) return;
+          applyResult(result, setters);
+          setResultCache((prev) => ({ ...prev, [action]: result }));
           if (trackUsage) analytics.aiToolUsed(action);
           return;
         }
 
-        setClientOnly(false);
-        const response = await aiApi.generateStudio(idToken, { action, input });
+        const response = await aiApi.generateStudio(idToken, { action, input }, abortRef.current.signal);
 
-        setAiNotes(response.notes);
-        setAiItems(response.items ?? []);
-        setTeaserLocked(!!(response.preview && response.locked));
+        if (requestGen !== requestGenRef.current) return;
+
+        const result: StudioResult = {
+          notes: response.notes,
+          items: response.items ?? [],
+          teaserLocked: hasPremium ? false : !!(response.preview && response.locked),
+          clientOnly: false
+        };
+        applyResult(result, setters);
+        setResultCache((prev) => ({ ...prev, [action]: result }));
         if (trackUsage) analytics.aiToolUsed(action);
       } catch (err) {
+        if (requestGen !== requestGenRef.current) return;
+        if (err instanceof Error && err.name === 'AbortError') return;
+
         const message = err instanceof Error ? err.message : 'Request failed.';
         const isAuth = /401|unauthorized/i.test(message);
         if (isAuth) {
@@ -106,24 +167,39 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
           setAiNotes('');
           setAiItems([]);
         } else {
+          const result: StudioResult = {
+            notes: 'Could not reach AI services. Showing local preview.',
+            items: buildClientPreviewItems(action, auditPreview),
+            teaserLocked: true,
+            clientOnly: false
+          };
           setAiError('');
-          setTeaserLocked(true);
-          setAiNotes('Could not reach AI services. Showing local preview.');
-          setAiItems(buildClientPreviewItems(action, auditPreview));
+          applyResult(result, setters);
+          setResultCache((prev) => ({ ...prev, [action]: result }));
           if (trackUsage) analytics.aiToolUsed(action);
         }
       } finally {
-        setAiLoading(false);
-        submittingRef.current = false;
+        if (requestGen === requestGenRef.current) {
+          setAiLoading(false);
+          setLoadingStartedAtMs(null);
+          submittingRef.current = false;
+          abortRef.current = null;
+        }
       }
     },
     [auditPreview, hasPremium, idToken]
   );
 
-  const autoRunDone = useRef(false);
   useEffect(() => {
-    if (autoRunDone.current) return;
-    autoRunDone.current = true;
+    return () => abortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    setResultCache({});
+  }, [auditPreview.channelLabel, idToken, hasPremium]);
+
+  useEffect(() => {
+    if (authLoading) return;
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       return;
     }
@@ -131,15 +207,17 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
       void runGeneration('rewrite_titles');
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [runGeneration]);
+  }, [authLoading, idToken, hasPremium, runGeneration]);
 
   const showBlurOnIndex = (index: number) => {
-    if (!teaserLocked && hasPremium && !clientOnly) return false;
+    if (hasPremium) return false;
     if (clientOnly || teaserLocked) return index >= 1;
     return false;
   };
 
   const badgeLabel = !idToken ? 'Preview' : hasPremium ? 'Pro' : 'Signed in';
+  const showResults = aiItems.length > 0;
+  const isLivePremium = !!(idToken && hasPremium);
 
   return (
     <section className="landing-section" id="ai-tools">
@@ -166,8 +244,9 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
               <button
                 key={key}
                 type="button"
-                className={`landing-ai-studio-tab btn btn-secondary${aiAction === key ? ' is-active' : ''}`}
-                disabled={aiLoading}
+                className={`landing-ai-studio-tab btn btn-secondary${aiAction === key ? ' is-active' : ''}${aiLoading && aiAction === key ? ' is-loading' : ''}`}
+                disabled={aiLoading && aiAction === key}
+                aria-busy={aiLoading && aiAction === key}
                 onClick={() => runGeneration(key, { trackUsage: true })}
               >
                 {label}
@@ -175,30 +254,24 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
             ))}
           </div>
 
-          <div className="landing-ai-studio-results">
-            {aiLoading ? (
-              <>
-                <p className="muted">Generating…</p>
-                <div className="landing-ai-skeleton-wrap" aria-hidden>
-                  <div className="landing-ai-skeleton" />
-                  <div className="landing-ai-skeleton" />
-                  <div className="landing-ai-skeleton" />
-                  <div className="landing-ai-skeleton" />
-                </div>
-              </>
-            ) : aiError ? (
+          <div className={`landing-ai-studio-results${aiLoading ? ' is-loading' : ''}`}>
+            {aiLoading && loadingStartedAtMs != null && (
+              <AiStudioLoadingProgress action={aiAction} hasPremium={isLivePremium} startedAtMs={loadingStartedAtMs} />
+            )}
+
+            {!aiLoading && aiError ? (
               <div className="landing-ai-error-panel">
                 <p className="landing-demo-error" role="alert">
                   {aiError}
                 </p>
                 {hasPremium && (
-                  <button type="button" className="btn btn-primary" onClick={() => runGeneration(aiAction, { trackUsage: true })}>
+                  <button type="button" className="btn btn-primary" onClick={() => runGeneration(aiAction, { trackUsage: true, force: true })}>
                     Retry
                   </button>
                 )}
               </div>
-            ) : aiItems.length > 0 ? (
-              <>
+            ) : showResults ? (
+              <div className={`landing-ai-results-body${aiLoading ? ' is-dimmed' : ''}`}>
                 {aiNotes && <p className="landing-ai-notes">{aiNotes}</p>}
                 <div className="landing-ai-result-grid">
                   {aiItems.map((item, index) => {
@@ -209,7 +282,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
                         <div className={blurred ? 'landing-ai-blur-target' : undefined}>
                           <p>{item}</p>
                         </div>
-                        {blurred && index === 1 && (teaserLocked || clientOnly) && (
+                        {blurred && index === 1 && !hasPremium && (teaserLocked || clientOnly) && !aiLoading && (
                           <div className="landing-ai-result-lock-overlay">
                             <p>Unlock full AI results</p>
                             <button type="button" className="btn btn-primary btn-sm" onClick={onUnlock}>
@@ -226,12 +299,12 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
                     type="button"
                     className="btn btn-secondary"
                     disabled={aiLoading}
-                    onClick={() => runGeneration(aiAction, { trackUsage: true })}
+                    onClick={() => runGeneration(aiAction, { trackUsage: true, force: true })}
                   >
                     Regenerate
                   </button>
                   {!hasPremium && (
-                    <button type="button" className="btn btn-primary" onClick={onUnlock}>
+                    <button type="button" className="btn btn-primary" onClick={onUnlock} disabled={aiLoading}>
                       Unlock full AI access
                     </button>
                   )}
@@ -241,10 +314,10 @@ export function AiGrowthStudio({ auditPreview, hasPremium, idToken, onUnlock }: 
                     {aiItems.length - 1} more {aiAction === 'rewrite_titles' ? 'title rewrites' : 'results'} in full unlock
                   </p>
                 )}
-              </>
-            ) : (
+              </div>
+            ) : !aiLoading ? (
               <p className="muted">Choose an action to generate your first result set.</p>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

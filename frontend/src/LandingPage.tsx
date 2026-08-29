@@ -496,7 +496,7 @@ export function LandingPage() {
   const { oneTimePriceLabel } = usePricing();
   const faqLeftColumn = useMemo(() => HOMEPAGE_FAQS.slice(0, 4), []);
   const faqRightColumn = useMemo(() => HOMEPAGE_FAQS.slice(4), []);
-  const { session: authSession, signOut: authSignOut } = useAuth();
+  const { session: authSession, loading: authLoading, signOut: authSignOut } = useAuth();
   const [demoInput, setDemoInput] = useState('');
   const [demoError, setDemoError] = useState('');
   const [auditSubmitting, setAuditSubmitting] = useState(false);
@@ -822,7 +822,8 @@ export function LandingPage() {
       }
 
       if (hasPremium) {
-        showPricingError('You already have premium access.');
+        setPricingError('');
+        handleViewFullReport();
         return;
       }
 
@@ -1326,6 +1327,7 @@ export function LandingPage() {
       <AiGrowthStudio
         auditPreview={auditPreview}
         hasPremium={hasPremium}
+        authLoading={authLoading}
         idToken={authSession?.idToken ?? null}
         onUnlock={handleUnlockReport}
       />

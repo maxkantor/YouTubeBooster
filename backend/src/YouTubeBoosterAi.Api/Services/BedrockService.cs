@@ -12,6 +12,7 @@ public sealed class BedrockService : IBedrockService
     private readonly ISecretValueProvider _secretValueProvider;
     private readonly IConfiguration _configuration;
     private readonly ILogger<BedrockService> _logger;
+    private string? _resolvedModelId;
 
     public BedrockService(
         IAmazonBedrockRuntime bedrock,
@@ -27,19 +28,9 @@ public sealed class BedrockService : IBedrockService
 
     public async Task<string> InvokeModelAsync(string prompt, double temperature, int maxTokens, CancellationToken cancellationToken)
     {
-        var modelId = Environment.GetEnvironmentVariable("BEDROCK_MODEL_ID")?.Trim()
-            ?? _configuration["BEDROCK_MODEL_ID"]?.Trim();
-        if (string.IsNullOrWhiteSpace(modelId))
-        {
-            modelId = (await _secretValueProvider.GetValueAsync("bedrock/model", secure: false, cancellationToken))?.Trim();
-        }
+        var modelId = await ResolveModelIdAsync(cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(modelId))
-        {
-            modelId = "anthropic.claude-3-sonnet-20240229-v1:0";
-        }
-
-        var effectiveMaxTokens = Math.Clamp(maxTokens, 800, 1200);
+        var effectiveMaxTokens = Math.Clamp(maxTokens, 640, 960);
         var effectiveTemperature = Math.Clamp(temperature, 0.1, 1.0);
 
         var payload = new
@@ -101,6 +92,29 @@ public sealed class BedrockService : IBedrockService
             _logger.LogWarning(ex, "Bedrock invoke failed");
             throw;
         }
+    }
+
+    private async Task<string> ResolveModelIdAsync(CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(_resolvedModelId))
+        {
+            return _resolvedModelId;
+        }
+
+        var modelId = Environment.GetEnvironmentVariable("BEDROCK_MODEL_ID")?.Trim()
+            ?? _configuration["BEDROCK_MODEL_ID"]?.Trim();
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            modelId = (await _secretValueProvider.GetValueAsync("bedrock/model", secure: false, cancellationToken))?.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            modelId = "anthropic.claude-3-sonnet-20240229-v1:0";
+        }
+
+        _resolvedModelId = modelId;
+        return modelId;
     }
 
     private static string ExtractAnthropicText(string responseJson)

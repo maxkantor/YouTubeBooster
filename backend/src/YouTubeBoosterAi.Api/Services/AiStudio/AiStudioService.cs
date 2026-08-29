@@ -68,14 +68,19 @@ public sealed class AiStudioService : IAiStudioService
 
         var prompt = _promptBuilder.BuildPrompt(request with { Action = action });
 
-        var maxTokensRaw = await _secretValueProvider.GetValueAsync("bedrock/maxTokens", secure: false, cancellationToken);
-        var temperatureRaw = await _secretValueProvider.GetValueAsync("bedrock/temperature", secure: false, cancellationToken);
+        var maxTokensTask = _secretValueProvider.GetValueAsync("bedrock/maxTokens", secure: false, cancellationToken);
+        var temperatureTask = _secretValueProvider.GetValueAsync("bedrock/temperature", secure: false, cancellationToken);
+        var modelIdTask = ResolveModelIdForLogAsync(cancellationToken);
+        await Task.WhenAll(maxTokensTask, temperatureTask, modelIdTask);
 
-        // Richer JSON (strategy + bestPick + options + why blocks) needs headroom vs plain lists.
-        var maxTokens = int.TryParse(maxTokensRaw, out var parsedMax) ? parsedMax : 1100;
+        var maxTokensRaw = await maxTokensTask;
+        var temperatureRaw = await temperatureTask;
+        var modelId = await modelIdTask;
+
+        // Strategist JSON is smaller after 5-option cap; lower default tokens speeds Bedrock.
+        var maxTokens = int.TryParse(maxTokensRaw, out var parsedMax) ? parsedMax : 800;
         var temperature = double.TryParse(temperatureRaw, out var parsedTemp) ? parsedTemp : 0.7;
 
-        var modelId = await ResolveModelIdForLogAsync(cancellationToken);
         var region = Environment.GetEnvironmentVariable("BEDROCK_REGION")
             ?? Environment.GetEnvironmentVariable("AWS_REGION")
             ?? "configured-default";
