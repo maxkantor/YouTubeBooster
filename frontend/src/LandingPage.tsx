@@ -13,7 +13,7 @@ import {
 import type { DemoPreview } from './types';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
 import { billingApi, meApi, publicApi } from './lib/api';
-import { isCheckoutEmailValid, startPremiumCheckout } from './lib/startCheckout';
+import { isCheckoutEmailValid, resolveCheckoutUrl, startPremiumCheckout } from './lib/startCheckout';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
 import { AiGrowthStudio } from './components/AiGrowthStudio';
@@ -331,12 +331,18 @@ function FullGrowthPlanSection({
   userState,
   auditPreview,
   pricingLoading,
+  checkoutEmail,
+  onCheckoutEmailChange,
+  pricingError,
   onUnlock,
   onViewFullReport
 }: {
   userState: FullGrowthPlanUserState;
   auditPreview: AuditPreviewData;
   pricingLoading: boolean;
+  checkoutEmail: string;
+  onCheckoutEmailChange: (value: string) => void;
+  pricingError: string;
   onUnlock: () => void;
   onViewFullReport: () => void;
 }) {
@@ -444,14 +450,52 @@ function FullGrowthPlanSection({
       </div>
 
       <div className="landing-growth-plan-footer">
-        <button
-          type="button"
-          className="btn btn-primary btn-lg landing-growth-plan-cta"
-          onClick={onUnlock}
-          disabled={pricingLoading}
-        >
-          {pricingLoading ? 'Starting checkout…' : isDemo ? 'Unlock My Full AI Audit →' : 'Unlock Full Plan →'}
-        </button>
+        {isDemo ? (
+          <form
+            className="landing-growth-plan-checkout"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onUnlock();
+            }}
+          >
+            <label className="field-label" htmlFor="growth-unlock-email">
+              Email for checkout
+            </label>
+            <input
+              id="growth-unlock-email"
+              type="email"
+              className="premium-input"
+              placeholder="you@example.com"
+              value={checkoutEmail}
+              onChange={(e) => onCheckoutEmailChange(e.target.value)}
+              autoComplete="email"
+              inputMode="email"
+              required
+              aria-invalid={!!pricingError}
+            />
+            {pricingError ? (
+              <p className="landing-pricing-error" role="alert">
+                {pricingError}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              className="btn btn-primary btn-lg landing-growth-plan-cta"
+              disabled={pricingLoading}
+            >
+              {pricingLoading ? 'Starting checkout…' : 'Unlock My Full AI Audit →'}
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary btn-lg landing-growth-plan-cta"
+            onClick={onUnlock}
+            disabled={pricingLoading}
+          >
+            {pricingLoading ? 'Starting checkout…' : 'Unlock Full Plan →'}
+          </button>
+        )}
 
         {isDemo ? (
           <>
@@ -568,16 +612,29 @@ export function LandingPage() {
   }, []);
 
   useEffect(() => {
-    const el = document.getElementById('audit');
     const cta = stickyCtaRef.current;
-    if (!el || !cta) return;
+    if (!cta) return;
+    const targets = ['audit', 'ai-tools', 'growth-plan', 'pricing']
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => !!el);
+    if (targets.length === 0) return;
+
+    const visible = new Set<string>();
+    const sync = () => {
+      cta.classList.toggle('is-hidden', visible.size > 0);
+    };
     const obs = new IntersectionObserver(
-      ([entry]) => {
-        cta.classList.toggle('is-hidden', !!entry?.isIntersecting);
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).id;
+          if (entry.isIntersecting) visible.add(id);
+          else visible.delete(id);
+        }
+        sync();
       },
-      { threshold: 0.2 }
+      { threshold: 0.08, rootMargin: '0px 0px -72px 0px' }
     );
-    obs.observe(el);
+    targets.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
   }, []);
 
@@ -752,6 +809,15 @@ export function LandingPage() {
   }
 
   async function handleUnlockReport() {
+    const revealCheckoutEmail = (message: string) => {
+      setPricingError(message);
+      const growthEmail = document.getElementById('growth-unlock-email') as HTMLInputElement | null;
+      const pricingEmail = document.getElementById('landing-checkout-email') as HTMLInputElement | null;
+      const target = growthEmail ?? pricingEmail;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => target?.focus(), 280);
+    };
+
     try {
       const stored = sessionStorage.getItem(DEMO_STORAGE_KEY);
       const storedDemo = getStoredDemoChannel();
@@ -772,19 +838,25 @@ export function LandingPage() {
 
       if (!authSession) {
         if (!isCheckoutEmailValid(checkoutEmail)) {
-          setPricingError('Enter your email to continue to secure checkout.');
+          revealCheckoutEmail('Enter your email to continue to secure checkout.');
           return;
         }
         setPricingLoading(true);
         setPricingError('');
         analytics.checkoutStarted(checkoutChannel);
         const checkout = await startPremiumCheckout({ channelInput: checkoutChannel, email: checkoutEmail });
-        window.location.href = checkout.checkoutUrl;
+        const checkoutUrl = resolveCheckoutUrl(checkout);
+        if (!checkoutUrl) {
+          revealCheckoutEmail('Could not start checkout. Please try again.');
+          return;
+        }
+        window.location.assign(checkoutUrl);
         return;
       }
 
       if (hasPremium) {
         setPricingError('You already have premium access.');
+        document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
 
@@ -797,9 +869,14 @@ export function LandingPage() {
         channelInput,
         idToken: authSession.idToken
       });
-      window.location.href = checkout.checkoutUrl;
+      const checkoutUrl = resolveCheckoutUrl(checkout);
+      if (!checkoutUrl) {
+        revealCheckoutEmail('Could not start checkout. Please try again.');
+        return;
+      }
+      window.location.assign(checkoutUrl);
     } catch (err) {
-      setPricingError(err instanceof Error ? err.message : 'Could not start checkout.');
+      revealCheckoutEmail(err instanceof Error ? err.message : 'Could not start checkout.');
     } finally {
       setPricingLoading(false);
     }
@@ -1298,6 +1375,12 @@ export function LandingPage() {
             userState={fullGrowthPlanUserState}
             auditPreview={auditPreview}
             pricingLoading={pricingLoading}
+            checkoutEmail={checkoutEmail}
+            onCheckoutEmailChange={(value) => {
+              setCheckoutEmail(value);
+              setPricingError('');
+            }}
+            pricingError={pricingError}
             onUnlock={handleUnlockReport}
             onViewFullReport={handleViewFullReport}
           />
@@ -1401,13 +1484,19 @@ export function LandingPage() {
                     }}
                     autoComplete="email"
                     inputMode="email"
+                    required
+                    aria-invalid={!!pricingError}
                   />
                   <p className="muted" style={{ margin: 0 }}>
                     Pay with Stripe first, then sign up with the same email to access your full report.
                   </p>
                 </>
               )}
-              {pricingError && <p className="landing-pricing-error">{pricingError}</p>}
+              {pricingError && (
+                <p className="landing-pricing-error" role="alert">
+                  {pricingError}
+                </p>
+              )}
               <button
                 type="submit"
                 className="btn btn-primary btn-lg landing-pricing-cta"
@@ -1561,7 +1650,7 @@ export function LandingPage() {
       </section>
       </main>
 
-      <div ref={stickyCtaRef} className="landing-mobile-sticky-cta">
+      <div ref={stickyCtaRef} className="landing-mobile-sticky-cta is-hidden">
         <a href="#audit" className="btn btn-primary btn-lg landing-mobile-sticky-cta-btn">
           Analyze Your Channel
         </a>

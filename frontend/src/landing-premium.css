@@ -338,6 +338,7 @@
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     justify-content: center;
     transition: transform 0.25s ease, opacity 0.25s ease;
+    pointer-events: auto;
   }
 
   .landing-mobile-sticky-cta.is-hidden {

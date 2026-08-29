@@ -7,6 +7,13 @@ export function isCheckoutEmailValid(email: string): boolean {
   return EMAIL_PATTERN.test(email.trim());
 }
 
+export function resolveCheckoutUrl(session: CheckoutSession | Record<string, unknown> | null | undefined): string {
+  if (!session || typeof session !== 'object') return '';
+  const record = session as Record<string, unknown>;
+  const url = record.checkoutUrl ?? record.CheckoutUrl;
+  return typeof url === 'string' ? url.trim() : '';
+}
+
 export async function startPremiumCheckout(opts: {
   channelInput: string;
   email?: string;

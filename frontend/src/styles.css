@@ -4429,11 +4429,26 @@ textarea {
 .landing-growth-plan-footer {
   margin-top: 18px;
   text-align: center;
+  position: relative;
+  z-index: 91;
 }
 
 .landing-growth-plan-cta {
   min-width: min(100%, 360px);
   box-shadow: 0 12px 34px rgba(79, 70, 229, 0.38);
+}
+
+.landing-growth-plan-checkout {
+  display: grid;
+  gap: 10px;
+  max-width: 28rem;
+  margin: 0 auto 8px;
+  text-align: left;
+}
+
+.landing-growth-plan-checkout .landing-growth-plan-cta {
+  width: 100%;
+  min-width: 0;
 }
 
 .landing-growth-plan-proof {
@@ -4764,6 +4779,7 @@ textarea {
   position: relative;
   padding: calc(var(--section-pad-y) + 8px) var(--app-gutter) calc(var(--section-pad-y) + 12px);
   overflow: hidden;
+  scroll-margin-top: 88px;
 }
 
 .landing-pricing-inner {
@@ -4948,7 +4964,7 @@ textarea {
   display: grid;
   gap: 12px;
   position: relative;
-  z-index: 1;
+  z-index: 91;
 }
 
 .landing-pricing-trust-list {
@@ -5006,8 +5022,9 @@ textarea {
 
 .landing-pricing-error {
   margin: 0;
-  color: #fca5a5;
-  font-size: 0.9rem;
+  color: #fecaca;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .landing-pricing-cta {

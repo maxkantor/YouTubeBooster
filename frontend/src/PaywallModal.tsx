@@ -3,7 +3,7 @@ import { analytics } from './lib/analytics';
 import { useAuth } from './AuthContext';
 import { billingApi, meApi } from './lib/api';
 import { getSession as cognitoGetSession } from './lib/auth';
-import { isCheckoutEmailValid, startPremiumCheckout } from './lib/startCheckout';
+import { isCheckoutEmailValid, resolveCheckoutUrl, startPremiumCheckout } from './lib/startCheckout';
 import type { CheckoutSession } from './types';
 import { usePricing } from './PricingContext';
 
@@ -83,13 +83,23 @@ export function PaywallModal({
         }
         analytics.checkoutStarted(channel);
         const session = await startPremiumCheckout({ channelInput: channel, email: checkoutEmail });
-        window.location.href = session.checkoutUrl;
+        const checkoutUrl = resolveCheckoutUrl(session);
+        if (!checkoutUrl) {
+          setError('Could not start checkout. Please try again.');
+          return;
+        }
+        window.location.assign(checkoutUrl);
         return;
       }
 
       analytics.checkoutStarted(channel);
       const session = await onCreateCheckout(channel, authSession.email ?? '');
-      window.location.href = session.checkoutUrl;
+      const checkoutUrl = resolveCheckoutUrl(session);
+      if (!checkoutUrl) {
+        setError('Could not start checkout. Please try again.');
+        return;
+      }
+      window.location.assign(checkoutUrl);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
 
@@ -99,7 +109,12 @@ export function PaywallModal({
           const fresh = await cognitoGetSession();
           if (fresh?.idToken) {
             const retrySession = await billingApi.createCheckoutSession(fresh.idToken, channel, 'premium');
-            window.location.href = retrySession.checkoutUrl;
+            const retryUrl = resolveCheckoutUrl(retrySession);
+            if (!retryUrl) {
+              setError('Could not start checkout. Please try again.');
+              return;
+            }
+            window.location.assign(retryUrl);
             return;
           }
         } catch {
@@ -160,6 +175,7 @@ export function PaywallModal({
                 }}
                 autoComplete="email"
                 inputMode="email"
+                required
               />
               <p className="muted" style={{ margin: 0 }}>
                 Pay with Stripe, then create your account with the same email to unlock your report.
