@@ -1915,12 +1915,12 @@ html.is-scrolling .landing-section {
 .landing-nav-link {
   position: relative;
   color: #94a3b8;
-  font-size: 0.9rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-decoration: none !important;
   padding: 10px 2px;
-  text-transform: none;
+  text-transform: uppercase;
   transition: color 0.15s ease, text-shadow 0.15s ease, transform 0.15s ease;
 }
 

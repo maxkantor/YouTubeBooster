@@ -977,14 +977,17 @@ export function LandingPage() {
       <section className="landing-hero" aria-labelledby="hero-heading">
         <div className="container landing-hero-grid">
           <div className="landing-hero-content">
-            <p className="landing-hero-kicker">AI YouTube Channel Audit</p>
-            <h1 className="landing-hero-title landing-hero-display-h1" id="hero-heading">
-              Find what&apos;s killing
-              <br />
-              your views
+            <h1 className="landing-hero-title landing-hero-brand-h1" id="hero-heading">
+              {BRAND.name}
             </h1>
+            <h2 className="landing-hero-tagline-h2">
+              AI-Powered YouTube Channel Audit &amp; Growth Platform
+            </h2>
             <p className="landing-hero-sub">
-              AI-powered audits that show what is limiting CTR, titles, SEO, and packaging — from public YouTube data, with a full growth plan when you unlock.
+              {BRAND.heroSubtitle}
+            </p>
+            <p className="landing-hero-outcome muted">
+              See what&apos;s limiting CTR, retention, and search visibility — from public YouTube data.
             </p>
             <form
               className="landing-hero-audit"

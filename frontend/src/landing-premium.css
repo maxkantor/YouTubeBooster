@@ -599,11 +599,15 @@
 }
 
 .landing-hero-content .landing-hero-sub {
-  margin-bottom: 26px;
+  margin-bottom: 12px;
   max-width: 36rem;
   font-size: 1.12rem;
   line-height: 1.6;
   color: #c5cde0;
+}
+
+.landing-hero-content .landing-hero-outcome {
+  margin-bottom: 22px;
 }
 
 .landing-hero-audit {
@@ -758,12 +762,8 @@
   padding-bottom: 18px;
 }
 
-.landing-nav-center {
-  gap: 22px;
-}
-
 .landing-nav-link-subtle {
-  letter-spacing: 0.01em;
+  letter-spacing: 0.06em;
 }
 
 @media (min-width: 1024px) {
@@ -785,18 +785,16 @@
 }
 
 @media (max-width: 1023px) {
-  .landing-hero-kicker,
-  .landing-hero-display-h1,
+  .landing-hero-brand-h1,
+  .landing-hero-tagline-h2,
   .landing-hero-content .landing-hero-sub,
+  .landing-hero-outcome,
   .landing-hero-audit-hint {
     text-align: center;
   }
 
-  .landing-hero-display-h1 {
-    margin-inline: auto !important;
-  }
-
-  .landing-hero-content .landing-hero-sub {
+  .landing-hero-content .landing-hero-sub,
+  .landing-hero-outcome {
     margin-inline: auto;
   }
 
