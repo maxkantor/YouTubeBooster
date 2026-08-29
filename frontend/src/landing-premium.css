@@ -197,8 +197,8 @@
 }
 
 .landing-hero-preview {
-  justify-content: center;
-  align-items: center;
+  justify-content: flex-end;
+  align-items: flex-start;
 }
 
 .landing-insight-panel-top {
@@ -249,7 +249,7 @@
 
 @media (min-width: 1024px) {
   .landing-hero-grid {
-    align-items: center;
+    align-items: start;
   }
 
   .landing-hero-content {
@@ -383,18 +383,19 @@
 }
 
 .landing-hero {
-  padding-top: clamp(44px, 7vh, var(--hero-pad-top)) !important;
-  padding-bottom: clamp(36px, 6vh, var(--hero-pad-bottom)) !important;
+  padding-top: clamp(28px, 4vh, 40px) !important;
+  padding-bottom: clamp(28px, 4.5vh, 44px) !important;
 }
 
 .landing-hero-grid {
   gap: clamp(18px, 3vw, 42px) !important;
+  align-items: start;
 }
 
 .landing-hero-content {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .landing-section {
@@ -685,6 +686,7 @@
 
 .landing-insight-glass.landing-hero-insight-panel {
   transform: perspective(1600px) rotateY(-6deg) rotateX(2deg) translateZ(0);
+  transform-origin: top center;
   border-radius: 26px;
   border-color: rgba(255, 255, 255, 0.14);
   box-shadow:
@@ -769,18 +771,23 @@
 @media (min-width: 1024px) {
   .landing-hero {
     min-height: 0;
-    padding-top: 56px !important;
-    padding-bottom: 64px !important;
+    padding-top: 28px !important;
+    padding-bottom: 24px !important;
   }
 
   .landing-hero-grid {
     width: 100%;
-    align-items: center;
-    gap: 48px !important;
+    align-items: start;
+    gap: 40px !important;
   }
 
   .landing-hero-preview {
     justify-content: flex-end;
+    padding-top: 0;
+  }
+
+  #product.landing-section {
+    padding-top: 36px !important;
   }
 }
 

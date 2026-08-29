@@ -2375,14 +2375,14 @@ html.is-scrolling .landing-section {
   display: grid;
   grid-template-columns: 1fr;
   gap: clamp(18px, 3vw, 28px);
-  align-items: center;
+  align-items: start;
 }
 
 @media (min-width: 1024px) {
   .landing-hero-grid {
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 520px);
     gap: clamp(28px, 3vw, 48px);
-    align-items: center;
+    align-items: start;
   }
 }
 
