@@ -226,7 +226,7 @@ export function AiGrowthStudio({ auditPreview, hasPremium, authLoading = false, 
           <span className={`landing-ai-studio-badge ${hasPremium ? 'is-paid' : 'is-preview'}`}>{badgeLabel}</span>
           <h2 className="landing-section-title">AI Growth Studio</h2>
           <p className="landing-section-sub">
-            Conversion-ready titles, descriptions, keywords, patterns, and ideas — premium runs on AWS Bedrock with server-side access control.
+            Conversion-ready titles, descriptions, keywords, patterns, and ideas — tailored to your channel and niche.
           </p>
         </div>
 
