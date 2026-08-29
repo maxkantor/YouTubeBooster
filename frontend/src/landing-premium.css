@@ -703,7 +703,7 @@
 }
 
 .landing-insight-glass.landing-hero-insight-panel {
-  transform: perspective(1600px) rotateY(-6deg) rotateX(2deg) translateZ(0);
+  transform: none;
   transform-origin: top center;
   border-radius: 26px;
   border-color: rgba(255, 255, 255, 0.14);
@@ -714,7 +714,7 @@
 }
 
 .landing-insight-glass.landing-hero-insight-panel:hover {
-  transform: perspective(1600px) rotateY(-3deg) rotateX(1deg) translateY(-6px) translateZ(0);
+  transform: none;
 }
 
 .landing-insight-health-ring {

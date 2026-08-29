@@ -491,9 +491,8 @@ export function LandingPage() {
   const [productPreviewError, setProductPreviewError] = useState('');
   const [checkoutEmail, setCheckoutEmail] = useState('');
   const pricingViewedRef = useRef(false);
-  const [navScrolled, setNavScrolled] = useState(false);
-  const navScrolledRef = useRef(false);
-  const [auditInView, setAuditInView] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const stickyCtaRef = useRef<HTMLDivElement>(null);
   const [showCheckoutSuccessBanner, setShowCheckoutSuccessBanner] = useState(false);
 
   const enteredChannelValid = useMemo(() => {
@@ -558,12 +557,10 @@ export function LandingPage() {
   }, []);
 
   useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
     const onScroll = () => {
-      const v = window.scrollY > 16;
-      if (v !== navScrolledRef.current) {
-        navScrolledRef.current = v;
-        setNavScrolled(v);
-      }
+      header.classList.toggle('landing-header-scrolled', window.scrollY > 16);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
@@ -572,9 +569,12 @@ export function LandingPage() {
 
   useEffect(() => {
     const el = document.getElementById('audit');
-    if (!el) return;
+    const cta = stickyCtaRef.current;
+    if (!el || !cta) return;
     const obs = new IntersectionObserver(
-      ([entry]) => setAuditInView(!!entry?.isIntersecting),
+      ([entry]) => {
+        cta.classList.toggle('is-hidden', !!entry?.isIntersecting);
+      },
       { threshold: 0.2 }
     );
     obs.observe(el);
@@ -856,7 +856,7 @@ export function LandingPage() {
         </div>
       ) : null}
       {/* 1. Header */}
-      <header className={`landing-header ${navScrolled ? 'landing-header-scrolled' : ''}`}>
+      <header ref={headerRef} className="landing-header">
         <div className="container landing-header-inner nav-shell">
           <Link
             to="/"
@@ -1561,7 +1561,7 @@ export function LandingPage() {
       </section>
       </main>
 
-      <div className={`landing-mobile-sticky-cta${auditInView ? ' is-hidden' : ''}`}>
+      <div ref={stickyCtaRef} className="landing-mobile-sticky-cta">
         <a href="#audit" className="btn btn-primary btn-lg landing-mobile-sticky-cta-btn">
           Analyze Your Channel
         </a>

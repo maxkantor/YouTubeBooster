@@ -3,7 +3,6 @@ import { flushSync } from 'react-dom';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { usePageTracking } from './hooks/usePageTracking';
-import { useScrollPerformance } from './hooks/useScrollPerformance';
 import { analytics } from './lib/analytics';
 import { adminApi, authApi, billingApi, meApi, premiumApi, userApi } from './lib/api';
 import { startPremiumCheckout } from './lib/startCheckout';
@@ -533,7 +532,6 @@ function AdminLoginPage({
 
 function AppInner() {
   usePageTracking();
-  useScrollPerformance();
 
   const [userSession, setUserSession] = useState<UserSessionStatus>({ authenticated: false, user: null });
   const [adminSession, setAdminSession] = useState<AdminSessionStatus>({ authenticated: false, email: null });
@@ -698,20 +696,17 @@ function AppInner() {
   }
 
   const path = location.pathname;
-  const [navScrolled, setNavScrolled] = useState(false);
-  const navScrolledRef = useRef(false);
+  const globalHeaderRef = useRef<HTMLElement>(null);
   useEffect(() => {
+    const header = globalHeaderRef.current;
+    if (!header) return;
     const onScroll = () => {
-      const v = window.scrollY > 20;
-      if (v !== navScrolledRef.current) {
-        navScrolledRef.current = v;
-        setNavScrolled(v);
-      }
+      header.classList.toggle('landing-header-scrolled', window.scrollY > 20);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [showGlobalNav]);
 
   async function handleGlobalSignOut() {
     // Best-effort logout for both the frontend session cookie and Cognito.
@@ -757,7 +752,7 @@ function AppInner() {
       <StructuredData graph={seoResolved.jsonLd ?? []} />
       {showGlobalNav && (
         <>
-          <header className={`landing-header ${navScrolled ? 'landing-header-scrolled' : ''}`}>
+          <header ref={globalHeaderRef} className="landing-header">
             <div className="container landing-header-inner nav-shell">
               <Link
                 to="/"

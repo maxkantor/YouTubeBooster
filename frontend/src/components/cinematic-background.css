@@ -8,6 +8,8 @@
   overflow: hidden;
   background: #040406;
   contain: strict;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .cinematic-bg__layer {
@@ -239,7 +241,6 @@
   animation: cinematic-orb-float var(--orb-dur, 54s) ease-in-out infinite;
   animation-delay: var(--orb-delay, 0s);
   transform: translate3d(0, 0, 0);
-  will-change: transform;
 }
 
 .cinematic-glass-orbs__orb svg {
@@ -564,20 +565,21 @@
   }
 }
 
-/* Pause cinematic motion while scrolling — do not hide layers (that flashes the page). */
-html.is-scrolling .cinematic-bg__aurora,
-html.is-scrolling .cinematic-bg__mesh,
-html.is-scrolling .cinematic-bg__glow,
-html.is-scrolling .cinematic-bg__flares,
-html.is-scrolling .cinematic-bg__fragments,
-html.is-scrolling .cinematic-bg__orbs,
-html.is-scrolling .cinematic-bg__volumetric,
-html.is-scrolling .cinematic-bg__fog,
-html.is-scrolling .cinematic-bg__particles,
-html.is-scrolling .cinematic-bg__horizon,
-html.is-scrolling .cinematic-bg__floor,
-html.is-scrolling .cinematic-bg__hub {
-  animation-play-state: paused !important;
+/* Frozen backdrop: animated full-viewport blurs flicker while scrolling on macOS Chrome. */
+.cinematic-bg__hub,
+.cinematic-bg__horizon,
+.cinematic-bg__floor,
+.cinematic-bg__aurora,
+.cinematic-bg__mesh,
+.cinematic-bg__fragments,
+.cinematic-bg__glow,
+.cinematic-bg__volumetric,
+.cinematic-bg__fog,
+.cinematic-bg__particle,
+.cinematic-glass-orbs__orb,
+.creator-fragments svg,
+.creator-fragments__bokeh {
+  animation: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

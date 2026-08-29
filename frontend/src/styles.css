@@ -41,7 +41,7 @@ body {
   margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
-  overflow-x: clip;
+  overflow-x: hidden;
   background: var(--space-deep);
   color: var(--text-bright);
 }
@@ -56,7 +56,7 @@ body {
 
 /* Prevent horizontal scroll / layout shift on notched phones and small viewports */
 html {
-  overflow-x: clip;
+  overflow-x: hidden;
 }
 
 a {
@@ -1812,9 +1812,7 @@ textarea {
   top: 0;
   z-index: 100;
   padding: 0;
-  background: rgba(5, 5, 7, 0.82);
-  backdrop-filter: blur(24px) saturate(1.12);
-  -webkit-backdrop-filter: blur(24px) saturate(1.12);
+  background: #07070c;
   border-bottom: 1px solid var(--glass-border);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
 }
@@ -1825,7 +1823,7 @@ textarea {
 }
 
 .landing-header-scrolled {
-  background: rgba(5, 5, 7, 0.82);
+  background: #07070c;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.42);
   border-bottom-color: rgba(255, 255, 255, 0.1);
 }
@@ -1840,7 +1838,6 @@ textarea {
   justify-content: space-between;
   gap: 24px;
   padding: 0 24px;
-  transition: padding 0.3s ease;
   min-height: var(--nav-height);
 }
 
@@ -2652,19 +2649,10 @@ textarea {
   padding: 0;
   border-radius: 24px;
   overflow: hidden;
-  transform: perspective(1400px) rotateY(-2deg) translateZ(0);
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  transform: none;
+  background: rgba(12, 14, 22, 0.94);
   border: 1px solid var(--glass-border);
   box-shadow: var(--card-shadow);
-  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s ease, border-color 0.4s ease;
-}
-
-.landing-insight-glass.landing-hero-insight-panel:hover {
-  transform: perspective(1400px) rotateY(-1deg) translateY(-4px) translateZ(0);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: var(--card-hover-shadow);
 }
 
 .landing-insight-panel-top {
