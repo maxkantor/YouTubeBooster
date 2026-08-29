@@ -3,7 +3,8 @@ import { useEffect } from 'react';
 const SCROLL_IDLE_MS = 280;
 
 /**
- * Toggles `html.is-scrolling` so CSS can strip expensive filters/backdrop blurs during scroll.
+ * Toggles `html.is-scrolling` so CSS can pause cinematic animations while the user scrolls.
+ * Do not restyle glass, transforms, or visibility here — that flashes the page on every scroll.
  */
 export function useScrollPerformance() {
   useEffect(() => {

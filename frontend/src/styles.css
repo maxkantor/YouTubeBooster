@@ -1812,40 +1812,11 @@ textarea {
   top: 0;
   z-index: 100;
   padding: 0;
-  background: rgba(5, 5, 7, 0.68);
+  background: rgba(5, 5, 7, 0.82);
   backdrop-filter: blur(24px) saturate(1.12);
   -webkit-backdrop-filter: blur(24px) saturate(1.12);
   border-bottom: 1px solid var(--glass-border);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
-  transition: box-shadow 0.3s ease, background 0.3s ease;
-}
-
-/* Scroll perf: backdrop-filter on sticky/fixed UI repaints the full viewport each frame. */
-html.is-scrolling .landing-header {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  background: rgba(5, 5, 7, 0.96);
-  transition: none !important;
-}
-
-html.is-scrolling .landing-insight-glass,
-html.is-scrolling .landing-dashboard-preview,
-html.is-scrolling .landing-audit-single-panel,
-html.is-scrolling .landing-pricing-card,
-html.is-scrolling .landing-cta-secondary-premium {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  background: rgba(12, 14, 22, 0.94);
-  transition: none !important;
-}
-
-html.is-scrolling .landing-insight-glass.landing-hero-insight-panel {
-  transform: none;
-  filter: none;
-}
-
-html.is-scrolling .landing-section {
-  transition: none !important;
 }
 
 .landing-header,
@@ -2149,7 +2120,7 @@ html.is-scrolling .landing-section {
   padding-bottom: var(--hero-pad-bottom);
   padding-left: 0;
   padding-right: 0;
-  overflow: hidden;
+  overflow: visible;
   background: transparent;
 }
 
@@ -3270,9 +3241,6 @@ html.is-scrolling .landing-section {
   padding: var(--section-pad-y) var(--app-gutter);
   position: relative;
   overflow: hidden;
-  transition: opacity 0.4s ease, transform 0.4s ease;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 520px;
 }
 
 .landing-hero,

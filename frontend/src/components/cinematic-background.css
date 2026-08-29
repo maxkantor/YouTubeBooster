@@ -564,7 +564,7 @@
   }
 }
 
-/* Scroll perf: hide filter-heavy layers (fixed + blur repaints every frame). */
+/* Pause cinematic motion while scrolling — do not hide layers (that flashes the page). */
 html.is-scrolling .cinematic-bg__aurora,
 html.is-scrolling .cinematic-bg__mesh,
 html.is-scrolling .cinematic-bg__glow,
@@ -573,12 +573,7 @@ html.is-scrolling .cinematic-bg__fragments,
 html.is-scrolling .cinematic-bg__orbs,
 html.is-scrolling .cinematic-bg__volumetric,
 html.is-scrolling .cinematic-bg__fog,
-html.is-scrolling .cinematic-bg__particles {
-  visibility: hidden !important;
-  opacity: 0 !important;
-  animation-play-state: paused !important;
-}
-
+html.is-scrolling .cinematic-bg__particles,
 html.is-scrolling .cinematic-bg__horizon,
 html.is-scrolling .cinematic-bg__floor,
 html.is-scrolling .cinematic-bg__hub {
