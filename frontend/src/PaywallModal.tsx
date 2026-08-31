@@ -4,8 +4,8 @@ import { analytics } from './lib/analytics';
 import { useAuth } from './AuthContext';
 import { billingApi, meApi } from './lib/api';
 import { getSession as cognitoGetSession } from './lib/auth';
-import { resolveCheckoutUrl } from './lib/startCheckout';
-import { unlockReturnFromWindow, unlockSigninPath, unlockSignupPath } from './lib/unlockFlow';
+import { isCheckoutEmailValid, resolveCheckoutUrl, startPremiumCheckout } from './lib/startCheckout';
+import { unlockSigninPath } from './lib/unlockFlow';
 import type { CheckoutSession } from './types';
 import { usePricing } from './PricingContext';
 
@@ -34,6 +34,8 @@ export function PaywallModal({
   const { session: authSession } = useAuth();
   const [error, setError] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestLoading, setGuestLoading] = useState(false);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -78,6 +80,20 @@ export function PaywallModal({
 
     try {
       if (!authSession) {
+        const email = guestEmail.trim();
+        if (!isCheckoutEmailValid(email)) {
+          setError('Enter a valid email to continue to secure checkout.');
+          return;
+        }
+        setGuestLoading(true);
+        analytics.checkoutStarted(channel);
+        const session = await startPremiumCheckout({ channelInput: channel, email });
+        const checkoutUrl = resolveCheckoutUrl(session);
+        if (!checkoutUrl) {
+          setError('Could not start checkout. Please try again.');
+          return;
+        }
+        window.location.assign(checkoutUrl);
         return;
       }
 
@@ -112,10 +128,10 @@ export function PaywallModal({
       }
 
       setError(err instanceof Error ? err.message : 'Could not start checkout.');
+    } finally {
+      setGuestLoading(false);
     }
   }
-
-  const unlockReturnTo = unlockReturnFromWindow();
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="paywall-title">
@@ -159,17 +175,36 @@ export function PaywallModal({
             </button>
           </form>
         ) : (
-          <div className="input-stack">
+          <form
+            className="input-stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleUnlock();
+            }}
+          >
             <p className="muted" style={{ margin: 0 }}>
-              Create a free account first, then complete secure one-time checkout to unlock your full report.
+              Pay once with Stripe. Create an account after checkout if you want the report saved across devices.
             </p>
-            <Link className="btn btn-primary" to={unlockSignupPath(unlockReturnTo)} onClick={onClose}>
-              Sign up to unlock — {oneTimePriceLabel}
-            </Link>
-            <Link className="btn btn-secondary" to={unlockSigninPath(unlockReturnTo)} onClick={onClose}>
+            <label className="sr-only" htmlFor="paywall-guest-email">
+              Email
+            </label>
+            <input
+              id="paywall-guest-email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={guestEmail}
+              onChange={(e) => setGuestEmail(e.target.value)}
+              required
+            />
+            {error && <p className="error-text">{error}</p>}
+            <button type="submit" className="btn btn-primary" disabled={guestLoading || hasPremium}>
+              {guestLoading ? 'Starting checkout…' : `Get My Full Growth Fix — ${oneTimePriceLabel}`}
+            </button>
+            <Link className="btn btn-secondary" to={unlockSigninPath()} onClick={onClose}>
               Already have an account? Sign in
             </Link>
-          </div>
+          </form>
         )}
         <button type="button" className="btn btn-secondary paywall-continue" onClick={onClose}>
           Continue Demo

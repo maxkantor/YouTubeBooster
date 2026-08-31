@@ -1329,10 +1329,10 @@ export function UnifiedDashboard({
     setPySeo(null);
   }
 
-  async function handleCreateCheckout(email: string) {
+  async function handleCreateCheckout(channel: string, email: string) {
     setCheckoutLoading(true);
     try {
-      return await onCreateCheckout(channelInput, email);
+      return await onCreateCheckout(channel || channelInput, email);
     } finally {
       setCheckoutLoading(false);
     }

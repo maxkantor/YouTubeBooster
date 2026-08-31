@@ -13,12 +13,10 @@ import {
 import type { DemoPreview } from './types';
 import { validateYouTubeChannelInput } from './lib/youtubeChannelInput';
 import { billingApi, meApi, publicApi } from './lib/api';
-import { resolveCheckoutUrl, startPremiumCheckout } from './lib/startCheckout';
+import { isCheckoutEmailValid, resolveCheckoutUrl, startPremiumCheckout } from './lib/startCheckout';
 import {
-  buildUnlockReturnTo,
   clearUnlockCheckoutParam,
-  shouldAutoStartUnlockCheckout,
-  unlockSignupPath
+  shouldAutoStartUnlockCheckout
 } from './lib/unlockFlow';
 import { useAuth } from './AuthContext';
 import { usePricing } from './PricingContext';
@@ -463,7 +461,7 @@ function FullGrowthPlanSection({
               ? 'Redirecting…'
               : 'Starting checkout…'
             : isDemo
-              ? 'Sign up to unlock →'
+              ? 'Unlock full plan →'
               : 'Unlock Full Plan →'}
         </button>
         {pricingError ? (
@@ -503,6 +501,7 @@ export function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState('');
+  const [guestCheckoutEmail, setGuestCheckoutEmail] = useState('');
   const [hasPremium, setHasPremium] = useState(false);
   const [userChannelUrl, setUserChannelUrl] = useState('');
   const [demoPreviewByChannel, setDemoPreviewByChannel] = useState<Record<string, DemoPreview>>({});
@@ -816,8 +815,24 @@ export function LandingPage() {
         enteredValid?.ok ? enteredValid.normalized : channelInput || getStoredDemoChannel() || 'account';
 
       if (!authSession) {
+        const email = guestCheckoutEmail.trim();
+        if (!isCheckoutEmailValid(email)) {
+          showPricingError('Enter a valid email to continue to secure checkout.');
+          return;
+        }
+        setPricingLoading(true);
         setPricingError('');
-        navigate(unlockSignupPath(buildUnlockReturnTo('/', '', 'pricing')));
+        analytics.checkoutStarted(checkoutChannel);
+        const checkout = await startPremiumCheckout({
+          channelInput: checkoutChannel,
+          email
+        });
+        const checkoutUrl = resolveCheckoutUrl(checkout);
+        if (!checkoutUrl) {
+          showPricingError('Could not start checkout. Please try again.');
+          return;
+        }
+        window.location.assign(checkoutUrl);
         return;
       }
 
@@ -1431,9 +1446,23 @@ export function LandingPage() {
               }}
             >
               {!authSession ? (
-                <p className="muted" style={{ margin: 0 }}>
-                  Create a free account first, then complete secure one-time checkout to unlock your full report.
-                </p>
+                <>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Enter your email to pay once with Stripe. You can create an account after checkout.
+                  </p>
+                  <label className="sr-only" htmlFor="landing-guest-checkout-email">
+                    Email
+                  </label>
+                  <input
+                    id="landing-guest-checkout-email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    value={guestCheckoutEmail}
+                    onChange={(e) => setGuestCheckoutEmail(e.target.value)}
+                    required
+                  />
+                </>
               ) : (
                 <p className="muted" style={{ margin: 0 }}>
                   One-time secure checkout via Stripe unlocks the account you&apos;re signed into.
@@ -1452,12 +1481,8 @@ export function LandingPage() {
                 {hasPremium
                   ? 'Already unlocked'
                   : pricingLoading
-                    ? authSession
-                      ? 'Starting checkout…'
-                      : 'Redirecting…'
-                    : authSession
-                      ? `Get My Full Growth Fix — ${oneTimePriceLabel}`
-                      : `Sign up to unlock — ${oneTimePriceLabel}`}
+                    ? 'Starting checkout…'
+                    : `Get My Full Growth Fix — ${oneTimePriceLabel}`}
               </button>
               <ul className="landing-pricing-trust-list" aria-label="Pricing trust signals">
                 <li>One-time payment</li>

@@ -5,9 +5,9 @@ Agents must append every experiment here. Do not delete history.
 ## Active
 
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive**; **2026-08-19** growth report now reads `ybai-purchases` + `ybai-users` entitlements (no PII). Still **0** verified product-attributed payments. Next eval on first verified checkout/payment or **2026-08-24**. Funnel stage: post-purchase activation
-- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (early read **2026-08-18**; full eval **Tuesday, August 25, 2026** / `2026-08-25`) — funnel stage: acquisition / SEO (**main** treatment)
+- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (**Keep** lock review 2026-08-31; low SEO landing traffic; treatment unchanged) — funnel stage: acquisition / SEO (**main** treatment)
 - **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
-- **EXP-004** — mini-audit share + sample paid report — **ACTIVE / COLLECTING** until **100 qualified COOK-001 sends or 2026-08-27** (14 days from 2026-08-13), unless deliverability STOP. COOK-001 ramp **10→20→30**/day enabled 2026-08-19. Conservative batch **2 SENT** (`APR-20260819-529e31b7`). Do not backfill. P05 founder send earlier the same day. P04 form-only skipped.
+- **EXP-004** — mini-audit share + sample paid report — **Keep** lock review 2026-08-31 (0 COOK-001 clicks; still collecting). COOK-001 ramp **10→20→30**/day; hold at 10 until 3 healthy days and ≥30 sends.
 
 ## Locked stages (do not launch overlapping treatments)
 
@@ -41,6 +41,23 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-08-31 — Lock review + guest checkout restore + COOK-001
+
+| Field | Value |
+|-------|--------|
+| Status | Prior lock **reviewed**. EXP-002 **Keep**. EXP-004 **Keep**. EXP-001 **Inconclusive** (treatment stays; guest checkout is the paid entry). EXP-003 nested **Keep**. |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-08-30: 4 checkout starts, 0 attributed payments). Signup-before-pay added a wall on the only converting step. |
+| One change | Restore **guest Stripe checkout** (email → Checkout). Sign-up optional after pay. New lock 2026-08-31 → 2026-09-06; review 2026-09-07. |
+| Hypothesis | Removing the account wall before Stripe increases completed Checkout sessions vs 4 starts / 0 paid. |
+| Exact change | `PaywallModal` + homepage `#pricing` collect email and call public `/api/checkout/session`. Signed-in path unchanged. |
+| Primary metric | Completed live Checkout sessions with `metadata.app=youtubeboosterai` and `payment_status=paid`. |
+| Guardrail | Do not change price. Do not add a second Acquisition/SEO experiment. COOK-001 remaining at 10/day. |
+| Baseline | 7d: 13 sessions, 4 checkout_started, 0 verified customers. |
+| Evaluation date | 2026-09-07 |
+| Stop rule | If public checkout 5xx or Stripe create fails in production, revert this UI to signed-in-only CTA. |
+| Funnel stage | Checkout conversion (does not add a second post-purchase experiment). |
+| Distribution | Morning automation already SES-accepted 1 COOK-001 (`APR-20260831-e0ed65b9`, @cookinginthemidwest). This run approved `APR-20260831-0bcd5004` then weekday-send **0** (cooldown on verified mailto, including @thedefineddish / @lovelemonsfood). Lifetime CRM SENT **12**. |
 
 ### 2026-08-24 — Strategy LOCKED for 7 days (FINAL growth system)
 

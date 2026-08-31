@@ -1,9 +1,9 @@
 {
   "strategyId": "youtubebooster-final-autonomous-growth-v1",
   "status": "LOCKED",
-  "lockStartYmd": "2026-08-24",
-  "lockEndYmdInclusive": "2026-08-30",
-  "reviewYmd": "2026-08-31",
+  "lockStartYmd": "2026-08-31",
+  "lockEndYmdInclusive": "2026-09-06",
+  "reviewYmd": "2026-09-07",
   "totalLockDays": 7,
   "timezone": "America/New_York",
   "authorityDoc": "docs/growth/LOCKED-STRATEGY.md",
@@ -19,14 +19,18 @@
     "EXP-002_seo_main",
     "EXP-003_youtube_channel_analyzer",
     "share_referral",
-    "sample_report"
+    "sample_report",
+    "guest_stripe_checkout"
   ],
+  "primaryBottleneck": "checkout_started_to_paid",
+  "primaryChangeThisLock": "restore_guest_stripe_checkout",
   "rules": {
     "noStrategyRewriteUntilReview": true,
     "noProductCodeUnlessLockException": true,
     "dailyCommitNotRequired": true,
     "maxOneExperimentPerFunnelStage": true,
-    "doNotCountCursorRateLimitAsGrowthFailure": true
+    "doNotCountCursorRateLimitAsGrowthFailure": true,
+    "doNotReimposeSignupBeforePay": true
   },
-  "notes": "Day 1 of lock includes the 2026-08-24 manual run after Cursor automation rate limit."
+  "notes": "2026-08-31 review: 4 checkout_started / 0 paid in prior 7d. Guest checkout restored. COOK-001 continues."
 }
