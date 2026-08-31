@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-08-31 — Daily run: COOK-001 send + strategy lock review
+
+| Field | Value |
+|-------|--------|
+| Status | Strategy lock **review day** (lock ended 2026-08-30). EXP-001 **Inconclusive** (4 checkout_started events / 7d; 0 verified product-attributed payments). EXP-002 **Keep** (0 EXP-002 landing sessions / 7d; 9 / 30d). EXP-003 **Keep** (0 analyzer sessions / 7d). EXP-004 **Keep** (12 lifetime CRM SENT after this run; 0 conversions). |
+| Distribution | **Executed:** 1 SES-accepted COOK-001 email (`APR-20260831-e0ed65b9`, @cookinginthemidwest / Cooking in the Midwest, ~96.2k subs). First weekday-send attempt sent 0 (all verified mailto on cooldown). Prospecting added 4 new verified-mailto drafts; targeted resend succeeded. |
+| Prospecting | `discover-creator-prospects-extra.mjs`: 11 new in-band handles; 4 with official mailto verified + drafted (@chrisscheuer, @swasthisrecipes, @smittenkitchening, @cookinginthemidwest). Remaining new prospects form-only. |
+| Funnel CRM | drafts 104 · approved 9 · **sent 12** (lifetime) · SES accepted this run **1** · marketingSendingEnabled true |
+| GA4 7d (through 2026-08-30) | session_start **13 events** · audit_started **3 events** · audit_completed **2 events** · pricing_viewed **12 events** · checkout_started **4 events** |
+| GA4 30d | session_start **64 events** · audit_started **7 events** · audit_completed **9 events** · pricing_viewed **15 events** · checkout_started **4 events** |
+| Verified customers | **0** (product-attributed baseline; reconciliation incomplete) |
+| Verified revenue | **$0** |
+| New customers this run | **0** |
+
 ### 2026-08-24 — Strategy LOCKED for 7 days (FINAL growth system)
 
 | Field | Value |
