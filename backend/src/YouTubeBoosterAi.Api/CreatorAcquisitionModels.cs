@@ -96,7 +96,7 @@ public sealed record AcqCampaignState(
     string? ConfigSet,
     int MaxDailyLimit = 30,
     bool RampEnabled = true,
-    int CooldownDays = 30,
+    int CooldownDays = 14,
     int RampStage = 10,
     bool StandingCampaignApproval = false,
     string? RampBlockReason = null

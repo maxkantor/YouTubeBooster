@@ -144,7 +144,7 @@ public class CreatorAcquisitionTests
     {
         var p = Prospect(lastContacted: DateTimeOffset.UtcNow.AddDays(-2));
         Assert.Equal("cooldown", CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, State(), true).Reason);
-        var cooled = Prospect(lastContacted: DateTimeOffset.UtcNow.AddDays(-31));
+        var cooled = Prospect(lastContacted: DateTimeOffset.UtcNow.AddDays(-15));
         Assert.True(CreatorAcquisitionScoring.ExplainSendEligibility(cooled, DateTimeOffset.UtcNow, State(), true).Ok);
     }
 

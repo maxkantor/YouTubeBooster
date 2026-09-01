@@ -6,7 +6,7 @@ public static class OutreachPolicy
 {
     public const int DefaultDailyLimit = 10;
     public const int DefaultMaxLimit = 30;
-    public const int DefaultCooldownDays = 30;
+    public const int DefaultCooldownDays = 14;
     public const int MinSendsForRate = 30;
     public const int SendingDaysBeforeRamp = 3;
     public const int EvalMinSends = 100;

@@ -13,7 +13,7 @@ Configuration (env, then Lambda `CreatorAcquisition:*`, then SSM `/youtubebooste
 | `YTB_OUTREACH_DAILY_LIMIT` | `10` | Used only when ramp is disabled |
 | `YTB_OUTREACH_MAX_LIMIT` | `30` | Hard cap; never auto-exceed |
 | `YTB_OUTREACH_RAMP_ENABLED` | `true` | Stage from persisted `ACQRAMP#COOK-001` |
-| `YTB_OUTREACH_COOLDOWN_DAYS` | `30` | Do not re-email the same prospect |
+| `YTB_OUTREACH_COOLDOWN_DAYS` | `14` | Do not re-email the same prospect (ramp period; was 30) |
 
 Ramp stages: **10 / 20 / 30** per Eastern weekday. Advance after **3 sending days** at the current stage **only if** at least **30** prior sends exist and:
 
@@ -60,7 +60,7 @@ Remain **COLLECTING** until **100 qualified sends** or **14 calendar days** from
 8. Unsubscribe HMAC configured
 9. Standing campaign approval while sending is enabled (named batches still supported)
 10. Daily cap from ramp stage (default **10**, max **30**), weekdays only (America/New_York)
-11. No guessed emails, cooldown 30 days, no suppression, no existing customers
+11. No guessed emails, cooldown 14 days, no suppression, no existing customers
 
 Operator (does not backfill historical campaigns):
 

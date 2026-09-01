@@ -24,7 +24,7 @@ vars.CreatorAcquisition__ConfigSet = 'yb-creator-acquisition';
 vars.YTB_OUTREACH_DAILY_LIMIT = vars.YTB_OUTREACH_DAILY_LIMIT || '10';
 vars.YTB_OUTREACH_MAX_LIMIT = '30';
 vars.YTB_OUTREACH_RAMP_ENABLED = 'true';
-vars.YTB_OUTREACH_COOLDOWN_DAYS = vars.YTB_OUTREACH_COOLDOWN_DAYS || '30';
+vars.YTB_OUTREACH_COOLDOWN_DAYS = '14';
 const payloadPath = path.join(os.tmpdir(), 'yb-lambda-acq-env.json');
 fs.writeFileSync(
   payloadPath,
@@ -86,6 +86,24 @@ if (put.status !== 0) {
   console.log(JSON.stringify({ ok: false, step: 'dynamo_flags', error: (put.stderr || put.stdout || '').slice(0, 400) }));
   process.exit(1);
 }
+
+spawnSync(
+  'aws',
+  [
+    'ssm',
+    'put-parameter',
+    '--name',
+    '/youtubebooster/outreach/cooldown-days',
+    '--value',
+    '14',
+    '--type',
+    'String',
+    '--overwrite',
+    '--region',
+    REGION
+  ],
+  { encoding: 'utf8' }
+);
 
 const ssm = spawnSync(
   'aws',

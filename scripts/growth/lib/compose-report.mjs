@@ -767,6 +767,14 @@ export function composeGrowthReport(opts) {
   t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
   const funnel = dist.outreachFunnel || emptyDistribution().outreachFunnel;
   t.push('COOK-001 outreach funnel (CRM lifetime unless labeled; a draft is not distribution):');
+  if (cohort.qualifiedProspects > 0 || dist.eligibleProspects > 0) {
+    t.push(`  ELIGIBLE PROSPECTS: ${dist.eligibleProspects ?? cohort.qualifiedProspects}`);
+  }
+  if (Array.isArray(dist.skippedByReason) && dist.skippedByReason.length) {
+    t.push(`  SKIPPED BY REASON: ${dist.skippedByReason.slice(0, 15).join('; ')}`);
+  } else if (dist.sendAttempts != null || dist.send?.attempted != null) {
+    t.push(`  SEND ATTEMPTS: ${dist.sendAttempts ?? dist.send?.attempted ?? 0}`);
+  }
   t.push(`  DRAFTED (CRM): ${funnel.drafted}`);
   t.push(`  APPROVED (CRM): ${funnel.approved}`);
   t.push(`  SES ACCEPTED TODAY: ${dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0}`);

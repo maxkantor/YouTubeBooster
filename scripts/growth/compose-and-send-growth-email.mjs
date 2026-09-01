@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { composeGrowthReport } from './lib/compose-report.mjs';
 import { parseActiveExperiments } from './lib/experiment-report.mjs';
+import { loadCrmAcquisitionSummary } from './lib/load-crm-acquisition.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
 import { sendAdminGrowthEmail } from './notify-admin-email.mjs';
 
@@ -121,6 +122,7 @@ const invokedAsCli =
   process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
 
 if (invokedAsCli) {
+  (async () => {
   const args = parseArgs(process.argv.slice(2));
   let notes = args.notes;
   if (args.notesFile) notes = fs.readFileSync(args.notesFile, 'utf8');
@@ -148,9 +150,23 @@ if (invokedAsCli) {
   const evaluations = args.evaluationsFile
     ? JSON.parse(fs.readFileSync(args.evaluationsFile, 'utf8'))
     : undefined;
-  const distribution = args.distributionFile
+  let distribution = args.distributionFile
     ? JSON.parse(fs.readFileSync(args.distributionFile, 'utf8'))
     : undefined;
+
+  const crmSummary = await loadCrmAcquisitionSummary();
+  if (crmSummary.ok) {
+    const base = distribution || {};
+    distribution = {
+      ...base,
+      outreachFunnel: {
+        ...(base.outreachFunnel || {}),
+        ...crmSummary.outreachFunnel
+      }
+    };
+  } else if (!distribution) {
+    distribution = undefined;
+  }
 
   const lockPath = path.join(ROOT, 'docs/growth/strategy-lock.json');
   let strategyLock = undefined;
@@ -239,4 +255,8 @@ if (invokedAsCli) {
     console.error(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     process.exit(1);
   }
+  })().catch((e) => {
+    console.error(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    process.exit(1);
+  });
 }

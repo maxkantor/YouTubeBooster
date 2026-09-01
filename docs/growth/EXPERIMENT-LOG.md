@@ -42,6 +42,19 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (overdue eval completed). EXP-004 **Inconclusive** (overdue eval completed; 12 lifetime sends, 0 clicks, 0 outreach-attributed audits). COOK-001 cooldown **30 → 14 days** (Lambda env + SSM + code default). |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-08-31: 4 checkout starts, 0 verified external customers). |
+| Distribution | Weekday SES **0 accepted** after cooldown reduction. All **12** lifetime CRM contacts remain inside the **14-day** window (oldest @thedefineddish / @lovelemonsfood at **12.9d**). Eligible never-contacted verified mailto: **1** (@marionskitchen) skipped `subscriber_out_of_band`. No manual contact forms. |
+| COOK-001 metrics | Eligible today: **0** (cooldown). Skipped: **107** (`cooldown`×12, `public_email_unverified`×20, `score_below_70`×40+, `subscriber_out_of_band`×1). SES accepted today: **0**. Lifetime CRM SENT: **12**. |
+| EXP-002 eval | **Keep.** 7d: 12 sessions, 3 audit_starts; eligible SEO form pages unchanged. Sample too small for lift; no verified SEO-attributed payments. |
+| EXP-004 eval | **Inconclusive.** 12 qualified sends over 19 calendar days; 0 tracked clicks; 0 outreach-attributed audit starts; deliverability healthy (sample &lt;30). Continue ramp 10/day; re-eval at 30 sends or first click. |
+| Evaluation date | EXP-002 next: 2026-09-07 (lock review). EXP-004 next: 2026-09-14 or first outreach click. |
+| Funnel stage | Distribution (COOK-001) + Acquisition/SEO (EXP-002) unchanged. |
+
 ### 2026-08-31 — Lock review + guest checkout restore + COOK-001
 
 | Field | Value |
