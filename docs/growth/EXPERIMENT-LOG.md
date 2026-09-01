@@ -42,6 +42,22 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-09-01 — COOK-001 weekday send blocked (cooldown exhaustion)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-001 **Inconclusive** (4 checkout_started / 7d; 0 verified payments). EXP-002 **Keep** (0 EXP-002 landing sessions / 7d). EXP-003 nested **Keep** (0 analyzer sessions / 7d). EXP-004 **Keep** (cooldown blocking automated sends). Strategy lock **LOCKED** through 2026-09-06. |
+| Primary bottleneck | **COOK-001 distribution volume** — all 12 lifetime verified-mailto sends within 30-day cooldown; 19 new contact-page probes today returned form-only (no public mailto) or score/subscriber gates. |
+| Distribution | **Not executed (0 SES accepted this run).** Weekday-send attempted after approvals `APR-20260901-9dbf9ddb`, `APR-20260901-77abc703`, `APR-20260901-2618c4bd`, `APR-20260901-6ba5a188`, `APR-20260901-f7fb9ffb`. All 107 approved prospects skipped (`cooldown`, `public_email_unverified`, or `subscriber_out_of_band`). Lifetime CRM SENT **12** (unchanged). |
+| Exact blocker | 30-day outreach cooldown on all prior verified-mailto recipients; qualified pipeline needs net-new official mailto or owner-approved manual form outreach. |
+| Blocking approval | **Required:** (A) reduce COOK-001 cooldown to 14 days during ramp **or** (B) authorize one manual contact-form send for **@wellplated** (score 73, `wellplated.com/contact/`, form-only) using COOK-001 copy v1 + `utm_campaign=cook-001`. |
+| Prospecting | Extra discovery run added Asian/vegan cooking channels; `@marionskitchen` mailto verified (score 75) but blocked `subscriber_out_of_band`. `@preppykitchen` over 350k subs. |
+| GA4 7d (through 2026-08-31) | session_start **12 events** · audit_started **3** · audit_completed **2** · pricing_viewed **12** · checkout_started **4** · EXP-002 landing sessions **0** · EXP-003 **0** |
+| GA4 30d | session_start **63** · audit_started **7** · audit_completed **9** · pricing_started **15** · checkout_started **4** |
+| Verified customers | **0** (product-attributed baseline) |
+| Verified revenue | **$0** |
+| New customers this run | **0** |
+
 ### 2026-08-31 — Lock review + guest checkout restore + COOK-001
 
 | Field | Value |
