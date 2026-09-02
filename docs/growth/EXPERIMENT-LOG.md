@@ -42,6 +42,21 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-09-02 — COOK-001 cooldown wall; blocking manual @wellplated approval
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (not due; next 2026-09-07 lock review). EXP-004 **Keep** (not due; next 2026-09-14 or first click). EXP-001 **Inconclusive** (0 verified payments; treatment unchanged). |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-09-01: 4 checkout_started events, 0 verified external customers). |
+| Distribution | Weekday SES **0 accepted**. Attempted **113**; skipped **113** (`cooldown`×12 on all lifetime SENT mailto, `public_email_unverified`×remainder, form-only e.g. @wellplated). Approvals created `APR-20260902-c0f15b2d`, `APR-20260902-cb2d9978` but send gate blocked. Lifetime CRM SENT: **12** (unchanged). |
+| COOK-001 metrics | Eligible today: **0**. Sync discovered **115** prospects; **7** contact-verified; **109** drafts. SES accepted this run: **0**. |
+| Blocking approval | **Manual @wellplated (P06) contact-form submit** at https://www.wellplated.com/contact/ OR wait ~1 day for @thedefineddish / @lovelemonsfood to clear **14d** cooldown (~2026-09-03). |
+| GA4 7d (through 2026-09-01) | session_start **12** · audit_started **3** · audit_completed **2** · pricing_viewed **12** · checkout_started **4** · EXP-002 landing sessions **0** · EXP-003 **0** |
+| Verified customers | **0** existing · **0** observed in window · **0** experiment-attributed · **0** acquired this run |
+| Verified revenue | **$0** (product-attributed baseline; reconciliation incomplete) |
+| Evaluation date | EXP-002: 2026-09-07. EXP-004: 2026-09-14 or first outreach click. |
+| Funnel stage | Distribution (COOK-001) blocked on cooldown + form-only volume; no new CRO. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
