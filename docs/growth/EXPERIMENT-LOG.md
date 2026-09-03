@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-09-03 — COOK-001 cooldown clear; 2 SES sends
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (lock review 2026-09-07). EXP-003 nested **Keep**. EXP-001 **Inconclusive** (0 verified payments). EXP-004 **Keep** (collecting). |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-09-02: 4 checkout_started events, 0 verified external customers). |
+| Distribution | **Executed:** 2 SES-accepted COOK-001 emails via weekday-send. Approval `APR-20260903-1ef3b550`. Recipients @thedefineddish + @lovelemonsfood (14d cooldown cleared). Attempted 113 · sent **2** · skipped 111 (cooldown×10, public_email_unverified×20+, score_below_70). |
+| COOK-001 metrics | SES accepted this run: **2**. Lifetime CRM SENT: **14** (was 12). Delivered/clicked: Unknown. Converted: 0. |
+| GA4 7d | session_start **13** events · audit_started **2** · audit_completed **1** · pricing_viewed **12** · checkout_started **4**. EXP-002 landing sessions: **0**. EXP-003: **0**. |
+| GA4 30d | session_start **67** · audit_started **7** · audit_completed **9** · pricing_viewed **15** · checkout_started **4**. |
+| Verified customers | **0** (product-attributed baseline). |
+| Verified revenue | **$0**. |
+| Owner approval | None blocking — automated batch within send gates. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
