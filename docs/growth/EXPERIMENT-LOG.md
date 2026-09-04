@@ -42,6 +42,19 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-09-04 — COOK-001 cooldown volume gate; mailto discovery
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (lock review 2026-09-07). EXP-004 **Keep** (next eval 2026-09-14 or first click). EXP-001 **Inconclusive** (unchanged). EXP-003 nested **Keep**. |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-09-03: 4 checkout_started events, 0 verified external customers). |
+| Distribution | Weekday SES **0 accepted**. Attempted `run-cook-001-weekday.mjs --max 10` + mailto discovery on 50+ in-band cooking contact pages. **113** CRM prospects skipped: **6** `cooldown` (prior verified sends), **107** `public_email_unverified` / score / stale / form-only. Approvals created (`APR-20260904-d562d96b` et al.) but weekday-send sent **0**. |
+| COOK-001 metrics | SES accepted this run: **0**. Lifetime CRM SENT: **12**. Verified-mailto never-contacted eligible today: **0**. |
+| Exact next action | **2026-09-05** (est.): auto weekday-send max **2** to @pinchofyum + @whatsgabycooking when 14d cooldown clears (2026-08-21 batch). Standing COOK-001 approval active — no new named-recipient gate unless Max overrides. |
+| GA4 7d | 14 session_start events · 1 audit_started · 0 audit_completed · 12 pricing_viewed · 4 checkout_started. EXP-002 landing sessions: 0. EXP-003: 0. |
+| Verified customers | **0** (product-attributed baseline) |
+| Evaluation date | EXP-002 lock review: 2026-09-07. EXP-004: 2026-09-14. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
