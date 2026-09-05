@@ -42,6 +42,21 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-09-05 — COOK-001 weekend gate; Monday send prepared
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (lock review 2026-09-07). EXP-003 **Keep** (nested). EXP-001 **Inconclusive**. EXP-004 **Keep** (next eval 2026-09-14). |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-09-04: 4 checkout_started events, 0 verified external customers). |
+| Distribution | **Not executed.** COOK-001 weekday-send attempted after approval `APR-20260905-ffef1289` (@thedefineddish, @lovelemonsfood); **0 SES accepted** — `weekend_eastern` gate (Saturday ET). |
+| Exact next | **Monday 2026-09-07:** weekday-send max 2 to same approved batch when Eastern weekday resumes. Alternate verified mailto in band: @pinchofyum, @whatsgabycooking, @itdoesnttastelikechicken, @mynewroots (cooldown/order dependent). |
+| COOK-001 metrics | SES accepted this run: **0**. Lifetime CRM SENT: **12**. Skipped today: weekend policy only. |
+| GA4 7d | 18 session_start events · 0 audit_started · 0 audit_completed · 8 pricing_viewed · 4 checkout_started · EXP-002 landing sessions 1 · EXP-003 0. |
+| GA4 30d | 76 session_start · 7 audit_started · 9 audit_completed · 15 pricing_viewed · 4 checkout_started. |
+| Verified customers | **0** (product-attributed baseline) |
+| Verified revenue | **$0** |
+| Funnel stage | Distribution (COOK-001) unchanged; no new CRO experiment. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
