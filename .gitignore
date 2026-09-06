@@ -114,3 +114,8 @@ artifacts/publish/
 
 # Daily growth automation lock (local / agent workspace)
 docs/growth/.growth-run.lock
+docs/growth/logs/
+docs/growth/.run-*.json
+docs/growth/.notes-*.txt
+docs/growth/.evaluations-*.json
+

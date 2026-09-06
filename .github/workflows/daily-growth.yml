@@ -1,0 +1,61 @@
+name: YouTubeBooster Daily Growth Automation
+
+on:
+  schedule:
+    # 8:00 AM America/New_York (EDT UTC-4 -> 12:00 UTC) Monday-Friday
+    - cron: '0 12 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (preview without sending emails)'
+        type: boolean
+        default: false
+      force:
+        description: 'Force run outreach even on weekend'
+        type: boolean
+        default: false
+      max_sends:
+        description: 'Maximum emails to approve/attempt'
+        type: number
+        default: 10
+
+jobs:
+  daily-growth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Install growth dependencies
+        working-directory: scripts/growth
+        run: npm ci
+
+      - name: Run daily growth job
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ "${{ inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          if [ -n "${{ inputs.max_sends }}" ]; then ARGS="$ARGS --max ${{ inputs.max_sends }}"; fi
+          node scripts/growth/run-daily-growth-job.mjs $ARGS
+
+      - name: Upload run logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: growth-run-logs-${{ github.run_id }}
+          path: docs/growth/logs/
+          if-no-files-found: ignore
