@@ -124,17 +124,8 @@ function collectSnapshot() {
   return json;
 }
 
-function runCook001Send(opts, isWeekend) {
+function runCook001Send(opts) {
   log('Step 4: Executing COOK-001 outreach send...');
-  if (isWeekend && !opts.force) {
-    log('Weekend in America/New_York: outreach sends paused per policy (use --force to override).');
-    return {
-      ok: false,
-      skippedWeekend: true,
-      send: { sent: 0, attempted: 0, skipped: 0, reasons: ['weekend_eastern'] }
-    };
-  }
-
   const args = [path.join(__dirname, 'run-cook-001-weekday.mjs'), '--max', String(opts.maxSends)];
   if (opts.dryRun) args.push('--dry-run');
 
@@ -165,18 +156,16 @@ function runCook001Send(opts, isWeekend) {
   return json;
 }
 
-function buildDistribution(sendData, todayYmd, isWeekend, opts, snapshot) {
+function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const send = sendData.send || {};
   const funnel = sendData.funnel || {};
   const m7 = snapshot?.explicit7d || snapshot?.windows?.['7d']?.metrics || {};
   const checkoutStarts = m7.checkout_started?.value ?? m7.checkout_started ?? 0;
   const auditStarts = m7.audit_started?.value ?? m7.audit_started ?? 0;
 
-  let exactAction = `COOK-001 weekday SES outreach (${send.sent ?? 0} accepted today, ${send.attempted ?? 0} attempted)`;
-  if (isWeekend && !opts.force) {
-    exactAction = 'Weekend in America/New_York — COOK-001 outreach paused per policy; snapshot collected.';
-  } else if (opts.dryRun) {
-    exactAction = `[DRY-RUN] COOK-001 weekday probe (${(sendData.verifiedProspectIds || []).length} verified candidates)`;
+  let exactAction = `COOK-001 daily SES outreach (${send.sent ?? 0} accepted today, ${send.attempted ?? 0} attempted)`;
+  if (opts.dryRun) {
+    exactAction = `[DRY-RUN] COOK-001 daily probe (${(sendData.verifiedProspectIds || []).length} verified candidates)`;
   }
 
   return {
@@ -319,8 +308,8 @@ async function main() {
       } catch {}
     }
 
-    const sendData = runCook001Send(opts, isWeekend);
-    const dist = buildDistribution(sendData, todayYmd, isWeekend, opts, snapshot);
+    const sendData = runCook001Send(opts);
+    const dist = buildDistribution(sendData, todayYmd, opts, snapshot);
     const distPath = path.join(ROOT, `docs/growth/.run-${todayYmd}-distribution.json`);
     fs.writeFileSync(distPath, JSON.stringify(dist, null, 2), 'utf8');
 
@@ -333,9 +322,7 @@ async function main() {
     const skippedToday = (dist.skippedByReason || []).length;
     const notes = [
       `Automated daily growth run (${weekday}, ${todayYmd}).`,
-      isWeekend && !opts.force
-        ? 'Weekend in America/New_York: COOK-001 outreach paused per policy; snapshot collected.'
-        : `COOK-001 weekday outreach: ${sentToday} SES accepted, ${attemptedToday} attempted, ${skippedToday} skipped.`,
+      `COOK-001 daily outreach: ${sentToday} SES accepted, ${attemptedToday} attempted, ${skippedToday} skipped.`,
       `Production Health: ${health.ok ? 'All checks OK' : 'One or more health checks failed'}.`,
       'New customers this run: 0. Existing customers: 0. Verified net revenue: $0.00.'
     ].join('\n');

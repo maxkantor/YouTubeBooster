@@ -25,6 +25,7 @@ vars.YTB_OUTREACH_DAILY_LIMIT = vars.YTB_OUTREACH_DAILY_LIMIT || '10';
 vars.YTB_OUTREACH_MAX_LIMIT = '30';
 vars.YTB_OUTREACH_RAMP_ENABLED = 'true';
 vars.YTB_OUTREACH_COOLDOWN_DAYS = '14';
+vars.YTB_OUTREACH_ALLOW_WEEKENDS = 'true';
 const payloadPath = path.join(os.tmpdir(), 'yb-lambda-acq-env.json');
 fs.writeFileSync(
   payloadPath,
@@ -96,6 +97,24 @@ spawnSync(
     '/youtubebooster/outreach/cooldown-days',
     '--value',
     '14',
+    '--type',
+    'String',
+    '--overwrite',
+    '--region',
+    REGION
+  ],
+  { encoding: 'utf8' }
+);
+
+spawnSync(
+  'aws',
+  [
+    'ssm',
+    'put-parameter',
+    '--name',
+    '/youtubebooster/outreach/allow-weekends',
+    '--value',
+    'true',
     '--type',
     'String',
     '--overwrite',

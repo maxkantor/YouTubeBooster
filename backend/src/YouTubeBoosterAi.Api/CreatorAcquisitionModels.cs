@@ -99,7 +99,8 @@ public sealed record AcqCampaignState(
     int CooldownDays = 14,
     int RampStage = 10,
     bool StandingCampaignApproval = false,
-    string? RampBlockReason = null
+    string? RampBlockReason = null,
+    bool AllowWeekends = true
 );
 
 public sealed record AcqSendGateResult(bool Ok, string Reason);

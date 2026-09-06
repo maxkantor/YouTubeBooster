@@ -68,6 +68,11 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 ?? _configuration["CreatorAcquisition:CooldownDays"]
                 ?? await _secrets.GetValueAsync("outreach/cooldown-days", secure: false, cancellationToken),
             OutreachPolicy.DefaultCooldownDays);
+        var allowWeekends = OutreachPolicy.ParseBool(
+            Environment.GetEnvironmentVariable("YTB_OUTREACH_ALLOW_WEEKENDS")
+                ?? _configuration["CreatorAcquisition:AllowWeekends"]
+                ?? await _secrets.GetValueAsync("outreach/allow-weekends", secure: false, cancellationToken),
+            true);
         var ramp = await _store.GetRampAsync(campaign, cancellationToken);
         var stage = OutreachPolicy.Stages.Contains(ramp.Stage) ? ramp.Stage : OutreachPolicy.Stages[0];
         var daily = rampEnabled
@@ -96,7 +101,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             CooldownDays: cooldown,
             RampStage: stage,
             StandingCampaignApproval: sending,
-            RampBlockReason: ramp.BlockReason
+            RampBlockReason: ramp.BlockReason,
+            AllowWeekends: allowWeekends
         );
     }
 
@@ -303,7 +309,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     {
         var reasons = new List<string>();
         var state = await LoadStateAsync(campaign, cancellationToken);
-        if (!CreatorAcquisitionScoring.IsWeekdayEastern(DateTimeOffset.UtcNow))
+        if (!state.AllowWeekends && !CreatorAcquisitionScoring.IsWeekdayEastern(DateTimeOffset.UtcNow))
             return new AcqWeekdaySendResult(state.MarketingSendingEnabled, 0, 0, 0, ["weekend_eastern"]);
         if (!state.MarketingSendingEnabled)
             return new AcqWeekdaySendResult(false, 0, 0, 0, ["marketing_sending_disabled"]);

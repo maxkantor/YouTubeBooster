@@ -2,8 +2,8 @@ name: YouTubeBooster Daily Growth Automation
 
 on:
   schedule:
-    # 8:00 AM America/New_York (EDT UTC-4 -> 12:00 UTC) Monday-Friday
-    - cron: '0 12 * * 1-5'
+    # 8:00 AM America/New_York (EDT UTC-4 -> 12:00 UTC) every day including weekends
+    - cron: '0 12 * * *'
   workflow_dispatch:
     inputs:
       dry_run:

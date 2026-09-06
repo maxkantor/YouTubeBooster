@@ -84,7 +84,7 @@ switch ($Action) {
         }
 
         $parsedTime = [datetime]::ParseExact($Time, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
-        $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday, Tuesday, Wednesday, Thursday, Friday -At $parsedTime
+        $trigger = New-ScheduledTaskTrigger -Daily -At $parsedTime
 
         $powershellExe = (Get-Command powershell.exe).Source
         $argumentList = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$RunnerPs1`""
@@ -92,17 +92,17 @@ switch ($Action) {
 
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 45) -WakeToRun
 
-        $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
+        $principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType S4U
 
         Register-ScheduledTask -TaskName $TaskName `
             -Trigger $trigger `
             -Action $taskAction `
             -Settings $settings `
             -Principal $principal `
-            -Description "YouTubeBooster AI Autonomous Daily Growth Automation (Monday-Friday $Time)" | Out-Null
+            -Description "YouTubeBooster AI Autonomous Daily Growth Automation (Daily including weekends at $Time)" | Out-Null
 
         Write-Host "Scheduled task '$TaskName' successfully registered!" -ForegroundColor Green
-        Write-Host "Schedule: Monday - Friday at $Time" -ForegroundColor Cyan
+        Write-Host "Schedule: Every day (including weekends) at $Time" -ForegroundColor Cyan
         Write-Host "Catch-up: Will run automatically on wake/boot if missed." -ForegroundColor Cyan
         Write-Host ""
         Show-Status
