@@ -5,7 +5,7 @@ Agents must append every experiment here. Do not delete history.
 ## Active
 
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive**; **2026-08-19** growth report now reads `ybai-purchases` + `ybai-users` entitlements (no PII). Still **0** verified product-attributed payments. Next eval on first verified checkout/payment or **2026-08-24**. Funnel stage: post-purchase activation
-- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (**Keep** lock review 2026-08-31; low SEO landing traffic; treatment unchanged) — funnel stage: acquisition / SEO (**main** treatment)
+- **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (**Keep** lock review 2026-09-10; 3 EXP-002 landing sessions/7d; treatment unchanged) — funnel stage: acquisition / SEO (**main** treatment)
 - **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
 - **EXP-004** — mini-audit share + sample paid report — **Keep** lock review 2026-08-31 (0 COOK-001 clicks; still collecting). COOK-001 ramp **10→20→30**/day; hold at 10 until 3 healthy days and ≥30 sends.
 
@@ -41,6 +41,20 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-09-10 — COOK-001 cooldown blocks volume; EXP-002 lock review Keep
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (lock review eval completed 2026-09-10). EXP-004 **Keep** (next eval 2026-09-14). EXP-001 **Inconclusive** (unchanged). EXP-003 nested **Keep**. |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-09-09: **0** checkout_started events, 0 verified external customers; 30d: 4 checkout_started, 0 paid). |
+| Distribution | **Not executed.** Weekday SES **0 accepted** (113 attempted, 113 skipped). All **12** lifetime verified-mailto sends still on **14-day cooldown**. **0** never-sent prospects with verified mailto + score ≥70 in CRM. Probed new mailto on @swasthisrecipes (cooldown), @detoxinista/@recipetineats (out of band), @smittenkitchen/@skinnytaste (API placeholder). |
+| Exact next action | Next weekday after cooldown clears (~**2026-09-14** est.): COOK-001 weekday-send **max 2** for @thedefineddish + @lovelemonsfood (approval batch `APR-20260910-e1ace181` or fresh batch). Continue discovering 1k–100k cooking creators with **official-site mailto** (most contact pages form-only). |
+| COOK-001 metrics | SES accepted this run: **0**. Lifetime CRM SENT: **12**. Skipped reasons: `cooldown`×12, `public_email_unverified`×20+, `score_below_70`×40+. |
+| EXP-002 eval | **Keep.** 7d: 54 session_start events, 2 audit_started events, 3 EXP-002 landing sessions; 30d: 106 sessions, 6 audit_starts, 9 EXP-002 landing sessions. No verified SEO-attributed payments. |
+| GA4 data-through | 2026-09-09 ET |
+| Evaluation date | EXP-002 next: 2026-09-17. EXP-004 next: 2026-09-14 or first outreach click. |
+| Funnel stage | Distribution (COOK-001 volume blocked by cooldown) + Acquisition/SEO (EXP-002) unchanged. |
 
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 

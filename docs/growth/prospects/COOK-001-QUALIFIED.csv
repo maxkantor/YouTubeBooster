@@ -1,43 +1,25 @@
 prospect_id,channel_name,handle,channel_url,niche,subscriber_range,recent_upload_date,fit_score,opportunity_category,contact_source_url,contact_status,approval_status
 COOK-001-P001,The Defined Dish,@thedefineddish,https://www.youtube.com/@thedefineddish,cooking,1k_100k,,73,weak_descriptions,https://thedefineddish.com/contact/,Contact route available — automated email unavailable,none
-COOK-001-P002,Love & Lemons,@lovelemonsfood,https://www.youtube.com/@lovelemonsfood,cooking,1k_100k,,73,weak_descriptions,https://loveandlemons.com/contact/,Contact route available — automated email unavailable,none
+COOK-001-P002,Sohla and Ham,@sohlaandham,https://www.youtube.com/@sohlaandham,cooking,1k_100k,,73,weak_descriptions,https://www.hellosohla.com/contact,Contact route available — automated email unavailable,none
 COOK-001-P003,TAYLOR KITCHEN,@taylorkitchen5226,https://www.youtube.com/@taylorkitchen5226,cooking,1k_100k,,73,weak_descriptions,https://www.taylorkitchen.net/about.html,source_recorded_unverified,none
 COOK-001-P004,Kelvin's Kitchen,@kelvinskitchen,https://www.youtube.com/@kelvinskitchen,cooking,1k_100k,,73,weak_descriptions,https://kelvinskitchen.com/contact/,Contact route available — automated email unavailable,none
-COOK-001-P005,Sohla and Ham,@sohlaandham,https://www.youtube.com/@sohlaandham,cooking,1k_100k,,73,weak_descriptions,https://www.hellosohla.com/contact,Contact route available — automated email unavailable,none
-COOK-001-P006,Erin Clarke,@wellplated,https://www.youtube.com/@wellplated,cooking,1k_100k,,73,weak_descriptions,https://www.wellplated.com/contact/,Contact route available — automated email unavailable,none
-COOK-001-P007,Pinch of Yum,@pinchofyum,https://www.youtube.com/@pinchofyum,cooking,1k_100k,,73,weak_descriptions,https://pinchofyum.com/contact,Contact route available — automated email unavailable,none
-COOK-001-P008,I povarenok,@ipovarenok5244,https://www.youtube.com/@ipovarenok5244,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P009,MARIE'S HOME COOKING IDEAS!,@marieshomecooking,https://www.youtube.com/@marieshomecooking,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P010,Лелькины Вкусняшки,@olga_egorova_food,https://www.youtube.com/@olga_egorova_food,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P011,Na-Kostre.ru | На-Костре.ру,@na-kostre,https://www.youtube.com/@na-kostre,cooking,1k_100k,,73,weak_descriptions,https://www.na-kostre.ru/,source_recorded_unverified,none
-COOK-001-P012,Remy's Home cooking,@remyshomecooking2493,https://www.youtube.com/@remyshomecooking2493,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P013,Дарія Даріко,@recepti_dariko,https://www.youtube.com/@recepti_dariko,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P014,Кулінарні рецепти від тещі Олі,@u_teshchi_oli,https://www.youtube.com/@u_teshchi_oli,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P015,Турецкая кухня дома.,@vkusno_i_prosto,https://www.youtube.com/@vkusno_i_prosto,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P016,Готовим Каждый День,@gotovim365,https://www.youtube.com/@gotovim365,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P017,Щира господиня,@shira_gospodiny,https://www.youtube.com/@shira_gospodiny,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P018,Кулінарні витівки,@kulinarny_vytivky,https://www.youtube.com/@kulinarny_vytivky,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P019,VKAZANE,@vkazane,https://www.youtube.com/@vkazane,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P020,Ambitious Kitchen,@ambitiouskitchen,https://www.youtube.com/@ambitiouskitchen,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P021,Our Salty Kitchen,@oursaltykitchen,https://www.youtube.com/@oursaltykitchen,cooking,1k_100k,,65,weak_descriptions,,none,none
-COOK-001-P022,Omnivore's Cookbook,@omnivorescookbook,https://www.youtube.com/@omnivorescookbook,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P023,Home Cook Basics,@homecookbasics,https://www.youtube.com/@homecookbasics,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P024,Kimchimari,@kimchimari,https://www.youtube.com/@kimchimari,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P025,My Korean Kitchen,@mykoreankitchen,https://www.youtube.com/@mykoreankitchen,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P026,Okonomi Kitchen,@okonomikitchen,https://www.youtube.com/@okonomikitchen,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P027,Chopstick Chronicles,@chopstickchronicles,https://www.youtube.com/@chopstickchronicles,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P028,Sudachi | Japanese Recipes | Yuto Omura,@sudachirecipes,https://www.youtube.com/@sudachirecipes,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P029,WoonHeng (woon.heng),@woonheng,https://www.youtube.com/@woonheng,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P030,TheFoodieTakesFlight,@thefoodietakesflight,https://www.youtube.com/@thefoodietakesflight,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P031,It Doesn't Taste Like Chicken,@itdoesnttastelikechicken,https://www.youtube.com/@itdoesnttastelikechicken,cooking,1k_100k,,73,weak_descriptions,https://itdoesnttastelikechicken.com/contact/,official_mailto_verified_2026-08-24,none
-COOK-001-P032,The Boy Who Bakes,@theboywhobakes,https://www.youtube.com/@theboywhobakes,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P033,Patee. Рецепты,@pateerecipes,https://www.youtube.com/@pateerecipes,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P034,Кулінарні рецепти | Фудблог ,@nelly.cooking,https://www.youtube.com/@nelly.cooking,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P035,COOK UA,@cook_ua,https://www.youtube.com/@cook_ua,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P036,Анна Шолкова,@anna_sholkova,https://www.youtube.com/@anna_sholkova,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P037,Домашние рецепты,@domashnie_recepty,https://www.youtube.com/@domashnie_recepty,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P038,The Modern Proper,@themodernproper,https://www.youtube.com/@themodernproper,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P039,What's Gaby Cooking,@whatsgabycooking,https://www.youtube.com/@whatsgabycooking,cooking,1k_100k,,73,weak_descriptions,https://whatsgabycooking.com/contact/,official_mailto_verified_2026-08-21,none
-COOK-001-P040,Oh She Glows,@ohsheglows,https://www.youtube.com/@ohsheglows,cooking,1k_100k,,50,weak_descriptions,,none,none
-COOK-001-P041,My New Roots,@mynewroots,https://www.youtube.com/@mynewroots,cooking,1k_100k,,50,weak_descriptions,https://www.mynewroots.org/contact/,official_mailto_score_below_70,none
-COOK-001-P042,Green Kitchen Stories,@greenkitchenstories,https://www.youtube.com/@greenkitchenstories,cooking,1k_100k,,50,weak_descriptions,,none,none
+COOK-001-P005,Love & Lemons,@lovelemonsfood,https://www.youtube.com/@lovelemonsfood,cooking,1k_100k,,73,weak_descriptions,https://loveandlemons.com/contact/,Contact route available — automated email unavailable,none
+COOK-001-P006,Pinch of Yum,@pinchofyum,https://www.youtube.com/@pinchofyum,cooking,1k_100k,,73,weak_descriptions,https://pinchofyum.com/contact,Contact route available — automated email unavailable,none
+COOK-001-P007,Erin Clarke,@wellplated,https://www.youtube.com/@wellplated,cooking,1k_100k,,73,weak_descriptions,https://www.wellplated.com/contact/,Contact route available — automated email unavailable,none
+COOK-001-P008,smitten kitchen,@smittenkitchening,https://www.youtube.com/@smittenkitchening,cooking,1k_100k,,73,weak_descriptions,https://smittenkitchen.com/about/,source_recorded_unverified,none
+COOK-001-P009,Swasthi's Recipes,@swasthisrecipes,https://www.youtube.com/@swasthisrecipes,cooking,1k_100k,,73,weak_descriptions,https://www.indianhealthyrecipes.com/about/,source_recorded_unverified,none
+COOK-001-P010,I povarenok,@ipovarenok5244,https://www.youtube.com/@ipovarenok5244,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P011,Michelle’s Southern Home Cooking & Living ,@michellessouthernhomecooki5870,https://www.youtube.com/@michellessouthernhomecooki5870,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P012,COOK WITH ME,@isabellecooksforyou,https://www.youtube.com/@isabellecooksforyou,cooking,1k_100k,,25,discoverability,,none,none
+COOK-001-P013,Лелькины Вкусняшки,@olga_egorova_food,https://www.youtube.com/@olga_egorova_food,cooking,1k_100k,,50,weak_descriptions,,none,none
+COOK-001-P014,Na-Kostre.ru | На-Костре.ру,@na-kostre,https://www.youtube.com/@na-kostre,cooking,1k_100k,,73,weak_descriptions,https://www.na-kostre.ru/,source_recorded_unverified,none
+COOK-001-P015,РУССКАЯ КУХНЯ,@русскаякухня,https://www.youtube.com/@русскаякухня,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P016,Турецкая кухня дома.,@vkusno_i_prosto,https://www.youtube.com/@vkusno_i_prosto,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P017,Дарія Даріко,@recepti_dariko,https://www.youtube.com/@recepti_dariko,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P018,Готовим Каждый День,@gotovim365,https://www.youtube.com/@gotovim365,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P019,Кулінарні рецепти від тещі Олі,@u_teshchi_oli,https://www.youtube.com/@u_teshchi_oli,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P020,Кулінарні витівки,@kulinarny_vytivky,https://www.youtube.com/@kulinarny_vytivky,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P021,Щира господиня,@shira_gospodiny,https://www.youtube.com/@shira_gospodiny,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P022,VKAZANE,@vkazane,https://www.youtube.com/@vkazane,cooking,1k_100k,,50,weak_descriptions,,none,none
+COOK-001-P023,Ambitious Kitchen,@ambitiouskitchen,https://www.youtube.com/@ambitiouskitchen,cooking,1k_100k,,65,weak_descriptions,,none,none
+COOK-001-P024,Our Salty Kitchen,@oursaltykitchen,https://www.youtube.com/@oursaltykitchen,cooking,1k_100k,,65,weak_descriptions,,none,none
