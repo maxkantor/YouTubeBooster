@@ -351,32 +351,38 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             .Where(p =>
                 string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.OutreachStatus, "sent", StringComparison.OrdinalIgnoreCase)
                 || (!string.IsNullOrWhiteSpace(p.Observation) && CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)))
             .OrderByDescending(p => p.PriorityScore)
             .ToList();
 
         var sent = 0;
         var skipped = 0;
-        var attempted = 0;
+        var evaluated = 0;
+        var sesAttempted = 0;
         var sentThisRunByApproval = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        void Skip(string prospectId, string reason)
+        {
+            skipped++;
+            reasons.Add($"{prospectId}:{reason}");
+        }
+
         foreach (var candidate in candidates)
         {
             if (sent >= remaining) break;
-            attempted++;
+            evaluated++;
             var p = candidate;
             var outreach = EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
                 ? await _appDataStore.GetOutreachContactAsync(p.PublicBusinessEmail!, cancellationToken)
                 : null;
             if (outreach is not null && string.Equals(outreach.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
             {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:unsubscribed");
+                Skip(p.ProspectId, "unsubscribed");
                 continue;
             }
             if (outreach is not null && outreach.Status.Contains("bounce", StringComparison.OrdinalIgnoreCase))
             {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:hard_bounce");
+                Skip(p.ProspectId, "hard_bounce");
                 continue;
             }
             if (EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
@@ -385,8 +391,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 var entitled = user is not null && await _appDataStore.UserHasActiveEntitlementAsync(user.UserId, "premium", cancellationToken);
                 if (user is not null && (user.Purchased || entitled))
                 {
-                    skipped++;
-                    reasons.Add($"{p.ProspectId}:existing_customer");
+                    Skip(p.ProspectId, "existing_customer");
                     continue;
                 }
             }
@@ -394,8 +399,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             var gate = CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, state, alreadyContacted: p.LastContactedAt is not null);
             if (!gate.Ok)
             {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:{gate.Reason}");
+                Skip(p.ProspectId, gate.Reason);
                 continue;
             }
 
@@ -405,8 +409,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 var approval = p.ApprovalId is null ? null : await _store.GetApprovalAsync(p.ApprovalId, cancellationToken);
                 if (approval is null || approval.ExpiresAt < DateTimeOffset.UtcNow)
                 {
-                    skipped++;
-                    reasons.Add($"{p.ProspectId}:approval_expired");
+                    Skip(p.ProspectId, "approval_expired");
                     continue;
                 }
                 var priorForApproval = all.Count(x =>
@@ -415,15 +418,13 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 extraThisRun = sentThisRunByApproval.GetValueOrDefault(approval.ApprovalId);
                 if (priorForApproval + extraThisRun >= approval.MaximumSends)
                 {
-                    skipped++;
-                    reasons.Add($"{p.ProspectId}:approval_cap");
+                    Skip(p.ProspectId, "approval_cap");
                     continue;
                 }
                 if (!approval.ContentHashes.TryGetValue(p.ProspectId, out var approvedHash)
                     || !string.Equals(approvedHash, CreatorAcquisitionScoring.ContentHash(p), StringComparison.Ordinal))
                 {
-                    skipped++;
-                    reasons.Add($"{p.ProspectId}:approval_invalidated");
+                    Skip(p.ProspectId, "approval_invalidated");
                     continue;
                 }
             }
@@ -437,8 +438,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             var idem = $"{p.ProspectId}:{cohortRunId}";
             if (!await _store.TryClaimIdempotencyAsync(idem, cancellationToken))
             {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:idempotency");
+                Skip(p.ProspectId, "idempotency");
                 continue;
             }
 
@@ -449,11 +449,12 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             var mime = CreatorAcquisitionMail.Build(prepared, state, site, unsub, tracked);
             if (CreatorAcquisitionMail.TagsContainPii(mime.SesTags))
             {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:pii_in_tags");
+                Skip(p.ProspectId, "pii_in_tags");
                 continue;
             }
 
+            // Only SES API calls count as send attempts — gate evaluations do not.
+            sesAttempted++;
             try
             {
                 var sendReq = new SendRawEmailRequest
@@ -503,8 +504,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             }
             catch (Exception ex)
             {
-                skipped++;
-                reasons.Add($"{p.ProspectId}:ses:{ex.Message}");
+                Skip(p.ProspectId, $"ses:{ex.Message}");
             }
         }
 
@@ -517,17 +517,32 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             decision.Advance ? 0 : days,
             sent > 0 ? runYmd : ramp.LastSendYmdEt,
             decision.Advance ? null : decision.Reason), cancellationToken);
+        var reasonCounts = OutreachPolicy.AggregateSkipReasons(reasons);
         await _store.SaveCohortRunAsync(campaign, cohortRunId, System.Text.Json.JsonSerializer.Serialize(new
         {
             runId = cohortRunId,
             sent,
-            attempted,
+            evaluated,
+            sesAttempted,
+            attempted = sesAttempted,
             skipped,
             dailyLimit = state.DailyLimit,
+            reasonCounts,
             variantSplit = true
         }), cancellationToken);
 
-        return new AcqWeekdaySendResult(true, attempted, sent, skipped, reasons, state.DailyLimit, cohortRunId, decision.Advance ? null : decision.Reason);
+        return new AcqWeekdaySendResult(
+            true,
+            sesAttempted,
+            sent,
+            skipped,
+            reasons,
+            state.DailyLimit,
+            cohortRunId,
+            decision.Advance ? null : decision.Reason,
+            evaluated,
+            sesAttempted,
+            reasonCounts);
     }
 
     public async Task UnsubscribeAsync(string email, CancellationToken cancellationToken)

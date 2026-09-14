@@ -162,14 +162,23 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const m7 = snapshot?.explicit7d || snapshot?.windows?.['7d']?.metrics || {};
   const checkoutStarts = m7.checkout_started?.value ?? m7.checkout_started ?? 0;
   const auditStarts = m7.audit_started?.value ?? m7.audit_started ?? 0;
+  const sesAccepted = Number(send.sent ?? 0) || 0;
+  const sesAttempted = Number(send.sesAttempted ?? send.attempted ?? 0) || 0;
+  const evaluated = Number(send.evaluated ?? 0) || 0;
+  const reasonCounts = send.reasonCounts || aggregateSkipReasons(send.reasons || []);
 
-  let exactAction = `COOK-001 daily SES outreach (${send.sent ?? 0} accepted today, ${send.attempted ?? 0} attempted)`;
+  let exactAction = `COOK-001 daily SES outreach (${sesAccepted} accepted / ${sesAttempted} SES attempts; ${evaluated} prospects evaluated)`;
   if (opts.dryRun) {
     exactAction = `[DRY-RUN] COOK-001 daily probe (${(sendData.verifiedProspectIds || []).length} verified candidates)`;
+  } else if (sesAccepted === 0) {
+    const dominant = dominantSkipReason(reasonCounts);
+    exactAction = `DISTRIBUTION FAILED / BLOCKED — SES accepted 0. Dominant skip: ${dominant}. Evaluated ${evaluated}, SES attempts ${sesAttempted}.`;
   }
 
   return {
-    executed: Boolean(sendData.ok || (send.sent ?? 0) > 0 || (send.attempted ?? 0) > 0),
+    // Truthful: distribution executed ONLY when SES accepted >= 1.
+    executed: sesAccepted > 0,
+    distributionAttempted: evaluated > 0 || sesAttempted > 0 || (sendData.verifiedProspectIds || []).length > 0,
     channel: 'approved SES outreach',
     audience: 'cooking creators (COOK-001 verified mailto)',
     attributedVisits: '0 (no outreach clicks this run)',
@@ -183,10 +192,13 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     requiredOwnerApproval: 'none',
     blockingApproval: false,
     exactActionPrepared: exactAction,
-    sesAcceptedThisRun: send.sent ?? 0,
-    sendAttempts: send.attempted ?? 0,
+    sesAcceptedThisRun: sesAccepted,
+    sesAttemptedThisRun: sesAttempted,
+    prospectsEvaluated: evaluated,
+    sendAttempts: sesAttempted,
     eligibleProspects: (sendData.verifiedProspectIds || []).length,
-    skippedByReason: (send.reasons || []).slice(0, 15),
+    skippedByReason: (send.reasons || []).slice(0, 40),
+    skipReasonCounts: reasonCounts,
     outreachFunnel: {
       drafted: funnel.drafted ?? 0,
       approved: funnel.approved ?? 0,
@@ -198,8 +210,8 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     cohort: {
       runId: `COOK-001-${todayYmd}`,
       qualifiedProspects: (sendData.verifiedProspectIds || []).length,
-      emailsAttempted: send.attempted ?? 0,
-      emailsSent: send.sent ?? 0,
+      emailsAttempted: sesAttempted,
+      emailsSent: sesAccepted,
       auditClicks: 0,
       auditStarts: 0,
       auditCompletions: 0,
@@ -207,18 +219,78 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
       checkoutStarts: 0,
       verifiedCustomers: 0,
       verifiedRevenue: 0,
-      dailyLimit: 10,
+      dailyLimit: send.dailyLimit ?? 10,
       nextRamp: 20,
-      rampBlockReason: 'sample_too_small'
+      rampBlockReason: send.rampBlockReason || 'sample_too_small'
     },
     deliverability: {
       bounceRate: 'N/A (sample < 30)',
       complaintRate: 'N/A',
       unsubscribeRate: 'N/A',
-      dailyLimit: 10,
-      nextRampDecision: 'hold; sample_too_small'
+      dailyLimit: send.dailyLimit ?? 10,
+      nextRampDecision: send.rampBlockReason
+        ? `hold; ${send.rampBlockReason}`
+        : 'hold; sample_too_small'
     }
   };
+}
+
+function aggregateSkipReasons(reasons) {
+  const counts = {};
+  for (const line of reasons || []) {
+    const raw = String(line);
+    let codePart = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
+    if (raw.toLowerCase().includes(':ses:')) {
+      codePart = raw.slice(raw.toLowerCase().indexOf(':ses:') + 1);
+    }
+    const code = normalizeSkipReason(codePart);
+    counts[code] = (counts[code] || 0) + 1;
+  }
+  return counts;
+}
+
+function normalizeSkipReason(raw) {
+  const r = String(raw || '').trim().toLowerCase();
+  if (r.startsWith('ses:')) return r.includes('reject') ? 'SES_REJECTED' : 'SES_ERROR';
+  const map = {
+    cooldown: 'COOLDOWN',
+    already_contacted: 'ALREADY_CONTACTED',
+    idempotency: 'ALREADY_CONTACTED',
+    public_email_unverified: 'INVALID_EMAIL',
+    invalid_or_spamtrap: 'INVALID_EMAIL',
+    suppressed: 'SUPPRESSED',
+    unsubscribed: 'SUPPRESSED',
+    hard_bounce: 'SUPPRESSED',
+    existing_customer: 'SUPPRESSED',
+    not_approved: 'NOT_APPROVED',
+    approval_expired: 'NOT_APPROVED',
+    approval_cap: 'NOT_APPROVED',
+    approval_invalidated: 'NOT_APPROVED',
+    daily_limit_reached: 'DAILY_LIMIT_REACHED',
+    marketing_sending_disabled: 'MISSING_CONFIG',
+    postal_address_missing: 'MISSING_CONFIG',
+    from_email_unconfigured: 'MISSING_CONFIG',
+    unsubscribe_signing_missing: 'MISSING_CONFIG',
+    weekend_eastern: 'MISSING_CONFIG',
+    score_below_70: 'NOT_QUALIFIED',
+    stale_upload: 'NOT_QUALIFIED',
+    subscriber_out_of_band: 'NOT_QUALIFIED',
+    inspection_incomplete: 'NOT_QUALIFIED',
+    preview_placeholder: 'NOT_QUALIFIED',
+    draft_incomplete: 'NOT_QUALIFIED',
+    content_hash_changed: 'NOT_QUALIFIED',
+    pii_in_tags: 'NOT_QUALIFIED',
+    complaint_pause: 'SUPPRESSED'
+  };
+  if (r.startsWith('health_stop')) return 'SUPPRESSED';
+  return map[r] || 'NOT_QUALIFIED';
+}
+
+function dominantSkipReason(counts) {
+  const entries = Object.entries(counts || {});
+  if (!entries.length) return 'NONE';
+  entries.sort((a, b) => b[1] - a[1]);
+  return `${entries[0][0]} (${entries[0][1]})`;
 }
 
 function evaluateDueExperiments(todayYmd) {
@@ -318,11 +390,14 @@ async function main() {
     fs.writeFileSync(evalPath, JSON.stringify(evals, null, 2), 'utf8');
 
     const sentToday = dist.sesAcceptedThisRun || 0;
-    const attemptedToday = dist.sendAttempts || 0;
-    const skippedToday = (dist.skippedByReason || []).length;
+    const attemptedToday = dist.sesAttemptedThisRun || dist.sendAttempts || 0;
+    const evaluatedToday = dist.prospectsEvaluated || 0;
     const notes = [
       `Automated daily growth run (${weekday}, ${todayYmd}).`,
-      `COOK-001 daily outreach: ${sentToday} SES accepted, ${attemptedToday} attempted, ${skippedToday} skipped.`,
+      `COOK-001: SES accepted ${sentToday}; SES attempts ${attemptedToday}; prospects evaluated ${evaluatedToday}.`,
+      sentToday === 0
+        ? `DISTRIBUTION FAILED / BLOCKED. Dominant skip: ${dominantSkipReason(dist.skipReasonCounts || {})}.`
+        : `Distribution executed: SES accepted ${sentToday}.`,
       `Production Health: ${health.ok ? 'All checks OK' : 'One or more health checks failed'}.`,
       'New customers this run: 0. Existing customers: 0. Verified net revenue: $0.00.'
     ].join('\n');

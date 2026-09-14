@@ -95,6 +95,70 @@ public static class OutreachPolicy
         return (nowUtc - lastContacted.Value).TotalDays < days;
     }
 
+    /// <summary>
+    /// Maps internal gate/SES reason strings to stable report codes.
+    /// </summary>
+    public static string NormalizeSkipReason(string? raw)
+    {
+        var r = (raw ?? "").Trim().ToLowerInvariant();
+        if (r.StartsWith("ses:", StringComparison.Ordinal))
+            return r.Contains("reject", StringComparison.Ordinal) ? "SES_REJECTED" : "SES_ERROR";
+        return r switch
+        {
+            "cooldown" => "COOLDOWN",
+            "already_contacted" => "ALREADY_CONTACTED",
+            "idempotency" => "ALREADY_CONTACTED",
+            "public_email_unverified" => "INVALID_EMAIL",
+            "invalid_or_spamtrap" => "INVALID_EMAIL",
+            "suppressed" => "SUPPRESSED",
+            "unsubscribed" => "SUPPRESSED",
+            "hard_bounce" => "SUPPRESSED",
+            "existing_customer" => "SUPPRESSED",
+            "not_approved" => "NOT_APPROVED",
+            "approval_expired" => "NOT_APPROVED",
+            "approval_cap" => "NOT_APPROVED",
+            "approval_invalidated" => "NOT_APPROVED",
+            "daily_limit_reached" => "DAILY_LIMIT_REACHED",
+            "marketing_sending_disabled" => "MISSING_CONFIG",
+            "postal_address_missing" => "MISSING_CONFIG",
+            "from_email_unconfigured" => "MISSING_CONFIG",
+            "unsubscribe_signing_missing" => "MISSING_CONFIG",
+            "weekend_eastern" => "MISSING_CONFIG",
+            "score_below_70" => "NOT_QUALIFIED",
+            "stale_upload" => "NOT_QUALIFIED",
+            "subscriber_out_of_band" => "NOT_QUALIFIED",
+            "inspection_incomplete" => "NOT_QUALIFIED",
+            "preview_placeholder" => "NOT_QUALIFIED",
+            "draft_incomplete" => "NOT_QUALIFIED",
+            "content_hash_changed" => "NOT_QUALIFIED",
+            "pii_in_tags" => "NOT_QUALIFIED",
+            "complaint_pause" => "SUPPRESSED",
+            _ when r.StartsWith("health_stop", StringComparison.Ordinal) => "SUPPRESSED",
+            _ when string.IsNullOrEmpty(r) => "NOT_QUALIFIED",
+            _ => "NOT_QUALIFIED"
+        };
+    }
+
+    public static Dictionary<string, int> AggregateSkipReasons(IEnumerable<string> reasons)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var line in reasons)
+        {
+            var raw = line ?? "";
+            var colon = raw.LastIndexOf(':');
+            var codePart = colon >= 0 ? raw[(colon + 1)..] : raw;
+            // prospectId:ses:message → keep ses:message
+            if (colon >= 0 && raw.Contains(":ses:", StringComparison.OrdinalIgnoreCase))
+            {
+                var sesIdx = raw.IndexOf(":ses:", StringComparison.OrdinalIgnoreCase);
+                codePart = raw[(sesIdx + 1)..];
+            }
+            var code = NormalizeSkipReason(codePart);
+            counts[code] = counts.GetValueOrDefault(code) + 1;
+        }
+        return counts;
+    }
+
     public static bool IsSpamTrapOrInvalid(string? email)
     {
         if (!EmailAddressHelpers.LooksLikeEmail(email)) return true;

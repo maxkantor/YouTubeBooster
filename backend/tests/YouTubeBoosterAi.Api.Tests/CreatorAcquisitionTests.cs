@@ -329,4 +329,47 @@ public class OutreachPolicyTests
         Assert.Contains("·", decoded);
         Assert.DoesNotContain("Â", decoded);
     }
+
+    [Fact]
+    public void NormalizeSkipReason_MapsGateCodes()
+    {
+        Assert.Equal("COOLDOWN", OutreachPolicy.NormalizeSkipReason("cooldown"));
+        Assert.Equal("INVALID_EMAIL", OutreachPolicy.NormalizeSkipReason("public_email_unverified"));
+        Assert.Equal("NOT_APPROVED", OutreachPolicy.NormalizeSkipReason("approval_expired"));
+        Assert.Equal("SES_ERROR", OutreachPolicy.NormalizeSkipReason("ses:Timeout"));
+        Assert.Equal("DAILY_LIMIT_REACHED", OutreachPolicy.NormalizeSkipReason("daily_limit_reached"));
+        Assert.Equal("ALREADY_CONTACTED", OutreachPolicy.NormalizeSkipReason("idempotency"));
+        Assert.Equal("NOT_QUALIFIED", OutreachPolicy.NormalizeSkipReason("score_below_70"));
+    }
+
+    [Fact]
+    public void AggregateSkipReasons_GroupsByCode()
+    {
+        var counts = OutreachPolicy.AggregateSkipReasons([
+            "COOK-001-a:cooldown",
+            "COOK-001-b:cooldown",
+            "COOK-001-c:public_email_unverified",
+            "COOK-001-d:ses:MessageRejected"
+        ]);
+        Assert.Equal(2, counts["COOLDOWN"]);
+        Assert.Equal(1, counts["INVALID_EMAIL"]);
+        Assert.Equal(1, counts["SES_REJECTED"]);
+    }
+
+    [Fact]
+    public void DailyLimit_ClampStaysAt10UntilRamp()
+    {
+        Assert.Equal(10, OutreachPolicy.ClampDailyLimit(10, 30));
+        Assert.Equal(10, OutreachPolicy.ClampDailyLimit(999, 10));
+        Assert.Equal(20, OutreachPolicy.ClampDailyLimit(20, 30));
+        Assert.Equal(30, OutreachPolicy.ClampDailyLimit(30, 30));
+    }
+
+    [Fact]
+    public void InCooldown_UsesExclusiveDayBoundary()
+    {
+        var now = DateTimeOffset.Parse("2026-09-14T12:00:00Z");
+        Assert.True(OutreachPolicy.InCooldown(now.AddDays(-13.9), now, 14));
+        Assert.False(OutreachPolicy.InCooldown(now.AddDays(-14.1), now, 14));
+    }
 }

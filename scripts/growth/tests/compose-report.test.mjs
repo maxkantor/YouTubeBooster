@@ -144,6 +144,7 @@ test('executed distribution leads the subject and scoreboard', () => {
     generatedAt: '2026-08-13T16:00:00.000Z',
     distribution: {
       executed: true,
+      sesAcceptedThisRun: 1,
       channel: 'approved SES outreach',
       audience: 'named cooking creator (public contact page)',
       attributedVisits: 'Unknown until UTM',

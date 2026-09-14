@@ -126,3 +126,54 @@ test('sesAcceptedThisRun reconciles TODAY with lifetime CRM SENT', async () => {
   assert.match(report.text, /SENT LIFETIME \(CRM\): 5/);
   assert.doesNotMatch(report.text, /^Sent: 0$/m);
 });
+
+test('zero SES accepted cannot report Distribution executed yes', async () => {
+  const { normalizeDistribution, buildSubject, composeGrowthReport } = await import('../lib/compose-report.mjs');
+  const d = normalizeDistribution({
+    executed: true,
+    distributionAttempted: true,
+    blockingApproval: false,
+    sesAcceptedThisRun: 0,
+    sesAttemptedThisRun: 0,
+    prospectsEvaluated: 112,
+    skipReasonCounts: { COOLDOWN: 7, INVALID_EMAIL: 100 },
+    outreachFunnel: { drafted: 108, approved: 7, sent: 12 }
+  });
+  assert.equal(d.executed, false);
+  assert.equal(d.sesAcceptedThisRun, 0);
+  assert.equal(d.blockingApproval, false);
+  const subject = buildSubject({
+    prefix: 'YouTubeBooster Growth',
+    et: { date: 'Sep 14, 2026' },
+    dist: d
+  });
+  assert.match(subject, /Distribution failed/);
+  assert.doesNotMatch(subject, /Distribution executed/);
+  const report = composeGrowthReport({
+    snapshot: explicitFunnelFixture,
+    health: { ok: true, checks: [] },
+    experiments: [],
+    generatedAt: '2026-09-14T16:00:00.000Z',
+    distribution: d
+  });
+  assert.match(report.text, /Distribution executed: no/);
+  assert.match(report.text, /Distribution attempted: yes/);
+  assert.match(report.text, /DISTRIBUTION FAILED \/ BLOCKED/);
+  assert.match(report.text, /COOLDOWN: 7/);
+  assert.match(report.text, /INVALID_EMAIL: 100/);
+  assert.match(report.text, /PROSPECTS EVALUATED: 112/);
+  assert.match(report.text, /SES ATTEMPTS \(API calls\): 0/);
+});
+
+test('SES accepted increments and keeps executed true', async () => {
+  const { normalizeDistribution } = await import('../lib/compose-report.mjs');
+  const d = normalizeDistribution({
+    executed: true,
+    sesAcceptedThisRun: 3,
+    sesAttemptedThisRun: 3,
+    prospectsEvaluated: 12
+  });
+  assert.equal(d.executed, true);
+  assert.equal(d.sesAcceptedThisRun, 3);
+  assert.equal(d.cohort.emailsSent, 3);
+});

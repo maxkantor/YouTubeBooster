@@ -168,7 +168,12 @@ public sealed record AcqWeekdaySendResult(
     IReadOnlyList<string> Reasons,
     int DailyLimit = 10,
     string? CohortRunId = null,
-    string? RampBlockReason = null
+    string? RampBlockReason = null,
+    /// <summary>Prospects evaluated against gates (not SES send attempts).</summary>
+    int Evaluated = 0,
+    /// <summary>SES SendRawEmail calls made this run (accepted or rejected).</summary>
+    int SesAttempted = 0,
+    IReadOnlyDictionary<string, int>? ReasonCounts = null
 );
 
 public static class AcqJson

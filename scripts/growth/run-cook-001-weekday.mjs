@@ -241,10 +241,15 @@ if (!args.dryRun && verified.length) {
     send = {
       http: weekday.status,
       marketingSendingEnabled: json.marketingSendingEnabled ?? json.MarketingSendingEnabled,
-      attempted: json.attempted ?? json.Attempted,
+      attempted: json.sesAttempted ?? json.SesAttempted ?? json.attempted ?? json.Attempted,
+      sesAttempted: json.sesAttempted ?? json.SesAttempted ?? json.attempted ?? json.Attempted,
+      evaluated: json.evaluated ?? json.Evaluated ?? 0,
       sent: json.sent ?? json.Sent,
       skipped: json.skipped ?? json.Skipped,
-      reasons: (json.reasons || json.Reasons || []).slice(0, 20)
+      reasons: (json.reasons || json.Reasons || []).slice(0, 40),
+      reasonCounts: json.reasonCounts || json.ReasonCounts || null,
+      dailyLimit: json.dailyLimit ?? json.DailyLimit,
+      rampBlockReason: json.rampBlockReason ?? json.RampBlockReason
     };
   }
   send.flagsHttp = flags.status;

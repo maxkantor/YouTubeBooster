@@ -296,11 +296,22 @@ export function normalizeDistribution(input, ctx = {}) {
     d.activations = `${cell(ctx.m7.audit_starts)} audit_started events (7d window; not this-run attribution unless UTM)`;
   }
   d.executed = d.executed === true;
+  // Hard rule: zero SES accepts cannot claim distribution executed.
+  const todaySesCheck = Number(
+    input?.sesAcceptedThisRun ?? input?.emailsSentThisRun ?? input?.cohort?.emailsSent ?? d.cohort?.emailsSent
+  );
+  if (Number.isFinite(todaySesCheck) && todaySesCheck <= 0) {
+    d.executed = false;
+  }
   d.newCustomersThisRun = Number(d.newCustomersThisRun) || 0;
   d.customersObservedInWindow = Number(d.customersObservedInWindow) || 0;
   d.outreachFunnel = { ...emptyDistribution().outreachFunnel, ...(input?.outreachFunnel || d.outreachFunnel || {}) };
   d.cohort = { ...emptyCohort(), ...(input?.cohort || d.cohort || {}) };
   d.deliverability = { ...emptyDeliverability(), ...(input?.deliverability || d.deliverability || {}) };
+  d.skipReasonCounts = { ...(input?.skipReasonCounts || d.skipReasonCounts || {}) };
+  d.prospectsEvaluated = Number(input?.prospectsEvaluated ?? d.prospectsEvaluated ?? 0) || 0;
+  d.sesAttemptedThisRun = Number(input?.sesAttemptedThisRun ?? input?.sendAttempts ?? d.sesAttemptedThisRun ?? 0) || 0;
+  d.distributionAttempted = d.distributionAttempted === true || d.prospectsEvaluated > 0 || d.sesAttemptedThisRun > 0;
 
   const todaySes = Number(
     input?.sesAcceptedThisRun ?? input?.emailsSentThisRun ?? input?.cohort?.emailsSent ?? d.cohort?.emailsSent
@@ -311,11 +322,13 @@ export function normalizeDistribution(input, ctx = {}) {
   } else {
     d.sesAcceptedThisRun = Number(d.cohort.emailsSent) || 0;
   }
+  if ((d.sesAcceptedThisRun || 0) <= 0) d.executed = false;
   d.lifetimeCrmSent = Number(d.outreachFunnel?.sent);
   if (!Number.isFinite(d.lifetimeCrmSent)) d.lifetimeCrmSent = null;
 
   if (d.executed) d.blockingApproval = false;
   else if (input?.blockingApproval === false) d.blockingApproval = false;
+  else if (d.distributionAttempted) d.blockingApproval = false;
   else d.blockingApproval = true;
   return d;
 }
@@ -412,7 +425,7 @@ export function defaultDecisionText({
         : 'n/a';
   const funnel = `${c.emailsSent} sent → ${c.auditClicks} clicks → ${c.auditCompletions} completed audit → ${c.verifiedCustomers} paid`;
   const compact = [
-    `Decision: ${d.blockingApproval ? 'BLOCKING APPROVAL' : d.executed ? exp004State : 'NO DISTRIBUTION'}`,
+    `Decision: ${d.blockingApproval ? 'BLOCKING APPROVAL' : d.executed ? exp004State : d.distributionAttempted || (d.prospectsEvaluated || 0) > 0 ? 'DISTRIBUTION FAILED' : 'NO DISTRIBUTION'}`,
     '',
     `COOK-001 sent ${c.emailsSent} qualified creator emails today.`,
     `${c.verifiedCustomers} verified customers / $${Number(c.verifiedRevenue || 0).toFixed(0)} revenue this run.`,
@@ -436,6 +449,12 @@ export function defaultDecisionText({
   } else if (d.executed) {
     diagnostics.push(
       `Distribution executed via ${d.channel} to ${d.audience}. New customers acquired by this run: ${d.newCustomersThisRun}.`
+    );
+  } else if (d.distributionAttempted || (d.sesAttemptedThisRun || 0) > 0 || (d.prospectsEvaluated || 0) > 0) {
+    const counts = d.skipReasonCounts || {};
+    const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    diagnostics.push(
+      `DISTRIBUTION FAILED / BLOCKED. SES accepted 0. Prospects evaluated: ${d.prospectsEvaluated || 0}. SES attempts: ${d.sesAttemptedThisRun || 0}. Dominant skip: ${dominant ? `${dominant[0]} (${dominant[1]})` : 'none'}.`
     );
   } else {
     diagnostics.push(
@@ -491,11 +510,15 @@ export function defaultDecisionText({
 export function buildSubject({ prefix, et, dist }) {
   const d = dist || emptyDistribution();
   const newCust = d.newCustomersThisRun ?? 0;
-  const lead = d.executed
-    ? 'Distribution executed'
-    : d.blockingApproval
-      ? 'Blocking approval required'
-      : 'Distribution not executed';
+  const ses = Number(d.sesAcceptedThisRun ?? d.cohort?.emailsSent ?? 0) || 0;
+  const lead =
+    ses > 0 || d.executed
+      ? 'Distribution executed'
+      : d.blockingApproval
+        ? 'Blocking approval required'
+        : d.distributionAttempted || (d.prospectsEvaluated || 0) > 0 || (d.sesAttemptedThisRun || 0) > 0
+          ? 'Distribution failed'
+          : 'Distribution not executed';
   return typographicNormalize(
     `${prefix || 'YouTubeBooster Growth'} · ${lead} · ${newCust} new customers this run · ${et.date}`
   );
@@ -754,7 +777,8 @@ export function composeGrowthReport(opts) {
 
   t.push('ACQUISITION ACTION');
   t.push('--------------------');
-  t.push(`Distribution executed: ${dist.executed ? 'yes' : 'no'}`);
+  t.push(`Distribution executed: ${dist.executed && (dist.sesAcceptedThisRun || 0) > 0 ? 'yes' : 'no'}`);
+  t.push(`Distribution attempted: ${dist.distributionAttempted ? 'yes' : 'no'}`);
   t.push(`Audience/channel: ${dist.audience} / ${dist.channel}`);
   t.push(`Attributed visits: ${dist.attributedVisits}`);
   t.push(`Activations: ${dist.activations}`);
@@ -767,17 +791,26 @@ export function composeGrowthReport(opts) {
   t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
   const funnel = dist.outreachFunnel || emptyDistribution().outreachFunnel;
   t.push('COOK-001 outreach funnel (CRM lifetime unless labeled; a draft is not distribution):');
-  if (cohort.qualifiedProspects > 0 || dist.eligibleProspects > 0) {
-    t.push(`  ELIGIBLE PROSPECTS: ${dist.eligibleProspects ?? cohort.qualifiedProspects}`);
+  t.push(`  PROSPECTS EVALUATED: ${dist.prospectsEvaluated ?? 0}`);
+  t.push(`  SES ATTEMPTS (API calls): ${dist.sesAttemptedThisRun ?? dist.sendAttempts ?? 0}`);
+  t.push(`  SES ACCEPTED TODAY: ${dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0}`);
+  if ((dist.sesAcceptedThisRun || 0) <= 0 && dist.distributionAttempted) {
+    t.push('  STATUS: DISTRIBUTION FAILED / BLOCKED');
   }
-  if (Array.isArray(dist.skippedByReason) && dist.skippedByReason.length) {
+  const skipCounts = dist.skipReasonCounts || {};
+  if (Object.keys(skipCounts).length) {
+    t.push('  SKIPPED REASONS:');
+    for (const [code, n] of Object.entries(skipCounts).sort((a, b) => b[1] - a[1])) {
+      t.push(`    ${code}: ${n}`);
+    }
+  } else if (Array.isArray(dist.skippedByReason) && dist.skippedByReason.length) {
     t.push(`  SKIPPED BY REASON: ${dist.skippedByReason.slice(0, 15).join('; ')}`);
-  } else if (dist.sendAttempts != null || dist.send?.attempted != null) {
-    t.push(`  SEND ATTEMPTS: ${dist.sendAttempts ?? dist.send?.attempted ?? 0}`);
+  }
+  if (dist.eligibleProspects != null) {
+    t.push(`  ELIGIBLE PROSPECTS (CSV probe): ${dist.eligibleProspects}`);
   }
   t.push(`  DRAFTED (CRM): ${funnel.drafted}`);
   t.push(`  APPROVED (CRM): ${funnel.approved}`);
-  t.push(`  SES ACCEPTED TODAY: ${dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0}`);
   t.push(`  SENT LIFETIME (CRM): ${dist.lifetimeCrmSent ?? funnel.sent}`);
   t.push(`  DELIVERED: ${funnel.delivered}`);
   t.push(`  CLICKED: ${funnel.clicked}`);
@@ -864,10 +897,23 @@ export function composeGrowthReport(opts) {
     )
     .join('');
 
-  const distLeadBg = dist.blockingApproval ? '#fef3c7' : dist.executed ? '#ecfdf5' : '#f1f5f9';
-  const distLeadBorder = dist.blockingApproval ? '#f59e0b' : dist.executed ? '#6ee7b7' : '#cbd5e1';
+  const distLeadBg = dist.blockingApproval
+    ? '#fef3c7'
+    : dist.executed
+      ? '#ecfdf5'
+      : dist.distributionAttempted
+        ? '#fee2e2'
+        : '#f1f5f9';
+  const distLeadBorder = dist.blockingApproval
+    ? '#f59e0b'
+    : dist.executed
+      ? '#6ee7b7'
+      : dist.distributionAttempted
+        ? '#f87171'
+        : '#cbd5e1';
   const distRows = [
-    ['Distribution executed', dist.executed ? 'yes' : 'no'],
+    ['Distribution executed', dist.executed && (dist.sesAcceptedThisRun || 0) > 0 ? 'yes' : 'no'],
+    ['Distribution attempted', dist.distributionAttempted ? 'yes' : 'no'],
     ['Audience/channel', `${dist.audience} / ${dist.channel}`],
     ['Attributed visits', String(dist.attributedVisits)],
     ['Activations', String(dist.activations)],
@@ -885,6 +931,8 @@ export function composeGrowthReport(opts) {
       String(dist.experimentAttributedCustomers)
     ],
     ['New customers acquired by the current run', String(dist.newCustomersThisRun)],
+    ['COOK-001 PROSPECTS EVALUATED', String(dist.prospectsEvaluated ?? 0)],
+    ['COOK-001 SES ATTEMPTS', String(dist.sesAttemptedThisRun ?? dist.sendAttempts ?? 0)],
     ['COOK-001 DRAFTED (CRM)', String(dist.outreachFunnel?.drafted ?? 0)],
     ['COOK-001 APPROVED (CRM)', String(dist.outreachFunnel?.approved ?? 0)],
     ['COOK-001 SES ACCEPTED TODAY', String(dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0)],
