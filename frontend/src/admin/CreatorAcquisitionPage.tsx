@@ -5,21 +5,25 @@ import type { AcqAdminProspect, AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import { AdminShell } from './AdminShell';
 import { Badge } from './AdminCrmComponents';
+import {
+  type AcqWorkflowStatus,
+  countWorkflowStatuses,
+  filterByWorkflowStatus,
+  resolveAcqWorkflow,
+  selectAllEligible,
+  selectEligibleIds
+} from './acqApprovalWorkflow';
 
-const STATUS_OPTIONS = [
+const WORKFLOW_FILTERS: { value: AcqWorkflowStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All statuses' },
-  { value: 'qualified', label: 'Qualified' },
-  { value: 'draft_ready', label: 'Needs review / draft ready' },
-  { value: 'approval_queue', label: 'Approval queue' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'sent', label: 'Sent' },
-  { value: 'delivered', label: 'Delivered' },
-  { value: 'contact_verified', label: 'Contact verified' },
-  { value: 'discovered', label: 'Discovered' },
-  { value: 'needs_inspection', label: 'Needs inspection' },
-  { value: 'customer', label: 'Converted' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'suppressed', label: 'Suppressed' }
+  { value: 'EMAIL_REQUIRED', label: 'Email required' },
+  { value: 'EMAIL_VERIFICATION_REQUIRED', label: 'Email verification required' },
+  { value: 'READY_FOR_APPROVAL', label: 'Ready for approval' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'COOLDOWN', label: 'Cooldown' },
+  { value: 'REJECTED', label: 'Rejected' },
+  { value: 'SENT', label: 'Sent' },
+  { value: 'OTHER', label: 'Other / draft incomplete' }
 ];
 
 const SKIP_LABELS: Record<string, string> = {
@@ -48,17 +52,23 @@ function formatDt(iso: string | null | undefined) {
   }
 }
 
-function statusBadge(row: AcqAdminProspect) {
-  const p = row.public;
-  const outreach = (p.outreachStatus || '').toLowerCase();
-  if (outreach === 'customer') return <Badge kind="ok">CONVERTED</Badge>;
-  if (outreach === 'sent' || outreach === 'delivered') return <Badge kind="info">{outreach.toUpperCase()}</Badge>;
-  if (outreach === 'approved' || p.approvalStatus === 'approved') return <Badge kind="ok">APPROVED</Badge>;
-  if (outreach === 'rejected') return <Badge kind="bad">SKIPPED</Badge>;
-  if (p.subject && p.observation) return <Badge kind="warn">NEEDS REVIEW</Badge>;
-  if (p.contactStatus === 'verified_public') return <Badge kind="info">VERIFIED</Badge>;
-  if (p.priorityScore >= 50) return <Badge kind="info">QUALIFIED</Badge>;
-  return <Badge kind="neutral">{outreach || 'DISCOVERED'}</Badge>;
+function workflowBadgeKind(status: AcqWorkflowStatus): 'ok' | 'warn' | 'bad' | 'info' | 'neutral' {
+  switch (status) {
+    case 'READY_FOR_APPROVAL':
+      return 'ok';
+    case 'APPROVED':
+    case 'SENT':
+    case 'CONVERTED':
+      return 'info';
+    case 'EMAIL_REQUIRED':
+    case 'EMAIL_VERIFICATION_REQUIRED':
+    case 'COOLDOWN':
+      return 'warn';
+    case 'REJECTED':
+      return 'bad';
+    default:
+      return 'neutral';
+  }
 }
 
 function rateOrNa(numerator: number, denominator: number): string {
@@ -69,9 +79,8 @@ function rateOrNa(numerator: number, denominator: number): string {
 export function CreatorAcquisitionPage() {
   useAdminCrm();
   const [summary, setSummary] = useState<AcqSummary | null>(null);
-  const [items, setItems] = useState<AcqAdminProspect[]>([]);
-  const [totalAll, setTotalAll] = useState(0);
-  const [view, setView] = useState('all');
+  const [allItems, setAllItems] = useState<AcqAdminProspect[]>([]);
+  const [workflowFilter, setWorkflowFilter] = useState<AcqWorkflowStatus | 'all'>('all');
   const [niche, setNiche] = useState('cooking');
   const [campaign, setCampaign] = useState('COOK-001');
   const [language, setLanguage] = useState('');
@@ -79,45 +88,71 @@ export function CreatorAcquisitionPage() {
   const [searchApplied, setSearchApplied] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [emailPanelOpen, setEmailPanelOpen] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [inspectInput, setInspectInput] = useState('');
   const [showInspect, setShowInspect] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState('');
+  const [verifySourceUrl, setVerifySourceUrl] = useState('');
+  const [verifyContactType, setVerifyContactType] = useState('business');
+
+  const cooldownDays = summary?.cooldownDays ?? 14;
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const apiView = view === 'approval_queue' ? 'draft_ready' : view;
-      const [s, list, allCount] = await Promise.all([
+      const [s, list] = await Promise.all([
         adminApi.acqSummary(),
         adminApi.acqProspects({
-          view: apiView,
+          view: 'all',
           niche: niche || undefined,
           campaign: campaign || undefined,
           language: language || undefined,
           q: searchApplied || undefined
-        }),
-        adminApi.acqProspects({ view: 'all', campaign: campaign || undefined })
+        })
       ]);
       setSummary(s);
-      setItems(list.items || []);
-      setTotalAll(allCount.totalCount || 0);
+      setAllItems(list.items || []);
+      setSelected((cur) =>
+        cur.filter((id) => {
+          const row = (list.items || []).find((x) => x.public.prospectId === id);
+          return row ? resolveAcqWorkflow(row, s.cooldownDays ?? 14).canSelectForApproval : false;
+        })
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load acquisition CRM');
     }
-  }, [view, niche, campaign, language, searchApplied]);
+  }, [niche, campaign, language, searchApplied]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const drawer = useMemo(
-    () => (drawerId ? items.find((x) => x.public.prospectId === drawerId) || null : null),
-    [drawerId, items]
+  const workflowCounts = useMemo(
+    () => countWorkflowStatuses(allItems, cooldownDays),
+    [allItems, cooldownDays]
   );
 
-  const approvalQueueCount = summary?.views?.draft_ready ?? summary?.drafts ?? 0;
+  const items = useMemo(
+    () => filterByWorkflowStatus(allItems, workflowFilter, cooldownDays),
+    [allItems, workflowFilter, cooldownDays]
+  );
+
+  const readyCount = workflowCounts.READY_FOR_APPROVAL;
+  const eligibleVisible = useMemo(
+    () => items.filter((r) => resolveAcqWorkflow(r, cooldownDays).canSelectForApproval),
+    [items, cooldownDays]
+  );
+
+  const drawer = useMemo(() => {
+    if (!drawerId) return null;
+    return allItems.find((x) => x.public.prospectId === drawerId) || null;
+  }, [drawerId, allItems]);
+
+  const drawerWorkflow = drawer ? resolveAcqWorkflow(drawer, cooldownDays) : null;
+
   const dailyLimit = summary?.dailyLimit ?? 10;
   const sentToday = summary?.sentToday ?? summary?.emailsAttemptedToday ?? 0;
   const sendPct = dailyLimit > 0 ? Math.min(100, Math.round((sentToday / dailyLimit) * 100)) : 0;
@@ -129,10 +164,10 @@ export function CreatorAcquisitionPage() {
       .map(([code, count]) => ({ code, count, label: skipLabel(code) }));
   }, [summary]);
 
-  const filtersActive = view !== 'all' || !!niche || !!language || !!searchApplied;
+  const filtersActive = workflowFilter !== 'all' || !!niche || !!language || !!searchApplied;
 
   const clearFilters = () => {
-    setView('all');
+    setWorkflowFilter('all');
     setNiche('');
     setLanguage('');
     setSearch('');
@@ -140,7 +175,22 @@ export function CreatorAcquisitionPage() {
   };
 
   const toggle = (id: string) => {
-    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= 25 ? cur : [...cur, id]));
+    setSelected((cur) => selectEligibleIds(allItems, cur, id, 25));
+  };
+
+  const selectAllVisibleEligible = () => {
+    setSelected(selectAllEligible(items, 25));
+  };
+
+  const openReview = (id: string, openEmail = false) => {
+    setDrawerId(id);
+    setEmailPanelOpen(openEmail);
+    const row = allItems.find((x) => x.public.prospectId === id);
+    if (row) {
+      setVerifyEmail(row.publicBusinessEmail || '');
+      setVerifySourceUrl(row.public.contactSourceUrl || row.public.officialWebsite || '');
+      setVerifyContactType(row.public.contactType && row.public.contactType !== 'none' ? row.public.contactType : 'business');
+    }
   };
 
   const inspect = async () => {
@@ -164,13 +214,73 @@ export function CreatorAcquisitionPage() {
     }
   };
 
-  const approveIds = async (ids: string[]) => {
-    if (!ids.length) return;
+  const verifyAndUpsertEmail = async (prospect: AcqAdminProspect) => {
+    if (!verifyEmail.trim() || !verifySourceUrl.trim()) {
+      setError('Public email and source URL are required to verify.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      const updated = await adminApi.acqInspect({
+        channelInput: prospect.public.handle || prospect.public.channelUrl,
+        primaryNiche: prospect.public.primaryNiche || niche || 'cooking',
+        campaign: prospect.public.campaign || campaign || 'COOK-001',
+        language: prospect.public.language || undefined,
+        officialWebsite: verifySourceUrl.trim(),
+        publicBusinessEmail: verifyEmail.trim(),
+        contactSourceUrl: verifySourceUrl.trim(),
+        contactType: verifyContactType,
+        notes: 'Admin verified public mailto'
+      });
+      const id = updated.public?.prospectId || prospect.public.prospectId;
+      try {
+        await adminApi.acqDraft(id);
+      } catch {
+        // Draft prep may fail if observation missing; approval still blocked until ready.
+      }
+      setNote('Contact saved. Refreshing workflow status…');
+      setEmailPanelOpen(false);
+      await load();
+      setDrawerId(id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Email verification failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const prepareDraft = async (id: string) => {
     setBusy(true);
     setError('');
     try {
-      const res = await adminApi.acqApprove(ids, campaign);
-      setNote(`Approval ${res.approvalId} stored. Weekday sender will only send approved verified contacts.`);
+      await adminApi.acqDraft(id);
+      setNote('Draft prepared.');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Prepare draft failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approveIds = async (ids: string[]) => {
+    if (!ids.length) return;
+    const eligible = ids.filter((id) => {
+      const row = allItems.find((x) => x.public.prospectId === id);
+      return row ? resolveAcqWorkflow(row, cooldownDays).canApprove : false;
+    });
+    if (!eligible.length) {
+      setError('No eligible creators selected for approval.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      const res = await adminApi.acqApprove(eligible, campaign);
+      setNote(`Approval ${res.approvalId} stored. Scheduled sending still applies all existing send gates.`);
       setSelected([]);
       setDrawerId(null);
       await load();
@@ -193,6 +303,9 @@ export function CreatorAcquisitionPage() {
   const blocked =
     summary?.outreachBlocked ||
     (summary?.marketingSendingEnabled && (summary?.sendEligible ?? 0) === 0 && sentToday === 0);
+
+  const allEligibleSelected =
+    eligibleVisible.length > 0 && eligibleVisible.every((r) => selected.includes(r.public.prospectId));
 
   return (
     <AdminShell title="Creator Acquisition" subtitle="Find, qualify, approve and contact creators.">
@@ -229,21 +342,10 @@ export function CreatorAcquisitionPage() {
           {pipeline.map((p, i) => (
             <React.Fragment key={p.key}>
               {i > 0 && <div className="acq-pipeline-connector" aria-hidden />}
-              <button
-                type="button"
-                className="acq-pipeline-card"
-                onClick={() => {
-                  if (p.key === 'discovered') setView('all');
-                  else if (p.key === 'inspected') setView('needs_inspection');
-                  else if (p.key === 'verified') setView('contact_verified');
-                  else if (p.key === 'approved') setView('approved');
-                  else if (p.key === 'sent') setView('sent');
-                  else if (p.key === 'converted') setView('customer');
-                }}
-              >
+              <div className="acq-pipeline-card acq-pipeline-card-static">
                 <span>{p.label}</span>
                 <strong>{p.value}</strong>
-              </button>
+              </div>
             </React.Fragment>
           ))}
         </div>
@@ -257,9 +359,39 @@ export function CreatorAcquisitionPage() {
           <div className="acq-progress" role="progressbar" aria-valuenow={sendPct} aria-valuemin={0} aria-valuemax={100}>
             <div className="acq-progress-fill" style={{ width: `${sendPct}%` }} />
           </div>
-          {summary?.marketingSendingEnabled && sentToday === 0 && (summary.sendEligible ?? 0) === 0 && (
-            <p className="ops-recon-warn">Sending is enabled but no emails can be sent right now — see blockers below.</p>
-          )}
+        </div>
+      </section>
+
+      <section className="ops-panel">
+        <header className="ops-section-head">
+          <h2>Approval workflow</h2>
+          <p className="ops-muted" style={{ margin: 0 }}>
+            Counts reflect creators that can actually take that next step.
+          </p>
+        </header>
+        <div className="acq-workflow-counts">
+          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('EMAIL_REQUIRED')}>
+            Needs contact info <strong>{workflowCounts.EMAIL_REQUIRED}</strong>
+          </button>
+          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('EMAIL_VERIFICATION_REQUIRED')}>
+            Needs email verification <strong>{workflowCounts.EMAIL_VERIFICATION_REQUIRED}</strong>
+          </button>
+          <button
+            type="button"
+            className="acq-count-chip acq-count-chip-ready"
+            onClick={() => setWorkflowFilter('READY_FOR_APPROVAL')}
+          >
+            Ready for approval <strong>{readyCount}</strong>
+          </button>
+          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('APPROVED')}>
+            Approved <strong>{workflowCounts.APPROVED}</strong>
+          </button>
+          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('COOLDOWN')}>
+            Cooldown <strong>{workflowCounts.COOLDOWN}</strong>
+          </button>
+          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('REJECTED')}>
+            Rejected <strong>{workflowCounts.REJECTED}</strong>
+          </button>
         </div>
       </section>
 
@@ -286,7 +418,6 @@ export function CreatorAcquisitionPage() {
                 </div>
               )}
             </div>
-
             {skipRows.length > 0 && (
               <div className="acq-skip-list">
                 {skipRows.map((r) => (
@@ -297,35 +428,10 @@ export function CreatorAcquisitionPage() {
                 ))}
               </div>
             )}
-
             <div className="acq-blocker-actions">
-              <button
-                type="button"
-                className="ops-btn ops-btn-ghost"
-                onClick={() => {
-                  setView('needs_inspection');
-                  setNiche(niche || 'cooking');
-                }}
-              >
-                View rejected prospects
-              </button>
               <Link className="ops-btn ops-btn-ghost" to="/admin/diagnostics">
                 Review qualification rules
               </Link>
-              {approvalQueueCount > 0 && (
-                <>
-                  <p className="ops-muted" style={{ margin: 0 }}>
-                    {approvalQueueCount} creators are ready for review
-                  </p>
-                  <button
-                    type="button"
-                    className="ops-btn ops-btn-primary"
-                    onClick={() => setView('approval_queue')}
-                  >
-                    Review creators
-                  </button>
-                </>
-              )}
             </div>
           </>
         )}
@@ -335,8 +441,12 @@ export function CreatorAcquisitionPage() {
         <div className="acq-toolbar">
           <label>
             Status
-            <select className="admin-crm-select" value={view} onChange={(e) => setView(e.target.value)}>
-              {STATUS_OPTIONS.map((o) => (
+            <select
+              className="admin-crm-select"
+              value={workflowFilter}
+              onChange={(e) => setWorkflowFilter(e.target.value as AcqWorkflowStatus | 'all')}
+            >
+              {WORKFLOW_FILTERS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -395,11 +505,16 @@ export function CreatorAcquisitionPage() {
             <button
               type="button"
               className="ops-btn ops-btn-primary"
-              onClick={() => setView('approval_queue')}
+              disabled={readyCount === 0}
+              title={readyCount === 0 ? 'No creators currently ready for approval' : undefined}
+              onClick={() => setWorkflowFilter('READY_FOR_APPROVAL')}
             >
-              Review approval queue ({approvalQueueCount})
+              Review Ready for Approval ({readyCount})
             </button>
           </div>
+          {readyCount === 0 && (
+            <p className="ops-muted acq-ready-empty">No creators currently ready for approval</p>
+          )}
         </div>
 
         {showInspect && (
@@ -417,8 +532,10 @@ export function CreatorAcquisitionPage() {
         )}
 
         {selected.length > 0 && (
-          <div className="acq-bulk-bar">
-            <span>{selected.length} selected</span>
+          <div className="acq-bulk-bar acq-bulk-bar-sticky">
+            <span>
+              <strong>{selected.length}</strong> selected
+            </span>
             <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => setSelected([])}>
               Clear
             </button>
@@ -428,7 +545,7 @@ export function CreatorAcquisitionPage() {
               disabled={busy}
               onClick={() => void approveIds(selected)}
             >
-              Approve selected ({selected.length}/25)
+              Approve &amp; Queue Selected
             </button>
           </div>
         )}
@@ -436,24 +553,20 @@ export function CreatorAcquisitionPage() {
         <div className="admin-crm-table-wrap acq-table-wrap">
           {items.length === 0 ? (
             <div className="acq-empty">
-              {totalAll === 0 ? (
+              {allItems.length === 0 ? (
                 <>
                   <h3>No prospects yet</h3>
                   <p className="ops-muted">Inspect a public channel to start the COOK-001 pipeline.</p>
                 </>
               ) : (
                 <>
-                  <h3>No prospects match these filters.</h3>
+                  <h3>No creators match these filters.</h3>
                   <button type="button" className="ops-btn ops-btn-primary" onClick={clearFilters}>
                     Clear filters
                   </button>
                   <p className="ops-muted" style={{ marginTop: 12 }}>
-                    {totalAll} prospects exist across all statuses
-                    {summary ? ` · ${summary.drafts} drafts` : ''}.
+                    {allItems.length} prospects in current campaign filters · {readyCount} ready for approval.
                   </p>
-                  <button type="button" className="ops-btn ops-btn-ghost" onClick={() => setView('all')}>
-                    View all prospects
-                  </button>
                 </>
               )}
             </div>
@@ -461,7 +574,20 @@ export function CreatorAcquisitionPage() {
             <table className="admin-crm-table acq-table">
               <thead>
                 <tr>
-                  <th className="acq-col-check" />
+                  <th className="acq-col-check">
+                    {eligibleVisible.length > 0 && (
+                      <input
+                        type="checkbox"
+                        checked={allEligibleSelected}
+                        title="Select all eligible rows in this view"
+                        aria-label="Select all eligible"
+                        onChange={() => {
+                          if (allEligibleSelected) setSelected([]);
+                          else selectAllVisibleEligible();
+                        }}
+                      />
+                    )}
+                  </th>
                   <th>Creator</th>
                   <th>Channel</th>
                   <th>Subscribers</th>
@@ -476,24 +602,31 @@ export function CreatorAcquisitionPage() {
               <tbody>
                 {items.map((row) => {
                   const p = row.public;
-                  const canApprove =
-                    p.contactStatus === 'verified_public' && !p.previewPlaceholder && p.approvalStatus !== 'approved';
+                  const wf = resolveAcqWorkflow(row, cooldownDays);
+                  const selectedRow = selected.includes(p.prospectId);
                   return (
-                    <tr key={p.prospectId} className="acq-row" onClick={() => setDrawerId(p.prospectId)}>
-                      <td className="acq-col-check" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(p.prospectId)}
-                          disabled={!canApprove}
-                          onChange={() => toggle(p.prospectId)}
-                        />
+                    <tr
+                      key={p.prospectId}
+                      className={`acq-row ${selectedRow ? 'acq-row-selected' : ''}`}
+                    >
+                      <td className="acq-col-check">
+                        {wf.canSelectForApproval ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedRow}
+                            aria-label={`Select ${p.channelName}`}
+                            onChange={() => toggle(p.prospectId)}
+                          />
+                        ) : (
+                          <span className="acq-check-placeholder" title={wf.checkboxDisabledReason || undefined} />
+                        )}
                       </td>
                       <td>
                         <div className="acq-creator-name">{p.channelName}</div>
                         <div className="ops-muted">{p.handle}</div>
                       </td>
                       <td>
-                        <a href={p.channelUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                        <a href={p.channelUrl} target="_blank" rel="noreferrer">
                           Open
                         </a>
                       </td>
@@ -504,20 +637,47 @@ export function CreatorAcquisitionPage() {
                         <div>{p.priorityScore}</div>
                         <div className="ops-muted">{p.opportunityCategory.replace(/_/g, ' ')}</div>
                       </td>
-                      <td>{statusBadge(row)}</td>
+                      <td>
+                        <Badge kind={workflowBadgeKind(wf.status)}>{wf.label}</Badge>
+                        {wf.status === 'COOLDOWN' && wf.cooldownEndsAt && (
+                          <div className="ops-muted acq-cooldown-hint">Until {formatDt(wf.cooldownEndsAt)}</div>
+                        )}
+                      </td>
                       <td className="admin-crm-nowrap">{formatDt(row.lastContactedAt || p.evidenceAt)}</td>
-                      <td className="acq-actions" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" className="ops-btn ops-btn-ghost ops-btn-sm" onClick={() => setDrawerId(p.prospectId)}>
-                          View
+                      <td className="acq-actions">
+                        <button
+                          type="button"
+                          className="ops-btn ops-btn-ghost ops-btn-sm"
+                          onClick={() => openReview(p.prospectId, false)}
+                        >
+                          {wf.status === 'APPROVED' || wf.status === 'SENT' || wf.status === 'COOLDOWN' ? 'View' : 'Review'}
                         </button>
-                        {canApprove && (
+                        {wf.primaryAction === 'find_email' && (
+                          <button
+                            type="button"
+                            className="ops-btn ops-btn-primary ops-btn-sm"
+                            onClick={() => openReview(p.prospectId, true)}
+                          >
+                            Find Email
+                          </button>
+                        )}
+                        {wf.primaryAction === 'verify_email' && (
+                          <button
+                            type="button"
+                            className="ops-btn ops-btn-primary ops-btn-sm"
+                            onClick={() => openReview(p.prospectId, true)}
+                          >
+                            Verify Email
+                          </button>
+                        )}
+                        {wf.canApprove && (
                           <button
                             type="button"
                             className="ops-btn ops-btn-primary ops-btn-sm"
                             disabled={busy}
                             onClick={() => void approveIds([p.prospectId])}
                           >
-                            Approve
+                            Approve &amp; Queue
                           </button>
                         )}
                       </td>
@@ -530,7 +690,7 @@ export function CreatorAcquisitionPage() {
         </div>
         {filtersActive && items.length > 0 && (
           <p className="ops-muted">
-            Showing {items.length} of {totalAll} prospects
+            Showing {items.length} of {allItems.length} prospects
           </p>
         )}
       </section>
@@ -569,10 +729,6 @@ export function CreatorAcquisitionPage() {
                 <strong>{summary.delivered ?? 0}</strong>
               </div>
               <div>
-                <span>Clicked</span>
-                <strong className="ops-muted">N/A</strong>
-              </div>
-              <div>
                 <span>Converted</span>
                 <strong>{summary.converted ?? 0}</strong>
               </div>
@@ -608,7 +764,7 @@ export function CreatorAcquisitionPage() {
         )}
       </section>
 
-      {drawer && (
+      {drawer && drawerWorkflow && (
         <div className="acq-drawer-backdrop" onClick={() => setDrawerId(null)} role="presentation">
           <aside className="acq-drawer" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Prospect detail">
             <header className="acq-drawer-head">
@@ -620,6 +776,107 @@ export function CreatorAcquisitionPage() {
                 Close
               </button>
             </header>
+
+            <div className="acq-drawer-decision">
+              <Badge kind={workflowBadgeKind(drawerWorkflow.status)}>{drawerWorkflow.label}</Badge>
+              <div className="acq-decision-q">
+                <strong>Why is this creator here?</strong>
+                <p>{drawerWorkflow.whyHere}</p>
+              </div>
+              <div className="acq-decision-q">
+                <strong>Can I approve them?</strong>
+                <p>{drawerWorkflow.canApproveAnswer}</p>
+              </div>
+              <div className="acq-decision-q">
+                <strong>What should I do next?</strong>
+                <p>{drawerWorkflow.nextStep}</p>
+              </div>
+              {drawerWorkflow.status === 'COOLDOWN' && drawerWorkflow.cooldownEndsAt && (
+                <p className="ops-recon-warn">Cooldown until {formatDt(drawerWorkflow.cooldownEndsAt)}</p>
+              )}
+
+              <div className="acq-drawer-primary-actions">
+                {drawerWorkflow.canApprove && (
+                  <button
+                    type="button"
+                    className="ops-btn ops-btn-primary"
+                    disabled={busy}
+                    onClick={() => void approveIds([drawer.public.prospectId])}
+                  >
+                    Approve &amp; Queue
+                  </button>
+                )}
+                {(drawerWorkflow.primaryAction === 'find_email' ||
+                  drawerWorkflow.primaryAction === 'verify_email' ||
+                  emailPanelOpen) && (
+                  <button
+                    type="button"
+                    className="ops-btn ops-btn-primary"
+                    onClick={() => setEmailPanelOpen(true)}
+                  >
+                    {drawerWorkflow.primaryAction === 'find_email' ? 'Find / Verify Email' : 'Verify Email'}
+                  </button>
+                )}
+                {drawerWorkflow.label === 'DRAFT INCOMPLETE' && (
+                  <button
+                    type="button"
+                    className="ops-btn ops-btn-primary"
+                    disabled={busy}
+                    onClick={() => void prepareDraft(drawer.public.prospectId)}
+                  >
+                    Prepare draft
+                  </button>
+                )}
+                <a className="ops-btn ops-btn-ghost" href={drawer.public.channelUrl} target="_blank" rel="noreferrer">
+                  Open YouTube
+                </a>
+              </div>
+
+              {emailPanelOpen && (
+                <div className="acq-verify-panel">
+                  <label>
+                    Public email
+                    <input
+                      className="admin-crm-input"
+                      value={verifyEmail}
+                      onChange={(e) => setVerifyEmail(e.target.value)}
+                      placeholder="hello@creator.com"
+                    />
+                  </label>
+                  <label>
+                    Source URL (official page with mailto)
+                    <input
+                      className="admin-crm-input"
+                      value={verifySourceUrl}
+                      onChange={(e) => setVerifySourceUrl(e.target.value)}
+                      placeholder="https://…"
+                    />
+                  </label>
+                  <label>
+                    Contact type
+                    <select
+                      className="admin-crm-select"
+                      value={verifyContactType}
+                      onChange={(e) => setVerifyContactType(e.target.value)}
+                    >
+                      <option value="business">business</option>
+                      <option value="partnership">partnership</option>
+                      <option value="media">media</option>
+                      <option value="general">general</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="ops-btn ops-btn-primary"
+                    disabled={busy}
+                    onClick={() => void verifyAndUpsertEmail(drawer)}
+                  >
+                    Save verified email
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="acq-drawer-body">
               <dl className="acq-dl">
                 <div>
@@ -675,7 +932,7 @@ export function CreatorAcquisitionPage() {
                 </div>
                 <div>
                   <dt>Draft body</dt>
-                  <dd className="acq-draft-body">{drawer.body || drawer.public.observation || '—'}</dd>
+                  <dd className="acq-draft-body">{drawer.body || '—'}</dd>
                 </div>
                 <div>
                   <dt>Observation</dt>
@@ -691,21 +948,6 @@ export function CreatorAcquisitionPage() {
                 </div>
               </dl>
             </div>
-            <footer className="acq-drawer-actions">
-              {drawer.public.contactStatus === 'verified_public' && drawer.public.approvalStatus !== 'approved' && (
-                <button
-                  type="button"
-                  className="ops-btn ops-btn-primary"
-                  disabled={busy}
-                  onClick={() => void approveIds([drawer.public.prospectId])}
-                >
-                  Approve &amp; queue
-                </button>
-              )}
-              <a className="ops-btn ops-btn-ghost" href={drawer.public.channelUrl} target="_blank" rel="noreferrer">
-                Open YouTube
-              </a>
-            </footer>
           </aside>
         </div>
       )}
