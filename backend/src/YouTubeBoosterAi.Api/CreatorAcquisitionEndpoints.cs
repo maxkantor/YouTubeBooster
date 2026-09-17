@@ -120,23 +120,121 @@ public static class CreatorAcquisitionEndpoints
         admin.MapGet("/summary", async (ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var rows = await acq.Store.ListProspectsAsync(cancellationToken);
-            var state = await acq.LoadStateAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
+            var campaign = CreatorAcquisitionCampaigns.Cook001;
+            var state = await acq.LoadStateAsync(campaign, cancellationToken);
+            var now = DateTimeOffset.UtcNow;
+            var todayEt = CreatorAcquisitionScoring.EasternDate(now).Date;
+            var runYmd = todayEt.ToString("yyyy-MM-dd");
+            var cohortRunId = $"{campaign}-{runYmd}";
+
+            var discovered = rows.Count;
+            var inspected = rows.Count(r => r.InspectionStatus == "completed");
+            var contactVerified = rows.Count(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
+            var drafts = rows.Count(r => !string.IsNullOrWhiteSpace(r.Observation) && !string.IsNullOrWhiteSpace(r.Subject));
+            var approved = rows.Count(r =>
+                string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrWhiteSpace(r.ApprovalId));
+            var sent = rows.Count(r => r.LastContactedAt is not null);
+            var sentToday = rows.Count(r =>
+                r.LastContactedAt is not null
+                && CreatorAcquisitionScoring.EasternDate(r.LastContactedAt.Value).Date == todayEt);
+            var delivered = rows.Count(r => string.Equals(r.OutreachStatus, "delivered", StringComparison.OrdinalIgnoreCase));
+            var converted = rows.Count(r => string.Equals(r.OutreachStatus, "customer", StringComparison.OrdinalIgnoreCase));
+            var bounced = rows.Count(r => string.Equals(r.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase));
+            var complained = rows.Count(r => string.Equals(r.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase));
+            var unsubscribed = rows.Count(r => string.Equals(r.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase));
+            var views = CreatorAcquisitionViews.All.ToDictionary(
+                v => v,
+                v => rows.Count(r => CreatorAcquisitionScoring.MapView(r) == v));
+            // approval_queue is a UI alias for draft_ready (MapView never emits approval_queue)
+            views["approval_queue"] = views.GetValueOrDefault("draft_ready");
+
+            var cookRows = rows
+                .Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var skipReasons = new Dictionary<string, int>(StringComparer.Ordinal);
+            var sendEligible = 0;
+            foreach (var p in cookRows)
+            {
+                var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
+                    p, now, state, alreadyContacted: p.LastContactedAt is not null);
+                if (gate.Ok)
+                {
+                    sendEligible++;
+                    continue;
+                }
+                var code = OutreachPolicy.NormalizeSkipReason(gate.Reason);
+                skipReasons[code] = skipReasons.GetValueOrDefault(code) + 1;
+            }
+
+            object? lastRun = null;
+            int? lastRunSesAttempted = null;
+            var lastRunJson = await acq.Store.GetCohortRunAsync(campaign, cohortRunId, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(lastRunJson))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(lastRunJson);
+                    lastRun = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(lastRunJson);
+                    if (doc.RootElement.TryGetProperty("sesAttempted", out var sesEl) && sesEl.TryGetInt32(out var sesVal))
+                        lastRunSesAttempted = sesVal;
+                    else if (doc.RootElement.TryGetProperty("attempted", out var attEl) && attEl.TryGetInt32(out var attVal))
+                        lastRunSesAttempted = attVal;
+                }
+                catch
+                {
+                    lastRun = null;
+                }
+            }
+
+            var primaryBlocker = skipReasons
+                .OrderByDescending(kv => kv.Value)
+                .Select(kv => new { code = kv.Key, count = kv.Value })
+                .FirstOrDefault();
+
+            var outreachBlocked = state.MarketingSendingEnabled
+                && sendEligible == 0
+                && sentToday == 0;
+
             return Results.Ok(new
             {
-                verifiedCustomers = 0,
+                verifiedCustomers = converted,
                 marketingSendingEnabled = state.MarketingSendingEnabled,
                 complaintPause = state.ComplaintPause,
                 fromEmailConfigured = EmailAddressHelpers.LooksLikeEmail(state.FromEmail),
                 postalAddressConfigured = !string.IsNullOrWhiteSpace(state.PostalAddress),
-                discovered = rows.Count,
-                inspected = rows.Count(r => r.InspectionStatus == "completed"),
-                contactVerified = rows.Count(CreatorAcquisitionScoring.IsVerifiedPublicEmail),
-                drafts = rows.Count(r => !string.IsNullOrWhiteSpace(r.Observation) && !string.IsNullOrWhiteSpace(r.Subject)),
-                approved = rows.Count(r => string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(r.ApprovalId)),
-                sent = rows.Count(r => r.LastContactedAt is not null),
-                delivered = rows.Count(r => string.Equals(r.OutreachStatus, "delivered", StringComparison.OrdinalIgnoreCase)),
-                converted = rows.Count(r => string.Equals(r.OutreachStatus, "customer", StringComparison.OrdinalIgnoreCase)),
-                views = CreatorAcquisitionViews.All.ToDictionary(v => v, v => rows.Count(r => CreatorAcquisitionScoring.MapView(r) == v))
+                campaign,
+                dailyLimit = state.DailyLimit,
+                cooldownDays = state.CooldownDays,
+                rampStage = state.RampStage,
+                standingCampaignApproval = state.StandingCampaignApproval,
+                allowWeekends = state.AllowWeekends,
+                discovered,
+                inspected,
+                contactVerified,
+                drafts,
+                approved,
+                sent,
+                sentToday,
+                sentLifetime = sent,
+                delivered,
+                converted,
+                bounced,
+                complained,
+                unsubscribed,
+                views,
+                prospectsEvaluated = cookRows.Count,
+                sendEligible,
+                emailsAttemptedToday = lastRunSesAttempted ?? sentToday,
+                sesConfigured = EmailAddressHelpers.LooksLikeEmail(state.FromEmail)
+                    && !string.IsNullOrWhiteSpace(state.PostalAddress),
+                outreachBlocked,
+                primaryBlocker,
+                skipReasonCounts = skipReasons
+                    .OrderByDescending(kv => kv.Value)
+                    .ToDictionary(kv => kv.Key, kv => kv.Value),
+                lastRun,
+                cohortRunId
             });
         });
 
@@ -145,27 +243,39 @@ public static class CreatorAcquisitionEndpoints
             string? niche,
             string? campaign,
             string? language,
+            string? q,
             ICreatorAcquisitionService acq,
             CancellationToken cancellationToken) =>
         {
             var rows = await acq.Store.ListProspectsAsync(cancellationToken);
-            IEnumerable<AcqProspectRecord> q = rows;
+            IEnumerable<AcqProspectRecord> query = rows;
             if (!string.IsNullOrWhiteSpace(campaign))
-                q = q.Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(niche))
-                q = q.Where(r => string.Equals(r.PrimaryNiche, niche, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(r => string.Equals(r.PrimaryNiche, niche, StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(language))
-                q = q.Where(r => string.Equals(r.Language, language, StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrWhiteSpace(view) && view != "all")
-                q = q.Where(r => CreatorAcquisitionScoring.MapView(r) == view);
-            var items = q.Select(r => new AcqAdminProspectDto(CreatorAcquisitionScoring.Sanitize(r), r.PublicBusinessEmail)).ToArray();
+                query = query.Where(r => string.Equals(r.Language, language, StringComparison.OrdinalIgnoreCase));
+            var viewKey = string.Equals(view, "approval_queue", StringComparison.OrdinalIgnoreCase) ? "draft_ready" : view;
+            if (!string.IsNullOrWhiteSpace(viewKey) && viewKey != "all")
+                query = query.Where(r => CreatorAcquisitionScoring.MapView(r) == viewKey);
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var needle = q.Trim();
+                query = query.Where(r =>
+                    (r.ChannelName?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (r.Handle?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (r.PublicBusinessEmail?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (r.ProspectId?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || (r.ChannelUrl?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+            var items = query.Select(ToAdminDto).ToArray();
             return Results.Ok(new { items, totalCount = items.Length });
         });
 
         admin.MapGet("/prospects/{id}", async (string id, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var row = await acq.Store.GetProspectAsync(id, cancellationToken);
-            return row is null ? Results.NotFound() : Results.Ok(new AcqAdminProspectDto(CreatorAcquisitionScoring.Sanitize(row), row.PublicBusinessEmail));
+            return row is null ? Results.NotFound() : Results.Ok(ToAdminDto(row));
         });
 
         admin.MapPost("/inspect", async (AcqUpsertProspectRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
@@ -173,13 +283,13 @@ public static class CreatorAcquisitionEndpoints
             if (string.IsNullOrWhiteSpace(request.ChannelInput))
                 return Results.BadRequest(new { error = "channelInput required" });
             var row = await acq.InspectAndUpsertAsync(request, cancellationToken);
-            return Results.Ok(new AcqAdminProspectDto(CreatorAcquisitionScoring.Sanitize(row), row.PublicBusinessEmail));
+            return Results.Ok(ToAdminDto(row));
         });
 
         admin.MapPost("/prospects/{id}/draft", async (string id, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var row = await acq.PrepareDraftAsync(id, cancellationToken);
-            return row is null ? Results.NotFound() : Results.Ok(new AcqAdminProspectDto(CreatorAcquisitionScoring.Sanitize(row), row.PublicBusinessEmail));
+            return row is null ? Results.NotFound() : Results.Ok(ToAdminDto(row));
         });
 
         admin.MapPost("/preview", async (AcqApproveBatchRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
@@ -250,6 +360,9 @@ public static class CreatorAcquisitionEndpoints
             return Results.Ok(new { ok = true, sent = false, note = "External and test sending remain disabled until marketing sending is explicitly enabled after SES identity setup." });
         });
     }
+
+    private static AcqAdminProspectDto ToAdminDto(AcqProspectRecord row) =>
+        new(CreatorAcquisitionScoring.Sanitize(row), row.PublicBusinessEmail, row.Body, row.LastContactedAt);
 }
 
 public sealed record AcqSesEventRequest(string ProspectId, string EventType);

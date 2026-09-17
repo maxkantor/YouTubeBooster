@@ -479,7 +479,13 @@ export const adminApi = {
   async acqSummary(): Promise<AcqSummary> {
     return fetchJson<AcqSummary>('/api/admin/crm/acquisition/summary');
   },
-  async acqProspects(params: { view?: string; niche?: string; campaign?: string; language?: string } = {}): Promise<{
+  async acqProspects(params: {
+    view?: string;
+    niche?: string;
+    campaign?: string;
+    language?: string;
+    q?: string;
+  } = {}): Promise<{
     items: AcqAdminProspect[];
     totalCount: number;
   }> {
@@ -488,6 +494,7 @@ export const adminApi = {
     if (params.niche) q.set('niche', params.niche);
     if (params.campaign) q.set('campaign', params.campaign);
     if (params.language) q.set('language', params.language);
+    if (params.q) q.set('q', params.q);
     const qs = q.toString();
     return fetchJson(`/api/admin/crm/acquisition/prospects${qs ? `?${qs}` : ''}`);
   },

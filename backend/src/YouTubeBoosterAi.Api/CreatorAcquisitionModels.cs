@@ -138,7 +138,9 @@ public sealed record AcqSanitizedProspectDto(
 
 public sealed record AcqAdminProspectDto(
     AcqSanitizedProspectDto Public,
-    string? PublicBusinessEmail
+    string? PublicBusinessEmail,
+    string? Body = null,
+    DateTimeOffset? LastContactedAt = null
 );
 
 public sealed record AcqUpsertProspectRequest(

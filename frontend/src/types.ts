@@ -559,7 +559,14 @@ export type AcqSanitizedProspect = {
 export type AcqAdminProspect = {
   public: AcqSanitizedProspect;
   publicBusinessEmail: string | null;
+  body?: string | null;
+  lastContactedAt?: string | null;
 };
+
+export type AcqSkipReasonPrimary = {
+  code: string;
+  count: number;
+} | null;
 
 export type AcqSummary = {
   verifiedCustomers: number;
@@ -567,14 +574,34 @@ export type AcqSummary = {
   complaintPause: boolean;
   fromEmailConfigured: boolean;
   postalAddressConfigured: boolean;
+  campaign?: string;
+  dailyLimit?: number;
+  cooldownDays?: number;
+  rampStage?: number;
+  standingCampaignApproval?: boolean;
+  allowWeekends?: boolean;
   discovered: number;
   inspected: number;
   contactVerified: number;
   drafts: number;
   approved: number;
   sent: number;
+  sentToday?: number;
+  sentLifetime?: number;
   delivered?: number;
   converted?: number;
+  bounced?: number;
+  complained?: number;
+  unsubscribed?: number;
   views: Record<string, number>;
+  prospectsEvaluated?: number;
+  sendEligible?: number;
+  emailsAttemptedToday?: number;
+  sesConfigured?: boolean;
+  outreachBlocked?: boolean;
+  primaryBlocker?: AcqSkipReasonPrimary;
+  skipReasonCounts?: Record<string, number>;
+  lastRun?: Record<string, unknown> | null;
+  cohortRunId?: string;
 };
 
