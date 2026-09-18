@@ -41,9 +41,9 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-/** Cohort conversion is unavailable until start and completion share an audit_attempt_id in the same window. */
+/** Cohort conversion for site-wide GA4 (not COOK-001 CRM). COOK-001 uses CRM prospect status. */
 export const COHORT_CONVERSION_UNAVAILABLE =
-  'Unavailable until same-cohort audit tracking exists (do not divide raw audit_completed by audit_started).';
+  'Site-wide GA4: Unavailable (raw audit_completed ÷ audit_started is not same-cohort). COOK-001 uses CRM prospect status via opaque yb_oid.';
 
 export const AUDIT_LANDING_DEFINITION =
   'Audit landing sessions: GA4 sessions on EXP-002 SEO/compare form pages plus EXP-003 /youtube-channel-analyzer (pagePath). Not qualified audits and not unique users.';
@@ -194,8 +194,8 @@ export function emptyDistribution() {
       drafted: 0,
       approved: 0,
       sent: 0,
-      delivered: 'Unknown',
-      clicked: 'Unknown',
+      delivered: 0,
+      clicked: 0,
       converted: 0
     },
     cohort: emptyCohort(),
@@ -219,6 +219,7 @@ export function emptyCohort() {
     checkoutStarts: 0,
     verifiedCustomers: 0,
     verifiedRevenue: 0,
+    sameCohortTracking: null,
     dailyLimit: 10,
     nextRamp: 20,
     rampBlockReason: 'sample_too_small',
@@ -767,9 +768,15 @@ export function composeGrowthReport(opts) {
       `Stripe 30d: attributed_live_payments=${stripe30.attributedLivePayments} | verified_external_customers=${stripe30.verifiedExternalCustomers} | verified_external_revenue=${stripe30.verifiedExternalRevenue} | owner_self_or_smoke=${stripe30.ownerSelfPayments} | unverified_unattributed=${stripe30.unverifiedPayments} | other_app=${a30.otherAppLivePayments ?? '?'} | account_wide_live_paid=${a30.accountWideLivePaidSessions ?? '?'} (diagnostic only)`
     );
   }
-  t.push(`Audit start-to-completion conversion: ${COHORT_CONVERSION_UNAVAILABLE}`);
-  t.push('Do not divide raw audit_completed by audit_started. Other stage rates omitted for the same reason.');
-  t.push('Experiment-attributed paid conversions: Unknown');
+  t.push(`Audit start-to-completion (site-wide GA4): ${COHORT_CONVERSION_UNAVAILABLE}`);
+  const cookRates = cohortConversionLines(dist.cohort || emptyCohort());
+  if ((dist.cohort?.sameCohortTracking || '') === 'crm_prospect_status') {
+    t.push(
+      `COOK-001 same-cohort (CRM): Start→Complete ${cookRates.startToComplete}; Send→Click ${cookRates.sendToClick}; Click→Start ${cookRates.clickToStart}; Complete→Signup ${cookRates.completeToSignup}; Signup→Checkout ${cookRates.signupToCheckout}; Checkout→Paid ${cookRates.checkoutToPaid}; Send→Paid ${cookRates.sendToPaid}.`
+    );
+  }
+  t.push('Do not divide raw site-wide audit_completed by audit_started. COOK-001 rates use CRM status progression only.');
+  t.push('Experiment-attributed paid conversions: Unknown unless CRM outreach status = customer');
   t.push(
     'A $9.99 live charge is not verified external revenue unless product attribution AND external-customer checks pass. Current verified external revenue baseline is $0.00.'
   );
@@ -811,6 +818,18 @@ export function composeGrowthReport(opts) {
   }
   t.push(`  DRAFTED (CRM): ${funnel.drafted}`);
   t.push(`  APPROVED (CRM): ${funnel.approved}`);
+  const pipe = dist.pipeline || {};
+  if (pipe.eligibleNow != null || pipe.approvedEligibleNow != null) {
+    t.push(`  ELIGIBLE NOW (send gates): ${pipe.eligibleNow ?? 'Unknown'}`);
+    t.push(`  APPROVED ELIGIBLE NOW: ${pipe.approvedEligibleNow ?? 'Unknown'}`);
+    t.push(`  BLOCKED BY COOLDOWN (approved): ${pipe.blockedByCooldown ?? 0}`);
+    t.push(`  BLOCKED BY EMAIL VALIDATION (approved): ${pipe.blockedByEmailValidation ?? 0}`);
+    t.push(`  BLOCKED BY QUALIFICATION (approved): ${pipe.blockedByQualification ?? 0}`);
+    t.push(`  BLOCKED BY SUPPRESSION (approved): ${pipe.blockedBySuppression ?? 0}`);
+    t.push(`  BLOCKED BY OTHER (approved): ${pipe.blockedByOther ?? 0}`);
+    t.push(`  DAILY REMAINING: ${pipe.dailyRemaining ?? 'Unknown'} / limit ${pipe.dailyLimit ?? dist.deliverability?.dailyLimit ?? 10}`);
+    t.push(`  EXPECTED TO ATTEMPT: ${pipe.expectedToAttempt ?? 'Unknown'}`);
+  }
   t.push(`  SENT LIFETIME (CRM): ${dist.lifetimeCrmSent ?? funnel.sent}`);
   t.push(`  DELIVERED: ${funnel.delivered}`);
   t.push(`  CLICKED: ${funnel.clicked}`);
@@ -935,6 +954,13 @@ export function composeGrowthReport(opts) {
     ['COOK-001 SES ATTEMPTS', String(dist.sesAttemptedThisRun ?? dist.sendAttempts ?? 0)],
     ['COOK-001 DRAFTED (CRM)', String(dist.outreachFunnel?.drafted ?? 0)],
     ['COOK-001 APPROVED (CRM)', String(dist.outreachFunnel?.approved ?? 0)],
+    ['COOK-001 ELIGIBLE NOW', String(dist.pipeline?.eligibleNow ?? 'Unknown')],
+    ['COOK-001 APPROVED ELIGIBLE NOW', String(dist.pipeline?.approvedEligibleNow ?? 'Unknown')],
+    ['COOK-001 BLOCKED BY COOLDOWN', String(dist.pipeline?.blockedByCooldown ?? 0)],
+    ['COOK-001 BLOCKED BY EMAIL VALIDATION', String(dist.pipeline?.blockedByEmailValidation ?? 0)],
+    ['COOK-001 BLOCKED BY QUALIFICATION', String(dist.pipeline?.blockedByQualification ?? 0)],
+    ['COOK-001 BLOCKED BY SUPPRESSION', String(dist.pipeline?.blockedBySuppression ?? 0)],
+    ['COOK-001 BLOCKED BY OTHER', String(dist.pipeline?.blockedByOther ?? 0)],
     ['COOK-001 SES ACCEPTED TODAY', String(dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0)],
     ['COOK-001 SENT LIFETIME (CRM)', String(dist.lifetimeCrmSent ?? dist.outreachFunnel?.sent ?? 0)],
     ['COOK-001 DELIVERED', String(dist.outreachFunnel?.delivered ?? 'Unknown')],
@@ -1070,8 +1096,10 @@ export function composeGrowthReport(opts) {
           </table>
           </div>
           <p style="margin:12px 0 0;font-size:14px;color:#334155;">
-            Audit start-to-completion conversion: <b>Unavailable</b> until same-cohort audit tracking exists.
-            Experiment-attributed paid: <b>Unknown</b>.
+            Audit start-to-completion (site-wide GA4): <b>Unavailable</b> (raw events are not same-cohort).
+            COOK-001 Start→Complete: <b>${escapeHtml(cohortConversionLines(cohort).startToComplete)}</b>
+            ${(cohort.sameCohortTracking || '') === 'crm_prospect_status' ? ' (CRM prospect status / yb_oid)' : ''}.
+            Experiment-attributed paid: <b>${escapeHtml(String(dist.experimentAttributedCustomers ?? 'Unknown'))}</b>.
             Paid to entitled within 24h: <b>${
               opts.snapshot?.sources?.crm === 'ok'
                 ? escapeHtml(

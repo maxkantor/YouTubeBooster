@@ -194,14 +194,12 @@ public static class OutreachPolicy
         string segment = "cooking")
     {
         var root = (site ?? "https://youtubeboosterai.com").TrimEnd('/');
-        var safeProspect = (prospectId ?? "").Replace("@", "");
-        if (safeProspect.Length > 40) safeProspect = safeProspect[..40];
         var token = string.IsNullOrWhiteSpace(opaqueToken) ? "x" : opaqueToken;
         return $"{root}/api/public/acq/go/{Uri.EscapeDataString(token)}"
-            + $"?utm_source=founder_outreach&utm_medium=email&utm_campaign=cook_001"
+            + $"?utm_source=outreach&utm_medium=email&utm_campaign=COOK-001"
             + $"&utm_content={Uri.EscapeDataString(variant)}"
-            + $"&utm_term={Uri.EscapeDataString(safeProspect)}"
             + $"&utm_id={Uri.EscapeDataString(runYmd)}"
+            + $"&yb_oid={Uri.EscapeDataString(token)}"
             + $"&exp=004&seg={Uri.EscapeDataString(segment)}";
     }
 

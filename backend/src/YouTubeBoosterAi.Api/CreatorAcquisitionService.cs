@@ -273,6 +273,19 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 return (null, $"{id} has no draft.");
             if (!CreatorAcquisitionScoring.IsVerifiedPublicEmail(p))
                 return (null, $"{id} has no verified public business email.");
+            // Align approval with send gates (except cooldown / already contacted — those are temporal).
+            if (p.PriorityScore < 70)
+                return (null, $"{id} score is below 70 and cannot be approved for sending.");
+            if (!string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
+                return (null, $"{id} inspection is incomplete.");
+            if (p.SubscriberCount < 1000 || p.SubscriberCount > 100000)
+                return (null, $"{id} subscriber count is outside the 1k–100k COOK-001 band.");
+            if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
+                return (null, $"{id} is suppressed.");
+            if (OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
+                return (null, $"{id} email looks invalid or spamtrap.");
+            if (p.RecentUploadAt is null || (DateTimeOffset.UtcNow - p.RecentUploadAt.Value).TotalDays > 60)
+                return (null, $"{id} recent upload is stale (>60 days).");
             var hash = CreatorAcquisitionScoring.ContentHash(p);
             included.Add(p.ProspectId);
             hashes[p.ProspectId] = hash;
@@ -461,7 +474,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 {
                     Source = mime.FromHeader,
                     Destinations = [p.PublicBusinessEmail!],
-                    RawMessage = new RawMessage { Data = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(mime.RawRfc822)) }
+                    RawMessage = new RawMessage { Data = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(mime.RawRfc822)) },
+                    Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList()
                 };
                 if (!string.IsNullOrWhiteSpace(state.ConfigSet))
                     sendReq.ConfigurationSetName = state.ConfigSet;
@@ -489,6 +503,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     TicketId = ticketId,
                     EmailVariant = variant,
                     CohortRunId = cohortRunId,
+                    LastSesMessageId = sesRes.MessageId,
                     UpdatedAt = DateTimeOffset.UtcNow
                 }, cancellationToken);
                 await _appDataStore.TrackEventAsync("acq_email_sent", p.ProspectId, new Dictionary<string, string?>
@@ -577,13 +592,13 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     {
         var p = await _store.GetProspectAsync(prospectId, cancellationToken);
         if (p is null) return;
-        var status = eventType.ToLowerInvariant() switch
+        var nextStatus = eventType.ToLowerInvariant() switch
         {
-            "delivery" => "delivered",
+            "delivery" => AdvanceOutreachStatus(p.OutreachStatus, "delivered"),
             "bounce" => "bounced",
             "complaint" => "complained",
             "reject" => "rejected",
-            "click" => p.OutreachStatus,
+            "click" => p.OutreachStatus, // open/click from SES is not our attributable CTA
             _ => p.OutreachStatus
         };
         var suppression = eventType.ToLowerInvariant() switch
@@ -596,7 +611,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             await _store.SaveCampaignFlagsAsync(p.Campaign, false, true, cancellationToken);
         await _store.UpsertProspectAsync(p with
         {
-            OutreachStatus = status,
+            OutreachStatus = nextStatus,
             SuppressionStatus = suppression,
             UpdatedAt = DateTimeOffset.UtcNow
         }, cancellationToken);
@@ -606,22 +621,47 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     {
         var p = await _store.GetByTokenAsync(token, cancellationToken);
         if (p is null) return;
-        var status = eventName switch
+        var mapped = eventName.ToLowerInvariant() switch
         {
-            "acq_click" when p.OutreachStatus is "sent" or "delivered" => "delivered",
-            "audit_started" => "audit_started",
-            "audit_completed" => "audit_completed",
-            "pricing_viewed" => "pricing_viewed",
+            "acq_click" => "clicked",
+            "audit_started" or "demo_started" => "audit_started",
+            "audit_completed" or "demo_completed" => "audit_completed",
+            "pricing_viewed" or "signup_completed" => "pricing_viewed",
             "checkout_started" => "checkout_started",
-            "checkout_paid" => "customer",
-            _ => p.OutreachStatus
+            "checkout_paid" or "checkout_return_success" or "purchase_completed" => "customer",
+            _ => null
         };
+        if (mapped is null) return;
+        var status = AdvanceOutreachStatus(p.OutreachStatus, mapped);
         await _store.UpsertProspectAsync(p with { OutreachStatus = status, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken);
         await _appDataStore.TrackEventAsync(eventName, p.ProspectId, new Dictionary<string, string?>
         {
             ["campaign"] = p.Campaign,
-            ["token"] = token
+            ["token"] = token,
+            ["yb_oid"] = token
         }, cancellationToken);
+    }
+
+    private static int StatusRank(string? status) => status?.ToLowerInvariant() switch
+    {
+        "sent" => 1,
+        "delivered" => 2,
+        "clicked" => 3,
+        "audit_started" => 4,
+        "audit_completed" => 5,
+        "pricing_viewed" => 6,
+        "checkout_started" => 7,
+        "customer" => 8,
+        "approved" => 0,
+        "bounced" or "complained" or "rejected" => -1,
+        _ => 0
+    };
+
+    /// <summary>Never downgrade funnel status (e.g. delivered must not overwrite clicked).</summary>
+    private static string AdvanceOutreachStatus(string? current, string candidate)
+    {
+        if (StatusRank(current) < 0) return current ?? candidate;
+        return StatusRank(candidate) >= StatusRank(current) ? candidate : (current ?? candidate);
     }
 
     public string Site() =>

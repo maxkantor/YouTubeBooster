@@ -12,7 +12,7 @@ import { usePricing } from '../../PricingContext';
 function buildTrackedDemoUrl(channel: string, params: URLSearchParams): string {
   const q = new URLSearchParams();
   q.set('channel', channel);
-  for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'ref']) {
+  for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id', 'ref', 'yb_oid', 'exp']) {
     const v = params.get(key);
     if (v) q.set(key, v);
   }

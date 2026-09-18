@@ -272,11 +272,14 @@ console.log(
         drafted: s.drafts ?? 0,
         approved: s.approved ?? 0,
         sent: s.sent ?? 0,
-        delivered: s.delivered ?? 'Unknown',
-        clicked: 'Unknown',
+        delivered: s.delivered ?? 0,
+        clicked: s.clicked ?? 0,
         converted: s.converted ?? 0,
         marketingSendingEnabled: s.marketingSendingEnabled === true
       },
+      cohortFunnel: s.cohortFunnel || null,
+      pipeline: s.pipeline || null,
+      sendEligible: s.sendEligible ?? 0,
       summaryBefore: summaryBefore.json
         ? {
             marketingSendingEnabled: summaryBefore.json.marketingSendingEnabled,

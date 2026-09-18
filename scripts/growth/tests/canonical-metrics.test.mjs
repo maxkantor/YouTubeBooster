@@ -234,7 +234,8 @@ test('awaiting owner approval experiments appear; conversion is unavailable; UTF
   assert.equal(parseActiveExperiments(md)[0].status, 'awaiting owner approval');
   assert.match(report.text, /EXP-004/);
   assert.match(report.text, /awaiting owner approval/i);
-  assert.match(report.text, /Unavailable until same-cohort/);
+  assert.match(report.text, /Unavailable \(raw audit_completed/);
+  assert.match(report.text, /COOK-001 uses CRM|same-cohort/i);
   assert.doesNotMatch(report.text, /275%/);
   assert.doesNotMatch(report.html, /275%/);
   assert.doesNotMatch(report.text, /complete\/start=/);

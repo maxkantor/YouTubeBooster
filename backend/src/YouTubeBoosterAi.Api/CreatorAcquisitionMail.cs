@@ -60,7 +60,9 @@ public static class CreatorAcquisitionMail
         {
             ["campaign"] = SanitizeTag(prospect.Campaign),
             ["purpose"] = "creator_acquisition",
-            ["variant"] = SanitizeTag(variant)
+            ["variant"] = SanitizeTag(variant),
+            ["prospect_id"] = SanitizeTag(prospect.ProspectId),
+            ["oid"] = SanitizeTag(prospect.OpaqueToken)
         };
         return new AcqMimeMessage(fromHeader, replyTo, to, subject, text, html, listUnsub, raw, tags);
     }

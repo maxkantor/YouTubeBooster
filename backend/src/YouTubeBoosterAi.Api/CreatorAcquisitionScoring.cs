@@ -197,7 +197,7 @@ public static class CreatorAcquisitionScoring
     {
         var s = (p.OutreachStatus ?? "").ToLowerInvariant();
         if (s is "unsubscribed" or "bounced" or "complained" or "suppressed" or "rejected"
-            or "sent" or "delivered" or "replied" or "interested" or "scheduled" or "approved"
+            or "sent" or "delivered" or "clicked" or "replied" or "interested" or "scheduled" or "approved"
             or "customer" or "audit_started" or "audit_completed" or "pricing_viewed" or "checkout_started")
             return s;
         if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))

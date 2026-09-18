@@ -44,10 +44,10 @@ public static class CreatorAcquisitionEndpoints
             var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
             var runYmd = p.CohortRunId is { Length: >= 10 } ? p.CohortRunId[^10..] : CreatorAcquisitionScoring.EasternDate(DateTimeOffset.UtcNow).ToString("yyyy-MM-dd");
             var dest = $"https://youtubeboosterai.com/share?channel={Uri.EscapeDataString(handle)}"
-                + "&utm_source=founder_outreach&utm_medium=email&utm_campaign=cook_001"
+                + "&utm_source=outreach&utm_medium=email&utm_campaign=COOK-001"
                 + $"&utm_content={Uri.EscapeDataString(variant)}"
-                + $"&utm_term={Uri.EscapeDataString(p.ProspectId)}"
                 + $"&utm_id={Uri.EscapeDataString(runYmd)}"
+                + $"&yb_oid={Uri.EscapeDataString(token)}"
                 + "&exp=004&seg=cooking";
             return Results.Redirect(dest);
         });
@@ -66,20 +66,101 @@ public static class CreatorAcquisitionEndpoints
         });
         publicApi.MapPost("/ses-events", async (
             HttpContext http,
-            [FromBody] AcqSesEventRequest? request,
             ICreatorAcquisitionService acq,
             ISecretValueProvider secrets,
             CancellationToken cancellationToken) =>
         {
             var expected = (await secrets.GetValueAsync("outreach/ses-events-key", secure: true, cancellationToken))?.Trim();
-            var provided = http.Request.Headers["X-Outreach-Ses-Key"].ToString();
-            if (string.IsNullOrWhiteSpace(expected) || !string.Equals(expected, provided, StringComparison.Ordinal))
+            var providedHeader = http.Request.Headers["X-Outreach-Ses-Key"].ToString();
+            var providedQuery = http.Request.Query["key"].ToString();
+            var provided = !string.IsNullOrWhiteSpace(providedHeader) ? providedHeader : providedQuery;
+            if (string.IsNullOrWhiteSpace(expected) || expected.Length < 8
+                || !string.Equals(expected, provided, StringComparison.Ordinal))
                 return Results.Unauthorized();
-            if (request is null || string.IsNullOrWhiteSpace(request.ProspectId) || string.IsNullOrWhiteSpace(request.EventType))
-                return Results.BadRequest(new { error = "prospectId and eventType required. Do not send email addresses in tags." });
-            await acq.ApplySesEventAsync(request.ProspectId, request.EventType, cancellationToken);
-            return Results.Ok(new { ok = true });
+
+            using var reader = new StreamReader(http.Request.Body);
+            var raw = await reader.ReadToEndAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(raw))
+                return Results.BadRequest(new { error = "empty body" });
+
+            // SNS subscription / notification envelope
+            if ((raw.Contains("\"Type\"", StringComparison.Ordinal) && raw.Contains("SubscriptionConfirmation", StringComparison.Ordinal))
+                || raw.Contains("\"Type\":\"Notification\"", StringComparison.Ordinal)
+                || raw.Contains("\"Type\": \"Notification\"", StringComparison.Ordinal))
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(raw);
+                var root = doc.RootElement;
+                var type = root.TryGetProperty("Type", out var t) ? t.GetString() : null;
+                if (string.Equals(type, "SubscriptionConfirmation", StringComparison.OrdinalIgnoreCase))
+                {
+                    var subscribeUrl = root.TryGetProperty("SubscribeURL", out var u) ? u.GetString() : null;
+                    if (!string.IsNullOrWhiteSpace(subscribeUrl))
+                    {
+                        using var httpClient = new HttpClient();
+                        await httpClient.GetAsync(subscribeUrl, cancellationToken);
+                    }
+                    return Results.Ok(new { ok = true, subscribed = true });
+                }
+                if (string.Equals(type, "Notification", StringComparison.OrdinalIgnoreCase))
+                {
+                    var message = root.TryGetProperty("Message", out var m) ? m.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(message))
+                        return Results.BadRequest(new { error = "sns message missing" });
+                    var applied = await ApplySesNotificationAsync(acq, message, cancellationToken);
+                    return Results.Ok(new { ok = true, applied });
+                }
+            }
+
+            // Direct JSON: { prospectId, eventType }
+            try
+            {
+                var direct = System.Text.Json.JsonSerializer.Deserialize<AcqSesEventRequest>(raw, AcqJson.Options);
+                if (direct is null || string.IsNullOrWhiteSpace(direct.ProspectId) || string.IsNullOrWhiteSpace(direct.EventType))
+                    return Results.BadRequest(new { error = "prospectId and eventType required. Do not send email addresses in tags." });
+                await acq.ApplySesEventAsync(direct.ProspectId, direct.EventType, cancellationToken);
+                return Results.Ok(new { ok = true });
+            }
+            catch
+            {
+                return Results.BadRequest(new { error = "unrecognized ses event payload" });
+            }
         });
+
+        static async Task<int> ApplySesNotificationAsync(
+            ICreatorAcquisitionService acq,
+            string messageJson,
+            CancellationToken cancellationToken)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(messageJson);
+            var root = doc.RootElement;
+            var eventType = root.TryGetProperty("eventType", out var et) ? et.GetString()
+                : root.TryGetProperty("notificationType", out var nt) ? nt.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(eventType)) return 0;
+
+            string? prospectId = null;
+            if (root.TryGetProperty("mail", out var mail) && mail.TryGetProperty("tags", out var tags))
+            {
+                if (tags.TryGetProperty("prospect_id", out var pidArr) && pidArr.ValueKind == System.Text.Json.JsonValueKind.Array
+                    && pidArr.GetArrayLength() > 0)
+                    prospectId = pidArr[0].GetString();
+                else if (tags.TryGetProperty("prospect_id", out var pidStr) && pidStr.ValueKind == System.Text.Json.JsonValueKind.String)
+                    prospectId = pidStr.GetString();
+            }
+            if (string.IsNullOrWhiteSpace(prospectId)) return 0;
+
+            var normalized = eventType.ToLowerInvariant() switch
+            {
+                "delivery" => "delivery",
+                "bounce" => "bounce",
+                "complaint" => "complaint",
+                "reject" => "reject",
+                "click" => "click",
+                _ => eventType.ToLowerInvariant()
+            };
+            await acq.ApplySesEventAsync(prospectId, normalized, cancellationToken);
+            return 1;
+        }
         publicApi.MapPost("/inbound", async (
             HttpContext http,
             [FromBody] AcqInboundRequest? request,
@@ -131,14 +212,28 @@ public static class CreatorAcquisitionEndpoints
             var inspected = rows.Count(r => r.InspectionStatus == "completed");
             var contactVerified = rows.Count(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
             var drafts = rows.Count(r => !string.IsNullOrWhiteSpace(r.Observation) && !string.IsNullOrWhiteSpace(r.Subject));
-            var approved = rows.Count(r =>
-                string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
-                || !string.IsNullOrWhiteSpace(r.ApprovalId));
+            // APPROVED = currently awaiting send (do not count sent/delivered that still retain ApprovalId).
+            var approved = rows.Count(r => string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase));
             var sent = rows.Count(r => r.LastContactedAt is not null);
             var sentToday = rows.Count(r =>
                 r.LastContactedAt is not null
                 && CreatorAcquisitionScoring.EasternDate(r.LastContactedAt.Value).Date == todayEt);
-            var delivered = rows.Count(r => string.Equals(r.OutreachStatus, "delivered", StringComparison.OrdinalIgnoreCase));
+            static bool StatusAtLeast(string? status, params string[] stages) =>
+                stages.Any(s => string.Equals(status, s, StringComparison.OrdinalIgnoreCase));
+
+            var delivered = rows.Count(r => StatusAtLeast(r.OutreachStatus,
+                "delivered", "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
+            // Clicked = CTA tracked; do not count SES delivery alone as a click.
+            var clicked = rows.Count(r => StatusAtLeast(r.OutreachStatus,
+                "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
+            var auditStarted = rows.Count(r => StatusAtLeast(r.OutreachStatus,
+                "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
+            var auditCompleted = rows.Count(r => StatusAtLeast(r.OutreachStatus,
+                "audit_completed", "pricing_viewed", "checkout_started", "customer"));
+            var pricingViewed = rows.Count(r => StatusAtLeast(r.OutreachStatus,
+                "pricing_viewed", "checkout_started", "customer"));
+            var checkoutStartedCrm = rows.Count(r => StatusAtLeast(r.OutreachStatus,
+                "checkout_started", "customer"));
             var converted = rows.Count(r => string.Equals(r.OutreachStatus, "customer", StringComparison.OrdinalIgnoreCase));
             var bounced = rows.Count(r => string.Equals(r.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase));
             var complained = rows.Count(r => string.Equals(r.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase));
@@ -154,6 +249,12 @@ public static class CreatorAcquisitionEndpoints
                 .ToList();
             var skipReasons = new Dictionary<string, int>(StringComparer.Ordinal);
             var sendEligible = 0;
+            var approvedEligible = 0;
+            var approvedBlockedCooldown = 0;
+            var approvedBlockedEmail = 0;
+            var approvedBlockedQualification = 0;
+            var approvedBlockedSuppression = 0;
+            var approvedBlockedOther = 0;
             foreach (var p in cookRows)
             {
                 var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
@@ -161,10 +262,33 @@ public static class CreatorAcquisitionEndpoints
                 if (gate.Ok)
                 {
                     sendEligible++;
+                    if (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+                        approvedEligible++;
                     continue;
                 }
                 var code = OutreachPolicy.NormalizeSkipReason(gate.Reason);
                 skipReasons[code] = skipReasons.GetValueOrDefault(code) + 1;
+                if (!string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                switch (code)
+                {
+                    case "COOLDOWN":
+                    case "ALREADY_CONTACTED":
+                        approvedBlockedCooldown++;
+                        break;
+                    case "INVALID_EMAIL":
+                        approvedBlockedEmail++;
+                        break;
+                    case "NOT_QUALIFIED":
+                        approvedBlockedQualification++;
+                        break;
+                    case "SUPPRESSED":
+                        approvedBlockedSuppression++;
+                        break;
+                    default:
+                        approvedBlockedOther++;
+                        break;
+                }
             }
 
             object? lastRun = null;
@@ -196,6 +320,12 @@ public static class CreatorAcquisitionEndpoints
                 && sendEligible == 0
                 && sentToday == 0;
 
+            var draftedNotApproved = cookRows.Count(r =>
+                !string.IsNullOrWhiteSpace(r.Observation)
+                && !string.IsNullOrWhiteSpace(r.Subject)
+                && !string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                && r.LastContactedAt is null);
+
             return Results.Ok(new
             {
                 verifiedCustomers = converted,
@@ -218,10 +348,27 @@ public static class CreatorAcquisitionEndpoints
                 sentToday,
                 sentLifetime = sent,
                 delivered,
+                clicked,
+                auditStarted,
+                auditCompleted,
+                pricingViewed,
+                checkoutStarted = checkoutStartedCrm,
                 converted,
                 bounced,
                 complained,
                 unsubscribed,
+                cohortFunnel = new
+                {
+                    emailsSent = sent,
+                    delivered,
+                    clicked,
+                    auditStarts = auditStarted,
+                    auditCompletions = auditCompleted,
+                    pricingViewed,
+                    checkoutStarts = checkoutStartedCrm,
+                    verifiedCustomers = converted,
+                    tracking = "crm_prospect_status"
+                },
                 views,
                 prospectsEvaluated = cookRows.Count,
                 sendEligible,
@@ -233,6 +380,22 @@ public static class CreatorAcquisitionEndpoints
                 skipReasonCounts = skipReasons
                     .OrderByDescending(kv => kv.Value)
                     .ToDictionary(kv => kv.Key, kv => kv.Value),
+                pipeline = new
+                {
+                    drafted = drafts,
+                    draftedNotApproved,
+                    approved,
+                    eligibleNow = sendEligible,
+                    approvedEligibleNow = approvedEligible,
+                    blockedByCooldown = approvedBlockedCooldown,
+                    blockedByEmailValidation = approvedBlockedEmail,
+                    blockedByQualification = approvedBlockedQualification,
+                    blockedBySuppression = approvedBlockedSuppression,
+                    blockedByOther = approvedBlockedOther,
+                    dailyLimit = state.DailyLimit,
+                    dailyRemaining = Math.Max(0, state.DailyLimit - sentToday),
+                    expectedToAttempt = Math.Min(sendEligible, Math.Max(0, state.DailyLimit - sentToday))
+                },
                 lastRun,
                 cohortRunId
             });

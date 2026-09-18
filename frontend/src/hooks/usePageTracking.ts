@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { captureOutreachAttributionFromUrl } from '../lib/analytics';
 
 /** Matches index.html gtag config; override with VITE_GA4_MEASUREMENT_ID in .env if needed. */
 const GA4_MEASUREMENT_ID =
@@ -8,11 +9,14 @@ const GA4_MEASUREMENT_ID =
 /**
  * GA4 virtual page views on every React Router navigation (SPA).
  * Relies on gtag.js + dataLayer from index.html (or analytics.ts bootstrap).
+ * Also captures COOK-001 / outreach attribution (opaque yb_oid) into sessionStorage.
  */
 export function usePageTracking() {
   const location = useLocation();
 
   useEffect(() => {
+    captureOutreachAttributionFromUrl(location.search);
+
     if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
 
     const pagePath = `${location.pathname}${location.search}`;

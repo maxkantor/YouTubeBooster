@@ -159,6 +159,7 @@ function runCook001Send(opts) {
 function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const send = sendData.send || {};
   const funnel = sendData.funnel || {};
+  const cf = sendData.cohortFunnel || {};
   const m7 = snapshot?.explicit7d || snapshot?.windows?.['7d']?.metrics || {};
   const checkoutStarts = m7.checkout_started?.value ?? m7.checkout_started ?? 0;
   const auditStarts = m7.audit_started?.value ?? m7.audit_started ?? 0;
@@ -166,6 +167,12 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const sesAttempted = Number(send.sesAttempted ?? send.attempted ?? 0) || 0;
   const evaluated = Number(send.evaluated ?? 0) || 0;
   const reasonCounts = send.reasonCounts || aggregateSkipReasons(send.reasons || []);
+  const crmClicks = Number(cf.clicked ?? funnel.clicked ?? 0) || 0;
+  const crmAuditStarts = Number(cf.auditStarts ?? 0) || 0;
+  const crmAuditCompletions = Number(cf.auditCompletions ?? 0) || 0;
+  const crmSignups = Number(cf.pricingViewed ?? 0) || 0;
+  const crmCheckout = Number(cf.checkoutStarts ?? 0) || 0;
+  const crmCustomers = Number(cf.verifiedCustomers ?? funnel.converted ?? 0) || 0;
 
   let exactAction = `COOK-001 daily SES outreach (${sesAccepted} accepted / ${sesAttempted} SES attempts; ${evaluated} prospects evaluated)`;
   if (opts.dryRun) {
@@ -181,13 +188,16 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     distributionAttempted: evaluated > 0 || sesAttempted > 0 || (sendData.verifiedProspectIds || []).length > 0,
     channel: 'approved SES outreach',
     audience: 'cooking creators (COOK-001 verified mailto)',
-    attributedVisits: '0 (no outreach clicks this run)',
-    activations: `${auditStarts} audit_started events (7d window; not this-run attribution)`,
-    checkoutStarts: `${checkoutStarts} checkout_started events (7d window; not this-run attribution)`,
+    attributedVisits:
+      crmClicks > 0
+        ? `${crmClicks} COOK-001 attributed clicks (CRM / opaque yb_oid)`
+        : '0 (no outreach clicks attributed in CRM)',
+    activations: `${crmAuditStarts} COOK-001 CRM audit_started (site-wide 7d GA4: ${auditStarts})`,
+    checkoutStarts: `${crmCheckout} COOK-001 CRM checkout_started (site-wide 7d GA4: ${checkoutStarts})`,
     newCustomersThisRun: 0,
     existingCustomers: 0,
     customersObservedInWindow: 0,
-    experimentAttributedCustomers: 'Unknown',
+    experimentAttributedCustomers: crmCustomers > 0 ? String(crmCustomers) : '0',
     verifiedRevenue: '$0.00',
     requiredOwnerApproval: 'none',
     blockingApproval: false,
@@ -196,29 +206,31 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     sesAttemptedThisRun: sesAttempted,
     prospectsEvaluated: evaluated,
     sendAttempts: sesAttempted,
-    eligibleProspects: (sendData.verifiedProspectIds || []).length,
+    eligibleProspects: Number(sendData.sendEligible ?? send.evaluated ?? 0) || 0,
     skippedByReason: (send.reasons || []).slice(0, 40),
     skipReasonCounts: reasonCounts,
+    pipeline: sendData.pipeline || null,
     outreachFunnel: {
       drafted: funnel.drafted ?? 0,
       approved: funnel.approved ?? 0,
       sent: funnel.sent ?? 0,
-      delivered: funnel.delivered ?? 'Unknown',
-      clicked: funnel.clicked ?? 'Unknown',
+      delivered: funnel.delivered ?? 0,
+      clicked: funnel.clicked ?? 0,
       converted: funnel.converted ?? 0
     },
     cohort: {
       runId: `COOK-001-${todayYmd}`,
-      qualifiedProspects: (sendData.verifiedProspectIds || []).length,
+      qualifiedProspects: Number(sendData.sendEligible ?? 0) || 0,
       emailsAttempted: sesAttempted,
       emailsSent: sesAccepted,
-      auditClicks: 0,
-      auditStarts: 0,
-      auditCompletions: 0,
-      signups: 0,
-      checkoutStarts: 0,
-      verifiedCustomers: 0,
+      auditClicks: crmClicks,
+      auditStarts: crmAuditStarts,
+      auditCompletions: crmAuditCompletions,
+      signups: crmSignups,
+      checkoutStarts: crmCheckout,
+      verifiedCustomers: crmCustomers,
       verifiedRevenue: 0,
+      sameCohortTracking: 'crm_prospect_status',
       dailyLimit: send.dailyLimit ?? 10,
       nextRamp: 20,
       rampBlockReason: send.rampBlockReason || 'sample_too_small'

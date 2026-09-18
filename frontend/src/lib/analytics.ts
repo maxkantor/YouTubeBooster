@@ -20,6 +20,50 @@ const GA4_PRODUCT = 'full_growth_audit';
 const GA4_PRICE = 9.99;
 const GA4_CURRENCY = 'USD';
 const DEMO_OPENED_SESSION_KEY = 'yb_ga4_demo_opened';
+const OUTREACH_ATTR_KEY = 'yb_outreach_attribution';
+
+/** Capture COOK-001 / outreach UTMs + opaque id into session (never stores email). */
+export function captureOutreachAttributionFromUrl(search = typeof window !== 'undefined' ? window.location.search : '') {
+  if (typeof window === 'undefined') return null;
+  try {
+    const q = new URLSearchParams(search);
+    const source = (q.get('utm_source') || '').toLowerCase();
+    const campaign = (q.get('utm_campaign') || '').toLowerCase();
+    const oid = q.get('yb_oid') || '';
+    const isOutreach =
+      source === 'outreach' ||
+      source === 'founder_outreach' ||
+      campaign === 'cook-001' ||
+      campaign === 'cook_001' ||
+      Boolean(oid);
+    if (!isOutreach) return getOutreachAttribution();
+    const attr = {
+      utm_source: q.get('utm_source') || 'outreach',
+      utm_medium: q.get('utm_medium') || 'email',
+      utm_campaign: q.get('utm_campaign') || 'COOK-001',
+      utm_content: q.get('utm_content') || '',
+      utm_id: q.get('utm_id') || '',
+      yb_oid: oid,
+      exp: q.get('exp') || '004',
+      capturedAt: new Date().toISOString()
+    };
+    sessionStorage.setItem(OUTREACH_ATTR_KEY, JSON.stringify(attr));
+    return attr;
+  } catch {
+    return null;
+  }
+}
+
+export function getOutreachAttribution(): Record<string, string> | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(OUTREACH_ATTR_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
 
 export type Ga4AiTool =
   | 'rewrite_titles'
@@ -106,6 +150,12 @@ async function trackFunnel(eventName: string, scope?: string, params?: FunnelPar
   }
   if (params?.livemode != null) meta.livemode = params.livemode ? 'true' : 'false';
 
+  const outreach = getOutreachAttribution();
+  if (outreach?.yb_oid) meta.yb_oid = outreach.yb_oid;
+  if (outreach?.utm_campaign) meta.utm_campaign = outreach.utm_campaign;
+  if (outreach?.utm_id) meta.utm_id = outreach.utm_id;
+  if (outreach?.utm_source) meta.utm_source = outreach.utm_source;
+
   void publicApi.trackFunnelEvent(eventName, scope ?? route, meta);
 }
 
@@ -156,6 +206,7 @@ export const analytics = {
       input_type: 'url_or_handle',
       ...(opts?.auditAttemptId ? { audit_attempt_id: opts.auditAttemptId } : {})
     });
+    void trackFunnel('audit_started', source);
   },
 
   /**
@@ -167,6 +218,7 @@ export const analytics = {
       source: opts?.source ?? 'audit_flow',
       ...(opts?.auditAttemptId ? { audit_attempt_id: opts.auditAttemptId } : {})
     });
+    void trackFunnel('audit_completed', opts?.source ?? 'audit_flow');
   },
 
   channelAuditStarted: (channel?: string) => {
@@ -220,6 +272,7 @@ export const analytics = {
       currency: GA4_CURRENCY,
       product: GA4_PRODUCT
     });
+    void trackFunnel('purchase_completed', '/checkout/success');
   },
 
   /** GA4: report_unlocked */

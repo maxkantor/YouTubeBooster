@@ -218,13 +218,19 @@ publicApi.MapGet("/pricing", async (IAppSettingsProvider appSettingsProvider, Ca
     var amount = s.OneTimePrice.ToString("F2", CultureInfo.InvariantCulture);
     return Results.Ok(new { oneTimePrice = amount, currency = s.Currency });
 });
-publicApi.MapPost("/analytics/event", async (PublicAnalyticsEventRequest request, IAppDataStore appDataStore, CancellationToken cancellationToken) =>
+publicApi.MapPost("/analytics/event", async (
+  PublicAnalyticsEventRequest request,
+  IAppDataStore appDataStore,
+  ICreatorAcquisitionService acq,
+  CancellationToken cancellationToken) =>
 {
   var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
   {
     "landing_page_view",
     "audit_url_entered",
     "demo_started",
+    "audit_started",
+    "audit_completed",
     "signup_started",
     "signup_completed",
     "login_completed",
@@ -236,6 +242,7 @@ publicApi.MapPost("/analytics/event", async (PublicAnalyticsEventRequest request
     "hero_audit_cta_clicked",
     "hero_instant_demo_clicked",
     "payment_failed",
+    "purchase_completed",
     "contact_submitted"
   };
   if (string.IsNullOrWhiteSpace(request.EventName) || !allowed.Contains(request.EventName))
@@ -249,6 +256,13 @@ publicApi.MapPost("/analytics/event", async (PublicAnalyticsEventRequest request
     ["eventSource"] = "frontend"
   };
   await appDataStore.TrackEventAsync(request.EventName, scope, metadata, cancellationToken);
+
+  // Same-cohort COOK-001: opaque outreach id only (never email).
+  if (metadata.TryGetValue("yb_oid", out var oid) && !string.IsNullOrWhiteSpace(oid))
+  {
+    await acq.RecordFunnelAsync(oid.Trim(), request.EventName, cancellationToken);
+  }
+
   return Results.Ok(new { ok = true });
 });
 

@@ -17,7 +17,7 @@ public static class CreatorAcquisitionViews
     public static readonly string[] All =
     [
         "discovered", "needs_inspection", "qualified", "contact_verified", "draft_ready",
-        "approval_queue", "approved", "scheduled", "sent", "delivered", "replied", "interested",
+        "approval_queue", "approved", "scheduled", "sent", "delivered", "clicked", "replied", "interested",
         "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer",
         "unsubscribed", "bounced", "complained", "suppressed", "rejected"
     ];
@@ -68,7 +68,8 @@ public sealed record AcqProspectRecord(
     DateTimeOffset UpdatedAt,
     bool PreviewPlaceholder,
     string? EmailVariant = null,
-    string? CohortRunId = null
+    string? CohortRunId = null,
+    string? LastSesMessageId = null
 );
 
 public sealed record AcqApprovalRecord(
