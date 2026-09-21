@@ -5,7 +5,8 @@ import { Badge } from './AdminCrmComponents';
 import { AcqActionPanel } from './AcqActionPanel';
 import { resolveAcqWorkflow } from './acqApprovalWorkflow';
 import { formatDt, whySelected, workflowBadgeKind } from './acqUiShared';
-import { draftPrepareErrorMessage } from './acqVisibleActions';
+import { draftPrepareErrorMessage, supportThreadPath } from './acqVisibleActions';
+import { useNavigate } from 'react-router-dom';
 
 export function AcqProspectDrawer({
   row,
@@ -30,6 +31,7 @@ export function AcqProspectDrawer({
   setNote: (v: string) => void;
   showEmailPreview?: boolean;
 }) {
+  const navigate = useNavigate();
   const wf = resolveAcqWorkflow(row, cooldownDays, Date.now(), sendingEnabled);
   const [editSubject, setEditSubject] = useState(row.public.subject || '');
   const [editBody, setEditBody] = useState(row.body || '');
@@ -329,6 +331,16 @@ export function AcqProspectDrawer({
                     setBusy(false);
                   }
                 })();
+              }}
+              onViewThread={() => {
+                const path = supportThreadPath(row);
+                if (!path) {
+                  showError(
+                    'Could not open thread. Reason: No support ticket is linked to this outreach yet.'
+                  );
+                  return;
+                }
+                navigate(path);
               }}
             />
           </div>

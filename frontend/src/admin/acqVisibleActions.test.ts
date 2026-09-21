@@ -6,7 +6,7 @@ import {
   isReadyForApproval,
   resolveAcqWorkflow
 } from './acqApprovalWorkflow';
-import { actionsAbovePreview, rowPrimaryButtons, visibleAcqActions } from './acqVisibleActions';
+import { actionsAbovePreview, draftPrepareErrorMessage, rowPrimaryButtons, supportThreadPath, visibleAcqActions } from './acqVisibleActions';
 
 function row(partial: {
   prospectId?: string;
@@ -140,5 +140,17 @@ describe('acqVisibleActions + approve readiness', () => {
       assert.ok(Array.isArray(rowPrimaryButtons(s)));
       assert.equal(typeof actionsAbovePreview(s), 'boolean');
     }
+  });
+
+  it('supportThreadPath requires ticketId', () => {
+    const withTicket = row({});
+    withTicket.public.ticketId = 'ticket_abc';
+    assert.equal(supportThreadPath(withTicket), '/admin/contacts/ticket_abc');
+    assert.equal(supportThreadPath(row({})), null);
+  });
+
+  it('draftPrepareErrorMessage surfaces backend reasons', () => {
+    assert.match(draftPrepareErrorMessage('missing_email'), /Missing usable email/i);
+    assert.match(draftPrepareErrorMessage('Backend returned 500'), /Backend returned 500/);
   });
 });

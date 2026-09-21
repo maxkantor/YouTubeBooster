@@ -181,7 +181,8 @@ public sealed record AcqSanitizedProspectDto(
     string? ContactConfidence = null,
     string? ContactDiscoveryResult = null,
     DateTimeOffset? ContactResearchLastAt = null,
-    DateTimeOffset? ContactResearchNextAt = null
+    DateTimeOffset? ContactResearchNextAt = null,
+    string? TicketId = null
 );
 
 public sealed record AcqAdminProspectDto(

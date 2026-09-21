@@ -1139,12 +1139,18 @@
 .acq-bulk-bar-sticky {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 2;
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(99, 102, 241, 0.18);
   border: 1px solid rgba(129, 140, 248, 0.4);
   backdrop-filter: blur(8px);
+  /* Keep bar from swallowing clicks on sticky row action buttons beneath it. */
+  pointer-events: none;
+}
+
+.acq-bulk-bar-sticky > * {
+  pointer-events: auto;
 }
 
 .acq-discovery-confirm,

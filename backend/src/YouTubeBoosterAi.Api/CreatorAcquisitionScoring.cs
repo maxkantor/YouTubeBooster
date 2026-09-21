@@ -423,7 +423,8 @@ public static class CreatorAcquisitionScoring
         ContactConfidence: p.ContactConfidence,
         ContactDiscoveryResult: p.ContactDiscoveryResult,
         ContactResearchLastAt: p.ContactResearchLastAt,
-        ContactResearchNextAt: p.ContactResearchNextAt
+        ContactResearchNextAt: p.ContactResearchNextAt,
+        TicketId: p.TicketId
     );
 
     public static string ContactStatusLabel(AcqProspectRecord p)

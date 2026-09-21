@@ -569,6 +569,7 @@ export type AcqSanitizedProspect = {
   contactDiscoveryResult?: string | null;
   contactResearchLastAt?: string | null;
   contactResearchNextAt?: string | null;
+  ticketId?: string | null;
 };
 
 export type AcqAdminProspect = {

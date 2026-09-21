@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { adminApi } from '../lib/api';
 import type { AcqAdminProspect, AcqEmailDiscoveryJob, AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
@@ -17,12 +17,13 @@ import {
   resolveAcqWorkflow
 } from './acqApprovalWorkflow';
 import { EMAIL_STATUS_FILTERS, WORKFLOW_FILTERS, formatDt, workflowBadgeKind } from './acqUiShared';
-import { draftPrepareErrorMessage } from './acqVisibleActions';
+import { draftPrepareErrorMessage, supportThreadPath } from './acqVisibleActions';
 
 type ConfirmMode = 'missing' | 'filtered' | 'selected' | null;
 
 export function AcquisitionCreatorsPage() {
   useAdminCrm();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const statusParam = (searchParams.get('status') as AcqWorkflowStatus | 'all' | null) || 'all';
   const emailParam = (searchParams.get('email') as AcqEmailStatusFilter | null) || 'all';
@@ -42,6 +43,8 @@ export function AcquisitionCreatorsPage() {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [preparingId, setPreparingId] = useState<string | null>(null);
+  const [findingEmailId, setFindingEmailId] = useState<string | null>(null);
+  const [discoveryBusy, setDiscoveryBusy] = useState(false);
   const [draftBatch, setDraftBatch] = useState<{
     attempted: number;
     prepared: number;
@@ -352,39 +355,76 @@ export function AcquisitionCreatorsPage() {
     }
   };
 
+  const openSupportThread = (row: AcqAdminProspect) => {
+    const path = supportThreadPath(row);
+    if (!path) {
+      setError(
+        'Could not open thread. Reason: No support ticket is linked to this outreach yet. Open Support from Inbox after a reply arrives, or re-send to create a ticket.'
+      );
+      setNote('');
+      return;
+    }
+    setError('');
+    navigate(path);
+  };
+
+  const findEmailFor = async (id: string, row: AcqAdminProspect) => {
+    setFindingEmailId(id);
+    setBusy(true);
+    setError('');
+    setNote('Researching public contact…');
+    try {
+      const job = await adminApi.acqEmailDiscoveryStart({
+        campaign: row.public.campaign || 'COOK-001',
+        prospectIds: [id],
+        forceRetry: true,
+        batchSize: 1
+      });
+      let current = job;
+      let ticks = 0;
+      while (current.status === 'running' && ticks < 40) {
+        current = await adminApi.acqEmailDiscoveryTick(current.jobId);
+        ticks += 1;
+      }
+      if (current.status === 'running') {
+        setError('Could not find email. Reason: Discovery is still running — try again in a moment.');
+        setNote('');
+        await load();
+        return;
+      }
+      const hit = current.results?.find((r) => r.prospectId === id) || current.results?.[0];
+      await load();
+      if (hit?.outcome === 'found') setNote(`Email found: ${hit.email}`);
+      else if (hit?.outcome === 'review') setNote(`Review candidate: ${hit.email}`);
+      else if (hit?.outcome === 'not_found') {
+        setError(`Could not find email. Reason: ${hit.detail || 'No public business email found.'}`);
+        setNote('');
+      } else if (hit?.outcome === 'failed') {
+        setError(`Could not find email. Reason: ${hit.detail || 'Discovery failed.'}`);
+        setNote('');
+      } else {
+        setNote(hit?.detail || `Discovery: ${hit?.outcome || current.status}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? `Could not find email. Reason: ${e.message}` : 'Could not find email. Reason: Backend request failed.');
+      setNote('');
+    } finally {
+      setFindingEmailId(null);
+      setBusy(false);
+    }
+  };
+
   const runPrimary = (id: string, action: AcqPrimaryAction, row: AcqAdminProspect) => {
     if (action === 'prepare_draft') {
       void prepareDraftFor(id, row);
       return;
     }
     if (action === 'find_email' || action === 'retry_email' || action === 'verify_email') {
-      void (async () => {
-        setBusy(true);
-        setError('');
-        setNote('Researching public contact…');
-        try {
-          const job = await adminApi.acqEmailDiscoveryStart({
-            campaign: row.public.campaign || 'COOK-001',
-            prospectIds: [id],
-            forceRetry: true,
-            batchSize: 1
-          });
-          let current = job;
-          while (current.status === 'running') {
-            current = await adminApi.acqEmailDiscoveryTick(current.jobId);
-          }
-          const hit = current.results[0];
-          await load();
-          if (hit?.outcome === 'found') setNote(`Email found: ${hit.email}`);
-          else if (hit?.outcome === 'review') setNote(`Review candidate: ${hit.email}`);
-          else setNote(hit?.detail || `Discovery: ${hit?.outcome || current.status}`);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : 'Email research failed');
-          setNote('');
-        } finally {
-          setBusy(false);
-        }
-      })();
+      void findEmailFor(id, row);
+      return;
+    }
+    if (action === 'view_thread' || action === 'reply') {
+      openSupportThread(row);
       return;
     }
     setDrawerId(id);
@@ -874,12 +914,17 @@ export function AcquisitionCreatorsPage() {
                           <button
                             type="button"
                             className="ops-btn ops-btn-primary ops-btn-sm"
-                            disabled={busy || preparingId === p.prospectId}
+                            disabled={busy || preparingId === p.prospectId || findingEmailId === p.prospectId}
                             onClick={() => runPrimary(p.prospectId, wf.primaryAction, row)}
                           >
                             {preparingId === p.prospectId && wf.primaryAction === 'prepare_draft'
                               ? 'Preparing…'
-                              : wf.primaryActionLabel}
+                              : findingEmailId === p.prospectId &&
+                                  (wf.primaryAction === 'find_email' ||
+                                    wf.primaryAction === 'retry_email' ||
+                                    wf.primaryAction === 'verify_email')
+                                ? 'Finding…'
+                                : wf.primaryActionLabel}
                           </button>
                         )}
                       </td>

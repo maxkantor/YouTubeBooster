@@ -78,9 +78,18 @@ export function AcquisitionInboxPage() {
                     </td>
                     <td>{formatDt(row.lastContactedAt)}</td>
                     <td>
-                      <Link className="ops-btn ops-btn-ghost ops-btn-sm" to="/admin/contacts">
-                        Open Support
-                      </Link>
+                      {row.public.ticketId ? (
+                        <Link
+                          className="ops-btn ops-btn-ghost ops-btn-sm"
+                          to={`/admin/contacts/${encodeURIComponent(row.public.ticketId)}`}
+                        >
+                          View Thread
+                        </Link>
+                      ) : (
+                        <Link className="ops-btn ops-btn-ghost ops-btn-sm" to="/admin/contacts">
+                          Open Support
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 );

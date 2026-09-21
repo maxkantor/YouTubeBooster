@@ -1,3 +1,4 @@
+import type { AcqAdminProspect } from '../types';
 import type { AcqWorkflowInfo, AcqWorkflowStatus } from './acqApprovalWorkflow';
 
 export type AcqVisibleActionId =
@@ -137,4 +138,11 @@ export function draftPrepareErrorMessage(reason: string | null | undefined): str
   if (r.startsWith('inspect_failed:')) return `Could not prepare draft. Reason: Re-inspect failed (${r.slice(15)}).`;
   if (r === 'not_found') return 'Could not prepare draft. Reason: Prospect not found.';
   return `Could not prepare draft. Reason: ${r}`;
+}
+
+/** Support CRM path for View Thread / Reply — requires ticketId from send. */
+export function supportThreadPath(row: Pick<AcqAdminProspect, 'public'>): string | null {
+  const ticketId = (row.public.ticketId || '').trim();
+  if (!ticketId) return null;
+  return `/admin/contacts/${encodeURIComponent(ticketId)}`;
 }

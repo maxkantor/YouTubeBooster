@@ -23,7 +23,8 @@ export function AcqActionPanel({
   onAddEmail,
   onPrepareDraft,
   onOverrideCooldown,
-  onStatusChange
+  onStatusChange,
+  onViewThread
 }: {
   row: AcqAdminProspect;
   wf: AcqWorkflowInfo;
@@ -46,6 +47,7 @@ export function AcqActionPanel({
   onPrepareDraft: () => void;
   onOverrideCooldown: () => void;
   onStatusChange: (status: string) => void;
+  onViewThread?: () => void;
 }) {
   const p = row.public;
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -121,6 +123,11 @@ export function AcqActionPanel({
         {wf.primaryAction === 'find_email' && (
           <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={onFindEmail}>
             Find Email
+          </button>
+        )}
+        {(wf.primaryAction === 'view_thread' || wf.primaryAction === 'reply') && onViewThread && (
+          <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={onViewThread}>
+            {wf.primaryActionLabel || 'View Thread'}
           </button>
         )}
         {wf.primaryAction === 'retry_email' && (
