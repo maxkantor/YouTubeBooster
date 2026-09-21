@@ -494,7 +494,14 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             SubjectVariant = subjectVariant,
             MessageVariant = "brand_audit_v1",
             TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
-            OutreachStatus = "draft_ready",
+            // Never put already-contacted creators back into the initial approval queue.
+            OutreachStatus = p.LastContactedAt is not null
+                ? (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                    ? "sent"
+                    : (string.IsNullOrWhiteSpace(p.OutreachStatus) || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                        ? "sent"
+                        : p.OutreachStatus))
+                : "draft_ready",
             ApprovalId = null,
             ContentHash = null,
             ApprovedBy = null,
