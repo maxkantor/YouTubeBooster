@@ -560,6 +560,11 @@ export type AcqSanitizedProspect = {
   followUpStep?: number;
   nextFollowUpAt?: string | null;
   lastContactedAtPublic?: string | null;
+  templateVersion?: string | null;
+  subjectVariant?: string | null;
+  messageVariant?: string | null;
+  findingType?: string | null;
+  exampleVideoTitle?: string | null;
 };
 
 export type AcqAdminProspect = {
@@ -571,6 +576,11 @@ export type AcqAdminProspect = {
   approvedAt?: string | null;
   cooldownOverrideUntil?: string | null;
   adminAttestedContact?: boolean;
+  fromDisplay?: string | null;
+  htmlPreview?: string | null;
+  textPreview?: string | null;
+  ctaDestination?: string | null;
+  findingSource?: string | null;
 };
 
 export type AcqSkipReasonPrimary = {

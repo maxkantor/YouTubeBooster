@@ -128,6 +128,10 @@ public static class CreatorAcquisitionScoring
             return new AcqSendGateResult(false, "not_approved");
         if (string.IsNullOrWhiteSpace(p.Observation))
             return new AcqSendGateResult(false, "draft_incomplete");
+        if (!HasStrongPersonalization(p))
+            return new AcqSendGateResult(false, "weak_personalization");
+        if (CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body))
+            return new AcqSendGateResult(false, "legacy_personal_template");
         if (!followUpDue && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body)))
             return new AcqSendGateResult(false, "draft_incomplete");
         if (!followUpDue && !string.IsNullOrWhiteSpace(p.ContentHash)
@@ -178,27 +182,130 @@ public static class CreatorAcquisitionScoring
         return AcqIds.Sha256Hex(raw);
     }
 
+    public const string GenericObservationFallback =
+        "Recent public uploads use inconsistent title structure, which makes the channel harder to scan in search and suggested videos.";
+
+    public static bool TryParseObservationEvidence(
+        string? observation,
+        out int issueCount,
+        out int sampleSize,
+        out string? exampleTitle,
+        out bool isDescriptionFinding)
+    {
+        issueCount = 0;
+        sampleSize = 0;
+        exampleTitle = null;
+        isDescriptionFinding = false;
+        if (string.IsNullOrWhiteSpace(observation)) return false;
+
+        var countMatch = Regex.Match(
+            observation,
+            @"(\d+)\s+of\s+(?:your\s+)?(?:the\s+)?last\s+(\d+)",
+            RegexOptions.IgnoreCase);
+        if (!countMatch.Success) return false;
+        issueCount = int.Parse(countMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+        sampleSize = int.Parse(countMatch.Groups[2].Value, CultureInfo.InvariantCulture);
+        isDescriptionFinding = observation.Contains("description", StringComparison.OrdinalIgnoreCase);
+
+        var ex = Regex.Match(
+            observation,
+            @"(?:Example title in the sample:\s*[“""]|For example, on\s*[“""]|on\s*[“""])([^”""]+)[”""]",
+            RegexOptions.IgnoreCase);
+        if (ex.Success) exampleTitle = TrimTitle(ex.Groups[1].Value);
+        return sampleSize > 0 && issueCount > 0;
+    }
+
     public static string BuildObservation(int titleIssues, int weakDescriptions, int sampleSize, string? exampleTitle)
     {
         var n = Math.Max(1, sampleSize);
         if (weakDescriptions >= Math.Max(3, n / 2))
         {
-            return string.IsNullOrWhiteSpace(exampleTitle)
-                ? $"{weakDescriptions} of the last {n} public videos have descriptions too thin for search (no ingredient summary or chapters)."
-                : $"{weakDescriptions} of the last {n} public videos have thin descriptions for search. Example title in the sample: “{TrimTitle(exampleTitle)}”.";
+            return $"{weakDescriptions} of your last {n} public videos have very short descriptions for search.";
         }
         if (titleIssues >= Math.Max(3, n / 4))
         {
-            return $"{titleIssues} of the last {n} public titles are much shorter or longer than a typical clickable recipe title.";
+            return string.IsNullOrWhiteSpace(exampleTitle)
+                ? $"{titleIssues} of your last {n} public titles bury the dish or benefit later than they should."
+                : $"{titleIssues} of your last {n} public titles bury the dish or benefit later than they should.";
         }
-        return "Recent public uploads use inconsistent title structure, which makes the channel harder to scan in search and suggested videos.";
+        return GenericObservationFallback;
     }
 
-    public static string BuildImprovement(int titleIssues, int weakDescriptions)
+    public static string BuildImprovement(int titleIssues, int weakDescriptions, string? exampleTitle = null)
     {
+        var example = TrimTitle(exampleTitle);
         if (weakDescriptions >= titleIssues)
-            return "On the next recipe, add a short description block: dish + main ingredients + who it is for.";
-        return "On the next upload, put the dish and the payoff in the first words of the title.";
+        {
+            if (!string.IsNullOrWhiteSpace(example))
+            {
+                return $"For example, on \"{example},\" we'd test putting the dish and main benefit earlier in the title and adding a short search-focused description.";
+            }
+            return "On the next recipe, we'd test a short search-focused description: dish + main ingredients + who it is for.";
+        }
+        if (!string.IsNullOrWhiteSpace(example))
+        {
+            return $"For example, on \"{example},\" we'd test putting the dish and the payoff in the first words of the title.";
+        }
+        return "On the next upload, we'd test putting the dish and the payoff in the first words of the title.";
+    }
+
+    public static string ResolveFindingType(int titleIssues, int weakDescriptions, int sampleSize, string? exampleTitle)
+    {
+        var n = Math.Max(1, sampleSize);
+        if (weakDescriptions >= Math.Max(3, n / 2))
+            return string.IsNullOrWhiteSpace(exampleTitle) ? "DESCRIPTION_OPPORTUNITY" : "DESCRIPTION_DEPTH";
+        if (titleIssues >= Math.Max(3, n / 4))
+            return string.IsNullOrWhiteSpace(exampleTitle) ? "TITLE_CLARITY" : "TITLE_OPPORTUNITY";
+        return "CONTENT_POSITIONING";
+    }
+
+    public static bool HasStrongPersonalization(AcqProspectRecord p)
+    {
+        if (string.IsNullOrWhiteSpace(p.Observation)) return false;
+        if (string.Equals(p.Observation.Trim(), GenericObservationFallback, StringComparison.Ordinal))
+            return false;
+        if (CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body))
+            return false;
+
+        var obs = p.Observation;
+        var hasCount = System.Text.RegularExpressions.Regex.IsMatch(obs, @"\d+\s+of\s+(your\s+)?(the\s+)?last\s+\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!hasCount) return false;
+
+        var finding = (p.FindingType ?? "").ToUpperInvariant();
+        if (finding is "DESCRIPTION_DEPTH" or "TITLE_OPPORTUNITY" or "DESCRIPTION_OPPORTUNITY" or "TITLE_CLARITY"
+            or "SEARCH_DISCOVERABILITY" or "KEYWORD_OPPORTUNITY" or "VIDEO_METADATA" or "UPLOAD_CONSISTENCY")
+        {
+            if (finding is "DESCRIPTION_DEPTH" or "TITLE_OPPORTUNITY")
+                return !string.IsNullOrWhiteSpace(p.ExampleVideoTitle)
+                       || (!string.IsNullOrWhiteSpace(p.SuggestedImprovement)
+                           && p.SuggestedImprovement.Contains("For example", StringComparison.OrdinalIgnoreCase));
+            return true;
+        }
+
+        // Infer from observation when FindingType not yet stored.
+        if (obs.Contains("description", StringComparison.OrdinalIgnoreCase)
+            || obs.Contains("title", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(p.ExampleVideoTitle)) return true;
+            if (!string.IsNullOrWhiteSpace(p.SuggestedImprovement)
+                && p.SuggestedImprovement.Contains("For example", StringComparison.OrdinalIgnoreCase))
+                return true;
+            // Counted evidence without example is still stronger than the generic fallback.
+            return p.SampleSize >= 5 && (p.WeakDescriptionCount >= 3 || p.TitleIssueCount >= 3);
+        }
+        return !string.IsNullOrWhiteSpace(p.SuggestedImprovement);
+    }
+
+    public static string FindingSourceSummary(AcqProspectRecord p)
+    {
+        var bits = new List<string>();
+        if (p.SampleSize > 0) bits.Add($"sampleSize={p.SampleSize}");
+        if (p.WeakDescriptionCount > 0) bits.Add($"weakDescriptions={p.WeakDescriptionCount}");
+        if (p.TitleIssueCount > 0) bits.Add($"titleIssues={p.TitleIssueCount}");
+        if (!string.IsNullOrWhiteSpace(p.ExampleVideoTitle)) bits.Add($"exampleVideo=\"{TrimTitle(p.ExampleVideoTitle)}\"");
+        if (!string.IsNullOrWhiteSpace(p.FindingType)) bits.Add($"findingType={p.FindingType}");
+        if (!string.IsNullOrWhiteSpace(p.EvidenceAt?.ToString("u"))) bits.Add($"evidenceAt={p.EvidenceAt:u}");
+        return bits.Count == 0 ? "No structured evidence fields stored." : string.Join("; ", bits);
     }
 
     public static (int titles, int descriptions, double cadence) ParseDemoFindings(IReadOnlyList<string> findings)
@@ -240,7 +347,8 @@ public static class CreatorAcquisitionScoring
         var s = (p.OutreachStatus ?? "").ToLowerInvariant();
         if (s is "unsubscribed" or "bounced" or "complained" or "suppressed" or "rejected"
             or "sent" or "delivered" or "clicked" or "replied" or "interested" or "scheduled" or "approved"
-            or "customer" or "audit_started" or "audit_completed" or "pricing_viewed" or "checkout_started")
+            or "customer" or "audit_started" or "audit_completed" or "pricing_viewed" or "checkout_started"
+            or "needs_review" or "draft_ready")
             return s;
         if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
             return p.SuppressionStatus.ToLowerInvariant();
@@ -289,7 +397,12 @@ public static class CreatorAcquisitionScoring
         ContactResearchStatus: p.ContactResearchStatus,
         FollowUpStep: p.FollowUpStep,
         NextFollowUpAt: p.NextFollowUpAt,
-        LastContactedAtPublic: p.LastContactedAt
+        LastContactedAtPublic: p.LastContactedAt,
+        TemplateVersion: p.TemplateVersion,
+        SubjectVariant: p.SubjectVariant,
+        MessageVariant: p.MessageVariant,
+        FindingType: p.FindingType,
+        ExampleVideoTitle: p.ExampleVideoTitle
     );
 
     public static string ContactStatusLabel(AcqProspectRecord p)
@@ -335,8 +448,9 @@ public static class CreatorAcquisitionScoring
     public static bool CsvContainsEmail(string csv) =>
         Regex.IsMatch(csv ?? "", @"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
 
-    private static string TrimTitle(string title)
+    private static string TrimTitle(string? title)
     {
+        if (string.IsNullOrWhiteSpace(title)) return "";
         var t = title.Trim();
         return t.Length <= 80 ? t : t[..77] + "…";
     }
@@ -363,7 +477,8 @@ public static class CreatorAcquisitionScoring
         if (outreach is "approved"
             or "rejected" or "suppressed" or "bounced" or "complained" or "unsubscribed"
             or "customer" or "sent" or "delivered" or "replied" or "interested"
-            or "clicked" or "audit_started" or "audit_completed" or "pricing_viewed" or "checkout_started")
+            or "clicked" or "audit_started" or "audit_completed" or "pricing_viewed" or "checkout_started"
+            or "needs_review")
             return false;
         if (!string.IsNullOrWhiteSpace(p.ApprovalId)
             && string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
@@ -372,6 +487,10 @@ public static class CreatorAcquisitionScoring
         if (string.IsNullOrWhiteSpace(p.Subject)
             || string.IsNullOrWhiteSpace(p.Observation)
             || string.IsNullOrWhiteSpace(p.Body))
+            return false;
+        if (!HasStrongPersonalization(p)) return false;
+        if (!string.Equals(p.TemplateVersion, CreatorAcquisitionCopy.TemplateVersion, StringComparison.OrdinalIgnoreCase)
+            && CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body))
             return false;
         return true;
     }

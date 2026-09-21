@@ -13,8 +13,8 @@ public class CreatorAcquisitionTests
         string contactType = "business",
         string inspection = "completed",
         int score = 80,
-        string? observation = "12 of the last 20 public videos have thin descriptions for search.",
-        string? subject = "One idea for your YouTube channel",
+        string? observation = "12 of your last 20 public videos have very short descriptions for search.",
+        string? subject = "One idea for Example Cook's YouTube channel",
         string suppression = "none",
         DateTimeOffset? lastContacted = null,
         bool placeholder = false,
@@ -29,17 +29,33 @@ public class CreatorAcquisitionTests
             25, 25, 20, score, inspection, "approved", lastContacted, suppression,
             CreatorAcquisitionCampaigns.Cook001, "/api/public/acq/go/tok", "tok",
             "https://www.youtube.com/@examplecook", DateTimeOffset.UtcNow, observation,
-            "Add ingredients to the next description.", "thin descriptions",
+            "For example, on \"Chicken stew,\" we'd test putting the dish and main benefit earlier in the title and adding a short search-focused description.",
+            "thin descriptions",
             subject, "body", null, approvalId, null, null,
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, placeholder);
-        return p with { ContentHash = CreatorAcquisitionScoring.ContentHash(p with { ContentHash = null }) };
+        return p with
+        {
+            ContentHash = CreatorAcquisitionScoring.ContentHash(p with { ContentHash = null }),
+            SampleSize = 20,
+            WeakDescriptionCount = 12,
+            TitleIssueCount = 2,
+            ExampleVideoTitle = "Chicken stew",
+            FindingType = "DESCRIPTION_DEPTH",
+            TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
+            SubjectVariant = "A",
+            MessageVariant = "brand_audit_v1",
+            Body = CreatorAcquisitionCopy.Build(
+                "A", "Example Cook", "Example Cook", observation ?? "",
+                "For example, on \"Chicken stew,\" we'd test putting the dish and main benefit earlier in the title and adding a short search-focused description.",
+                "https://youtubeboosterai.com/api/public/acq/go/tok").Body
+        };
     }
 
     private static AcqCampaignState State(bool sending = true) => new(
         sending, false, 5, null, 0,
         "123 Example St, Wilmington, DE 19801",
         "hello@youtubeboosterai.com",
-        "Max from YouTubeBooster",
+        "YouTubeBooster AI",
         "hello@youtubeboosterai.com",
         "yb-creator-acquisition");
 
@@ -154,10 +170,30 @@ public class CreatorAcquisitionTests
     public void Observation_IsEvidenceBackedAndNotInsulting()
     {
         var obs = CreatorAcquisitionScoring.BuildObservation(2, 14, 20, "Chicken stew");
-        Assert.Contains("14 of the last 20", obs);
+        Assert.Contains("14 of your last 20", obs);
         Assert.DoesNotContain("failing", obs, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("terrible", obs, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("guarantee", obs, StringComparison.OrdinalIgnoreCase);
+        var fix = CreatorAcquisitionScoring.BuildImprovement(2, 14, "Chicken stew");
+        Assert.Contains("For example, on \"Chicken stew,\"", fix);
+    }
+
+    [Fact]
+    public void BrandCopy_HasNoPersonalSender()
+    {
+        var (subject, body) = CreatorAcquisitionCopy.Build(
+            "A", "Pinch of Yum", "Pinch of Yum",
+            "20 of your last 20 public videos have very short descriptions for search.",
+            "For example, on \"Chipotle Salmon with Orange Salsa and Aji Verde,\" we'd test putting the dish and main benefit earlier in the title and adding a short search-focused description.",
+            "https://youtubeboosterai.com/api/public/acq/go/tok");
+        Assert.Equal("One idea for Pinch of Yum's YouTube channel", subject);
+        Assert.Contains("We analyzed", body);
+        Assert.Contains("YouTubeBooster AI", body);
+        Assert.DoesNotContain("Max", body);
+        Assert.DoesNotContain("Founder", body);
+        Assert.DoesNotContain("I ran", body);
+        Assert.True(CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(
+            "x", "Hi,\n\nI ran Foo through YouTubeBooster\n\nMax\nFounder, YouTubeBooster AI"));
     }
 
     [Fact]
@@ -165,7 +201,10 @@ public class CreatorAcquisitionTests
     {
         var p = Prospect();
         var hash = p.ContentHash;
-        var edited = p with { Observation = "Changed observation." };
+        var edited = p with
+        {
+            Observation = "18 of your last 20 public videos have very short descriptions for search."
+        };
         Assert.NotEqual(hash, CreatorAcquisitionScoring.ContentHash(edited));
         var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
             edited with { ContentHash = hash }, DateTimeOffset.UtcNow, State(), false);
@@ -216,7 +255,7 @@ public class CreatorAcquisitionTests
     public void Mime_IsUtf8AndHasUnsubscribeWithoutPiiTags()
     {
         var mime = CreatorAcquisitionMail.Build(
-            Prospect(observation: "Titles hide the recipe."),
+            Prospect(observation: "12 of your last 20 public videos have very short descriptions for search."),
             State(),
             "https://youtubeboosterai.com",
             "https://youtubeboosterai.com/api/public/acq/unsubscribe?token=abc",
@@ -225,22 +264,32 @@ public class CreatorAcquisitionTests
         Assert.Contains("List-Unsubscribe:", mime.RawRfc822);
         Assert.Contains("List-Unsubscribe-Post:", mime.RawRfc822);
         Assert.Contains("Hi Example Cook", mime.TextBody);
-        Assert.Contains("I ran", mime.TextBody);
-        Assert.Contains("YouTubeBooster", mime.TextBody);
+        Assert.Contains("We analyzed", mime.TextBody);
+        Assert.Contains("YouTubeBooster AI", mime.TextBody);
+        Assert.DoesNotContain("I ran", mime.TextBody);
+        Assert.DoesNotContain("Max", mime.TextBody);
+        Assert.DoesNotContain("Founder", mime.TextBody);
+        Assert.Contains("VIEW YOUR FREE YOUTUBE AUDIT", mime.HtmlBody);
+        Assert.DoesNotContain(">https://youtubeboosterai.com/api/public/acq/go/tok<", mime.HtmlBody);
+        Assert.Contains("href=\"https://youtubeboosterai.com/api/public/acq/go/tok\"", mime.HtmlBody);
+        Assert.Contains("View your free YouTube audit:", mime.TextBody);
         Assert.DoesNotContain("<script", mime.HtmlBody, StringComparison.OrdinalIgnoreCase);
         Assert.False(CreatorAcquisitionMail.TagsContainPii(mime.SesTags));
         Assert.DoesNotContain("hello@example-creator.test", string.Join(',', mime.SesTags.Select(kv => kv.Key + kv.Value)));
-        Assert.Equal("Max from YouTubeBooster <hello@youtubeboosterai.com>", mime.FromHeader);
+        Assert.Equal("YouTubeBooster AI <hello@youtubeboosterai.com>", mime.FromHeader);
         Assert.Equal("hello@youtubeboosterai.com", mime.ReplyTo);
+        Assert.Equal(CreatorAcquisitionMail.DefaultFromName, CreatorAcquisitionMail.ResolveFromName("Max from YouTubeBooster"));
     }
 
     [Fact]
     public void Html_EscapesChannelName()
     {
-        var html = CreatorAcquisitionMail.BuildHtml("A <b>x</b>", "Cook & Co", "obs", "https://x.test", "Cook & Co", "https://u.test", "Addr");
+        var html = CreatorAcquisitionMail.BuildHtml(
+            "A <b>x</b>", "Cook & Co", "obs", "fix", "https://x.test/api/public/acq/go/t", "Cook & Co", "https://u.test", "Addr");
         Assert.Contains("Cook &amp; Co", html);
         Assert.Contains("A &lt;b&gt;x&lt;/b&gt;", html);
         Assert.DoesNotContain("<b>x</b>", html);
+        Assert.Contains("VIEW YOUR FREE YOUTUBE AUDIT", html);
     }
 
     [Fact]

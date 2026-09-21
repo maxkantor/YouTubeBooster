@@ -1,9 +1,53 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace YouTubeBoosterAi.Api;
 
 public static class CreatorAcquisitionCopy
 {
+    public const string TemplateVersion = "brand-v1";
+    public const string CtaLabel = "VIEW YOUR FREE YOUTUBE AUDIT";
+    public const string CtaPlainLeadIn = "View your free YouTube audit:";
+    public const string BrandSignature = "YouTubeBooster AI";
+
+    /// <summary>Marker paragraph replaced by the HTML CTA button (plain text keeps the URL).</summary>
+    public const string CtaMarker = "{{YB_AUDIT_CTA}}";
+
+    public static bool LooksLikeLegacyPersonalSender(string? subject, string? body)
+    {
+        var blob = $"{subject}\n{body}";
+        if (string.IsNullOrWhiteSpace(blob)) return false;
+        if (Regex.IsMatch(blob, @"\bI'm Max\b", RegexOptions.IgnoreCase)) return true;
+        if (Regex.IsMatch(blob, @"\bI am Max\b", RegexOptions.IgnoreCase)) return true;
+        if (blob.Contains("Founder, YouTubeBooster", StringComparison.OrdinalIgnoreCase)) return true;
+        if (blob.Contains("Max from YouTubeBooster", StringComparison.OrdinalIgnoreCase)) return true;
+        if (Regex.IsMatch(blob, @"\bI ran .+ through YouTubeBooster", RegexOptions.IgnoreCase)) return true;
+        if (Regex.IsMatch(blob, @"\bI reviewed your channel\b", RegexOptions.IgnoreCase)) return true;
+        if (Regex.IsMatch(blob, @"^\s*Max\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase)) return true;
+        return false;
+    }
+
+    public static string SubjectFor(string variant, string channelName)
+    {
+        var channel = string.IsNullOrWhiteSpace(channelName) ? "your" : channelName.Trim();
+        return (variant ?? "A").Trim().ToUpperInvariant() switch
+        {
+            "B" => $"A YouTube idea for {channel}",
+            "C" => $"We found something on {channel}",
+            "D" => $"A quick YouTube opportunity for {channel}",
+            _ => $"One idea for {channel}'s YouTube channel"
+        };
+    }
+
+    public static string SubjectVariantCode(string? emailVariant) =>
+        (emailVariant ?? "A").Trim().ToUpperInvariant() switch
+        {
+            "B" => "B",
+            "C" => "C",
+            "D" => "D",
+            _ => "A"
+        };
+
     public static (string Subject, string Body) Build(
         string variant,
         string creatorName,
@@ -12,42 +56,30 @@ public static class CreatorAcquisitionCopy
         string improvement,
         string trackedUrl)
     {
-        var name = string.IsNullOrWhiteSpace(creatorName) ? channelName : creatorName;
+        var name = string.IsNullOrWhiteSpace(creatorName) ? channelName : creatorName.Trim();
+        var channel = string.IsNullOrWhiteSpace(channelName) ? name : channelName.Trim();
         var obs = (observation ?? "").Trim();
         var fix = (improvement ?? "").Trim();
         if (string.IsNullOrWhiteSpace(obs))
             obs = "Recent public titles and descriptions are inconsistent, which makes the channel harder to scan in search.";
         if (string.IsNullOrWhiteSpace(fix))
-            fix = "On the next upload, put the dish and the payoff in the first words of the title and add a short description block.";
+            fix = "On the next upload, we'd test clearer packaging in the title and a short search-focused description.";
 
-        if (string.Equals(variant, "B", StringComparison.OrdinalIgnoreCase))
-        {
-            var bodyB = JoinParagraphs(
-                $"Hi {name},",
-                $"I ran {channelName} through YouTubeBooster using only public YouTube data.",
-                obs,
-                $"Quick win: {fix}",
-                "You can see the free audit (no signup required for the preview) here:",
-                trackedUrl,
-                "Happy to answer anything if useful — otherwise ignore this.",
-                "Max",
-                "Founder, YouTubeBooster AI"
-            );
-            return ($"Free audit notes for {channelName}", bodyB);
-        }
+        var subject = SubjectFor(SubjectVariantCode(variant), channel);
+        var ctaBlock = string.IsNullOrWhiteSpace(trackedUrl)
+            ? CtaMarker
+            : $"{CtaPlainLeadIn}\n{trackedUrl.Trim()}";
 
-        var bodyA = JoinParagraphs(
+        var body = JoinParagraphs(
             $"Hi {name},",
-            $"I ran {channelName} through YouTubeBooster and found several concrete opportunities.",
+            "We analyzed your YouTube channel with YouTubeBooster AI and noticed something worth testing:",
             obs,
-            $"Suggested first move: {fix}",
-            "See the initial free audit here (preview first — no card required):",
-            trackedUrl,
-            "Thanks,",
-            "Max",
-            "Founder, YouTubeBooster AI"
+            fix,
+            "We put the rest of the findings into a free audit:",
+            ctaBlock,
+            BrandSignature
         );
-        return ($"I found specific growth opportunities on {channelName}", bodyA);
+        return (subject, body);
     }
 
     public static (string Subject, string Body) BuildFollowUp(
@@ -57,47 +89,64 @@ public static class CreatorAcquisitionCopy
         string observation,
         string trackedUrl)
     {
-        var name = string.IsNullOrWhiteSpace(creatorName) ? channelName : creatorName;
+        var name = string.IsNullOrWhiteSpace(creatorName) ? channelName : creatorName.Trim();
+        var channel = string.IsNullOrWhiteSpace(channelName) ? name : channelName.Trim();
         var obs = string.IsNullOrWhiteSpace(observation)
-            ? "a few packaging and discoverability opportunities on recent uploads"
+            ? "a packaging opportunity on recent public uploads"
             : observation.Trim();
+        var ctaBlock = string.IsNullOrWhiteSpace(trackedUrl)
+            ? CtaMarker
+            : $"{CtaPlainLeadIn}\n{trackedUrl.Trim()}";
+
         if (followUpStep <= 0)
         {
             return (
-                $"Quick follow-up on your {channelName} audit",
+                $"Quick follow-up on the free audit for {channel}",
                 JoinParagraphs(
                     $"Hi {name},",
-                    "Just bumping this in case it got buried — I left a free YouTubeBooster audit open for your channel.",
+                    "Following up in case this got buried — we still have a free YouTubeBooster AI audit open for your channel.",
                     $"Main finding: {obs}",
-                    trackedUrl,
-                    "No pressure either way.",
-                    "Max")
+                    ctaBlock,
+                    BrandSignature)
             );
         }
 
         return (
-            $"Last note on the free audit for {channelName}",
+            $"Last note on the free audit for {channel}",
             JoinParagraphs(
                 $"Hi {name},",
-                "Last note from me on this. The free audit is still available if useful:",
-                trackedUrl,
-                "I'll leave it there — no more follow-ups.",
-                "Max")
+                "Last note on this. The free audit is still available if useful:",
+                ctaBlock,
+                "We'll leave it there — no more follow-ups.",
+                BrandSignature)
         );
     }
 
     public static string WithComplianceFooter(string body, string channelForFooter, string unsubscribeUrl, string postalAddress)
     {
         var sb = new StringBuilder();
-        sb.Append(body.TrimEnd());
+        sb.Append(StripComplianceFooter(body).TrimEnd());
         sb.Append("\n\n");
-        sb.Append($"You received this one-time business email because a contact address was publicly listed for {channelForFooter}. YouTubeBooster AI is not affiliated with YouTube or Google.\n\n");
+        sb.Append($"You received this one-time business email because a business contact address was publicly listed for {channelForFooter}.\n\n");
+        sb.Append("YouTubeBooster AI is not affiliated with YouTube or Google.\n\n");
         sb.Append($"Unsubscribe: {unsubscribeUrl}\n\n");
         sb.Append(postalAddress.Trim());
         return sb.ToString().Replace("\r\n", "\n");
     }
 
-    private static string JoinParagraphs(params string[] parts)
+    /// <summary>Remove a previously appended compliance block so re-wrapping stays clean.</summary>
+    public static string StripComplianceFooter(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return "";
+        var text = body.Replace("\r\n", "\n");
+        var idx = text.IndexOf("You received this one-time business email", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0)
+            idx = text.IndexOf("YouTubeBooster AI is not affiliated with YouTube", StringComparison.OrdinalIgnoreCase);
+        if (idx > 0) return text[..idx].TrimEnd();
+        return text.TrimEnd();
+    }
+
+    public static string JoinParagraphs(params string[] parts)
     {
         var sb = new StringBuilder();
         foreach (var p in parts)

@@ -66,16 +66,39 @@ export function AcqProspectDrawer({
         <div className="acq-drawer-decision">
           <Badge kind={workflowBadgeKind(wf.status)}>{wf.label}</Badge>
 
-          {(showEmailPreview || wf.status === 'READY_FOR_APPROVAL' || wf.status === 'APPROVED') && (
+          {(showEmailPreview || wf.status === 'READY_FOR_APPROVAL' || wf.status === 'APPROVED' || wf.status === 'NEEDS_REVIEW') && (
             <div className="acq-email-preview">
-              <span className="ops-kpi-label">EMAIL PREVIEW</span>
+              <span className="ops-kpi-label">EMAIL PREVIEW (exact recipient view)</span>
+              <p>
+                <strong>From:</strong> {row.fromDisplay || 'YouTubeBooster AI'}
+              </p>
               <p>
                 <strong>To:</strong> {row.publicBusinessEmail || '—'}
               </p>
               <p>
                 <strong>Subject:</strong> {editSubject || row.public.subject || '—'}
               </p>
-              <pre className="acq-draft-body">{editBody || row.body || '—'}</pre>
+              <p>
+                <strong>Primary finding:</strong> {row.public.observation || '—'}
+              </p>
+              <p>
+                <strong>Source data:</strong> {row.findingSource || '—'}
+              </p>
+              <p>
+                <strong>CTA destination:</strong>{' '}
+                {row.ctaDestination ? (
+                  <a href={row.ctaDestination} target="_blank" rel="noreferrer">
+                    {row.ctaDestination}
+                  </a>
+                ) : (
+                  '—'
+                )}
+              </p>
+              {row.htmlPreview ? (
+                <div className="acq-html-preview" dangerouslySetInnerHTML={{ __html: row.htmlPreview }} />
+              ) : null}
+              <span className="ops-kpi-label">PLAIN TEXT</span>
+              <pre className="acq-draft-body">{row.textPreview || editBody || row.body || '—'}</pre>
             </div>
           )}
 

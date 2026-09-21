@@ -447,6 +447,9 @@ public static class CreatorAcquisitionEndpoints
             CancellationToken cancellationToken) =>
         {
             var rows = await acq.Store.ListProspectsAsync(cancellationToken);
+            var campaignKey = string.IsNullOrWhiteSpace(campaign) ? CreatorAcquisitionCampaigns.Cook001 : campaign.Trim();
+            var state = await acq.LoadStateAsync(campaignKey, cancellationToken);
+            var site = acq.Site();
             IEnumerable<AcqProspectRecord> query = rows;
             if (!string.IsNullOrWhiteSpace(campaign))
                 query = query.Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
@@ -467,14 +470,16 @@ public static class CreatorAcquisitionEndpoints
                     || (r.ProspectId?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false)
                     || (r.ChannelUrl?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false));
             }
-            var items = query.Select(ToAdminDto).ToArray();
+            var items = query.Select(r => ToAdminDto(r, state, site)).ToArray();
             return Results.Ok(new { items, totalCount = items.Length });
         });
 
         admin.MapGet("/prospects/{id}", async (string id, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var row = await acq.Store.GetProspectAsync(id, cancellationToken);
-            return row is null ? Results.NotFound() : Results.Ok(ToAdminDto(row));
+            if (row is null) return Results.NotFound();
+            var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
+            return Results.Ok(ToAdminDto(row, state, acq.Site()));
         });
 
         admin.MapPost("/inspect", async (AcqUpsertProspectRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
@@ -482,7 +487,8 @@ public static class CreatorAcquisitionEndpoints
             if (string.IsNullOrWhiteSpace(request.ChannelInput))
                 return Results.BadRequest(new { error = "channelInput required" });
             var row = await acq.InspectAndUpsertAsync(request, cancellationToken);
-            return Results.Ok(ToAdminDto(row));
+            var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
+            return Results.Ok(ToAdminDto(row, state, acq.Site()));
         });
 
         admin.MapPost("/migrate-rescore", async (
@@ -494,20 +500,30 @@ public static class CreatorAcquisitionEndpoints
             return Results.Ok(result);
         });
 
+        admin.MapPost("/migrate-brand-copy", async (
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await acq.MigrateBrandCopyAsync(cancellationToken);
+            return Results.Ok(result);
+        });
+
         admin.MapPost("/prospects/{id}/draft", async (string id, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var row = await acq.PrepareDraftAsync(id, cancellationToken);
-            return row is null ? Results.NotFound() : Results.Ok(ToAdminDto(row));
+            return row is null ? Results.NotFound() : Results.Ok(ToAdminDto(row, await acq.LoadStateAsync(row.Campaign, cancellationToken), acq.Site()));
         });
 
         admin.MapPost("/preview", async (AcqApproveBatchRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var state = await acq.LoadStateAsync(request.Campaign, cancellationToken);
+            var site = acq.Site();
             var items = new List<object>();
             foreach (var id in request.ProspectIds.Take(CreatorAcquisitionService.MaxBatchApprove))
             {
                 var p = await acq.Store.GetProspectAsync(id, cancellationToken);
                 if (p is null) continue;
+                var preview = BuildExactPreview(p, state, site);
                 items.Add(new
                 {
                     p.ProspectId,
@@ -517,8 +533,22 @@ public static class CreatorAcquisitionEndpoints
                     publicBusinessEmail = p.PublicBusinessEmail,
                     p.ContactSourceUrl,
                     p.Observation,
-                    p.Subject,
-                    trackedUrl = acq.Site() + p.TrackedPath,
+                    suggestedImprovement = p.SuggestedImprovement,
+                    primaryFinding = p.Observation,
+                    findingType = p.FindingType,
+                    findingSource = CreatorAcquisitionScoring.FindingSourceSummary(p),
+                    exampleVideoTitle = p.ExampleVideoTitle,
+                    from = preview.From,
+                    to = preview.To,
+                    subject = preview.Subject,
+                    htmlPreview = preview.Html,
+                    textPreview = preview.Text,
+                    ctaDestination = preview.CtaDestination,
+                    ctaLabel = CreatorAcquisitionCopy.CtaLabel,
+                    templateVersion = p.TemplateVersion,
+                    subjectVariant = p.SubjectVariant,
+                    messageVariant = p.MessageVariant,
+                    trackedUrl = preview.CtaDestination,
                     suppression = p.SuppressionStatus,
                     wouldSend = false,
                     note = "Preview never sends."
@@ -565,7 +595,7 @@ public static class CreatorAcquisitionEndpoints
             var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
             var (row, error) = await acq.RejectAsync(id, admin, body?.Reason, cancellationToken);
             if (error is not null) return Results.BadRequest(new { error });
-            return Results.Ok(ToAdminDto(row!));
+            return Results.Ok(await ToAdminDtoAsync(row!, acq, cancellationToken));
         });
 
         admin.MapPost("/prospects/{id}/unapprove", async (
@@ -577,7 +607,7 @@ public static class CreatorAcquisitionEndpoints
             var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
             var (row, error) = await acq.UnapproveAsync(id, admin, cancellationToken);
             if (error is not null) return Results.BadRequest(new { error });
-            return Results.Ok(ToAdminDto(row!));
+            return Results.Ok(await ToAdminDtoAsync(row!, acq, cancellationToken));
         });
 
         admin.MapPost("/prospects/{id}/override-cooldown", async (
@@ -590,7 +620,7 @@ public static class CreatorAcquisitionEndpoints
             var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
             var (row, error) = await acq.OverrideCooldownAsync(id, admin, body?.Reason, cancellationToken);
             if (error is not null) return Results.BadRequest(new { error });
-            return Results.Ok(ToAdminDto(row!));
+            return Results.Ok(await ToAdminDtoAsync(row!, acq, cancellationToken));
         });
 
         admin.MapPost("/prospects/{id}/draft-edit", async (
@@ -603,7 +633,7 @@ public static class CreatorAcquisitionEndpoints
             var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
             var (row, error) = await acq.UpdateDraftAsync(id, body.Subject, body.Body, admin, cancellationToken);
             if (error is not null) return Results.BadRequest(new { error });
-            return Results.Ok(ToAdminDto(row!));
+            return Results.Ok(await ToAdminDtoAsync(row!, acq, cancellationToken));
         });
 
         admin.MapPost("/prospects/{id}/manual-contact", async (
@@ -617,7 +647,7 @@ public static class CreatorAcquisitionEndpoints
             var (row, error) = await acq.SetManualContactAsync(
                 id, body.Email, body.SourceUrl, body.Attested, admin, body.ContactName, body.Notes, cancellationToken);
             if (error is not null) return Results.BadRequest(new { error });
-            return Results.Ok(ToAdminDto(row!));
+            return Results.Ok(await ToAdminDtoAsync(row!, acq, cancellationToken));
         });
 
         admin.MapPost("/prospects/{id}/status", async (
@@ -630,7 +660,7 @@ public static class CreatorAcquisitionEndpoints
             var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
             var (row, error) = await acq.SetStatusAsync(id, body.Status, admin, body.Reason, cancellationToken);
             if (error is not null) return Results.BadRequest(new { error });
-            return Results.Ok(ToAdminDto(row!));
+            return Results.Ok(await ToAdminDtoAsync(row!, acq, cancellationToken));
         });
 
         admin.MapPost("/prospects/{id}/send-now", async (
@@ -643,7 +673,12 @@ public static class CreatorAcquisitionEndpoints
             var (ok, error, messageId) = await acq.SendNowAsync(id, admin, cancellationToken);
             if (!ok) return Results.BadRequest(new { error });
             var row = await acq.Store.GetProspectAsync(id, cancellationToken);
-            return Results.Ok(new { ok = true, messageId, prospect = row is null ? null : ToAdminDto(row) });
+            return Results.Ok(new
+            {
+                ok = true,
+                messageId,
+                prospect = row is null ? null : await ToAdminDtoAsync(row, acq, cancellationToken)
+            });
         });
 
         admin.MapPost("/prospects/{id}/approve-and-send", async (
@@ -667,7 +702,7 @@ public static class CreatorAcquisitionEndpoints
                 approved = result.Approved,
                 sent = result.Sent,
                 messageId = result.MessageId,
-                prospect = result.Prospect is null ? null : ToAdminDto(result.Prospect)
+                prospect = result.Prospect is null ? null : await ToAdminDtoAsync(result.Prospect, acq, cancellationToken)
             });
         });
 
@@ -707,8 +742,19 @@ public static class CreatorAcquisitionEndpoints
         });
     }
 
-    private static AcqAdminProspectDto ToAdminDto(AcqProspectRecord row) =>
-        new(
+    private static async Task<AcqAdminProspectDto> ToAdminDtoAsync(
+        AcqProspectRecord row,
+        ICreatorAcquisitionService acq,
+        CancellationToken cancellationToken)
+    {
+        var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
+        return ToAdminDto(row, state, acq.Site());
+    }
+
+    private static AcqAdminProspectDto ToAdminDto(AcqProspectRecord row, AcqCampaignState state, string site)
+    {
+        var preview = BuildExactPreview(row, state, site);
+        return new AcqAdminProspectDto(
             CreatorAcquisitionScoring.Sanitize(row),
             row.PublicBusinessEmail,
             row.Body,
@@ -716,7 +762,56 @@ public static class CreatorAcquisitionEndpoints
             row.ApprovedBy,
             row.ApprovedAt,
             row.CooldownOverrideUntil,
-            row.AdminAttestedContact);
+            row.AdminAttestedContact,
+            preview.From,
+            preview.Html,
+            preview.Text,
+            preview.CtaDestination,
+            CreatorAcquisitionScoring.FindingSourceSummary(row));
+    }
+
+    private static (string From, string To, string Subject, string Html, string Text, string CtaDestination) BuildExactPreview(
+        AcqProspectRecord row,
+        AcqCampaignState state,
+        string site)
+    {
+        var tracked = string.IsNullOrWhiteSpace(row.TrackedPath)
+            ? ""
+            : (row.TrackedPath!.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                ? row.TrackedPath
+                : site.TrimEnd('/') + (row.TrackedPath.StartsWith('/') ? row.TrackedPath : "/" + row.TrackedPath));
+        var unsub = site.TrimEnd('/') + "/api/public/acq/unsubscribe?token=PREVIEW";
+        var fromName = CreatorAcquisitionMail.ResolveFromName(state.FromName);
+        var fromEmail = string.IsNullOrWhiteSpace(state.FromEmail) ? "contact@youtubeboosterai.com" : state.FromEmail.Trim();
+        var from = $"{fromName} <{fromEmail}>";
+        var to = row.PublicBusinessEmail ?? "";
+
+        if (string.IsNullOrWhiteSpace(row.Subject) || string.IsNullOrWhiteSpace(row.Body) || string.IsNullOrWhiteSpace(tracked))
+        {
+            return (from, to, row.Subject ?? "", "", row.Body ?? "", tracked);
+        }
+
+        try
+        {
+            var mime = CreatorAcquisitionMail.Build(row, state with
+            {
+                FromEmail = fromEmail,
+                FromName = fromName,
+                PostalAddress = state.PostalAddress ?? "{{configured_business_postal_address}}"
+            }, site, unsub, tracked);
+            return (mime.FromHeader, mime.To, mime.Subject, mime.HtmlBody, mime.TextBody, tracked);
+        }
+        catch
+        {
+            var body = CreatorAcquisitionCopy.StripComplianceFooter(row.Body!);
+            var html = CreatorAcquisitionMail.BuildHtmlFromText(
+                body, tracked, row.ChannelName, unsub, state.PostalAddress ?? "", row.Subject!);
+            var text = CreatorAcquisitionCopy.WithComplianceFooter(
+                CreatorAcquisitionMail.NormalizeBodyForSend(body, tracked),
+                row.ChannelName, unsub, state.PostalAddress ?? "");
+            return (from, to, row.Subject!, html, text, tracked);
+        }
+    }
 }
 
 public sealed record AcqSesEventRequest(string ProspectId, string EventType);
@@ -741,6 +836,7 @@ public interface ICreatorAcquisitionService
     Task ApplySesEventAsync(string prospectId, string eventType, CancellationToken cancellationToken);
     Task RecordFunnelAsync(string token, string eventName, CancellationToken cancellationToken);
     Task<object> MigrateRescoreAsync(int limit, CancellationToken cancellationToken);
+    Task<object> MigrateBrandCopyAsync(CancellationToken cancellationToken);
     Task<(AcqProspectRecord? Prospect, string? Error)> RejectAsync(string prospectId, string adminEmail, string? reason, CancellationToken cancellationToken);
     Task<(AcqProspectRecord? Prospect, string? Error)> UnapproveAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
     Task<(AcqProspectRecord? Prospect, string? Error)> OverrideCooldownAsync(string prospectId, string adminEmail, string? reason, CancellationToken cancellationToken);

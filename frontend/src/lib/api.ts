@@ -565,6 +565,22 @@ export const adminApi = {
   }> {
     return fetchJson(`/api/admin/crm/acquisition/migrate-rescore?limit=${limit}`, { method: 'POST' });
   },
+  async acqMigrateBrandCopy(): Promise<{
+    considered: number;
+    regenerated: number;
+    items: Array<{
+      prospectId: string;
+      channelName: string;
+      wasApproved: boolean;
+      outreachStatus: string;
+      templateVersion?: string;
+      subject?: string;
+      findingType?: string;
+      hadLegacyCopy: boolean;
+    }>;
+  }> {
+    return fetchJson('/api/admin/crm/acquisition/migrate-brand-copy', { method: 'POST' });
+  },
   async acqReject(id: string, reason?: string): Promise<AcqAdminProspect> {
     return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/reject`, {
       method: 'POST',

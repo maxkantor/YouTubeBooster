@@ -9,14 +9,14 @@ public static class CreatorAcquisitionCampaigns
 {
     public const string Cook001 = "COOK-001";
     public const string Other001 = "OTHER-001";
-    public const string DefaultSubject = "I found specific growth opportunities on your channel";
+    public const string DefaultSubject = "One idea for your YouTube channel";
 }
 
 public static class CreatorAcquisitionViews
 {
     public static readonly string[] All =
     [
-        "discovered", "needs_inspection", "qualified", "contact_verified", "draft_ready",
+        "discovered", "needs_inspection", "qualified", "contact_verified", "draft_ready", "needs_review",
         "approval_queue", "approved", "scheduled", "sent", "delivered", "clicked", "replied", "interested",
         "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer",
         "unsubscribed", "bounced", "complained", "suppressed", "rejected"
@@ -83,7 +83,12 @@ public sealed record AcqProspectRecord(
     string? ApprovedBy = null,
     DateTimeOffset? ApprovedAt = null,
     DateTimeOffset? CooldownOverrideUntil = null,
-    bool AdminAttestedContact = false
+    bool AdminAttestedContact = false,
+    string? TemplateVersion = null,
+    string? SubjectVariant = null,
+    string? MessageVariant = null,
+    string? FindingType = null,
+    string? ExampleVideoTitle = null
 );
 
 public sealed record AcqApprovalRecord(
@@ -154,7 +159,12 @@ public sealed record AcqSanitizedProspectDto(
     string? ContactResearchStatus = null,
     int FollowUpStep = 0,
     DateTimeOffset? NextFollowUpAt = null,
-    DateTimeOffset? LastContactedAtPublic = null
+    DateTimeOffset? LastContactedAtPublic = null,
+    string? TemplateVersion = null,
+    string? SubjectVariant = null,
+    string? MessageVariant = null,
+    string? FindingType = null,
+    string? ExampleVideoTitle = null
 );
 
 public sealed record AcqAdminProspectDto(
@@ -165,7 +175,12 @@ public sealed record AcqAdminProspectDto(
     string? ApprovedBy = null,
     DateTimeOffset? ApprovedAt = null,
     DateTimeOffset? CooldownOverrideUntil = null,
-    bool AdminAttestedContact = false
+    bool AdminAttestedContact = false,
+    string? FromDisplay = null,
+    string? HtmlPreview = null,
+    string? TextPreview = null,
+    string? CtaDestination = null,
+    string? FindingSource = null
 );
 
 public sealed record AcqUpsertProspectRequest(

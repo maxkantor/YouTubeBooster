@@ -50,8 +50,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
 
         var from = (await _secrets.GetValueAsync("ses/outreach-from-email", secure: true, cancellationToken))
             ?? await _secrets.GetValueAsync("ses/from-email", secure: true, cancellationToken);
-        var fromName = (await _secrets.GetValueAsync("ses/outreach-from-name", secure: false, cancellationToken))
-            ?? "Max from YouTubeBooster";
+        var fromNameRaw = (await _secrets.GetValueAsync("ses/outreach-from-name", secure: false, cancellationToken))
+            ?? CreatorAcquisitionMail.DefaultFromName;
+        var fromName = CreatorAcquisitionMail.ResolveFromName(fromNameRaw);
         var reply = (await _secrets.GetValueAsync("ses/outreach-reply-to", secure: true, cancellationToken))
             ?? "hello@youtubeboosterai.com";
         var postal = await _secrets.GetValueAsync("business/postal-address", secure: false, cancellationToken);
@@ -257,7 +258,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         var token = dup?.OpaqueToken ?? AcqIds.NewOpaqueToken();
         var example = demo.TopVideos?.FirstOrDefault()?.Title;
         var observation = placeholder ? null : CreatorAcquisitionScoring.BuildObservation(titles, descriptions, sampleSize, example);
-        var improvement = placeholder ? null : CreatorAcquisitionScoring.BuildImprovement(titles, descriptions);
+        var improvement = placeholder ? null : CreatorAcquisitionScoring.BuildImprovement(titles, descriptions, example);
+        var findingType = placeholder ? null : CreatorAcquisitionScoring.ResolveFindingType(titles, descriptions, sampleSize, example);
         var tracked = $"/api/public/acq/go/{token}";
         if (string.IsNullOrWhiteSpace(email) && !string.IsNullOrWhiteSpace(contactSourceUrl) && contactType != "form_only"
             && contactType is not "business" and not "partnership" and not "media" and not "general")
@@ -338,7 +340,12 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             ApprovedAt: keepApproval is not null ? dup?.ApprovedAt : null,
             CooldownOverrideUntil: dup?.CooldownOverrideUntil,
             AdminAttestedContact: string.Equals(contactType, "admin_attested", StringComparison.OrdinalIgnoreCase)
-                || (dup?.AdminAttestedContact == true && EmailAddressHelpers.LooksLikeEmail(email))
+                || (dup?.AdminAttestedContact == true && EmailAddressHelpers.LooksLikeEmail(email)),
+            TemplateVersion: dup?.TemplateVersion,
+            SubjectVariant: dup?.SubjectVariant,
+            MessageVariant: dup?.MessageVariant,
+            FindingType: findingType ?? dup?.FindingType,
+            ExampleVideoTitle: placeholder ? dup?.ExampleVideoTitle : (example ?? dup?.ExampleVideoTitle)
         );
 
         if (dup is not null && (dup.LastContactedAt is not null || !string.Equals(dup.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)))
@@ -361,21 +368,133 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     public async Task<AcqProspectRecord?> PrepareDraftAsync(string prospectId, CancellationToken cancellationToken)
     {
         var p = await _store.GetProspectAsync(prospectId, cancellationToken);
-        if (p is null || p.PreviewPlaceholder || string.IsNullOrWhiteSpace(p.Observation))
+        if (p is null || p.PreviewPlaceholder)
             return p;
+
+        // Refresh observation/improvement from stored evidence counts when available.
+        var exampleTitle = p.ExampleVideoTitle;
+        var sampleSize = p.SampleSize;
+        var weakDescriptions = p.WeakDescriptionCount;
+        var titleIssues = p.TitleIssueCount;
+        string? observation = p.Observation;
+        string? improvement = p.SuggestedImprovement;
+        string? findingType = p.FindingType;
+
+        if (sampleSize <= 0
+            && CreatorAcquisitionScoring.TryParseObservationEvidence(
+                p.Observation, out var parsedCount, out var parsedSample, out var parsedExample, out var isDesc))
+        {
+            sampleSize = parsedSample;
+            if (isDesc) weakDescriptions = Math.Max(weakDescriptions, parsedCount);
+            else titleIssues = Math.Max(titleIssues, parsedCount);
+            if (string.IsNullOrWhiteSpace(exampleTitle)) exampleTitle = parsedExample;
+        }
+
+        // Pull example title from legacy observation prose when structured field is empty.
+        if (string.IsNullOrWhiteSpace(exampleTitle)
+            && CreatorAcquisitionScoring.TryParseObservationEvidence(
+                p.Observation, out _, out _, out var legacyExample, out _))
+        {
+            exampleTitle = legacyExample;
+        }
+
+        if (sampleSize > 0 && (weakDescriptions > 0 || titleIssues > 0))
+        {
+            observation = CreatorAcquisitionScoring.BuildObservation(
+                titleIssues, weakDescriptions, sampleSize, exampleTitle);
+            improvement = CreatorAcquisitionScoring.BuildImprovement(
+                titleIssues, weakDescriptions, exampleTitle);
+            findingType = CreatorAcquisitionScoring.ResolveFindingType(
+                titleIssues, weakDescriptions, sampleSize, exampleTitle);
+        }
+        else if (!string.IsNullOrWhiteSpace(observation)
+                 && !string.IsNullOrWhiteSpace(exampleTitle)
+                 && (improvement is null || !improvement.Contains("For example", StringComparison.OrdinalIgnoreCase)))
+        {
+            improvement = CreatorAcquisitionScoring.BuildImprovement(
+                Math.Max(1, titleIssues), Math.Max(1, weakDescriptions), exampleTitle);
+            findingType ??= observation.Contains("description", StringComparison.OrdinalIgnoreCase)
+                ? "DESCRIPTION_DEPTH"
+                : "TITLE_OPPORTUNITY";
+        }
+
+        if (string.IsNullOrWhiteSpace(observation))
+        {
+            var weak = p with
+            {
+                OutreachStatus = "needs_review",
+                Subject = null,
+                Body = null,
+                ApprovalId = null,
+                ContentHash = null,
+                ApprovedBy = null,
+                ApprovedAt = null,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            await _store.UpsertProspectAsync(weak, cancellationToken);
+            return weak;
+        }
+
+        var draftProbe = p with
+        {
+            Observation = observation,
+            SuggestedImprovement = improvement,
+            FindingType = findingType,
+            ExampleVideoTitle = exampleTitle,
+            SampleSize = sampleSize > 0 ? sampleSize : p.SampleSize,
+            WeakDescriptionCount = weakDescriptions > 0 ? weakDescriptions : p.WeakDescriptionCount,
+            TitleIssueCount = titleIssues > 0 ? titleIssues : p.TitleIssueCount
+        };
+        if (!CreatorAcquisitionScoring.HasStrongPersonalization(draftProbe))
+        {
+            var weak = draftProbe with
+            {
+                OutreachStatus = "needs_review",
+                Subject = null,
+                Body = null,
+                ApprovalId = null,
+                ContentHash = null,
+                ApprovedBy = null,
+                ApprovedAt = null,
+                TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            await _store.UpsertProspectAsync(weak, cancellationToken);
+            return weak;
+        }
+
         var site = Site();
         var tracked = $"{site}{p.TrackedPath}";
-        var greeting = p.ChannelName;
-        var subject = CreatorAcquisitionCampaigns.DefaultSubject;
-        var unsub = $"{site}/api/public/acq/unsubscribe?token=PLACEHOLDER";
-        var body = CreatorAcquisitionMail.BuildText(greeting, p.ChannelName, p.Observation, tracked, p.ChannelName, unsub, "{{configured_business_postal_address}}");
+        var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
+        var subjectVariant = CreatorAcquisitionCopy.SubjectVariantCode(variant);
+        var (subject, body) = CreatorAcquisitionCopy.Build(
+            variant,
+            p.ChannelName,
+            p.ChannelName,
+            observation!,
+            improvement ?? "",
+            tracked);
+
         var next = p with
         {
+            Observation = observation,
+            SuggestedImprovement = improvement,
+            FindingType = findingType,
+            ExampleVideoTitle = exampleTitle,
+            SampleSize = sampleSize > 0 ? sampleSize : p.SampleSize,
+            WeakDescriptionCount = weakDescriptions > 0 ? weakDescriptions : p.WeakDescriptionCount,
+            TitleIssueCount = titleIssues > 0 ? titleIssues : p.TitleIssueCount,
             Subject = subject,
             Body = body,
+            EmailVariant = variant,
+            SubjectVariant = subjectVariant,
+            MessageVariant = "brand_audit_v1",
+            TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
             OutreachStatus = "draft_ready",
             ApprovalId = null,
             ContentHash = null,
+            ApprovedBy = null,
+            ApprovedAt = null,
             UpdatedAt = DateTimeOffset.UtcNow
         };
         next = next with { ContentHash = CreatorAcquisitionScoring.ContentHash(next) };
@@ -400,6 +519,10 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             if (p.PreviewPlaceholder) return (null, $"{id} is a placeholder and cannot be approved.");
             if (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body) || string.IsNullOrWhiteSpace(p.Observation))
                 return (null, $"{id} has no draft.");
+            if (CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body))
+                return (null, $"{id} still uses the legacy personal-name template. Regenerate the draft first.");
+            if (!CreatorAcquisitionScoring.HasStrongPersonalization(p))
+                return (null, $"{id} personalization is too weak for outreach (needs_review).");
             if (!CreatorAcquisitionScoring.IsVerifiedPublicEmail(p))
                 return (null, $"{id} has no verified public business email.");
             // Align approval with send gates (except cooldown / already contacted — those are temporal).
@@ -1329,6 +1452,73 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         }
 
         return new { inspected = ok, failed, contactVerified = verified, considered = targets.Count };
+    }
+
+    /// <summary>
+    /// Invalidate unsent outreach that still uses the legacy Max/Founder template,
+    /// regenerate brand-led drafts, and return them to needs-approval (draft_ready / needs_review).
+    /// Does not touch already-sent emails.
+    /// </summary>
+    public async Task<object> MigrateBrandCopyAsync(CancellationToken cancellationToken)
+    {
+        var all = await _store.ListProspectsAsync(cancellationToken);
+        var candidates = all
+            .Where(p => !p.PreviewPlaceholder)
+            .Where(p => p.LastContactedAt is null)
+            .Where(p =>
+            {
+                var status = (p.OutreachStatus ?? "").ToLowerInvariant();
+                if (status is "sent" or "delivered" or "clicked" or "replied" or "interested"
+                    or "customer" or "unsubscribed" or "bounced" or "complained" or "suppressed")
+                    return false;
+                var legacy = CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body)
+                    || !string.Equals(p.TemplateVersion, CreatorAcquisitionCopy.TemplateVersion, StringComparison.OrdinalIgnoreCase);
+                // Also catch approved/queued drafts that never got TemplateVersion stamped.
+                if (!legacy && string.IsNullOrWhiteSpace(p.TemplateVersion)
+                    && (!string.IsNullOrWhiteSpace(p.Body) || !string.IsNullOrWhiteSpace(p.ApprovalId)))
+                    legacy = true;
+                return legacy;
+            })
+            .ToList();
+
+        var regenerated = new List<object>();
+        var skipped = new List<object>();
+        foreach (var p in candidates)
+        {
+            var wasApproved = !string.IsNullOrWhiteSpace(p.ApprovalId)
+                || string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase);
+            var cleared = p with
+            {
+                ApprovalId = null,
+                ContentHash = null,
+                ApprovedBy = null,
+                ApprovedAt = null,
+                OutreachStatus = "draft_ready",
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            await _store.UpsertProspectAsync(cleared, cancellationToken);
+
+            var next = await PrepareDraftAsync(p.ProspectId, cancellationToken) ?? cleared;
+            regenerated.Add(new
+            {
+                prospectId = next.ProspectId,
+                channelName = next.ChannelName,
+                wasApproved,
+                outreachStatus = next.OutreachStatus,
+                templateVersion = next.TemplateVersion,
+                subject = next.Subject,
+                findingType = next.FindingType,
+                hadLegacyCopy = CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body)
+            });
+        }
+
+        return new
+        {
+            considered = candidates.Count,
+            regenerated = regenerated.Count,
+            items = regenerated,
+            skipped
+        };
     }
 
     private static string GuessLanguage(string title, IReadOnlyList<(DateTimeOffset publishedAt, string title, string description)> videos)

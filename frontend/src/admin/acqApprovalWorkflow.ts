@@ -4,6 +4,7 @@ export type AcqWorkflowStatus =
   | 'EMAIL_REQUIRED'
   | 'EMAIL_VERIFICATION_REQUIRED'
   | 'READY_FOR_APPROVAL'
+  | 'NEEDS_REVIEW'
   | 'APPROVED'
   | 'COOLDOWN'
   | 'REJECTED'
@@ -68,7 +69,7 @@ export function isReadyForApproval(row: AcqAdminProspect): boolean {
   const outreach = (p.outreachStatus || '').toLowerCase();
   if (outreach === 'approved' || (p.approvalStatus || '').toLowerCase() === 'approved') return false;
   if (
-    ['rejected', 'suppressed', 'bounced', 'complained', 'unsubscribed', 'customer', 'sent', 'delivered', 'replied'].includes(
+    ['rejected', 'suppressed', 'bounced', 'complained', 'unsubscribed', 'customer', 'sent', 'delivered', 'replied', 'needs_review'].includes(
       outreach
     )
   ) {
@@ -77,6 +78,10 @@ export function isReadyForApproval(row: AcqAdminProspect): boolean {
   if (!isVerifiedPublicContact(row)) return false;
   if (!(p.subject || '').trim() || !(p.observation || '').trim()) return false;
   if (!(row.body || '').trim()) return false;
+  const blob = `${p.subject || ''}\n${row.body || ''}`;
+  if (/\bI'm Max\b/i.test(blob) || /Founder,\s*YouTubeBooster/i.test(blob) || /\bI ran .+ through YouTubeBooster/i.test(blob)) {
+    return false;
+  }
   return true;
 }
 
@@ -251,6 +256,21 @@ export function resolveAcqWorkflow(
     };
   }
 
+  if (outreach === 'needs_review') {
+    return {
+      ...base,
+      status: 'NEEDS_REVIEW',
+      label: 'NEEDS REVIEW',
+      checkboxDisabledReason: 'Personalization is too weak for outreach.',
+      whyHere: 'No sufficiently specific channel finding — quality gate blocked the draft.',
+      currentStatusAnswer: 'NEEDS REVIEW',
+      nextStep: 'Re-inspect the channel for stronger evidence, or reject.',
+      whatICanDo: 'Prepare Draft (retry), Re-inspect, or Reject.',
+      primaryAction: 'prepare_draft',
+      primaryActionLabel: 'Retry Draft'
+    };
+  }
+
   if (!isReadyForApproval(row)) {
     const needsDraft = !(p.subject || '').trim() || !(row.body || '').trim() || !(p.observation || '').trim();
     return {
@@ -296,6 +316,7 @@ export function countWorkflowStatuses(
     EMAIL_REQUIRED: 0,
     EMAIL_VERIFICATION_REQUIRED: 0,
     READY_FOR_APPROVAL: 0,
+    NEEDS_REVIEW: 0,
     APPROVED: 0,
     COOLDOWN: 0,
     REJECTED: 0,

@@ -5,6 +5,7 @@ export const WORKFLOW_FILTERS: { value: AcqWorkflowStatus | 'all'; label: string
   { value: 'EMAIL_REQUIRED', label: 'Email required' },
   { value: 'EMAIL_VERIFICATION_REQUIRED', label: 'Email verification required' },
   { value: 'READY_FOR_APPROVAL', label: 'Ready for approval' },
+  { value: 'NEEDS_REVIEW', label: 'Needs review' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'COOLDOWN', label: 'Cooldown' },
   { value: 'REJECTED', label: 'Rejected' },
@@ -43,15 +44,16 @@ export function workflowBadgeKind(status: AcqWorkflowStatus): 'ok' | 'warn' | 'b
   switch (status) {
     case 'READY_FOR_APPROVAL':
       return 'ok';
+    case 'NEEDS_REVIEW':
+    case 'EMAIL_REQUIRED':
+    case 'EMAIL_VERIFICATION_REQUIRED':
+    case 'COOLDOWN':
+      return 'warn';
     case 'APPROVED':
     case 'SENT':
     case 'REPLIED':
     case 'CONVERTED':
       return 'info';
-    case 'EMAIL_REQUIRED':
-    case 'EMAIL_VERIFICATION_REQUIRED':
-    case 'COOLDOWN':
-      return 'warn';
     case 'REJECTED':
       return 'bad';
     default:
