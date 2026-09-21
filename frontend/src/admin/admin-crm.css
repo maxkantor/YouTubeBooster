@@ -1010,6 +1010,26 @@
 .acq-progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #6366f1, #818cf8);
+  transition: width 0.35s ease;
+}
+
+.acq-progress-fill-active {
+  background-size: 200% 100%;
+  animation: acq-progress-shimmer 1.2s linear infinite;
+}
+
+@keyframes acq-progress-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.acq-discovery-progress-bar {
+  margin: 4px 0 10px;
+  height: 10px;
 }
 
 .acq-blocker-hot {

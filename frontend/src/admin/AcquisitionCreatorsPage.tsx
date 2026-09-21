@@ -278,6 +278,9 @@ export function AcquisitionCreatorsPage() {
   const remaining = discoveryJob
     ? Math.max(0, discoveryJob.prospectIds.length - discoveryJob.processed)
     : 0;
+  const discoveryTotal = discoveryJob?.prospectIds.length ?? 0;
+  const discoveryPct =
+    discoveryTotal > 0 ? Math.min(100, Math.round((100 * (discoveryJob?.processed ?? 0)) / discoveryTotal)) : 0;
 
   return (
     <AdminShell title="Creators" subtitle="Master prospect database — all COOK-001 creators.">
@@ -339,11 +342,26 @@ export function AcquisitionCreatorsPage() {
           <div className="acq-discovery-progress">
             <div className="acq-discovery-progress-head">
               <strong>EMAIL DISCOVERY</strong>
-              <span className="ops-muted">{discoveryJob.status}</span>
+              <span className="ops-muted">
+                {discoveryJob.status} · {discoveryPct}%
+              </span>
             </div>
             <p>
-              {discoveryJob.processed} / {discoveryJob.prospectIds.length} processed
+              {discoveryJob.processed} / {discoveryTotal} processed
             </p>
+            <div
+              className="acq-progress acq-discovery-progress-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={discoveryPct}
+              aria-label="Email discovery progress"
+            >
+              <div
+                className={`acq-progress-fill${discoveryJob.status === 'running' ? ' acq-progress-fill-active' : ''}`}
+                style={{ width: `${discoveryPct}%` }}
+              />
+            </div>
             <ul className="acq-discovery-stats">
               <li>
                 Found <strong>{discoveryJob.found}</strong>
