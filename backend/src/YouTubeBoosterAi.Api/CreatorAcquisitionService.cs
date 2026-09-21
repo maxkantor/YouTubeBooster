@@ -443,7 +443,11 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             ExampleVideoTitle = exampleTitle,
             SampleSize = sampleSize > 0 ? sampleSize : p.SampleSize,
             WeakDescriptionCount = weakDescriptions > 0 ? weakDescriptions : p.WeakDescriptionCount,
-            TitleIssueCount = titleIssues > 0 ? titleIssues : p.TitleIssueCount
+            TitleIssueCount = titleIssues > 0 ? titleIssues : p.TitleIssueCount,
+            // Ignore legacy Max/Founder body when judging personalization strength.
+            Body = null,
+            Subject = null,
+            TemplateVersion = CreatorAcquisitionCopy.TemplateVersion
         };
         if (!CreatorAcquisitionScoring.HasStrongPersonalization(draftProbe))
         {
@@ -1457,23 +1461,28 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     /// <summary>
     /// Invalidate unsent outreach that still uses the legacy Max/Founder template,
     /// regenerate brand-led drafts, and return them to needs-approval (draft_ready / needs_review).
-    /// Does not touch already-sent emails.
+    /// Does not re-approve or re-queue already-sent emails. When includeAlreadyContacted is true,
+    /// contacted prospects get brand copy regenerated for CRM preview / follow-up only.
     /// </summary>
-    public async Task<object> MigrateBrandCopyAsync(CancellationToken cancellationToken)
+    public async Task<object> MigrateBrandCopyAsync(CancellationToken cancellationToken, bool includeAlreadyContacted = false)
     {
         var all = await _store.ListProspectsAsync(cancellationToken);
         var candidates = all
             .Where(p => !p.PreviewPlaceholder)
-            .Where(p => p.LastContactedAt is null)
             .Where(p =>
             {
                 var status = (p.OutreachStatus ?? "").ToLowerInvariant();
-                if (status is "sent" or "delivered" or "clicked" or "replied" or "interested"
-                    or "customer" or "unsubscribed" or "bounced" or "complained" or "suppressed")
+                if (status is "customer" or "unsubscribed" or "bounced" or "complained" or "suppressed")
                     return false;
+                if (!includeAlreadyContacted && p.LastContactedAt is not null)
+                    return false;
+                if (!includeAlreadyContacted
+                    && status is "sent" or "delivered" or "clicked" or "replied" or "interested")
+                    return false;
+
                 var legacy = CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body)
-                    || !string.Equals(p.TemplateVersion, CreatorAcquisitionCopy.TemplateVersion, StringComparison.OrdinalIgnoreCase);
-                // Also catch approved/queued drafts that never got TemplateVersion stamped.
+                    || !string.Equals(p.TemplateVersion, CreatorAcquisitionCopy.TemplateVersion, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(status, "needs_review", StringComparison.OrdinalIgnoreCase);
                 if (!legacy && string.IsNullOrWhiteSpace(p.TemplateVersion)
                     && (!string.IsNullOrWhiteSpace(p.Body) || !string.IsNullOrWhiteSpace(p.ApprovalId)))
                     legacy = true;
@@ -1482,28 +1491,53 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             .ToList();
 
         var regenerated = new List<object>();
-        var skipped = new List<object>();
         foreach (var p in candidates)
         {
             var wasApproved = !string.IsNullOrWhiteSpace(p.ApprovalId)
                 || string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase);
+            var alreadyContacted = p.LastContactedAt is not null;
+            var priorStatus = p.OutreachStatus;
+
             var cleared = p with
             {
                 ApprovalId = null,
                 ContentHash = null,
                 ApprovedBy = null,
                 ApprovedAt = null,
-                OutreachStatus = "draft_ready",
+                OutreachStatus = alreadyContacted ? (priorStatus ?? "sent") : "draft_ready",
                 UpdatedAt = DateTimeOffset.UtcNow
             };
             await _store.UpsertProspectAsync(cleared, cancellationToken);
 
             var next = await PrepareDraftAsync(p.ProspectId, cancellationToken) ?? cleared;
+
+            if (alreadyContacted)
+            {
+                // Keep funnel status; never put contacted creators back into approved send queue.
+                var keepStatus = priorStatus is "approved" ? "sent" : (priorStatus ?? "sent");
+                if (string.Equals(next.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase))
+                    keepStatus = "needs_review";
+                else if (string.Equals(next.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                         && keepStatus is "sent" or "delivered" or "clicked" or "replied" or "interested" or "approved")
+                    keepStatus = keepStatus == "approved" ? "sent" : keepStatus;
+
+                next = next with
+                {
+                    ApprovalId = null,
+                    ApprovedBy = null,
+                    ApprovedAt = null,
+                    OutreachStatus = keepStatus,
+                    UpdatedAt = DateTimeOffset.UtcNow
+                };
+                await _store.UpsertProspectAsync(next, cancellationToken);
+            }
+
             regenerated.Add(new
             {
                 prospectId = next.ProspectId,
                 channelName = next.ChannelName,
                 wasApproved,
+                alreadyContacted,
                 outreachStatus = next.OutreachStatus,
                 templateVersion = next.TemplateVersion,
                 subject = next.Subject,
@@ -1516,8 +1550,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         {
             considered = candidates.Count,
             regenerated = regenerated.Count,
-            items = regenerated,
-            skipped
+            items = regenerated
         };
     }
 

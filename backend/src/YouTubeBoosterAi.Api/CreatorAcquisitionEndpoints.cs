@@ -501,10 +501,11 @@ public static class CreatorAcquisitionEndpoints
         });
 
         admin.MapPost("/migrate-brand-copy", async (
+            bool? includeAlreadyContacted,
             ICreatorAcquisitionService acq,
             CancellationToken cancellationToken) =>
         {
-            var result = await acq.MigrateBrandCopyAsync(cancellationToken);
+            var result = await acq.MigrateBrandCopyAsync(cancellationToken, includeAlreadyContacted == true);
             return Results.Ok(result);
         });
 
@@ -836,7 +837,7 @@ public interface ICreatorAcquisitionService
     Task ApplySesEventAsync(string prospectId, string eventType, CancellationToken cancellationToken);
     Task RecordFunnelAsync(string token, string eventName, CancellationToken cancellationToken);
     Task<object> MigrateRescoreAsync(int limit, CancellationToken cancellationToken);
-    Task<object> MigrateBrandCopyAsync(CancellationToken cancellationToken);
+    Task<object> MigrateBrandCopyAsync(CancellationToken cancellationToken, bool includeAlreadyContacted = false);
     Task<(AcqProspectRecord? Prospect, string? Error)> RejectAsync(string prospectId, string adminEmail, string? reason, CancellationToken cancellationToken);
     Task<(AcqProspectRecord? Prospect, string? Error)> UnapproveAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
     Task<(AcqProspectRecord? Prospect, string? Error)> OverrideCooldownAsync(string prospectId, string adminEmail, string? reason, CancellationToken cancellationToken);
