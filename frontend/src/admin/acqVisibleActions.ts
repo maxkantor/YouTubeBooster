@@ -122,3 +122,19 @@ export function actionsAbovePreview(status: AcqWorkflowStatus): boolean {
     status === 'EMAIL_VERIFICATION_REQUIRED'
   );
 }
+
+export function draftPrepareErrorMessage(reason: string | null | undefined): string {
+  const r = (reason || '').trim();
+  if (!r) return 'Could not prepare draft. Unknown error.';
+  if (r === 'already_complete') return 'Draft already complete.';
+  if (r === 'placeholder_inspection')
+    return 'Could not prepare draft. Reason: YouTube channel data still missing after re-inspect.';
+  if (r === 'missing_observation') return 'Could not prepare draft. Reason: Missing creator analysis.';
+  if (r === 'weak_personalization')
+    return 'Could not prepare draft. Reason: Channel evidence is too weak for a personalized draft.';
+  if (r === 'missing_email') return 'Could not prepare draft. Reason: Missing usable email.';
+  if (r.startsWith('suppressed:')) return `Could not prepare draft. Reason: Recipient is suppressed (${r.slice(11)}).`;
+  if (r.startsWith('inspect_failed:')) return `Could not prepare draft. Reason: Re-inspect failed (${r.slice(15)}).`;
+  if (r === 'not_found') return 'Could not prepare draft. Reason: Prospect not found.';
+  return `Could not prepare draft. Reason: ${r}`;
+}

@@ -160,9 +160,9 @@ export function AcqActionPanel({
             Add Email Manually
           </button>
         )}
-        {wf.primaryAction === 'prepare_draft' && (
+            {wf.primaryAction === 'prepare_draft' && (
           <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={onPrepareDraft}>
-            {wf.primaryActionLabel || 'Prepare Draft'}
+            {busy ? 'Preparing…' : wf.primaryActionLabel || 'Prepare Draft'}
           </button>
         )}
         {wf.canReject && (

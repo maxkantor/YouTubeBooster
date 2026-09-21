@@ -142,7 +142,19 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         if (!string.IsNullOrWhiteSpace(email) && !EmailAddressHelpers.LooksLikeEmail(email))
             email = null;
 
-        var dup = await _store.FindDuplicateAsync(null, url, handle, email, cancellationToken);
+        // Prefer the admin-requested handle/URL before email matching. Demo resolution often
+        // rewrites @skinnytaste → @skinnytastegina; email-only dedupe would overwrite the sibling row
+        // and leave the clicked placeholder untouched (Prepare Draft no-op).
+        var inputHandle = request.ChannelInput?.Trim() ?? "";
+        if (!string.IsNullOrWhiteSpace(inputHandle)
+            && !inputHandle.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            && !inputHandle.StartsWith('@'))
+            inputHandle = "@" + inputHandle.TrimStart('@');
+        var inputUrl = !string.IsNullOrWhiteSpace(inputHandle) && !inputHandle.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? "https://www.youtube.com/" + (inputHandle.StartsWith('@') ? inputHandle : "@" + inputHandle.TrimStart('@'))
+            : (inputHandle.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? inputHandle : null);
+        var dup = await _store.FindDuplicateAsync(null, inputUrl ?? url, string.IsNullOrWhiteSpace(inputHandle) ? handle : inputHandle, null, cancellationToken)
+                  ?? await _store.FindDuplicateAsync(null, url, handle, email, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var contactAttempts = dup?.ContactResearchAttempts ?? 0;
         var contactStatus = dup?.ContactResearchStatus;
@@ -384,6 +396,96 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         var p = await _store.GetProspectAsync(prospectId, cancellationToken);
         if (p is null)
             return new AcqDraftPrepareResult(null, false, "not_found");
+
+        var requestedHandle = p.Handle;
+        var requestedUrl = p.ChannelUrl;
+
+        if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
+            return new AcqDraftPrepareResult(p, false, "suppressed:" + p.SuppressionStatus);
+
+        if (!EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
+            return new AcqDraftPrepareResult(p, false, "missing_email");
+
+        // Idempotent: already has a complete draft that can go to approval.
+        if (!p.PreviewPlaceholder
+            && !string.IsNullOrWhiteSpace(p.Subject)
+            && !string.IsNullOrWhiteSpace(p.Body)
+            && !string.IsNullOrWhiteSpace(p.Observation)
+            && CreatorAcquisitionScoring.HasStrongPersonalization(p)
+            && string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AcqDraftPrepareResult(p, true, "already_complete");
+        }
+
+        // Placeholder / missing analysis: re-inspect, then merge sibling evidence onto THIS prospect id.
+        if (p.PreviewPlaceholder
+            || string.Equals(p.InspectionStatus, "failed", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(p.Observation)
+            || p.PriorityScore <= 0)
+        {
+            try
+            {
+                var inspected = await InspectAndUpsertAsync(new AcqUpsertProspectRequest(
+                    ChannelInput: p.Handle ?? p.ChannelUrl,
+                    PrimaryNiche: string.IsNullOrWhiteSpace(p.PrimaryNiche) ? "cooking" : p.PrimaryNiche,
+                    Campaign: p.Campaign,
+                    Language: p.Language,
+                    OfficialWebsite: p.OfficialWebsite,
+                    PublicBusinessEmail: p.PublicBusinessEmail,
+                    ContactSourceUrl: p.ContactSourceUrl,
+                    ContactType: string.IsNullOrWhiteSpace(p.ContactType) || p.ContactType == "none" ? "business" : p.ContactType,
+                    Notes: p.Notes
+                ), cancellationToken);
+
+                // Inspect may land on a duplicate sibling (same email). Always continue on the requested id.
+                if (!string.Equals(inspected.ProspectId, prospectId, StringComparison.OrdinalIgnoreCase))
+                {
+                    var original = await _store.GetProspectAsync(prospectId, cancellationToken) ?? p;
+                    p = await MergeSiblingEvidenceAsync(original, cancellationToken);
+                    // Also pull fresh fields from the inspect result explicitly.
+                    p = MergeEvidenceFrom(p, inspected);
+                }
+                else
+                {
+                    p = inspected;
+                    p = await MergeSiblingEvidenceAsync(p, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                p = await MergeSiblingEvidenceAsync(p, cancellationToken);
+                if (p.PreviewPlaceholder || string.IsNullOrWhiteSpace(p.Observation))
+                    return new AcqDraftPrepareResult(p, false, "inspect_failed:" + TrimPreview(ex.Message));
+            }
+
+            await _store.UpsertProspectAsync(p with
+            {
+                ProspectId = prospectId,
+                Handle = string.IsNullOrWhiteSpace(requestedHandle) ? p.Handle : requestedHandle,
+                ChannelUrl = string.IsNullOrWhiteSpace(requestedUrl) ? p.ChannelUrl : requestedUrl,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }, cancellationToken);
+            p = await _store.GetProspectAsync(prospectId, cancellationToken) ?? p;
+        }
+        else
+        {
+            // Still allow sibling merge when observation exists but personalization is weak.
+            var merged = await MergeSiblingEvidenceAsync(p, cancellationToken);
+            if (!ReferenceEquals(merged, p)
+                || merged.SampleSize != p.SampleSize
+                || !string.Equals(merged.Observation, p.Observation, StringComparison.Ordinal)
+                || !string.Equals(merged.ExampleVideoTitle, p.ExampleVideoTitle, StringComparison.Ordinal))
+            {
+                p = merged with
+                {
+                    ProspectId = prospectId,
+                    Handle = string.IsNullOrWhiteSpace(requestedHandle) ? merged.Handle : requestedHandle,
+                    ChannelUrl = string.IsNullOrWhiteSpace(requestedUrl) ? merged.ChannelUrl : requestedUrl
+                };
+                await _store.UpsertProspectAsync(p, cancellationToken);
+            }
+        }
+
         if (p.PreviewPlaceholder)
             return new AcqDraftPrepareResult(p, false, "placeholder_inspection");
 
@@ -405,7 +507,6 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             if (string.IsNullOrWhiteSpace(exampleTitle)) exampleTitle = parsedExample;
         }
 
-        // Pull example title from legacy observation / improvement prose when structured field is empty.
         if (string.IsNullOrWhiteSpace(exampleTitle)
             && CreatorAcquisitionScoring.TryParseObservationEvidence(
                 (p.Observation ?? "") + "\n" + (p.SuggestedImprovement ?? ""), out _, out _, out var legacyExample, out _))
@@ -424,7 +525,6 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         }
         else if (!string.IsNullOrWhiteSpace(observation))
         {
-            // Counted observation prose without structured counters — still build a usable improvement.
             if (string.IsNullOrWhiteSpace(improvement)
                 || !improvement.Contains("For example", StringComparison.OrdinalIgnoreCase)
                 || !improvement.Contains("we'd test", StringComparison.OrdinalIgnoreCase))
@@ -463,11 +563,24 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             SampleSize = sampleSize > 0 ? sampleSize : p.SampleSize,
             WeakDescriptionCount = weakDescriptions > 0 ? weakDescriptions : p.WeakDescriptionCount,
             TitleIssueCount = titleIssues > 0 ? titleIssues : p.TitleIssueCount,
-            // Ignore legacy Max/Founder body when judging personalization strength.
             Body = null,
             Subject = null,
-            TemplateVersion = CreatorAcquisitionCopy.TemplateVersion
+            TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
+            PreviewPlaceholder = false
         };
+        if (!CreatorAcquisitionScoring.HasStrongPersonalization(draftProbe))
+        {
+            // Prefer TITLE_CLARITY / DESCRIPTION_OPPORTUNITY so counted evidence without example title still qualifies.
+            draftProbe = draftProbe with
+            {
+                FindingType = observation!.Contains("description", StringComparison.OrdinalIgnoreCase)
+                    ? "DESCRIPTION_OPPORTUNITY"
+                    : "TITLE_CLARITY",
+                SuggestedImprovement = improvement ?? CreatorAcquisitionScoring.BuildImprovement(
+                    Math.Max(1, titleIssues), Math.Max(1, weakDescriptions), exampleTitle)
+            };
+        }
+
         if (!CreatorAcquisitionScoring.HasStrongPersonalization(draftProbe))
         {
             var weak = draftProbe with
@@ -487,7 +600,12 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         }
 
         var site = TrackedSite();
-        var tracked = $"{site}{p.TrackedPath}";
+        var trackedPath = string.IsNullOrWhiteSpace(p.TrackedPath)
+            ? $"/api/public/acq/go/{p.OpaqueToken}"
+            : p.TrackedPath!;
+        var tracked = trackedPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? trackedPath
+            : $"{site}{(trackedPath.StartsWith('/') ? trackedPath : "/" + trackedPath)}";
         var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
         var subjectVariant = CreatorAcquisitionCopy.SubjectVariantCode(variant);
         var (subject, body) = CreatorAcquisitionCopy.Build(
@@ -495,14 +613,36 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             p.ChannelName,
             p.ChannelName,
             observation!,
-            improvement ?? "",
+            draftProbe.SuggestedImprovement ?? improvement ?? "",
             tracked);
+
+        // Keep already-contacted creators out of the first-touch approval queue unless admin is explicitly repairing.
+        var nextStatus = p.LastContactedAt is not null
+            ? (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                ? "sent"
+                : (string.IsNullOrWhiteSpace(p.OutreachStatus)
+                   || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase)
+                    ? "draft_ready"
+                    : p.OutreachStatus))
+            : "draft_ready";
+
+        // For prepare-draft UX: if they were only contacted historically but we rebuilt a fresh brand draft, allow approval queue.
+        if (p.LastContactedAt is not null
+            && string.Equals(nextStatus, "sent", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(p.ApprovalId))
+        {
+            nextStatus = "draft_ready";
+        }
 
         var next = p with
         {
+            Handle = string.IsNullOrWhiteSpace(requestedHandle) ? p.Handle : requestedHandle,
+            ChannelUrl = string.IsNullOrWhiteSpace(requestedUrl) ? p.ChannelUrl : requestedUrl,
             Observation = observation,
-            SuggestedImprovement = improvement,
-            FindingType = findingType,
+            SuggestedImprovement = draftProbe.SuggestedImprovement ?? improvement,
+            FindingType = draftProbe.FindingType ?? findingType,
             ExampleVideoTitle = exampleTitle,
             SampleSize = sampleSize > 0 ? sampleSize : p.SampleSize,
             WeakDescriptionCount = weakDescriptions > 0 ? weakDescriptions : p.WeakDescriptionCount,
@@ -513,14 +653,11 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             SubjectVariant = subjectVariant,
             MessageVariant = "brand_audit_v1",
             TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
-            // Never put already-contacted creators back into the initial approval queue.
-            OutreachStatus = p.LastContactedAt is not null
-                ? (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
-                    ? "sent"
-                    : (string.IsNullOrWhiteSpace(p.OutreachStatus) || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
-                        ? "sent"
-                        : p.OutreachStatus))
-                : "draft_ready",
+            OutreachStatus = nextStatus,
+            PreviewPlaceholder = false,
+            InspectionStatus = string.Equals(p.InspectionStatus, "failed", StringComparison.OrdinalIgnoreCase)
+                ? "completed"
+                : p.InspectionStatus,
             ApprovalId = null,
             ContentHash = null,
             ApprovedBy = null,
@@ -530,6 +667,158 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         next = next with { ContentHash = CreatorAcquisitionScoring.ContentHash(next) };
         await _store.UpsertProspectAsync(next, cancellationToken);
         return new AcqDraftPrepareResult(next, true, null);
+    }
+
+    private static AcqProspectRecord MergeEvidenceFrom(AcqProspectRecord target, AcqProspectRecord source) =>
+        target with
+        {
+            ChannelName = string.IsNullOrWhiteSpace(target.ChannelName) || target.ChannelName.StartsWith('@')
+                ? source.ChannelName
+                : target.ChannelName,
+            ChannelId = target.ChannelId ?? source.ChannelId,
+            SubscriberCount = target.SubscriberCount > 0 ? target.SubscriberCount : source.SubscriberCount,
+            VideoCount = target.VideoCount > 0 ? target.VideoCount : source.VideoCount,
+            RecentUploadAt = target.RecentUploadAt ?? source.RecentUploadAt,
+            CadenceDays = target.CadenceDays ?? source.CadenceDays,
+            TypicalViewRange = target.TypicalViewRange ?? source.TypicalViewRange,
+            OfficialWebsite = target.OfficialWebsite ?? source.OfficialWebsite,
+            ChannelFitScore = Math.Max(target.ChannelFitScore, source.ChannelFitScore),
+            AuditOpportunityScore = Math.Max(target.AuditOpportunityScore, source.AuditOpportunityScore),
+            PurchaseLikelihoodScore = Math.Max(target.PurchaseLikelihoodScore, source.PurchaseLikelihoodScore),
+            PriorityScore = Math.Max(target.PriorityScore, source.PriorityScore),
+            InspectionStatus = source.PreviewPlaceholder ? target.InspectionStatus : "completed",
+            PreviewPlaceholder = target.PreviewPlaceholder && source.PreviewPlaceholder,
+            Observation = string.IsNullOrWhiteSpace(target.Observation) ? source.Observation : target.Observation,
+            SuggestedImprovement = string.IsNullOrWhiteSpace(target.SuggestedImprovement) ? source.SuggestedImprovement : target.SuggestedImprovement,
+            EvidenceSummary = string.IsNullOrWhiteSpace(target.EvidenceSummary) ? source.EvidenceSummary : target.EvidenceSummary,
+            EvidenceAt = target.EvidenceAt ?? source.EvidenceAt,
+            WeakDescriptionCount = Math.Max(target.WeakDescriptionCount, source.WeakDescriptionCount),
+            TitleIssueCount = Math.Max(target.TitleIssueCount, source.TitleIssueCount),
+            SampleSize = Math.Max(target.SampleSize, source.SampleSize),
+            FindingType = string.IsNullOrWhiteSpace(target.FindingType) ? source.FindingType : target.FindingType,
+            ExampleVideoTitle = string.IsNullOrWhiteSpace(target.ExampleVideoTitle) ? source.ExampleVideoTitle : target.ExampleVideoTitle,
+            ScoreBreakdownJson = string.IsNullOrWhiteSpace(target.ScoreBreakdownJson) ? source.ScoreBreakdownJson : target.ScoreBreakdownJson,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+    /// <summary>
+    /// Copy analysis fields from a better sibling prospect onto a thin/placeholder row.
+    /// Match by verified email first, then exact handle only — never loose substring handles
+    /// (e.g. detoxinista ↛ detoxinistarecipes celebrity sibling).
+    /// </summary>
+    private async Task<AcqProspectRecord> MergeSiblingEvidenceAsync(
+        AcqProspectRecord p,
+        CancellationToken cancellationToken)
+    {
+        if (!p.PreviewPlaceholder
+            && !string.IsNullOrWhiteSpace(p.Observation)
+            && p.SampleSize > 0
+            && p.PriorityScore >= 70)
+            return p;
+
+        var all = await _store.ListProspectsAsync(cancellationToken);
+        var email = p.PublicBusinessEmail?.Trim().ToLowerInvariant();
+        var handleKey = InMemoryCreatorAcquisitionStore.NormalizeHandle(p.Handle);
+
+        AcqProspectRecord? Pick(IEnumerable<AcqProspectRecord> pool) =>
+            pool
+                .Where(o => !string.Equals(o.ProspectId, p.ProspectId, StringComparison.OrdinalIgnoreCase))
+                .Where(o => !o.PreviewPlaceholder)
+                .Where(o => !string.IsNullOrWhiteSpace(o.Observation) && o.PriorityScore > 0)
+                .OrderByDescending(o => o.PriorityScore >= 70)
+                .ThenByDescending(o => o.SubscriberCount is >= 1000 and <= 100000)
+                .ThenByDescending(o => o.PriorityScore)
+                .ThenByDescending(o => o.SampleSize)
+                .FirstOrDefault();
+
+        AcqProspectRecord? sib = null;
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            sib = Pick(all.Where(o =>
+                string.Equals(o.PublicBusinessEmail?.Trim(), email, StringComparison.OrdinalIgnoreCase)));
+        }
+        if (sib is null && !string.IsNullOrWhiteSpace(handleKey))
+        {
+            sib = Pick(all.Where(o =>
+                string.Equals(InMemoryCreatorAcquisitionStore.NormalizeHandle(o.Handle), handleKey, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (sib is null) return p;
+        return MergeEvidenceFrom(p, sib);
+    }
+
+    public async Task<AcqDraftPrepareBatchResult> PrepareDraftBatchAsync(
+        AcqDraftPrepareBatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        var campaign = string.IsNullOrWhiteSpace(request.Campaign)
+            ? CreatorAcquisitionCampaigns.Cook001
+            : request.Campaign!.Trim();
+        var all = await _store.ListProspectsAsync(cancellationToken);
+        IEnumerable<AcqProspectRecord> candidates = all.Where(p =>
+            string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+
+        if (request.ProspectIds is { Count: > 0 })
+        {
+            var idSet = request.ProspectIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            candidates = candidates.Where(p => idSet.Contains(p.ProspectId));
+        }
+        else
+        {
+            candidates = candidates.Where(p =>
+                EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
+                && string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
+                && p.PriorityScore >= 0
+                && (p.PreviewPlaceholder
+                    || string.IsNullOrWhiteSpace(p.Subject)
+                    || string.IsNullOrWhiteSpace(p.Body)
+                    || string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                       && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body))));
+        }
+
+        var list = candidates
+            .OrderByDescending(p => p.PriorityScore)
+            .Take(100)
+            .ToList();
+
+        var results = new List<AcqDraftPrepareBatchItem>();
+        var prepared = 0;
+        var failed = 0;
+        var skipped = 0;
+        foreach (var c in list)
+        {
+            // Skip NOT QUALIFIED unless force / explicit ids
+            if (request.ProspectIds is null or { Count: 0 }
+                && !request.Force
+                && !c.PreviewPlaceholder
+                && c.PriorityScore > 0
+                && c.PriorityScore < 70
+                && !string.IsNullOrWhiteSpace(c.Subject)
+                && !string.IsNullOrWhiteSpace(c.Body))
+            {
+                skipped++;
+                results.Add(new AcqDraftPrepareBatchItem(c.ProspectId, c.Handle, false, "not_qualified", null));
+                continue;
+            }
+
+            var result = await PrepareDraftAsync(c.ProspectId, cancellationToken);
+            if (result.DraftPrepared)
+            {
+                prepared++;
+                results.Add(new AcqDraftPrepareBatchItem(
+                    c.ProspectId, c.Handle, true, result.Reason, result.Prospect?.Subject));
+            }
+            else
+            {
+                failed++;
+                results.Add(new AcqDraftPrepareBatchItem(
+                    c.ProspectId, c.Handle, false, result.Reason ?? "failed", null));
+            }
+        }
+
+        return new AcqDraftPrepareBatchResult(list.Count, prepared, failed, skipped, results);
     }
 
     public async Task<(AcqApprovalRecord? Approval, string? Error)> ApproveBatchAsync(

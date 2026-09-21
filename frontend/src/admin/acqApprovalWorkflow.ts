@@ -68,8 +68,55 @@ export function isVerifiedPublicContact(row: AcqAdminProspect): boolean {
 }
 
 /** Matches backend ApproveBatchAsync prerequisites (UI-side). */
-export function isReadyForApproval(row: AcqAdminProspect, nowMs = Date.now()): boolean {
-  return approvalBlockReason(row, nowMs) === null && !isTerminalOutreach(row);
+/**
+ * Soft gate: complete personalized draft ready for human review (Needs Approval tab).
+ * Does NOT enforce COOK-001 score / audience band — those block Approve & Send only.
+ */
+export function draftReviewBlockReason(row: AcqAdminProspect): string | null {
+  const p = row.public;
+  if (p.previewPlaceholder) return 'Placeholder inspection — cannot approve.';
+  if ((p.outreachStatus || '').toLowerCase() === 'needs_review') {
+    return 'Personalization is too weak — retry draft first.';
+  }
+  if (!isVerifiedPublicContact(row)) return 'Verified public email required.';
+  if (!(p.subject || '').trim() || !(row.body || '').trim() || !(p.observation || '').trim()) {
+    return 'Complete draft required.';
+  }
+  const blob = `${p.subject || ''}\n${row.body || ''}`;
+  if (/\bI'm Max\b/i.test(blob) || /Founder,\s*YouTubeBooster/i.test(blob) || /\bI ran .+ through YouTubeBooster/i.test(blob)) {
+    return 'Legacy personal template — regenerate the draft first.';
+  }
+  return null;
+}
+
+/** Hard COOK-001 gates for Approve / Approve & Send / batch selection. */
+export function approvalBlockReason(row: AcqAdminProspect, nowMs = Date.now()): string | null {
+  const soft = draftReviewBlockReason(row);
+  if (soft) return soft;
+  if (isTerminalOutreach(row) && (row.public.outreachStatus || '').toLowerCase() !== 'needs_review') {
+    if (
+      (row.public.outreachStatus || '').toLowerCase() === 'approved' ||
+      (row.public.approvalStatus || '').toLowerCase() === 'approved'
+    ) {
+      return 'Already approved.';
+    }
+  }
+  const p = row.public;
+  const score = p.acquisitionScore ?? p.priorityScore ?? 0;
+  if (score < 70) return `Score ${score} is below 70 — cannot approve or send.`;
+  if ((p.subscriberRange || '') !== '1k_100k') {
+    return `Audience ${p.subscriberRange || 'unknown'} is outside the 1k–100k COOK-001 band.`;
+  }
+  if (!p.recentUploadAt) return 'Missing recent upload date — re-inspect the channel.';
+  const ageDays = (nowMs - new Date(p.recentUploadAt).getTime()) / (1000 * 60 * 60 * 24);
+  if (Number.isFinite(ageDays) && ageDays > 60) {
+    return `Last upload is ${Math.floor(ageDays)} days old (>60) — re-inspect or pick a more active creator.`;
+  }
+  return null;
+}
+
+export function isReadyForApproval(row: AcqAdminProspect, _nowMs = Date.now()): boolean {
+  return draftReviewBlockReason(row) === null && !isTerminalOutreach(row);
 }
 
 function isTerminalOutreach(row: AcqAdminProspect): boolean {
@@ -87,39 +134,6 @@ function isTerminalOutreach(row: AcqAdminProspect): boolean {
     'replied',
     'needs_review'
   ].includes(outreach);
-}
-
-export function approvalBlockReason(row: AcqAdminProspect, nowMs = Date.now()): string | null {
-  const p = row.public;
-  if (p.previewPlaceholder) return 'Placeholder inspection — cannot approve.';
-  if (isTerminalOutreach(row) && (p.outreachStatus || '').toLowerCase() === 'needs_review') {
-    return 'Personalization is too weak — retry draft first.';
-  }
-  if (isTerminalOutreach(row) && (p.outreachStatus || '').toLowerCase() !== 'needs_review') {
-    // Already approved / sent / etc. — not an approval-queue candidate.
-    if ((p.outreachStatus || '').toLowerCase() === 'approved' || (p.approvalStatus || '').toLowerCase() === 'approved') {
-      return 'Already approved.';
-    }
-  }
-  if (!isVerifiedPublicContact(row)) return 'Verified public email required.';
-  if (!(p.subject || '').trim() || !(row.body || '').trim() || !(p.observation || '').trim()) {
-    return 'Complete draft required.';
-  }
-  const blob = `${p.subject || ''}\n${row.body || ''}`;
-  if (/\bI'm Max\b/i.test(blob) || /Founder,\s*YouTubeBooster/i.test(blob) || /\bI ran .+ through YouTubeBooster/i.test(blob)) {
-    return 'Legacy personal template — regenerate the draft first.';
-  }
-  const score = p.acquisitionScore ?? p.priorityScore ?? 0;
-  if (score < 70) return `Score ${score} is below 70 — cannot approve or send.`;
-  if ((p.subscriberRange || '') !== '1k_100k') {
-    return `Audience ${p.subscriberRange || 'unknown'} is outside the 1k–100k COOK-001 band.`;
-  }
-  if (!p.recentUploadAt) return 'Missing recent upload date — re-inspect the channel.';
-  const ageDays = (nowMs - new Date(p.recentUploadAt).getTime()) / (1000 * 60 * 60 * 24);
-  if (Number.isFinite(ageDays) && ageDays > 60) {
-    return `Last upload is ${Math.floor(ageDays)} days old (>60) — re-inspect or pick a more active creator.`;
-  }
-  return null;
 }
 
 /** Hard blocks for manual admin send (cooldown is NOT a hard block). */
@@ -373,42 +387,45 @@ export function resolveAcqWorkflow(
 
   if (!isReadyForApproval(row, nowMs)) {
     const needsDraft = !(p.subject || '').trim() || !(row.body || '').trim() || !(p.observation || '').trim();
-    const block = approvalBlockReason(row, nowMs);
-    const notQualified = !!block && !needsDraft && isVerifiedPublicContact(row);
+    const block = draftReviewBlockReason(row) || approvalBlockReason(row, nowMs);
     return {
       ...base,
       status: 'OTHER',
-      label: needsDraft ? 'DRAFT INCOMPLETE' : notQualified ? 'NOT QUALIFIED' : 'QUALIFIED',
+      label: needsDraft ? 'DRAFT INCOMPLETE' : 'QUALIFIED',
       checkboxDisabledReason: p.previewPlaceholder
         ? 'Placeholder inspection — cannot approve.'
         : block || 'Complete the outreach draft before approval.',
       whyHere: p.previewPlaceholder
         ? 'Inspection returned placeholder data.'
-        : notQualified
-          ? block || 'Outside COOK-001 send gates.'
-          : 'Contact is verified; outreach draft still needs work.',
-      currentStatusAnswer: needsDraft ? 'DRAFT INCOMPLETE' : notQualified ? 'NOT QUALIFIED' : 'QUALIFIED',
-      nextStep: notQualified
-        ? block || 'Reject or re-inspect. Approve & Send is blocked until COOK-001 gates pass.'
-        : 'Prepare or edit the draft, then approve when READY FOR APPROVAL.',
-      whatICanDo: notQualified ? 'Reject, or re-inspect / find another prospect.' : 'Prepare Draft, Review, or Reject.',
+        : 'Contact is verified; outreach draft still needs work.',
+      currentStatusAnswer: needsDraft ? 'DRAFT INCOMPLETE' : 'QUALIFIED',
+      nextStep: 'Prepare or edit the draft, then review under Needs Approval.',
+      whatICanDo: 'Prepare Draft, Review, or Reject.',
       primaryAction: needsDraft ? 'prepare_draft' : 'review',
       primaryActionLabel: needsDraft ? 'Prepare Draft' : 'Review'
     };
   }
 
+  const sendGate = approvalBlockReason(row, nowMs);
   return {
     ...base,
     status: 'READY_FOR_APPROVAL',
-    label: 'READY FOR APPROVAL',
-    canSelectForApproval: true,
-    canApprove: true,
-    whyHere: 'Verified contact + complete draft — waiting for your approval.',
-    currentStatusAnswer: 'READY FOR APPROVAL',
-    nextStep: 'Use Approve & Send to send immediately, or Approve to queue for the weekday sender.',
-    whatICanDo: 'Approve & Send, Approve (queue only), Edit Message, or Reject.',
+    label: 'NEEDS APPROVAL',
+    canSelectForApproval: sendGate === null,
+    canApprove: sendGate === null,
+    checkboxDisabledReason: sendGate,
+    whyHere: sendGate
+      ? `Draft is ready for review, but Approve & Send is blocked: ${sendGate}`
+      : 'Verified contact + complete draft — waiting for your approval.',
+    currentStatusAnswer: 'NEEDS APPROVAL',
+    nextStep: sendGate
+      ? `Review the draft. Approve is blocked until: ${sendGate}`
+      : 'Review the draft, then Approve & Send or Approve (queue only). Nothing sends until you approve.',
+    whatICanDo: sendGate
+      ? 'Review Draft, Edit Message, or Reject. Approve stays blocked by COOK-001 gates.'
+      : 'Review Draft, Approve & Send, Approve (queue only), Edit Message, or Reject.',
     primaryAction: 'approve',
-    primaryActionLabel: 'Approve & Send'
+    primaryActionLabel: 'Review Draft'
   };
 }
 

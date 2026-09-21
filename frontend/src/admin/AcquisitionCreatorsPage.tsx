@@ -17,6 +17,7 @@ import {
   resolveAcqWorkflow
 } from './acqApprovalWorkflow';
 import { EMAIL_STATUS_FILTERS, WORKFLOW_FILTERS, formatDt, workflowBadgeKind } from './acqUiShared';
+import { draftPrepareErrorMessage } from './acqVisibleActions';
 
 type ConfirmMode = 'missing' | 'filtered' | 'selected' | null;
 
@@ -40,7 +41,14 @@ export function AcquisitionCreatorsPage() {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const [discoveryBusy, setDiscoveryBusy] = useState(false);
+  const [preparingId, setPreparingId] = useState<string | null>(null);
+  const [draftBatch, setDraftBatch] = useState<{
+    attempted: number;
+    prepared: number;
+    failed: number;
+    skipped: number;
+    results: { prospectId: string; handle: string; draftPrepared: boolean; reason?: string | null }[];
+  } | null>(null);
   const [inspectInput, setInspectInput] = useState('');
   const [showInspect, setShowInspect] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -257,41 +265,74 @@ export function AcquisitionCreatorsPage() {
           }).length
         : missingEmailCount;
 
+  const incompleteDraftRows = useMemo(
+    () =>
+      allItems.filter((r) => {
+        const wf = resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled);
+        return (
+          !!r.publicBusinessEmail &&
+          (wf.status === 'OTHER' || wf.status === 'NEEDS_REVIEW') &&
+          (wf.primaryAction === 'prepare_draft' || wf.label === 'DRAFT INCOMPLETE')
+        );
+      }),
+    [allItems, cooldownDays, sendingEnabled]
+  );
+
   const prepareDraftFor = async (id: string, row?: AcqAdminProspect) => {
+    setPreparingId(id);
     setBusy(true);
     setError('');
+    setNote('Preparing draft…');
     try {
-      let res = await adminApi.acqDraft(id);
-      if (res.draftPrepared === false && row) {
-        setNote('Evidence weak — re-inspecting channel, then retrying draft…');
-        await adminApi.acqInspect({
-          channelInput: row.public.handle || row.public.channelUrl,
-          primaryNiche: row.public.primaryNiche || 'cooking',
-          campaign: row.public.campaign || 'COOK-001',
-          language: row.public.language || undefined,
-          officialWebsite: row.public.officialWebsite || undefined,
-          publicBusinessEmail: row.publicBusinessEmail || undefined,
-          contactSourceUrl: row.public.contactSourceUrl || undefined,
-          contactType:
-            row.public.contactType && row.public.contactType !== 'none' ? row.public.contactType : 'business'
-        });
-        res = await adminApi.acqDraft(id);
-      }
-      if (res.draftPrepared === false) {
-        setError(
-          res.reason === 'weak_personalization'
-            ? 'Still needs stronger channel evidence before a draft can be built.'
-            : res.reason === 'missing_observation'
-              ? 'No channel finding yet — re-inspect the channel first.'
-              : `Draft not ready (${res.reason || 'unknown'}).`
-        );
+      const res = await adminApi.acqDraft(id);
+      if (res.draftPrepared !== true) {
+        setError(draftPrepareErrorMessage(res.reason));
         setNote('');
-      } else {
-        setNote('Draft prepared.');
+        await load();
+        return;
+      }
+      setNote('Draft prepared — ready for approval.');
+      await load();
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? `Could not prepare draft. Reason: ${e.message}`
+          : 'Could not prepare draft. Reason: Backend request failed.'
+      );
+      setNote('');
+    } finally {
+      setPreparingId(null);
+      setBusy(false);
+    }
+  };
+
+  const prepareDraftBatch = async (ids: string[]) => {
+    if (!ids.length) return;
+    setBusy(true);
+    setError('');
+    setNote(`Preparing drafts… 0 / ${ids.length}`);
+    setDraftBatch(null);
+    try {
+      const res = await adminApi.acqPrepareDraftBatch({
+        campaign: 'COOK-001',
+        prospectIds: ids
+      });
+      setDraftBatch(res);
+      const failBits = res.results
+        .filter((r) => !r.draftPrepared)
+        .slice(0, 5)
+        .map((r) => `${r.handle}: ${r.reason || 'failed'}`);
+      setNote(
+        `Draft batch done: ${res.prepared} prepared, ${res.failed} failed, ${res.skipped} skipped.` +
+          (failBits.length ? ` Failures — ${failBits.join('; ')}` : '')
+      );
+      if (res.failed > 0 && res.prepared === 0) {
+        setError(`Could not prepare drafts. ${failBits[0] || 'See batch results.'}`);
       }
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Prepare draft failed');
+      setError(e instanceof Error ? e.message : 'Bulk prepare drafts failed');
+      setNote('');
     } finally {
       setBusy(false);
     }
@@ -382,10 +423,44 @@ export function AcquisitionCreatorsPage() {
           <button
             type="button"
             className="ops-btn ops-btn-ghost"
-            disabled={discoveryBusy || selected.size === 0}
+            disabled={discoveryBusy || busy || selected.size === 0}
             onClick={() => setConfirmMode('selected')}
           >
             Find Emails for Selected ({selected.size})
+          </button>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy || selected.size === 0}
+            onClick={() =>
+              void prepareDraftBatch(
+                [...selected].filter((id) => {
+                  const row = allItems.find((r) => r.public.prospectId === id);
+                  if (!row?.publicBusinessEmail) return false;
+                  const wf = resolveAcqWorkflow(row, cooldownDays, Date.now(), sendingEnabled);
+                  return wf.primaryAction === 'prepare_draft' || wf.label === 'DRAFT INCOMPLETE';
+                })
+              )
+            }
+          >
+            Prepare Drafts for Selected (
+            {
+              [...selected].filter((id) => {
+                const row = allItems.find((r) => r.public.prospectId === id);
+                if (!row?.publicBusinessEmail) return false;
+                const wf = resolveAcqWorkflow(row, cooldownDays, Date.now(), sendingEnabled);
+                return wf.primaryAction === 'prepare_draft' || wf.label === 'DRAFT INCOMPLETE';
+              }).length
+            }
+            )
+          </button>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy || incompleteDraftRows.length === 0}
+            onClick={() => void prepareDraftBatch(incompleteDraftRows.map((r) => r.public.prospectId))}
+          >
+            Prepare All Incomplete Drafts ({incompleteDraftRows.length})
           </button>
         </div>
 
@@ -799,10 +874,12 @@ export function AcquisitionCreatorsPage() {
                           <button
                             type="button"
                             className="ops-btn ops-btn-primary ops-btn-sm"
-                            disabled={busy}
+                            disabled={busy || preparingId === p.prospectId}
                             onClick={() => runPrimary(p.prospectId, wf.primaryAction, row)}
                           >
-                            {wf.primaryActionLabel}
+                            {preparingId === p.prospectId && wf.primaryAction === 'prepare_draft'
+                              ? 'Preparing…'
+                              : wf.primaryActionLabel}
                           </button>
                         )}
                       </td>

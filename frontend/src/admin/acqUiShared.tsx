@@ -7,7 +7,7 @@ export const WORKFLOW_FILTERS: { value: AcqWorkflowStatus | 'all'; label: string
   { value: 'REVIEW_EMAIL', label: 'Review email' },
   { value: 'NOT_FOUND', label: 'Not found' },
   { value: 'EMAIL_VERIFICATION_REQUIRED', label: 'Email verification required' },
-  { value: 'READY_FOR_APPROVAL', label: 'Ready for approval' },
+  { value: 'READY_FOR_APPROVAL', label: 'Needs approval' },
   { value: 'NEEDS_REVIEW', label: 'Needs review' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'COOLDOWN', label: 'Cooldown' },

@@ -547,6 +547,15 @@ public static class CreatorAcquisitionEndpoints
             });
         });
 
+        admin.MapPost("/drafts/prepare-batch", async (
+            AcqDraftPrepareBatchRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await acq.PrepareDraftBatchAsync(body ?? new AcqDraftPrepareBatchRequest(), cancellationToken);
+            return Results.Ok(result);
+        });
+
         admin.MapPost("/preview", async (AcqApproveBatchRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var state = await acq.LoadStateAsync(request.Campaign, cancellationToken);
@@ -904,6 +913,7 @@ public interface ICreatorAcquisitionService
     Task<AcqCampaignState> LoadStateAsync(string campaign, CancellationToken cancellationToken);
     Task<AcqProspectRecord> InspectAndUpsertAsync(AcqUpsertProspectRequest request, CancellationToken cancellationToken);
     Task<AcqDraftPrepareResult> PrepareDraftAsync(string prospectId, CancellationToken cancellationToken);
+    Task<AcqDraftPrepareBatchResult> PrepareDraftBatchAsync(AcqDraftPrepareBatchRequest request, CancellationToken cancellationToken);
     Task<(AcqApprovalRecord? Approval, string? Error)> ApproveBatchAsync(AcqApproveBatchRequest request, string approver, CancellationToken cancellationToken);
     Task<AcqWeekdaySendResult> RunWeekdaySendAsync(string campaign, CancellationToken cancellationToken);
     Task UnsubscribeAsync(string email, CancellationToken cancellationToken);

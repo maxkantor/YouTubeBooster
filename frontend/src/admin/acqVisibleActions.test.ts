@@ -81,12 +81,12 @@ describe('acqVisibleActions + approve readiness', () => {
     assert.equal(actionsAbovePreview('READY_FOR_APPROVAL'), true);
   });
 
-  it('blocks READY when upload is older than 60 days (matches backend ApproveBatch)', () => {
+  it('blocks Approve when upload is older than 60 days (still Needs Approval for review)', () => {
     const r = row({ recentUploadAt: '2026-06-01T00:00:00Z' });
-    assert.equal(isReadyForApproval(r, now), false);
+    assert.equal(isReadyForApproval(r, now), true);
     assert.match(approvalBlockReason(r, now) || '', /60/);
     const wf = resolveAcqWorkflow(r, 14, now, true);
-    assert.notEqual(wf.status, 'READY_FOR_APPROVAL');
+    assert.equal(wf.status, 'READY_FOR_APPROVAL');
     assert.equal(wf.canApprove, false);
   });
 

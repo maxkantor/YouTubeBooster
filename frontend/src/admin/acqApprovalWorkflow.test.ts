@@ -101,27 +101,36 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.primaryActionLabel, 'Verify Email');
   });
 
-  it('marks complete verified draft as READY_FOR_APPROVAL', () => {
+  it('marks complete verified draft as READY_FOR_APPROVAL / NEEDS APPROVAL', () => {
     const r = row({});
     assert.equal(isReadyForApproval(r), true);
     const w = resolveAcqWorkflow(r);
     assert.equal(w.status, 'READY_FOR_APPROVAL');
+    assert.equal(w.label, 'NEEDS APPROVAL');
     assert.equal(w.canSelectForApproval, true);
     assert.equal(w.canApprove, true);
     assert.equal(w.primaryAction, 'approve');
-    assert.equal(w.primaryActionLabel, 'Approve & Send');
-    assert.match(w.currentStatusAnswer, /READY FOR APPROVAL/i);
+    assert.equal(w.primaryActionLabel, 'Review Draft');
+    assert.match(w.currentStatusAnswer, /NEEDS APPROVAL/i);
   });
 
-  it('blocks low score and out-of-band subscribers from approval', () => {
+  it('keeps complete drafts in Needs Approval when COOK-001 send gates fail', () => {
     const low = row({ priorityScore: 60 });
-    assert.equal(isReadyForApproval(low), false);
-    assert.match(resolveAcqWorkflow(low).label, /NOT QUALIFIED/i);
+    assert.equal(isReadyForApproval(low), true);
+    const wLow = resolveAcqWorkflow(low);
+    assert.equal(wLow.status, 'READY_FOR_APPROVAL');
+    assert.equal(wLow.label, 'NEEDS APPROVAL');
+    assert.equal(wLow.canApprove, false);
+    assert.equal(wLow.canSelectForApproval, false);
+    assert.match(wLow.checkboxDisabledReason || '', /below 70/i);
 
     const celeb = row({});
     celeb.public.subscriberRange = 'over_350k';
-    assert.equal(isReadyForApproval(celeb), false);
-    assert.match(resolveAcqWorkflow(celeb).checkboxDisabledReason || '', /1k/);
+    assert.equal(isReadyForApproval(celeb), true);
+    const wCeleb = resolveAcqWorkflow(celeb);
+    assert.equal(wCeleb.status, 'READY_FOR_APPROVAL');
+    assert.equal(wCeleb.canApprove, false);
+    assert.match(wCeleb.checkboxDisabledReason || '', /1k/);
   });
 
   it('does not treat incomplete draft as ready', () => {

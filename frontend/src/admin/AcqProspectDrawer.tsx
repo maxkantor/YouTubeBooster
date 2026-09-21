@@ -5,6 +5,7 @@ import { Badge } from './AdminCrmComponents';
 import { AcqActionPanel } from './AcqActionPanel';
 import { resolveAcqWorkflow } from './acqApprovalWorkflow';
 import { formatDt, whySelected, workflowBadgeKind } from './acqUiShared';
+import { draftPrepareErrorMessage } from './acqVisibleActions';
 
 export function AcqProspectDrawer({
   row,
@@ -270,40 +271,22 @@ export function AcqProspectDrawer({
                 void (async () => {
                   setBusy(true);
                   showError('');
+                  showNote('Preparing draft…');
                   try {
-                    let res = await adminApi.acqDraft(row.public.prospectId);
-                    if (res.draftPrepared === false) {
-                      showNote('Evidence weak — re-inspecting channel, then retrying draft…');
-                      await adminApi.acqInspect({
-                        channelInput: row.public.handle || row.public.channelUrl,
-                        primaryNiche: row.public.primaryNiche || 'cooking',
-                        campaign: row.public.campaign || 'COOK-001',
-                        language: row.public.language || undefined,
-                        officialWebsite: row.public.officialWebsite || undefined,
-                        publicBusinessEmail: row.publicBusinessEmail || undefined,
-                        contactSourceUrl: row.public.contactSourceUrl || undefined,
-                        contactType:
-                          row.public.contactType && row.public.contactType !== 'none'
-                            ? row.public.contactType
-                            : 'business'
-                      });
-                      res = await adminApi.acqDraft(row.public.prospectId);
-                    }
-                    if (res.draftPrepared === false) {
-                      showError(
-                        res.reason === 'weak_personalization'
-                          ? 'Still needs stronger channel evidence before a draft can be built. Reject or re-inspect later.'
-                          : res.reason === 'missing_observation'
-                            ? 'No channel finding yet — re-inspect the channel first.'
-                            : `Draft not ready (${res.reason || 'unknown'}).`
-                      );
+                    const res = await adminApi.acqDraft(row.public.prospectId);
+                    if (res.draftPrepared !== true) {
+                      showError(draftPrepareErrorMessage(res.reason));
                       showNote('');
                     } else {
-                      showNote('Draft prepared.');
+                      showNote('Draft prepared — ready for approval.');
                     }
                     await onReload();
                   } catch (e) {
-                    showError(e instanceof Error ? e.message : 'Prepare draft failed');
+                    showError(
+                      e instanceof Error
+                        ? `Could not prepare draft. Reason: ${e.message}`
+                        : 'Could not prepare draft. Reason: Backend request failed.'
+                    );
                   } finally {
                     setBusy(false);
                   }

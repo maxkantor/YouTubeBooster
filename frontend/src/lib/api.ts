@@ -546,6 +546,28 @@ export const adminApi = {
   async acqDraft(id: string): Promise<AcqAdminProspect & { draftPrepared?: boolean; reason?: string | null }> {
     return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/draft`, { method: 'POST' });
   },
+  async acqPrepareDraftBatch(body: {
+    campaign?: string;
+    prospectIds?: string[];
+    filter?: string;
+    force?: boolean;
+  } = {}): Promise<{
+    attempted: number;
+    prepared: number;
+    failed: number;
+    skipped: number;
+    results: { prospectId: string; handle: string; draftPrepared: boolean; reason?: string | null; subject?: string | null }[];
+  }> {
+    return fetchJson('/api/admin/crm/acquisition/drafts/prepare-batch', {
+      method: 'POST',
+      body: JSON.stringify({
+        campaign: body.campaign || 'COOK-001',
+        prospectIds: body.prospectIds,
+        filter: body.filter || null,
+        force: body.force === true
+      })
+    });
+  },
   async acqPreview(prospectIds: string[], campaign = 'COOK-001'): Promise<{ preview: boolean; sent: boolean; items: unknown[] }> {
     return fetchJson('/api/admin/crm/acquisition/preview', {
       method: 'POST',

@@ -296,6 +296,29 @@ public sealed record AcqDraftPrepareResult(
     string? Reason = null
 );
 
+public sealed record AcqDraftPrepareBatchRequest(
+    string? Campaign = null,
+    IReadOnlyList<string>? ProspectIds = null,
+    string? Filter = null,
+    bool Force = false
+);
+
+public sealed record AcqDraftPrepareBatchItem(
+    string ProspectId,
+    string Handle,
+    bool DraftPrepared,
+    string? Reason,
+    string? Subject
+);
+
+public sealed record AcqDraftPrepareBatchResult(
+    int Attempted,
+    int Prepared,
+    int Failed,
+    int Skipped,
+    IReadOnlyList<AcqDraftPrepareBatchItem> Results
+);
+
 
 public sealed record AcqWeekdaySendResult(
     bool MarketingSendingEnabled,
