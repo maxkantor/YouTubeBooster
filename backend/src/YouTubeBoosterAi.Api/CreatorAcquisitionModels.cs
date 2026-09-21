@@ -79,7 +79,11 @@ public sealed record AcqProspectRecord(
     string? ContactResearchStatus = null,
     int FollowUpStep = 0,
     DateTimeOffset? NextFollowUpAt = null,
-    string? ScoreBreakdownJson = null
+    string? ScoreBreakdownJson = null,
+    string? ApprovedBy = null,
+    DateTimeOffset? ApprovedAt = null,
+    DateTimeOffset? CooldownOverrideUntil = null,
+    bool AdminAttestedContact = false
 );
 
 public sealed record AcqApprovalRecord(
@@ -157,7 +161,11 @@ public sealed record AcqAdminProspectDto(
     AcqSanitizedProspectDto Public,
     string? PublicBusinessEmail,
     string? Body = null,
-    DateTimeOffset? LastContactedAt = null
+    DateTimeOffset? LastContactedAt = null,
+    string? ApprovedBy = null,
+    DateTimeOffset? ApprovedAt = null,
+    DateTimeOffset? CooldownOverrideUntil = null,
+    bool AdminAttestedContact = false
 );
 
 public sealed record AcqUpsertProspectRequest(

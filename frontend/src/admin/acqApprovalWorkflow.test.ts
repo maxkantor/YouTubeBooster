@@ -69,6 +69,7 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.canApprove, false);
     assert.match(w.checkboxDisabledReason || '', /email/i);
     assert.equal(w.primaryAction, 'find_email');
+    assert.equal(w.primaryActionLabel, 'Find Email');
   });
 
   it('marks unverified email as EMAIL_VERIFICATION_REQUIRED', () => {
@@ -76,6 +77,7 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.status, 'EMAIL_VERIFICATION_REQUIRED');
     assert.equal(w.canApprove, false);
     assert.equal(w.primaryAction, 'verify_email');
+    assert.equal(w.primaryActionLabel, 'Verify Email');
   });
 
   it('marks complete verified draft as READY_FOR_APPROVAL', () => {
@@ -86,6 +88,8 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.canSelectForApproval, true);
     assert.equal(w.canApprove, true);
     assert.equal(w.primaryAction, 'approve');
+    assert.equal(w.primaryActionLabel, 'Approve');
+    assert.match(w.currentStatusAnswer, /READY FOR APPROVAL/i);
   });
 
   it('does not treat incomplete draft as ready', () => {
@@ -97,6 +101,23 @@ describe('acqApprovalWorkflow', () => {
     const w = resolveAcqWorkflow(row({ outreachStatus: 'approved', approvalStatus: 'approved' }));
     assert.equal(w.status, 'APPROVED');
     assert.equal(w.canSelectForApproval, false);
+    assert.equal(w.primaryAction, 'send');
+    assert.equal(w.primaryActionLabel, 'Send');
+    assert.match(w.currentStatusAnswer, /APPROVED/i);
+  });
+
+  it('marks approved as scheduled when sending disabled', () => {
+    const w = resolveAcqWorkflow(row({ outreachStatus: 'approved', approvalStatus: 'approved' }), 14, Date.now(), false);
+    assert.equal(w.status, 'APPROVED');
+    assert.equal(w.primaryAction, 'scheduled');
+    assert.equal(w.canSendNow, false);
+  });
+
+  it('marks replied as REPLIED', () => {
+    const w = resolveAcqWorkflow(row({ outreachStatus: 'replied' }));
+    assert.equal(w.status, 'REPLIED');
+    assert.equal(w.primaryAction, 'reply');
+    assert.equal(w.primaryActionLabel, 'Reply');
   });
 
   it('marks cooldown with eligible end time', () => {
@@ -134,13 +155,16 @@ describe('acqApprovalWorkflow', () => {
       row({ prospectId: '1' }),
       row({ prospectId: '2', email: null }),
       row({ prospectId: '3', contactStatus: 'none', email: 'x@y.com' }),
-      row({ prospectId: '4', outreachStatus: 'approved', approvalStatus: 'approved' })
+      row({ prospectId: '4', outreachStatus: 'approved', approvalStatus: 'approved' }),
+      row({ prospectId: '5', outreachStatus: 'replied' })
     ];
     const counts = countWorkflowStatuses(rows);
     assert.equal(counts.READY_FOR_APPROVAL, 1);
     assert.equal(counts.EMAIL_REQUIRED, 1);
     assert.equal(counts.EMAIL_VERIFICATION_REQUIRED, 1);
     assert.equal(counts.APPROVED, 1);
+    assert.equal(counts.REPLIED, 1);
     assert.equal(filterByWorkflowStatus(rows, 'READY_FOR_APPROVAL').length, 1);
+    assert.equal(filterByWorkflowStatus(rows, 'REPLIED').length, 1);
   });
 });

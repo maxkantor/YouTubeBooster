@@ -567,6 +567,10 @@ export type AcqAdminProspect = {
   publicBusinessEmail: string | null;
   body?: string | null;
   lastContactedAt?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  cooldownOverrideUntil?: string | null;
+  adminAttestedContact?: boolean;
 };
 
 export type AcqSkipReasonPrimary = {
@@ -591,6 +595,8 @@ export type AcqSummary = {
   contactVerified: number;
   drafts: number;
   approved: number;
+  currentlyApprovedWaitingToSend?: number;
+  everApproved?: number;
   sent: number;
   sentToday?: number;
   sentLifetime?: number;

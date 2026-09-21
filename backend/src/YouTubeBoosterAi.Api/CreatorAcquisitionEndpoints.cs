@@ -214,6 +214,10 @@ public static class CreatorAcquisitionEndpoints
             var drafts = rows.Count(r => !string.IsNullOrWhiteSpace(r.Observation) && !string.IsNullOrWhiteSpace(r.Subject));
             // APPROVED = currently awaiting send (do not count sent/delivered that still retain ApprovalId).
             var approved = rows.Count(r => string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase));
+            var everApproved = rows.Count(r =>
+                !string.IsNullOrWhiteSpace(r.ApprovalId)
+                || r.ApprovedAt is not null
+                || r.LastContactedAt is not null);
             var sent = rows.Count(r => r.LastContactedAt is not null);
             var sentToday = rows.Count(r =>
                 r.LastContactedAt is not null
@@ -344,6 +348,8 @@ public static class CreatorAcquisitionEndpoints
                 contactVerified,
                 drafts,
                 approved,
+                currentlyApprovedWaitingToSend = approved,
+                everApproved,
                 sent,
                 sentToday,
                 sentLifetime = sent,
@@ -530,6 +536,97 @@ public static class CreatorAcquisitionEndpoints
             return Results.Ok(approval);
         });
 
+        admin.MapPost("/prospects/{id}/reject", async (
+            string id,
+            HttpContext http,
+            AcqAdminActionRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var (row, error) = await acq.RejectAsync(id, admin, body?.Reason, cancellationToken);
+            if (error is not null) return Results.BadRequest(new { error });
+            return Results.Ok(ToAdminDto(row!));
+        });
+
+        admin.MapPost("/prospects/{id}/unapprove", async (
+            string id,
+            HttpContext http,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var (row, error) = await acq.UnapproveAsync(id, admin, cancellationToken);
+            if (error is not null) return Results.BadRequest(new { error });
+            return Results.Ok(ToAdminDto(row!));
+        });
+
+        admin.MapPost("/prospects/{id}/override-cooldown", async (
+            string id,
+            HttpContext http,
+            AcqAdminActionRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var (row, error) = await acq.OverrideCooldownAsync(id, admin, body?.Reason, cancellationToken);
+            if (error is not null) return Results.BadRequest(new { error });
+            return Results.Ok(ToAdminDto(row!));
+        });
+
+        admin.MapPost("/prospects/{id}/draft-edit", async (
+            string id,
+            HttpContext http,
+            AcqDraftEditRequest body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var (row, error) = await acq.UpdateDraftAsync(id, body.Subject, body.Body, admin, cancellationToken);
+            if (error is not null) return Results.BadRequest(new { error });
+            return Results.Ok(ToAdminDto(row!));
+        });
+
+        admin.MapPost("/prospects/{id}/manual-contact", async (
+            string id,
+            HttpContext http,
+            AcqManualContactRequest body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var (row, error) = await acq.SetManualContactAsync(
+                id, body.Email, body.SourceUrl, body.Attested, admin, body.ContactName, body.Notes, cancellationToken);
+            if (error is not null) return Results.BadRequest(new { error });
+            return Results.Ok(ToAdminDto(row!));
+        });
+
+        admin.MapPost("/prospects/{id}/status", async (
+            string id,
+            HttpContext http,
+            AcqStatusChangeRequest body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var (row, error) = await acq.SetStatusAsync(id, body.Status, admin, body.Reason, cancellationToken);
+            if (error is not null) return Results.BadRequest(new { error });
+            return Results.Ok(ToAdminDto(row!));
+        });
+
+        admin.MapPost("/prospects/{id}/send-now", async (
+            string id,
+            HttpContext http,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var (ok, error, messageId) = await acq.SendNowAsync(id, admin, cancellationToken);
+            if (!ok) return Results.BadRequest(new { error });
+            var row = await acq.Store.GetProspectAsync(id, cancellationToken);
+            return Results.Ok(new { ok = true, messageId, prospect = row is null ? null : ToAdminDto(row) });
+        });
+
         admin.MapPost("/test-send", async (
             [FromBody] AcqTestSendRequest request,
             ICreatorAcquisitionService acq,
@@ -545,13 +642,25 @@ public static class CreatorAcquisitionEndpoints
     }
 
     private static AcqAdminProspectDto ToAdminDto(AcqProspectRecord row) =>
-        new(CreatorAcquisitionScoring.Sanitize(row), row.PublicBusinessEmail, row.Body, row.LastContactedAt);
+        new(
+            CreatorAcquisitionScoring.Sanitize(row),
+            row.PublicBusinessEmail,
+            row.Body,
+            row.LastContactedAt,
+            row.ApprovedBy,
+            row.ApprovedAt,
+            row.CooldownOverrideUntil,
+            row.AdminAttestedContact);
 }
 
 public sealed record AcqSesEventRequest(string ProspectId, string EventType);
 public sealed record AcqInboundRequest(string FromEmail, string? Subject, string? Preview, string? MessageId, string? InReplyTo);
 public sealed record AcqTestSendRequest(string? To);
 public sealed record AcqCampaignFlagsRequest(string? Campaign, bool? SendingEnabled, bool? ComplaintPause);
+public sealed record AcqAdminActionRequest(string? Reason);
+public sealed record AcqDraftEditRequest(string? Subject, string? Body);
+public sealed record AcqManualContactRequest(string Email, string SourceUrl, bool Attested, string? ContactName = null, string? Notes = null);
+public sealed record AcqStatusChangeRequest(string Status, string? Reason = null);
 
 public interface ICreatorAcquisitionService
 {
@@ -566,6 +675,13 @@ public interface ICreatorAcquisitionService
     Task ApplySesEventAsync(string prospectId, string eventType, CancellationToken cancellationToken);
     Task RecordFunnelAsync(string token, string eventName, CancellationToken cancellationToken);
     Task<object> MigrateRescoreAsync(int limit, CancellationToken cancellationToken);
+    Task<(AcqProspectRecord? Prospect, string? Error)> RejectAsync(string prospectId, string adminEmail, string? reason, CancellationToken cancellationToken);
+    Task<(AcqProspectRecord? Prospect, string? Error)> UnapproveAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
+    Task<(AcqProspectRecord? Prospect, string? Error)> OverrideCooldownAsync(string prospectId, string adminEmail, string? reason, CancellationToken cancellationToken);
+    Task<(AcqProspectRecord? Prospect, string? Error)> UpdateDraftAsync(string prospectId, string? subject, string? body, string adminEmail, CancellationToken cancellationToken);
+    Task<(AcqProspectRecord? Prospect, string? Error)> SetManualContactAsync(string prospectId, string email, string sourceUrl, bool attested, string adminEmail, string? contactName, string? notes, CancellationToken cancellationToken);
+    Task<(AcqProspectRecord? Prospect, string? Error)> SetStatusAsync(string prospectId, string newStatus, string adminEmail, string? reason, CancellationToken cancellationToken);
+    Task<(bool Ok, string? Error, string? MessageId)> SendNowAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
     string Site();
 }
 

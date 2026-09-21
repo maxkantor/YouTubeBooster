@@ -233,7 +233,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         var inactive = recent is null || (DateTimeOffset.UtcNow - recent.Value).TotalDays > 180;
         var celebrity = demo.SubscriberCount > 1000000;
         var emailVerified = EmailAddressHelpers.LooksLikeEmail(email) && !string.IsNullOrWhiteSpace(contactSourceUrl)
-            && contactType is "business" or "partnership" or "media" or "general";
+            && (contactType is "business" or "partnership" or "media" or "general"
+                || (contactType == "admin_attested" && (dup?.AdminAttestedContact == true || request.ContactType == "admin_attested")));
 
         var score = CreatorAcquisitionScoring.Score(new AcqScoreInput(
             demo.SubscriberCount,
@@ -332,7 +333,12 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             ContactResearchStatus: contactStatus ?? (emailVerified ? "verified_public" : "contact_needed"),
             FollowUpStep: dup?.FollowUpStep ?? 0,
             NextFollowUpAt: dup?.NextFollowUpAt,
-            ScoreBreakdownJson: CreatorAcquisitionScoring.ScoreBreakdownJson(score)
+            ScoreBreakdownJson: CreatorAcquisitionScoring.ScoreBreakdownJson(score),
+            ApprovedBy: keepApproval is not null ? dup?.ApprovedBy : null,
+            ApprovedAt: keepApproval is not null ? dup?.ApprovedAt : null,
+            CooldownOverrideUntil: dup?.CooldownOverrideUntil,
+            AdminAttestedContact: string.Equals(contactType, "admin_attested", StringComparison.OrdinalIgnoreCase)
+                || (dup?.AdminAttestedContact == true && EmailAddressHelpers.LooksLikeEmail(email))
         );
 
         if (dup is not null && (dup.LastContactedAt is not null || !string.Equals(dup.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)))
@@ -435,6 +441,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 ApprovalId = approval.ApprovalId,
                 ContentHash = hashes[id],
                 OutreachStatus = "approved",
+                ApprovedBy = approver,
+                ApprovedAt = approval.ApprovedAt,
                 UpdatedAt = DateTimeOffset.UtcNow
             }, cancellationToken);
         }
@@ -880,6 +888,310 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             e.Contains("partnerships@", StringComparison.OrdinalIgnoreCase) ||
             e.Contains("press@", StringComparison.OrdinalIgnoreCase));
         return preferred ?? emails[0];
+    }
+
+    public async Task<(AcqProspectRecord? Prospect, string? Error)> RejectAsync(
+        string prospectId,
+        string adminEmail,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null) return (null, "not_found");
+        var old = p.OutreachStatus;
+        var next = p with
+        {
+            OutreachStatus = "rejected",
+            ApprovalId = null,
+            ContentHash = null,
+            NextFollowUpAt = null,
+            Notes = string.IsNullOrWhiteSpace(reason) ? p.Notes : TrimPreview($"Rejected: {reason}"),
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        await _store.UpsertProspectAsync(next, cancellationToken);
+        await AuditAsync("acq_status_change", prospectId, adminEmail, old, "rejected", reason, cancellationToken);
+        return (next, null);
+    }
+
+    public async Task<(AcqProspectRecord? Prospect, string? Error)> UnapproveAsync(
+        string prospectId,
+        string adminEmail,
+        CancellationToken cancellationToken)
+    {
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null) return (null, "not_found");
+        if (p.LastContactedAt is not null)
+            return (null, "already_sent");
+        if (!string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(p.ApprovalId))
+            return (null, "not_approved");
+        var old = p.OutreachStatus;
+        var next = p with
+        {
+            OutreachStatus = "draft_ready",
+            ApprovalId = null,
+            ContentHash = null,
+            ApprovedBy = null,
+            ApprovedAt = null,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        await _store.UpsertProspectAsync(next, cancellationToken);
+        await AuditAsync("acq_unapprove", prospectId, adminEmail, old, "draft_ready", null, cancellationToken);
+        return (next, null);
+    }
+
+    public async Task<(AcqProspectRecord? Prospect, string? Error)> OverrideCooldownAsync(
+        string prospectId,
+        string adminEmail,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null) return (null, "not_found");
+        if (p.LastContactedAt is null)
+            return (null, "not_in_cooldown");
+        var old = p.OutreachStatus;
+        var next = p with
+        {
+            CooldownOverrideUntil = DateTimeOffset.UtcNow.AddHours(24),
+            OutreachStatus = string.IsNullOrWhiteSpace(p.ApprovalId) ? "draft_ready" : "approved",
+            Notes = TrimPreview($"Cooldown override by {adminEmail}: {reason ?? "admin override"}"),
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        await _store.UpsertProspectAsync(next, cancellationToken);
+        await AuditAsync("acq_cooldown_override", prospectId, adminEmail, old, next.OutreachStatus, reason, cancellationToken);
+        return (next, null);
+    }
+
+    public async Task<(AcqProspectRecord? Prospect, string? Error)> UpdateDraftAsync(
+        string prospectId,
+        string? subject,
+        string? body,
+        string adminEmail,
+        CancellationToken cancellationToken)
+    {
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null) return (null, "not_found");
+        if (p.LastContactedAt is not null)
+            return (null, "already_sent");
+        var next = p with
+        {
+            Subject = string.IsNullOrWhiteSpace(subject) ? p.Subject : subject.Trim(),
+            Body = string.IsNullOrWhiteSpace(body) ? p.Body : body.Trim(),
+            // Editing invalidates prior approval hash — require re-approve.
+            ApprovalId = null,
+            ContentHash = null,
+            ApprovedBy = null,
+            ApprovedAt = null,
+            OutreachStatus = "draft_ready",
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        next = next with { ContentHash = CreatorAcquisitionScoring.ContentHash(next) };
+        await _store.UpsertProspectAsync(next, cancellationToken);
+        await AuditAsync("acq_draft_edit", prospectId, adminEmail, p.OutreachStatus, "draft_ready", null, cancellationToken);
+        return (next, null);
+    }
+
+    public async Task<(AcqProspectRecord? Prospect, string? Error)> SetManualContactAsync(
+        string prospectId,
+        string email,
+        string sourceUrl,
+        bool attested,
+        string adminEmail,
+        string? contactName,
+        string? notes,
+        CancellationToken cancellationToken)
+    {
+        if (!attested) return (null, "attestation_required");
+        if (!EmailAddressHelpers.LooksLikeEmail(email)) return (null, "invalid_email");
+        if (string.IsNullOrWhiteSpace(sourceUrl) || !Uri.TryCreate(sourceUrl, UriKind.Absolute, out _))
+            return (null, "source_url_required");
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null) return (null, "not_found");
+        var old = p.OutreachStatus;
+        var next = p with
+        {
+            PublicBusinessEmail = email.Trim().ToLowerInvariant(),
+            ContactSourceUrl = sourceUrl.Trim(),
+            ContactType = "admin_attested",
+            ContactVerifiedAt = DateTimeOffset.UtcNow,
+            AdminAttestedContact = true,
+            ContactResearchStatus = "admin_attested",
+            Notes = TrimPreview($"Admin attested contact ({contactName ?? adminEmail}): {notes ?? "manual entry"}"),
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        await _store.UpsertProspectAsync(next, cancellationToken);
+        await AuditAsync("acq_manual_contact", prospectId, adminEmail, old, next.OutreachStatus, notes, cancellationToken);
+        if (string.IsNullOrWhiteSpace(next.Subject) || string.IsNullOrWhiteSpace(next.Body))
+            next = await PrepareDraftAsync(prospectId, cancellationToken) ?? next;
+        return (next, null);
+    }
+
+    public async Task<(AcqProspectRecord? Prospect, string? Error)> SetStatusAsync(
+        string prospectId,
+        string newStatus,
+        string adminEmail,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "discovered", "contact_needed", "draft_ready", "approved", "rejected",
+            "not_qualified", "suppressed"
+        };
+        if (!allowed.Contains(newStatus))
+            return (null, "invalid_status");
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null) return (null, "not_found");
+        var old = p.OutreachStatus;
+        // Dangerous: don't allow jumping to sent/customer manually.
+        if (newStatus is "sent" or "customer" or "delivered")
+            return (null, "dangerous_transition");
+        var next = p with
+        {
+            OutreachStatus = newStatus.ToLowerInvariant(),
+            ApprovalId = string.Equals(newStatus, "approved", StringComparison.OrdinalIgnoreCase) ? p.ApprovalId : null,
+            ApprovedBy = string.Equals(newStatus, "approved", StringComparison.OrdinalIgnoreCase) ? adminEmail : null,
+            ApprovedAt = string.Equals(newStatus, "approved", StringComparison.OrdinalIgnoreCase) ? DateTimeOffset.UtcNow : null,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Notes = string.IsNullOrWhiteSpace(reason) ? p.Notes : TrimPreview($"Status→{newStatus}: {reason}")
+        };
+        if (string.Equals(newStatus, "rejected", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(newStatus, "not_qualified", StringComparison.OrdinalIgnoreCase))
+        {
+            next = next with { NextFollowUpAt = null, ApprovalId = null, ContentHash = null };
+        }
+        await _store.UpsertProspectAsync(next, cancellationToken);
+        await AuditAsync("acq_status_change", prospectId, adminEmail, old, newStatus, reason, cancellationToken);
+        return (next, null);
+    }
+
+    public async Task<(bool Ok, string? Error, string? MessageId)> SendNowAsync(
+        string prospectId,
+        string adminEmail,
+        CancellationToken cancellationToken)
+    {
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null) return (false, "not_found", null);
+        var state = await LoadStateAsync(p.Campaign, cancellationToken);
+        if (!state.MarketingSendingEnabled)
+            return (false, "marketing_sending_disabled", null);
+        var hmac = await _secrets.GetValueAsync("outreach/unsubscribe-hmac", secure: true, cancellationToken);
+        if (string.IsNullOrWhiteSpace(hmac))
+            return (false, "unsubscribe_signing_missing", null);
+
+        var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
+            p, DateTimeOffset.UtcNow, state, alreadyContacted: p.LastContactedAt is not null);
+        if (!gate.Ok)
+            return (false, gate.Reason, null);
+
+        var followUpDue = CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow);
+        if (!followUpDue && !state.StandingCampaignApproval)
+        {
+            var approval = p.ApprovalId is null ? null : await _store.GetApprovalAsync(p.ApprovalId, cancellationToken);
+            if (approval is null || approval.ExpiresAt < DateTimeOffset.UtcNow)
+                return (false, "approval_expired", null);
+            if (!approval.ContentHashes.TryGetValue(p.ProspectId, out var approvedHash)
+                || !string.Equals(approvedHash, CreatorAcquisitionScoring.ContentHash(p), StringComparison.Ordinal))
+                return (false, "approval_invalidated", null);
+        }
+
+        var today = CreatorAcquisitionScoring.EasternDate(DateTimeOffset.UtcNow).Date;
+        var runYmd = today.ToString("yyyy-MM-dd");
+        var cohortRunId = $"{p.Campaign}-{runYmd}-manual";
+        var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
+        var idem = followUpDue
+            ? $"{p.ProspectId}:{cohortRunId}:fu{p.FollowUpStep}"
+            : $"{p.ProspectId}:{cohortRunId}";
+        if (!await _store.TryClaimIdempotencyAsync(idem, cancellationToken))
+            return (false, "idempotency", null);
+
+        if (followUpDue)
+        {
+            var siteFu = Site();
+            var trackedFu = OutreachPolicy.BuildTrackedUrl(siteFu, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
+            var (fuSubject, fuBody) = CreatorAcquisitionCopy.BuildFollowUp(
+                p.FollowUpStep, p.ChannelName, p.ChannelName, p.Observation ?? "", trackedFu);
+            p = p with { Subject = fuSubject, Body = fuBody, EmailVariant = variant };
+        }
+
+        var unsub = UnsubscribeUrl(p.PublicBusinessEmail!, hmac);
+        var site = Site();
+        var tracked = OutreachPolicy.BuildTrackedUrl(site, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
+        var mime = CreatorAcquisitionMail.Build(p with { EmailVariant = variant, CohortRunId = cohortRunId }, state, site, unsub, tracked);
+        if (CreatorAcquisitionMail.TagsContainPii(mime.SesTags))
+            return (false, "pii_in_tags", null);
+
+        try
+        {
+            var sendReq = new SendRawEmailRequest
+            {
+                Source = mime.FromHeader,
+                Destinations = [p.PublicBusinessEmail!],
+                RawMessage = new RawMessage { Data = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(mime.RawRfc822)) },
+                Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList()
+            };
+            if (!string.IsNullOrWhiteSpace(state.ConfigSet))
+                sendReq.ConfigurationSetName = state.ConfigSet;
+            var sesRes = await _ses.SendRawEmailAsync(sendReq, cancellationToken);
+
+            var ticketId = await _appDataStore.SaveSupportTicketAsync(
+                new SupportTicketRequest(
+                    Email: p.PublicBusinessEmail!,
+                    Name: p.ChannelName,
+                    Subject: p.Subject!,
+                    Message: p.Body ?? "",
+                    ProductArea: "creator_acquisition",
+                    ChannelUrl: p.ChannelUrl,
+                    OrderReference: p.ProspectId,
+                    AccountEmail: null,
+                    Source: "founder_outreach"),
+                linkedUserId: null,
+                cancellationToken);
+            await _appDataStore.SaveSupportReplyAsync(ticketId, p.Subject!, p.Body ?? "", sesRes.MessageId, "queued", cancellationToken);
+            await _appDataStore.MarkOutreachSentAsync(p.PublicBusinessEmail!, DateTimeOffset.UtcNow, cancellationToken);
+            await _store.UpsertProspectAsync(p with
+            {
+                OutreachStatus = "sent",
+                LastContactedAt = DateTimeOffset.UtcNow,
+                TicketId = ticketId,
+                EmailVariant = variant,
+                CohortRunId = cohortRunId,
+                LastSesMessageId = sesRes.MessageId,
+                CooldownOverrideUntil = null,
+                FollowUpStep = followUpDue ? Math.Min(2, p.FollowUpStep + 1) : 0,
+                NextFollowUpAt = followUpDue
+                    ? (p.FollowUpStep + 1 >= 2 ? null : DateTimeOffset.UtcNow.AddDays(5))
+                    : DateTimeOffset.UtcNow.AddDays(4),
+                UpdatedAt = DateTimeOffset.UtcNow
+            }, cancellationToken);
+            await AuditAsync("acq_send_now", prospectId, adminEmail, "approved", "sent", null, cancellationToken);
+            return (true, null, sesRes.MessageId);
+        }
+        catch (Exception ex)
+        {
+            return (false, $"ses:{ex.Message}", null);
+        }
+    }
+
+    private async Task AuditAsync(
+        string eventName,
+        string prospectId,
+        string adminEmail,
+        string? oldStatus,
+        string? newStatus,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        await _appDataStore.TrackEventAsync(eventName, prospectId, new Dictionary<string, string?>
+        {
+            ["admin"] = adminEmail,
+            ["creator"] = prospectId,
+            ["oldStatus"] = oldStatus,
+            ["newStatus"] = newStatus,
+            ["reason"] = reason,
+            ["at"] = DateTimeOffset.UtcNow.ToString("O")
+        }, cancellationToken);
     }
 
     /// <summary>Re-inspect existing prospects to re-score and research public contacts (preserves IDs).</summary>

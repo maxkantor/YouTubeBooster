@@ -5,7 +5,9 @@ import type { AcqAdminProspect, AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import { AdminShell } from './AdminShell';
 import { Badge } from './AdminCrmComponents';
+import { AcqActionPanel } from './AcqActionPanel';
 import {
+  type AcqPrimaryAction,
   type AcqWorkflowStatus,
   countWorkflowStatuses,
   filterByWorkflowStatus,
@@ -42,8 +44,18 @@ const WORKFLOW_FILTERS: { value: AcqWorkflowStatus | 'all'; label: string }[] = 
   { value: 'COOLDOWN', label: 'Cooldown' },
   { value: 'REJECTED', label: 'Rejected' },
   { value: 'SENT', label: 'Sent' },
+  { value: 'REPLIED', label: 'Replies' },
   { value: 'OTHER', label: 'Other / draft incomplete' }
 ];
+
+const APPROVALS_FILTERS: { value: AcqWorkflowStatus | 'all'; label: string }[] = [
+  { value: 'all', label: 'Ready + Approved + Rejected' },
+  { value: 'READY_FOR_APPROVAL', label: 'Ready for approval' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' }
+];
+
+const APPROVALS_ALL_STATUSES: AcqWorkflowStatus[] = ['READY_FOR_APPROVAL', 'APPROVED', 'REJECTED'];
 
 const SKIP_LABELS: Record<string, string> = {
   NOT_QUALIFIED: 'Not qualified',
@@ -77,6 +89,7 @@ function workflowBadgeKind(status: AcqWorkflowStatus): 'ok' | 'warn' | 'bad' | '
       return 'ok';
     case 'APPROVED':
     case 'SENT':
+    case 'REPLIED':
     case 'CONVERTED':
       return 'info';
     case 'EMAIL_REQUIRED':
@@ -101,7 +114,7 @@ export function CreatorAcquisitionPage() {
   const view = acquisitionViewFromPath(location.pathname);
   const [summary, setSummary] = useState<AcqSummary | null>(null);
   const [allItems, setAllItems] = useState<AcqAdminProspect[]>([]);
-  const [workflowFilter, setWorkflowFilter] = useState<AcqWorkflowStatus | 'all'>(
+  const [workflowFilter, setWorkflowFilter] = useState<AcqWorkflowStatus | 'all' | 'NEED_EMAIL'>(
     view === 'approvals' ? 'READY_FOR_APPROVAL' : 'all'
   );
   const [niche, setNiche] = useState('cooking');
@@ -112,6 +125,10 @@ export function CreatorAcquisitionPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
+  const [emailManualMode, setEmailManualMode] = useState(false);
+  const [manualAttested, setManualAttested] = useState(false);
+  const [editSubject, setEditSubject] = useState('');
+  const [editBody, setEditBody] = useState('');
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [inspectInput, setInspectInput] = useState('');
@@ -122,6 +139,7 @@ export function CreatorAcquisitionPage() {
   const [verifyContactType, setVerifyContactType] = useState('business');
 
   const cooldownDays = summary?.cooldownDays ?? 14;
+  const sendingEnabled = summary?.marketingSendingEnabled ?? true;
 
   const load = useCallback(async () => {
     setError('');
@@ -138,10 +156,11 @@ export function CreatorAcquisitionPage() {
       ]);
       setSummary(s);
       setAllItems(list.items || []);
+      const enabled = s.marketingSendingEnabled ?? true;
       setSelected((cur) =>
         cur.filter((id) => {
           const row = (list.items || []).find((x) => x.public.prospectId === id);
-          return row ? resolveAcqWorkflow(row, s.cooldownDays ?? 14).canSelectForApproval : false;
+          return row ? resolveAcqWorkflow(row, s.cooldownDays ?? 14, Date.now(), enabled).canSelectForApproval : false;
         })
       );
     } catch (e) {
@@ -159,19 +178,32 @@ export function CreatorAcquisitionPage() {
   }, [load]);
 
   const workflowCounts = useMemo(
-    () => countWorkflowStatuses(allItems, cooldownDays),
-    [allItems, cooldownDays]
+    () => countWorkflowStatuses(allItems, cooldownDays, Date.now(), sendingEnabled),
+    [allItems, cooldownDays, sendingEnabled]
   );
 
-  const items = useMemo(
-    () => filterByWorkflowStatus(allItems, workflowFilter, cooldownDays),
-    [allItems, workflowFilter, cooldownDays]
-  );
+  const items = useMemo(() => {
+    const now = Date.now();
+    let rows: AcqAdminProspect[];
+    if (workflowFilter === 'NEED_EMAIL') {
+      const needEmail = new Set<AcqWorkflowStatus>(['EMAIL_REQUIRED', 'EMAIL_VERIFICATION_REQUIRED']);
+      rows = allItems.filter((r) => needEmail.has(resolveAcqWorkflow(r, cooldownDays, now, sendingEnabled).status));
+    } else {
+      rows = filterByWorkflowStatus(allItems, workflowFilter, cooldownDays, now, sendingEnabled);
+    }
+    if (view === 'approvals' && workflowFilter === 'all') {
+      rows = rows.filter((r) =>
+        APPROVALS_ALL_STATUSES.includes(resolveAcqWorkflow(r, cooldownDays, now, sendingEnabled).status)
+      );
+    }
+    return rows;
+  }, [allItems, workflowFilter, cooldownDays, sendingEnabled, view]);
 
   const readyCount = workflowCounts.READY_FOR_APPROVAL;
+  const needEmailCount = workflowCounts.EMAIL_REQUIRED + workflowCounts.EMAIL_VERIFICATION_REQUIRED;
   const eligibleVisible = useMemo(
-    () => items.filter((r) => resolveAcqWorkflow(r, cooldownDays).canSelectForApproval),
-    [items, cooldownDays]
+    () => items.filter((r) => resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).canSelectForApproval),
+    [items, cooldownDays, sendingEnabled]
   );
 
   const drawer = useMemo(() => {
@@ -179,10 +211,17 @@ export function CreatorAcquisitionPage() {
     return allItems.find((x) => x.public.prospectId === drawerId) || null;
   }, [drawerId, allItems]);
 
-  const drawerWorkflow = drawer ? resolveAcqWorkflow(drawer, cooldownDays) : null;
+  const drawerWorkflow = drawer ? resolveAcqWorkflow(drawer, cooldownDays, Date.now(), sendingEnabled) : null;
+
+  useEffect(() => {
+    if (!drawer) return;
+    setEditSubject(drawer.public.subject || '');
+    setEditBody(drawer.body || '');
+  }, [drawerId, drawer?.public.subject, drawer?.body]);
 
   const dailyLimit = summary?.dailyLimit ?? 10;
   const sentToday = summary?.sentToday ?? summary?.emailsAttemptedToday ?? 0;
+  const sentLifetime = summary?.sentLifetime ?? summary?.sent ?? 0;
   const sendPct = dailyLimit > 0 ? Math.min(100, Math.round((sentToday / dailyLimit) * 100)) : 0;
 
   const skipRows = useMemo(() => {
@@ -193,9 +232,13 @@ export function CreatorAcquisitionPage() {
   }, [summary]);
 
   const filtersActive = workflowFilter !== 'all' || !!niche || !!language || !!searchApplied;
+  const showActionChips = view === 'home' || view === 'creators' || view === 'approvals';
+  const statusFilterOptions = view === 'approvals' ? APPROVALS_FILTERS : WORKFLOW_FILTERS;
+
+  const setFilter = (value: AcqWorkflowStatus | 'all' | 'NEED_EMAIL') => setWorkflowFilter(value);
 
   const clearFilters = () => {
-    setWorkflowFilter('all');
+    setWorkflowFilter(view === 'approvals' ? 'READY_FOR_APPROVAL' : 'all');
     setNiche('');
     setLanguage('');
     setSearch('');
@@ -210,14 +253,44 @@ export function CreatorAcquisitionPage() {
     setSelected(selectAllEligible(items, 25));
   };
 
-  const openReview = (id: string, openEmail = false) => {
+  const openReview = (id: string, openEmail = false, manual = false) => {
     setDrawerId(id);
     setEmailPanelOpen(openEmail);
+    setEmailManualMode(manual);
+    setManualAttested(false);
     const row = allItems.find((x) => x.public.prospectId === id);
     if (row) {
       setVerifyEmail(row.publicBusinessEmail || '');
       setVerifySourceUrl(row.public.contactSourceUrl || row.public.officialWebsite || '');
       setVerifyContactType(row.public.contactType && row.public.contactType !== 'none' ? row.public.contactType : 'business');
+      setEditSubject(row.public.subject || '');
+      setEditBody(row.body || '');
+    }
+  };
+
+  const runPrimaryAction = (id: string, action: AcqPrimaryAction) => {
+    switch (action) {
+      case 'find_email':
+      case 'verify_email':
+        openReview(id, true, false);
+        break;
+      case 'approve':
+      case 'send':
+      case 'scheduled':
+      case 'view':
+      case 'view_thread':
+      case 'reply':
+      case 'review':
+        openReview(id, false);
+        break;
+      case 'prepare_draft':
+        void prepareDraft(id);
+        break;
+      case 'reconsider':
+        void setStatus(id, 'draft_ready');
+        break;
+      default:
+        openReview(id, false);
     }
   };
 
@@ -270,10 +343,47 @@ export function CreatorAcquisitionPage() {
       }
       setNote('Contact saved. Refreshing workflow status…');
       setEmailPanelOpen(false);
+      setManualAttested(false);
       await load();
       setDrawerId(id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Email verification failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveManualContact = async (prospect: AcqAdminProspect) => {
+    if (!verifyEmail.trim() || !verifySourceUrl.trim()) {
+      setError('Email and source URL are required.');
+      return;
+    }
+    if (!manualAttested) {
+      setError('Confirm this is a legitimate public/business contact before saving.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      await adminApi.acqManualContact(prospect.public.prospectId, {
+        email: verifyEmail.trim(),
+        sourceUrl: verifySourceUrl.trim(),
+        attested: true,
+        notes: 'Admin attested public/business contact'
+      });
+      try {
+        await adminApi.acqDraft(prospect.public.prospectId);
+      } catch {
+        // optional
+      }
+      setNote('Manual contact saved with attestation.');
+      setEmailPanelOpen(false);
+      setManualAttested(false);
+      setEmailManualMode(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Manual contact failed');
     } finally {
       setBusy(false);
     }
@@ -297,7 +407,7 @@ export function CreatorAcquisitionPage() {
     if (!ids.length) return;
     const eligible = ids.filter((id) => {
       const row = allItems.find((x) => x.public.prospectId === id);
-      return row ? resolveAcqWorkflow(row, cooldownDays).canApprove : false;
+      return row ? resolveAcqWorkflow(row, cooldownDays, Date.now(), sendingEnabled).canApprove : false;
     });
     if (!eligible.length) {
       setError('No eligible creators selected for approval.');
@@ -319,11 +429,73 @@ export function CreatorAcquisitionPage() {
     }
   };
 
+  const rejectIds = async (ids: string[]) => {
+    if (!ids.length) return;
+    const reason = window.prompt('Rejection reason (optional):', '') ?? null;
+    if (reason === null) return;
+    if (!window.confirm(`Reject ${ids.length} selected creator(s)?`)) return;
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      for (const id of ids) {
+        await adminApi.acqReject(id, reason || undefined);
+      }
+      setNote(`Rejected ${ids.length} creator(s).`);
+      setSelected([]);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reject failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setStatus = async (id: string, status: string) => {
+    if (!window.confirm(`Change status to "${status}"?`)) return;
+    setBusy(true);
+    setError('');
+    try {
+      await adminApi.acqSetStatus(id, status);
+      setNote(`Status set to ${status}.`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Status change failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const researchEmail = async (prospect: AcqAdminProspect) => {
+    setBusy(true);
+    setError('');
+    setNote('Researching...');
+    try {
+      await adminApi.acqInspect({
+        channelInput: prospect.public.handle || prospect.public.channelUrl,
+        primaryNiche: prospect.public.primaryNiche || niche || 'cooking',
+        campaign: prospect.public.campaign || campaign || 'COOK-001',
+        language: prospect.public.language || undefined,
+        contactType: 'none'
+      });
+      setEmailManualMode(false);
+      setEmailPanelOpen(true);
+      setManualAttested(false);
+      await load();
+      setNote('Research complete — review or add contact below.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Email research failed');
+      setNote('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const pipeline = [
     { key: 'discovered', label: 'Discovered', value: summary?.cohortFunnel?.discovered ?? summary?.discovered ?? 0 },
     { key: 'contactable', label: 'Contactable', value: summary?.cohortFunnel?.contactable ?? summary?.contactVerified ?? 0 },
     { key: 'approved', label: 'Approved', value: summary?.cohortFunnel?.approved ?? summary?.approved ?? 0 },
-    { key: 'sent', label: 'Sent', value: summary?.cohortFunnel?.emailsSent ?? summary?.sentLifetime ?? summary?.sent ?? 0 },
+    { key: 'sent', label: 'Sent lifetime', value: summary?.cohortFunnel?.emailsSent ?? sentLifetime },
     { key: 'clicked', label: 'Clicked', value: summary?.cohortFunnel?.clicked ?? summary?.clicked ?? 0 },
     { key: 'audit', label: 'Audit started', value: summary?.cohortFunnel?.auditStarts ?? summary?.auditStarted ?? 0 },
     { key: 'account', label: 'Account created', value: summary?.cohortFunnel?.accountsCreated ?? summary?.pricingViewed ?? 0 },
@@ -427,8 +599,9 @@ export function CreatorAcquisitionPage() {
         <div className="acq-today-bar">
           <div className="acq-today-meta">
             <span>
-              Today {sentToday} / {dailyLimit} sent
+              Sent today {sentToday} / {dailyLimit}
             </span>
+            <span>Sent lifetime {sentLifetime}</span>
             <span>{sendPct}%</span>
           </div>
           <div className="acq-progress" role="progressbar" aria-valuenow={sendPct} aria-valuemin={0} aria-valuemax={100}>
@@ -444,29 +617,21 @@ export function CreatorAcquisitionPage() {
             Counts reflect creators that can actually take that next step.
           </p>
         </header>
-        <div className="acq-workflow-counts">
-          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('EMAIL_REQUIRED')}>
-            Needs contact info <strong>{workflowCounts.EMAIL_REQUIRED}</strong>
-          </button>
-          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('EMAIL_VERIFICATION_REQUIRED')}>
-            Needs email verification <strong>{workflowCounts.EMAIL_VERIFICATION_REQUIRED}</strong>
-          </button>
-          <button
-            type="button"
-            className="acq-count-chip acq-count-chip-ready"
-            onClick={() => setWorkflowFilter('READY_FOR_APPROVAL')}
-          >
-            Ready for approval <strong>{readyCount}</strong>
-          </button>
-          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('APPROVED')}>
-            Approved <strong>{workflowCounts.APPROVED}</strong>
-          </button>
-          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('COOLDOWN')}>
-            Cooldown <strong>{workflowCounts.COOLDOWN}</strong>
-          </button>
-          <button type="button" className="acq-count-chip" onClick={() => setWorkflowFilter('REJECTED')}>
-            Rejected <strong>{workflowCounts.REJECTED}</strong>
-          </button>
+        <div className="acq-approval-meta">
+          <span>
+            Currently approved / waiting to send <strong>{workflowCounts.APPROVED}</strong>
+          </span>
+          {summary?.everApproved != null && (
+            <span>
+              Ever approved <strong>{summary.everApproved}</strong>
+            </span>
+          )}
+          <span>
+            Sent today <strong>{sentToday}</strong>
+          </span>
+          <span>
+            Sent lifetime <strong>{sentLifetime}</strong>
+          </span>
         </div>
       </section>
 
@@ -513,15 +678,58 @@ export function CreatorAcquisitionPage() {
       </section>
 
       <section className="ops-panel">
+        {showActionChips && (
+          <div className="acq-action-required-chips" aria-label="Action required filters">
+            <span className="ops-kpi-label">ACTION REQUIRED</span>
+            <div className="acq-workflow-counts">
+              <button
+                type="button"
+                className={`acq-count-chip acq-count-chip-ready${workflowFilter === 'READY_FOR_APPROVAL' ? ' acq-count-chip-active' : ''}`}
+                onClick={() => setFilter('READY_FOR_APPROVAL')}
+              >
+                Ready for Approval <strong>{readyCount}</strong>
+              </button>
+              <button
+                type="button"
+                className={`acq-count-chip${workflowFilter === 'APPROVED' ? ' acq-count-chip-active' : ''}`}
+                onClick={() => setFilter('APPROVED')}
+              >
+                Approved / Ready to Send <strong>{workflowCounts.APPROVED}</strong>
+              </button>
+              <button
+                type="button"
+                className={`acq-count-chip${workflowFilter === 'NEED_EMAIL' ? ' acq-count-chip-active' : ''}`}
+                onClick={() => setFilter('NEED_EMAIL')}
+              >
+                Need Email <strong>{needEmailCount}</strong>
+              </button>
+              <button
+                type="button"
+                className={`acq-count-chip${workflowFilter === 'COOLDOWN' ? ' acq-count-chip-active' : ''}`}
+                onClick={() => setFilter('COOLDOWN')}
+              >
+                Cooldown <strong>{workflowCounts.COOLDOWN}</strong>
+              </button>
+              <button
+                type="button"
+                className={`acq-count-chip${workflowFilter === 'REPLIED' ? ' acq-count-chip-active' : ''}`}
+                onClick={() => setFilter('REPLIED')}
+              >
+                Replies <strong>{workflowCounts.REPLIED}</strong>
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="acq-toolbar">
           <label>
             Status
             <select
               className="admin-crm-select"
-              value={workflowFilter}
-              onChange={(e) => setWorkflowFilter(e.target.value as AcqWorkflowStatus | 'all')}
+              value={workflowFilter === 'NEED_EMAIL' ? 'EMAIL_REQUIRED' : workflowFilter}
+              onChange={(e) => setFilter(e.target.value as AcqWorkflowStatus | 'all')}
             >
-              {WORKFLOW_FILTERS.map((o) => (
+              {statusFilterOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -622,6 +830,14 @@ export function CreatorAcquisitionPage() {
             >
               Approve &amp; Queue Selected
             </button>
+            <button
+              type="button"
+              className="ops-btn ops-btn-ghost"
+              disabled={busy}
+              onClick={() => void rejectIds(selected)}
+            >
+              Reject Selected
+            </button>
           </div>
         )}
 
@@ -663,21 +879,19 @@ export function CreatorAcquisitionPage() {
                       />
                     )}
                   </th>
-                  <th>Creator</th>
-                  <th>Channel</th>
-                  <th>Subscribers</th>
-                  <th>Language</th>
+                  <th className="acq-col-creator">Creator</th>
+                  <th>Audience</th>
                   <th>Email</th>
-                  <th>Qualification</th>
+                  <th>Score</th>
                   <th>Status</th>
-                  <th>Last action</th>
-                  <th>Actions</th>
+                  <th>Last Contact</th>
+                  <th className="acq-col-action">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((row) => {
                   const p = row.public;
-                  const wf = resolveAcqWorkflow(row, cooldownDays);
+                  const wf = resolveAcqWorkflow(row, cooldownDays, Date.now(), sendingEnabled);
                   const selectedRow = selected.includes(p.prospectId);
                   return (
                     <tr
@@ -696,22 +910,13 @@ export function CreatorAcquisitionPage() {
                           <span className="acq-check-placeholder" title={wf.checkboxDisabledReason || undefined} />
                         )}
                       </td>
-                      <td>
+                      <td className="acq-col-creator">
                         <div className="acq-creator-name">{p.channelName}</div>
                         <div className="ops-muted">{p.handle}</div>
                       </td>
-                      <td>
-                        <a href={p.channelUrl} target="_blank" rel="noreferrer">
-                          Open
-                        </a>
-                      </td>
                       <td>{p.subscriberRange}</td>
-                      <td>{p.language || '—'}</td>
                       <td className="acq-email-cell">{row.publicBusinessEmail || '—'}</td>
-                      <td>
-                        <div>{p.priorityScore}</div>
-                        <div className="ops-muted">{p.opportunityCategory.replace(/_/g, ' ')}</div>
-                      </td>
+                      <td>{p.priorityScore}</td>
                       <td>
                         <Badge kind={workflowBadgeKind(wf.status)}>{wf.label}</Badge>
                         {wf.status === 'COOLDOWN' && wf.cooldownEndsAt && (
@@ -719,42 +924,15 @@ export function CreatorAcquisitionPage() {
                         )}
                       </td>
                       <td className="admin-crm-nowrap">{formatDt(row.lastContactedAt || p.evidenceAt)}</td>
-                      <td className="acq-actions">
+                      <td className="acq-col-action acq-actions">
                         <button
                           type="button"
-                          className="ops-btn ops-btn-ghost ops-btn-sm"
-                          onClick={() => openReview(p.prospectId, false)}
+                          className="ops-btn ops-btn-primary ops-btn-sm"
+                          disabled={busy}
+                          onClick={() => runPrimaryAction(p.prospectId, wf.primaryAction)}
                         >
-                          {wf.status === 'APPROVED' || wf.status === 'SENT' || wf.status === 'COOLDOWN' ? 'View' : 'Review'}
+                          {wf.primaryActionLabel}
                         </button>
-                        {wf.primaryAction === 'find_email' && (
-                          <button
-                            type="button"
-                            className="ops-btn ops-btn-primary ops-btn-sm"
-                            onClick={() => openReview(p.prospectId, true)}
-                          >
-                            Find Email
-                          </button>
-                        )}
-                        {wf.primaryAction === 'verify_email' && (
-                          <button
-                            type="button"
-                            className="ops-btn ops-btn-primary ops-btn-sm"
-                            onClick={() => openReview(p.prospectId, true)}
-                          >
-                            Verify Email
-                          </button>
-                        )}
-                        {wf.canApprove && (
-                          <button
-                            type="button"
-                            className="ops-btn ops-btn-primary ops-btn-sm"
-                            disabled={busy}
-                            onClick={() => void approveIds([p.prospectId])}
-                          >
-                            Approve &amp; Queue
-                          </button>
-                        )}
                       </td>
                     </tr>
                   );
@@ -797,7 +975,7 @@ export function CreatorAcquisitionPage() {
               </div>
               <div>
                 <span>Sent lifetime</span>
-                <strong>{summary.sentLifetime ?? summary.sent}</strong>
+                <strong>{sentLifetime}</strong>
               </div>
               <div>
                 <span>Delivered</span>
@@ -813,25 +991,25 @@ export function CreatorAcquisitionPage() {
               <div>
                 <span>Bounce</span>
                 <strong className="ops-muted">
-                  {(summary.sentLifetime ?? summary.sent) < 20
+                  {sentLifetime < 20
                     ? 'Not enough sends to calculate a reliable rate.'
-                    : rateOrNa(summary.bounced ?? 0, summary.sentLifetime ?? summary.sent)}
+                    : rateOrNa(summary.bounced ?? 0, sentLifetime)}
                 </strong>
               </div>
               <div>
                 <span>Complaint</span>
                 <strong className="ops-muted">
-                  {(summary.sentLifetime ?? summary.sent) < 20
+                  {sentLifetime < 20
                     ? 'Not enough sends to calculate a reliable rate.'
-                    : rateOrNa(summary.complained ?? 0, summary.sentLifetime ?? summary.sent)}
+                    : rateOrNa(summary.complained ?? 0, sentLifetime)}
                 </strong>
               </div>
               <div>
                 <span>Unsubscribe</span>
                 <strong className="ops-muted">
-                  {(summary.sentLifetime ?? summary.sent) < 20
+                  {sentLifetime < 20
                     ? 'Not enough sends to calculate a reliable rate.'
-                    : rateOrNa(summary.unsubscribed ?? 0, summary.sentLifetime ?? summary.sent)}
+                    : rateOrNa(summary.unsubscribed ?? 0, sentLifetime)}
                 </strong>
               </div>
             </div>
@@ -859,8 +1037,8 @@ export function CreatorAcquisitionPage() {
                 <p>{drawerWorkflow.whyHere}</p>
               </div>
               <div className="acq-decision-q">
-                <strong>Can I approve them?</strong>
-                <p>{drawerWorkflow.canApproveAnswer}</p>
+                <strong>Current status</strong>
+                <p>{drawerWorkflow.currentStatusAnswer}</p>
               </div>
               <div className="acq-decision-q">
                 <strong>What should I do next?</strong>
@@ -870,42 +1048,115 @@ export function CreatorAcquisitionPage() {
                 <p className="ops-recon-warn">Cooldown until {formatDt(drawerWorkflow.cooldownEndsAt)}</p>
               )}
 
-              <div className="acq-drawer-primary-actions">
-                {drawerWorkflow.canApprove && (
-                  <button
-                    type="button"
-                    className="ops-btn ops-btn-primary"
-                    disabled={busy}
-                    onClick={() => void approveIds([drawer.public.prospectId])}
-                  >
-                    Approve &amp; Queue
-                  </button>
-                )}
-                {(drawerWorkflow.primaryAction === 'find_email' ||
-                  drawerWorkflow.primaryAction === 'verify_email' ||
-                  emailPanelOpen) && (
-                  <button
-                    type="button"
-                    className="ops-btn ops-btn-primary"
-                    onClick={() => setEmailPanelOpen(true)}
-                  >
-                    {drawerWorkflow.primaryAction === 'find_email' ? 'Find / Verify Email' : 'Verify Email'}
-                  </button>
-                )}
-                {drawerWorkflow.label === 'DRAFT INCOMPLETE' && (
-                  <button
-                    type="button"
-                    className="ops-btn ops-btn-primary"
-                    disabled={busy}
-                    onClick={() => void prepareDraft(drawer.public.prospectId)}
-                  >
-                    Prepare draft
-                  </button>
-                )}
-                <a className="ops-btn ops-btn-ghost" href={drawer.public.channelUrl} target="_blank" rel="noreferrer">
-                  Open YouTube
-                </a>
-              </div>
+              <AcqActionPanel
+                row={drawer}
+                wf={drawerWorkflow}
+                busy={busy}
+                sendingEnabled={sendingEnabled}
+                editSubject={editSubject}
+                editBody={editBody}
+                onEditSubject={setEditSubject}
+                onEditBody={setEditBody}
+                onApprove={() => void approveIds([drawer.public.prospectId])}
+                onReject={() => {
+                  const reason = window.prompt('Rejection reason (optional):', '');
+                  if (reason === null) return;
+                  void (async () => {
+                    setBusy(true);
+                    setError('');
+                    try {
+                      await adminApi.acqReject(drawer.public.prospectId, reason || undefined);
+                      setNote('Rejected.');
+                      setDrawerId(null);
+                      await load();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Reject failed');
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+                onUnapprove={() => {
+                  if (!window.confirm('Unapprove this creator? They will leave the send queue.')) return;
+                  void (async () => {
+                    setBusy(true);
+                    setError('');
+                    try {
+                      await adminApi.acqUnapprove(drawer.public.prospectId);
+                      setNote('Unapproved.');
+                      await load();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Unapprove failed');
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+                onSendNow={() => {
+                  const email = drawer.publicBusinessEmail || '(no email)';
+                  const subject = editSubject || drawer.public.subject || '(no subject)';
+                  if (!window.confirm(`Send now to ${email}?\n\nSubject: ${subject}`)) return;
+                  void (async () => {
+                    setBusy(true);
+                    setError('');
+                    try {
+                      const res = await adminApi.acqSendNow(drawer.public.prospectId);
+                      if (res.ok) setNote(`Sent. Message ID: ${res.messageId || 'ok'}`);
+                      else setError(res.error || 'Send failed');
+                      await load();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Send failed');
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+                onSaveDraft={() => {
+                  void (async () => {
+                    setBusy(true);
+                    setError('');
+                    try {
+                      await adminApi.acqDraftEdit(drawer.public.prospectId, editSubject, editBody);
+                      setNote('Draft saved.');
+                      await load();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Save draft failed');
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+                onFindEmail={() => void researchEmail(drawer)}
+                onAddEmail={() => {
+                  setEmailManualMode(true);
+                  setEmailPanelOpen(true);
+                  setManualAttested(false);
+                }}
+                onPrepareDraft={() => void prepareDraft(drawer.public.prospectId)}
+                onOverrideCooldown={() => {
+                  if (
+                    !window.confirm(
+                      'Override cooldown? This allows contacting the creator before the cooldown ends. Use only when necessary.'
+                    )
+                  ) {
+                    return;
+                  }
+                  void (async () => {
+                    setBusy(true);
+                    setError('');
+                    try {
+                      await adminApi.acqOverrideCooldown(drawer.public.prospectId, 'admin override from drawer');
+                      setNote('Cooldown overridden.');
+                      await load();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Override failed');
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+                onStatusChange={(status) => void setStatus(drawer.public.prospectId, status)}
+              />
 
               {emailPanelOpen && (
                 <div className="acq-verify-panel">
@@ -940,13 +1191,23 @@ export function CreatorAcquisitionPage() {
                       <option value="general">general</option>
                     </select>
                   </label>
+                  <label className="acq-attest-check">
+                    <input
+                      type="checkbox"
+                      checked={manualAttested}
+                      onChange={(e) => setManualAttested(e.target.checked)}
+                    />
+                    This is a legitimate public/business contact
+                  </label>
                   <button
                     type="button"
                     className="ops-btn ops-btn-primary"
-                    disabled={busy}
-                    onClick={() => void verifyAndUpsertEmail(drawer)}
+                    disabled={busy || (emailManualMode && !manualAttested)}
+                    onClick={() =>
+                      void (emailManualMode ? saveManualContact(drawer) : verifyAndUpsertEmail(drawer))
+                    }
                   >
-                    Save verified email
+                    {emailManualMode ? 'Save attested contact' : 'Save verified email'}
                   </button>
                 </div>
               )}

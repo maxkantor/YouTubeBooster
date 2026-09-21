@@ -116,7 +116,9 @@ public static class CreatorAcquisitionScoring
         var cooldownDays = state.CooldownDays > 0 ? state.CooldownDays : OutreachPolicy.DefaultCooldownDays;
         if (alreadyContacted && p.LastContactedAt is null)
             return new AcqSendGateResult(false, "already_contacted");
-        if (!followUpDue && OutreachPolicy.InCooldown(p.LastContactedAt, nowUtc, cooldownDays))
+        if (!followUpDue
+            && !HasActiveCooldownOverride(p, nowUtc)
+            && OutreachPolicy.InCooldown(p.LastContactedAt, nowUtc, cooldownDays))
             return new AcqSendGateResult(false, "cooldown");
         if (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60)
             return new AcqSendGateResult(false, "stale_upload");
@@ -154,9 +156,15 @@ public static class CreatorAcquisitionScoring
         EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
         && !string.IsNullOrWhiteSpace(p.ContactSourceUrl)
         && p.ContactVerifiedAt is not null
-        && p.ContactType is "business" or "partnership" or "media" or "general"
+        && (
+            p.ContactType is "business" or "partnership" or "media" or "general"
+            || (p.AdminAttestedContact && string.Equals(p.ContactType, "admin_attested", StringComparison.OrdinalIgnoreCase))
+        )
         && !string.Equals(p.ContactType, "guessed", StringComparison.OrdinalIgnoreCase)
         && !string.Equals(p.ContactType, "form_only", StringComparison.OrdinalIgnoreCase);
+
+    public static bool HasActiveCooldownOverride(AcqProspectRecord p, DateTimeOffset nowUtc) =>
+        p.CooldownOverrideUntil is not null && p.CooldownOverrideUntil > nowUtc;
 
     public static string ContentHash(AcqProspectRecord p)
     {
@@ -286,6 +294,8 @@ public static class CreatorAcquisitionScoring
 
     public static string ContactStatusLabel(AcqProspectRecord p)
     {
+        if (p.AdminAttestedContact && string.Equals(p.ContactType, "admin_attested", StringComparison.OrdinalIgnoreCase))
+            return "admin_attested";
         if (string.Equals(p.ContactType, "form_only", StringComparison.OrdinalIgnoreCase))
             return "Contact route available — automated email unavailable";
         if (IsVerifiedPublicEmail(p)) return "verified_public";

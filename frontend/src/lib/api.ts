@@ -564,5 +564,44 @@ export const adminApi = {
     considered: number;
   }> {
     return fetchJson(`/api/admin/crm/acquisition/migrate-rescore?limit=${limit}`, { method: 'POST' });
+  },
+  async acqReject(id: string, reason?: string): Promise<AcqAdminProspect> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason || null })
+    });
+  },
+  async acqUnapprove(id: string): Promise<AcqAdminProspect> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/unapprove`, { method: 'POST' });
+  },
+  async acqOverrideCooldown(id: string, reason?: string): Promise<AcqAdminProspect> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/override-cooldown`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason || 'admin override' })
+    });
+  },
+  async acqDraftEdit(id: string, subject: string, body: string): Promise<AcqAdminProspect> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/draft-edit`, {
+      method: 'POST',
+      body: JSON.stringify({ subject, body })
+    });
+  },
+  async acqManualContact(
+    id: string,
+    payload: { email: string; sourceUrl: string; attested: boolean; contactName?: string; notes?: string }
+  ): Promise<AcqAdminProspect> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/manual-contact`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+  async acqSetStatus(id: string, status: string, reason?: string): Promise<AcqAdminProspect> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status, reason: reason || null })
+    });
+  },
+  async acqSendNow(id: string): Promise<{ ok: boolean; messageId?: string; prospect?: AcqAdminProspect; error?: string }> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/send-now`, { method: 'POST' });
   }
 };
