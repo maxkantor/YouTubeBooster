@@ -413,6 +413,25 @@ function DashboardPage({
   );
 }
 
+const ADMIN_EMAIL_CACHE_KEY = 'yb_admin_login_email';
+
+function readCachedAdminEmail(): string {
+  try {
+    return localStorage.getItem(ADMIN_EMAIL_CACHE_KEY)?.trim() || '';
+  } catch {
+    return '';
+  }
+}
+
+function cacheAdminEmail(value: string) {
+  try {
+    const trimmed = value.trim();
+    if (trimmed) localStorage.setItem(ADMIN_EMAIL_CACHE_KEY, trimmed);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 function AdminLoginPage({
   adminSession,
   sessionLoading,
@@ -423,7 +442,7 @@ function AdminLoginPage({
   refreshAdminSession: () => Promise<AdminSessionStatus>;
 }) {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(readCachedAdminEmail);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -442,6 +461,7 @@ function AdminLoginPage({
     setError('');
     try {
       await adminApi.login(email, password);
+      cacheAdminEmail(email);
       await refreshAdminSession();
       navigate('/admin', { replace: true });
     } catch (err) {
@@ -496,18 +516,13 @@ function AdminLoginPage({
           </div>
         ) : (
           <>
-            <p className="admin-login-lead">
-              Sign in with the same <strong>admin email</strong> and <strong>password</strong> the API reads from AWS Systems Manager (e.g.{' '}
-              <code className="admin-login-code">…/admin/email</code> and <code className="admin-login-code">…/admin/password</code>). Values are
-              not loaded in the browser—enter them here to create an admin session cookie.
-            </p>
             <div className="input-stack">
               <label className="field-label">
                 <span>Admin email</span>
                 <input
                   name="admin-email"
                   autoComplete="username"
-                  placeholder="Email stored in SSM (admin/email)"
+                  placeholder="Admin email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
