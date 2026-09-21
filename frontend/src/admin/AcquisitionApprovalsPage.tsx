@@ -126,19 +126,29 @@ export function AcquisitionApprovalsPage() {
       if (andSend) {
         let sent = 0;
         let failed = 0;
+        const failReasons: string[] = [];
         for (const id of ids) {
+          const label =
+            allItems.find((r) => r.public.prospectId === id)?.public.channelName || id;
           try {
             const res = await adminApi.acqApproveAndSend(id);
-            if (res.ok) sent++;
-            else failed++;
-          } catch {
+            if (res.ok && res.sent) sent++;
+            else {
+              failed++;
+              failReasons.push(`${label}: ${res.error || 'send failed'}`);
+            }
+          } catch (e) {
             failed++;
+            failReasons.push(`${label}: ${e instanceof Error ? e.message : 'send failed'}`);
           }
         }
-        setNote(`Approve & send: ${sent} sent${failed ? `, ${failed} failed` : ''}.`);
+        const detail = failReasons.length ? ` — ${failReasons.slice(0, 3).join('; ')}${failReasons.length > 3 ? '…' : ''}` : '';
+        setNote(`Approve & send: ${sent} sent${failed ? `, ${failed} failed${detail}` : ''}.`);
+        if (sent > 0) setTab('sent');
       } else {
         const res = await adminApi.acqApprove(ids);
         setNote(`Approval ${res.approvalId} stored. Nothing sends until Send Now / scheduled send.`);
+        if (ids.length) setTab('ready');
       }
       setSelected([]);
       await load();
@@ -170,6 +180,7 @@ export function AcquisitionApprovalsPage() {
         .map((r) => r.public.prospectId);
       const res = await adminApi.acqSendApproved({ campaign: 'COOK-001', prospectIds: ids });
       setNote(`Send all approved: ${res.sent} sent, ${res.skipped} skipped.`);
+      if (res.sent > 0) setTab('sent');
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Send approved failed');
@@ -407,8 +418,10 @@ export function AcquisitionApprovalsPage() {
                                     setBusy(true);
                                     try {
                                       const res = await adminApi.acqSendNow(p.prospectId);
-                                      if (res.ok) setNote(`Sent. Message ID: ${res.messageId || 'ok'}`);
-                                      else setError(res.error || 'Send failed');
+                                      if (res.ok) {
+                                        setNote(`Sent. Message ID: ${res.messageId || 'ok'}`);
+                                        setTab('sent');
+                                      } else setError(res.error || 'Send failed');
                                       await load();
                                     } catch (e) {
                                       setError(e instanceof Error ? e.message : 'Send failed');

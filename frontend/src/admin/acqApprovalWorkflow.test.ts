@@ -92,6 +92,17 @@ describe('acqApprovalWorkflow', () => {
     assert.match(w.currentStatusAnswer, /READY FOR APPROVAL/i);
   });
 
+  it('blocks low score and out-of-band subscribers from approval', () => {
+    const low = row({ priorityScore: 60 });
+    assert.equal(isReadyForApproval(low), false);
+    assert.match(resolveAcqWorkflow(low).label, /NOT QUALIFIED/i);
+
+    const celeb = row({});
+    celeb.public.subscriberRange = 'over_350k';
+    assert.equal(isReadyForApproval(celeb), false);
+    assert.match(resolveAcqWorkflow(celeb).checkboxDisabledReason || '', /1k/);
+  });
+
   it('does not treat incomplete draft as ready', () => {
     const r = row({ body: '' });
     assert.equal(isReadyForApproval(r), false);

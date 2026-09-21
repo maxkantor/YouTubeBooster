@@ -82,7 +82,24 @@ export function isReadyForApproval(row: AcqAdminProspect): boolean {
   if (/\bI'm Max\b/i.test(blob) || /Founder,\s*YouTubeBooster/i.test(blob) || /\bI ran .+ through YouTubeBooster/i.test(blob)) {
     return false;
   }
+  const score = p.acquisitionScore ?? p.priorityScore ?? 0;
+  if (score < 70) return false;
+  if ((p.subscriberRange || '') !== '1k_100k') return false;
   return true;
+}
+
+export function approvalBlockReason(row: AcqAdminProspect): string | null {
+  const p = row.public;
+  if (!isVerifiedPublicContact(row)) return 'Verified public email required.';
+  if (!(p.subject || '').trim() || !(row.body || '').trim() || !(p.observation || '').trim()) {
+    return 'Complete draft required.';
+  }
+  const score = p.acquisitionScore ?? p.priorityScore ?? 0;
+  if (score < 70) return `Score ${score} is below 70 — cannot approve or send.`;
+  if ((p.subscriberRange || '') !== '1k_100k') {
+    return `Audience ${p.subscriberRange || 'unknown'} is outside the 1k–100k COOK-001 band.`;
+  }
+  return null;
 }
 
 export function cooldownEndsAt(
@@ -273,19 +290,25 @@ export function resolveAcqWorkflow(
 
   if (!isReadyForApproval(row)) {
     const needsDraft = !(p.subject || '').trim() || !(row.body || '').trim() || !(p.observation || '').trim();
+    const block = approvalBlockReason(row);
+    const notQualified = !!block && !needsDraft && isVerifiedPublicContact(row);
     return {
       ...base,
       status: 'OTHER',
-      label: needsDraft ? 'DRAFT INCOMPLETE' : 'QUALIFIED',
+      label: needsDraft ? 'DRAFT INCOMPLETE' : notQualified ? 'NOT QUALIFIED' : 'QUALIFIED',
       checkboxDisabledReason: p.previewPlaceholder
         ? 'Placeholder inspection — cannot approve.'
-        : 'Complete the outreach draft before approval.',
+        : block || 'Complete the outreach draft before approval.',
       whyHere: p.previewPlaceholder
         ? 'Inspection returned placeholder data.'
-        : 'Contact is verified; outreach draft still needs work.',
-      currentStatusAnswer: needsDraft ? 'DRAFT INCOMPLETE' : 'QUALIFIED',
-      nextStep: 'Prepare or edit the draft, then approve when READY FOR APPROVAL.',
-      whatICanDo: 'Prepare Draft, Review, or Reject.',
+        : notQualified
+          ? block || 'Outside COOK-001 send gates.'
+          : 'Contact is verified; outreach draft still needs work.',
+      currentStatusAnswer: needsDraft ? 'DRAFT INCOMPLETE' : notQualified ? 'NOT QUALIFIED' : 'QUALIFIED',
+      nextStep: notQualified
+        ? 'Reject or re-inspect. Approve & Send is blocked until score ≥ 70 and audience is 1k–100k.'
+        : 'Prepare or edit the draft, then approve when READY FOR APPROVAL.',
+      whatICanDo: notQualified ? 'Reject, or re-inspect / find another prospect.' : 'Prepare Draft, Review, or Reject.',
       primaryAction: needsDraft ? 'prepare_draft' : 'review',
       primaryActionLabel: needsDraft ? 'Prepare Draft' : 'Review'
     };
