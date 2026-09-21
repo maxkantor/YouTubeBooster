@@ -40,6 +40,7 @@ export function AcquisitionCreatorsPage() {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [discoveryBusy, setDiscoveryBusy] = useState(false);
   const [inspectInput, setInspectInput] = useState('');
   const [showInspect, setShowInspect] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -188,7 +189,7 @@ export function AcquisitionCreatorsPage() {
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Email discovery failed');
       } finally {
-        setBusy(false);
+        setDiscoveryBusy(false);
       }
     },
     [load]
@@ -197,7 +198,7 @@ export function AcquisitionCreatorsPage() {
   const startDiscovery = async (mode: ConfirmMode) => {
     if (!mode) return;
     setConfirmMode(null);
-    setBusy(true);
+    setDiscoveryBusy(true);
     setError('');
     setShowResults(false);
     try {
@@ -236,12 +237,12 @@ export function AcquisitionCreatorsPage() {
         void pollDiscovery(job.jobId);
       } else {
         setShowResults(true);
-        setBusy(false);
+        setDiscoveryBusy(false);
         setNote(`Discovery finished immediately (${job.processed} processed).`);
         await load();
       }
     } catch (e) {
-      setBusy(false);
+      setDiscoveryBusy(false);
       setError(e instanceof Error ? e.message : 'Failed to start email discovery');
     }
   };
@@ -256,16 +257,89 @@ export function AcquisitionCreatorsPage() {
           }).length
         : missingEmailCount;
 
-  const runPrimary = (id: string, action: AcqPrimaryAction) => {
+  const prepareDraftFor = async (id: string, row?: AcqAdminProspect) => {
+    setBusy(true);
+    setError('');
+    try {
+      let res = await adminApi.acqDraft(id);
+      if (res.draftPrepared === false && row) {
+        setNote('Evidence weak — re-inspecting channel, then retrying draft…');
+        await adminApi.acqInspect({
+          channelInput: row.public.handle || row.public.channelUrl,
+          primaryNiche: row.public.primaryNiche || 'cooking',
+          campaign: row.public.campaign || 'COOK-001',
+          language: row.public.language || undefined,
+          officialWebsite: row.public.officialWebsite || undefined,
+          publicBusinessEmail: row.publicBusinessEmail || undefined,
+          contactSourceUrl: row.public.contactSourceUrl || undefined,
+          contactType:
+            row.public.contactType && row.public.contactType !== 'none' ? row.public.contactType : 'business'
+        });
+        res = await adminApi.acqDraft(id);
+      }
+      if (res.draftPrepared === false) {
+        setError(
+          res.reason === 'weak_personalization'
+            ? 'Still needs stronger channel evidence before a draft can be built.'
+            : res.reason === 'missing_observation'
+              ? 'No channel finding yet — re-inspect the channel first.'
+              : `Draft not ready (${res.reason || 'unknown'}).`
+        );
+        setNote('');
+      } else {
+        setNote('Draft prepared.');
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Prepare draft failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const acceptReviewEmail = async (id: string, accept: boolean) => {
+    setBusy(true);
+    setError('');
+    try {
+      await adminApi.acqEmailDiscoveryAccept(id, accept, accept ? undefined : 'admin rejected candidate');
+      setNote(accept ? 'Email accepted.' : 'Candidate email rejected.');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : accept ? 'Accept failed' : 'Reject failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runPrimary = (id: string, action: AcqPrimaryAction, row: AcqAdminProspect) => {
     if (action === 'prepare_draft') {
+      void prepareDraftFor(id, row);
+      return;
+    }
+    if (action === 'find_email' || action === 'retry_email' || action === 'verify_email') {
       void (async () => {
         setBusy(true);
+        setError('');
+        setNote('Researching public contact…');
         try {
-          await adminApi.acqDraft(id);
-          setNote('Draft prepared.');
+          const job = await adminApi.acqEmailDiscoveryStart({
+            campaign: row.public.campaign || 'COOK-001',
+            prospectIds: [id],
+            forceRetry: true,
+            batchSize: 1
+          });
+          let current = job;
+          while (current.status === 'running') {
+            current = await adminApi.acqEmailDiscoveryTick(current.jobId);
+          }
+          const hit = current.results[0];
           await load();
+          if (hit?.outcome === 'found') setNote(`Email found: ${hit.email}`);
+          else if (hit?.outcome === 'review') setNote(`Review candidate: ${hit.email}`);
+          else setNote(hit?.detail || `Discovery: ${hit?.outcome || current.status}`);
         } catch (e) {
-          setError(e instanceof Error ? e.message : 'Prepare draft failed');
+          setError(e instanceof Error ? e.message : 'Email research failed');
+          setNote('');
         } finally {
           setBusy(false);
         }
@@ -292,7 +366,7 @@ export function AcquisitionCreatorsPage() {
           <button
             type="button"
             className="ops-btn ops-btn-primary"
-            disabled={busy || missingEmailCount === 0}
+            disabled={discoveryBusy || missingEmailCount === 0}
             onClick={() => setConfirmMode('missing')}
           >
             Find Missing Emails ({missingEmailCount})
@@ -300,7 +374,7 @@ export function AcquisitionCreatorsPage() {
           <button
             type="button"
             className="ops-btn ops-btn-ghost"
-            disabled={busy || items.length === 0}
+            disabled={discoveryBusy || items.length === 0}
             onClick={() => setConfirmMode('filtered')}
           >
             Find Emails for Filtered
@@ -308,7 +382,7 @@ export function AcquisitionCreatorsPage() {
           <button
             type="button"
             className="ops-btn ops-btn-ghost"
-            disabled={busy || selected.size === 0}
+            disabled={discoveryBusy || selected.size === 0}
             onClick={() => setConfirmMode('selected')}
           >
             Find Emails for Selected ({selected.size})
@@ -323,13 +397,13 @@ export function AcquisitionCreatorsPage() {
               business emails. Medium-confidence hits go to REVIEW EMAIL. Nothing is sent.
             </p>
             <div className="acq-drawer-primary-actions">
-              <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => setConfirmMode(null)}>
+              <button type="button" className="ops-btn ops-btn-ghost" disabled={discoveryBusy} onClick={() => setConfirmMode(null)}>
                 Cancel
               </button>
               <button
                 type="button"
                 className="ops-btn ops-btn-primary"
-                disabled={busy || confirmCount === 0}
+                disabled={discoveryBusy || confirmCount === 0}
                 onClick={() => void startDiscovery(confirmMode)}
               >
                 Start Discovery
@@ -601,14 +675,48 @@ export function AcquisitionCreatorsPage() {
                       </td>
                       <td className="admin-crm-nowrap">{formatDt(row.lastContactedAt)}</td>
                       <td className="acq-col-action">
-                        <button
-                          type="button"
-                          className="ops-btn ops-btn-primary ops-btn-sm"
-                          disabled={busy}
-                          onClick={() => runPrimary(p.prospectId, wf.primaryAction)}
-                        >
-                          {wf.primaryActionLabel}
-                        </button>
+                        {wf.status === 'REVIEW_EMAIL' ? (
+                          <div className="acq-row-actions">
+                            <button
+                              type="button"
+                              className="ops-btn ops-btn-primary ops-btn-sm"
+                              disabled={busy}
+                              onClick={() => void acceptReviewEmail(p.prospectId, true)}
+                            >
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              className="ops-btn ops-btn-ghost ops-btn-sm"
+                              disabled={busy}
+                              onClick={() => void acceptReviewEmail(p.prospectId, false)}
+                            >
+                              Reject
+                            </button>
+                            {p.contactSourceUrl && (
+                              <a className="ops-btn ops-btn-ghost ops-btn-sm" href={p.contactSourceUrl} target="_blank" rel="noreferrer">
+                                Source
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              className="ops-btn ops-btn-ghost ops-btn-sm"
+                              disabled={busy}
+                              onClick={() => setDrawerId(p.prospectId)}
+                            >
+                              Open
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ops-btn ops-btn-primary ops-btn-sm"
+                            disabled={busy}
+                            onClick={() => runPrimary(p.prospectId, wf.primaryAction, row)}
+                          >
+                            {wf.primaryActionLabel}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

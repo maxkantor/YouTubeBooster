@@ -379,11 +379,13 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         return record;
     }
 
-    public async Task<AcqProspectRecord?> PrepareDraftAsync(string prospectId, CancellationToken cancellationToken)
+    public async Task<AcqDraftPrepareResult> PrepareDraftAsync(string prospectId, CancellationToken cancellationToken)
     {
         var p = await _store.GetProspectAsync(prospectId, cancellationToken);
-        if (p is null || p.PreviewPlaceholder)
-            return p;
+        if (p is null)
+            return new AcqDraftPrepareResult(null, false, "not_found");
+        if (p.PreviewPlaceholder)
+            return new AcqDraftPrepareResult(p, false, "placeholder_inspection");
 
         // Refresh observation/improvement from stored evidence counts when available.
         var exampleTitle = p.ExampleVideoTitle;
@@ -394,20 +396,19 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         string? improvement = p.SuggestedImprovement;
         string? findingType = p.FindingType;
 
-        if (sampleSize <= 0
-            && CreatorAcquisitionScoring.TryParseObservationEvidence(
+        if (CreatorAcquisitionScoring.TryParseObservationEvidence(
                 p.Observation, out var parsedCount, out var parsedSample, out var parsedExample, out var isDesc))
         {
-            sampleSize = parsedSample;
+            if (sampleSize <= 0) sampleSize = parsedSample;
             if (isDesc) weakDescriptions = Math.Max(weakDescriptions, parsedCount);
             else titleIssues = Math.Max(titleIssues, parsedCount);
             if (string.IsNullOrWhiteSpace(exampleTitle)) exampleTitle = parsedExample;
         }
 
-        // Pull example title from legacy observation prose when structured field is empty.
+        // Pull example title from legacy observation / improvement prose when structured field is empty.
         if (string.IsNullOrWhiteSpace(exampleTitle)
             && CreatorAcquisitionScoring.TryParseObservationEvidence(
-                p.Observation, out _, out _, out var legacyExample, out _))
+                (p.Observation ?? "") + "\n" + (p.SuggestedImprovement ?? ""), out _, out _, out var legacyExample, out _))
         {
             exampleTitle = legacyExample;
         }
@@ -421,15 +422,19 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             findingType = CreatorAcquisitionScoring.ResolveFindingType(
                 titleIssues, weakDescriptions, sampleSize, exampleTitle);
         }
-        else if (!string.IsNullOrWhiteSpace(observation)
-                 && !string.IsNullOrWhiteSpace(exampleTitle)
-                 && (improvement is null || !improvement.Contains("For example", StringComparison.OrdinalIgnoreCase)))
+        else if (!string.IsNullOrWhiteSpace(observation))
         {
-            improvement = CreatorAcquisitionScoring.BuildImprovement(
-                Math.Max(1, titleIssues), Math.Max(1, weakDescriptions), exampleTitle);
+            // Counted observation prose without structured counters — still build a usable improvement.
+            if (string.IsNullOrWhiteSpace(improvement)
+                || !improvement.Contains("For example", StringComparison.OrdinalIgnoreCase)
+                || !improvement.Contains("we'd test", StringComparison.OrdinalIgnoreCase))
+            {
+                improvement = CreatorAcquisitionScoring.BuildImprovement(
+                    Math.Max(1, titleIssues), Math.Max(1, weakDescriptions), exampleTitle);
+            }
             findingType ??= observation.Contains("description", StringComparison.OrdinalIgnoreCase)
-                ? "DESCRIPTION_DEPTH"
-                : "TITLE_OPPORTUNITY";
+                ? (string.IsNullOrWhiteSpace(exampleTitle) ? "DESCRIPTION_OPPORTUNITY" : "DESCRIPTION_DEPTH")
+                : (string.IsNullOrWhiteSpace(exampleTitle) ? "TITLE_CLARITY" : "TITLE_OPPORTUNITY");
         }
 
         if (string.IsNullOrWhiteSpace(observation))
@@ -446,7 +451,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 UpdatedAt = DateTimeOffset.UtcNow
             };
             await _store.UpsertProspectAsync(weak, cancellationToken);
-            return weak;
+            return new AcqDraftPrepareResult(weak, false, "missing_observation");
         }
 
         var draftProbe = p with
@@ -478,7 +483,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 UpdatedAt = DateTimeOffset.UtcNow
             };
             await _store.UpsertProspectAsync(weak, cancellationToken);
-            return weak;
+            return new AcqDraftPrepareResult(weak, false, "weak_personalization");
         }
 
         var site = TrackedSite();
@@ -524,7 +529,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         };
         next = next with { ContentHash = CreatorAcquisitionScoring.ContentHash(next) };
         await _store.UpsertProspectAsync(next, cancellationToken);
-        return next;
+        return new AcqDraftPrepareResult(next, true, null);
     }
 
     public async Task<(AcqApprovalRecord? Approval, string? Error)> ApproveBatchAsync(
@@ -1181,7 +1186,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         var p = await _store.GetProspectAsync(prospectId, cancellationToken);
         if (p is null) return (null, "not_found");
         if (!string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(CreatorAcquisitionScoring.ContactStatusLabel(p), "review_email", StringComparison.OrdinalIgnoreCase))
             return (null, "not_in_review");
 
         if (!accept)
@@ -1227,7 +1233,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         if (ShouldAutoPrepareDraft(accepted))
         {
             var drafted = await PrepareDraftAsync(prospectId, cancellationToken);
-            return (drafted ?? accepted, null);
+            return (drafted.Prospect ?? accepted, null);
         }
         return (accepted, null);
     }
@@ -1610,7 +1616,10 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         await _store.UpsertProspectAsync(next, cancellationToken);
         await AuditAsync("acq_manual_contact", prospectId, adminEmail, old, next.OutreachStatus, notes, cancellationToken);
         if (string.IsNullOrWhiteSpace(next.Subject) || string.IsNullOrWhiteSpace(next.Body))
-            next = await PrepareDraftAsync(prospectId, cancellationToken) ?? next;
+        {
+            var drafted = await PrepareDraftAsync(prospectId, cancellationToken);
+            next = drafted.Prospect ?? next;
+        }
         return (next, null);
     }
 
@@ -2008,7 +2017,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             };
             await _store.UpsertProspectAsync(cleared, cancellationToken);
 
-            var next = await PrepareDraftAsync(p.ProspectId, cancellationToken) ?? cleared;
+            var drafted = await PrepareDraftAsync(p.ProspectId, cancellationToken);
+            var next = drafted.Prospect ?? cleared;
 
             if (alreadyContacted)
             {

@@ -543,7 +543,7 @@ export const adminApi = {
       body: JSON.stringify(body)
     });
   },
-  async acqDraft(id: string): Promise<AcqAdminProspect> {
+  async acqDraft(id: string): Promise<AcqAdminProspect & { draftPrepared?: boolean; reason?: string | null }> {
     return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/draft`, { method: 'POST' });
   },
   async acqPreview(prospectIds: string[], campaign = 'COOK-001'): Promise<{ preview: boolean; sent: boolean; items: unknown[] }> {

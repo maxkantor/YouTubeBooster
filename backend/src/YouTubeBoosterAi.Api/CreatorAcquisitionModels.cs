@@ -290,6 +290,12 @@ public sealed record AcqEmailDiscoveryJobState(
 
 public sealed record AcqEmailDiscoveryAcceptRequest(bool Accept = true, string? Reason = null);
 
+public sealed record AcqDraftPrepareResult(
+    AcqProspectRecord? Prospect,
+    bool DraftPrepared,
+    string? Reason = null
+);
+
 
 public sealed record AcqWeekdaySendResult(
     bool MarketingSendingEnabled,

@@ -671,6 +671,23 @@ public class CreatorAcquisitionContactTests
     }
 
     [Fact]
+    public void StrongPersonalization_AcceptsCountedTitleClarityWithoutExample()
+    {
+        var p = Prospect(email: "hello@cook.test") with
+        {
+            Observation = "14 of your last 20 public titles bury the dish or benefit later than they should.",
+            SuggestedImprovement = "On the next upload, we'd test putting the dish and the payoff in the first words of the title.",
+            FindingType = "TITLE_CLARITY",
+            ExampleVideoTitle = null,
+            SampleSize = 20,
+            TitleIssueCount = 14,
+            Subject = null,
+            Body = null
+        };
+        Assert.True(CreatorAcquisitionScoring.HasStrongPersonalization(p));
+    }
+
+    [Fact]
     public void EmailDiscoveryJob_ProgressCounters_AddUp()
     {
         var job = new AcqEmailDiscoveryJobState(

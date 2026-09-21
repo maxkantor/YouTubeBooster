@@ -287,8 +287,36 @@ export function AcqProspectDrawer({
                 setBusy(true);
                 setError('');
                 try {
-                  await adminApi.acqDraft(row.public.prospectId);
-                  setNote('Draft prepared.');
+                  let res = await adminApi.acqDraft(row.public.prospectId);
+                  if (res.draftPrepared === false) {
+                    setNote('Evidence weak — re-inspecting channel, then retrying draft…');
+                    await adminApi.acqInspect({
+                      channelInput: row.public.handle || row.public.channelUrl,
+                      primaryNiche: row.public.primaryNiche || 'cooking',
+                      campaign: row.public.campaign || 'COOK-001',
+                      language: row.public.language || undefined,
+                      officialWebsite: row.public.officialWebsite || undefined,
+                      publicBusinessEmail: row.publicBusinessEmail || undefined,
+                      contactSourceUrl: row.public.contactSourceUrl || undefined,
+                      contactType:
+                        row.public.contactType && row.public.contactType !== 'none'
+                          ? row.public.contactType
+                          : 'business'
+                    });
+                    res = await adminApi.acqDraft(row.public.prospectId);
+                  }
+                  if (res.draftPrepared === false) {
+                    setError(
+                      res.reason === 'weak_personalization'
+                        ? 'Still needs stronger channel evidence before a draft can be built. Reject or re-inspect later.'
+                        : res.reason === 'missing_observation'
+                          ? 'No channel finding yet — re-inspect the channel first.'
+                          : `Draft not ready (${res.reason || 'unknown'}).`
+                    );
+                    setNote('');
+                  } else {
+                    setNote('Draft prepared.');
+                  }
                   await onReload();
                 } catch (e) {
                   setError(e instanceof Error ? e.message : 'Prepare draft failed');

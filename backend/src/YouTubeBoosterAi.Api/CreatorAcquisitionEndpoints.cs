@@ -522,8 +522,29 @@ public static class CreatorAcquisitionEndpoints
 
         admin.MapPost("/prospects/{id}/draft", async (string id, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
-            var row = await acq.PrepareDraftAsync(id, cancellationToken);
-            return row is null ? Results.NotFound() : Results.Ok(ToAdminDto(row, await acq.LoadStateAsync(row.Campaign, cancellationToken), acq.TrackedSite()));
+            var result = await acq.PrepareDraftAsync(id, cancellationToken);
+            if (result.Prospect is null) return Results.NotFound(new { error = result.Reason ?? "not_found" });
+            var dto = ToAdminDto(result.Prospect, await acq.LoadStateAsync(result.Prospect.Campaign, cancellationToken), acq.TrackedSite());
+            return Results.Ok(new
+            {
+                prospect = dto,
+                draftPrepared = result.DraftPrepared,
+                reason = result.Reason,
+                // Keep flat shape for older clients that expect the admin prospect DTO at the root.
+                @public = dto.Public,
+                publicBusinessEmail = dto.PublicBusinessEmail,
+                body = dto.Body,
+                lastContactedAt = dto.LastContactedAt,
+                approvedBy = dto.ApprovedBy,
+                approvedAt = dto.ApprovedAt,
+                cooldownOverrideUntil = dto.CooldownOverrideUntil,
+                adminAttestedContact = dto.AdminAttestedContact,
+                fromDisplay = dto.FromDisplay,
+                htmlPreview = dto.HtmlPreview,
+                textPreview = dto.TextPreview,
+                ctaDestination = dto.CtaDestination,
+                findingSource = dto.FindingSource
+            });
         });
 
         admin.MapPost("/preview", async (AcqApproveBatchRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
@@ -882,7 +903,7 @@ public interface ICreatorAcquisitionService
     ICreatorAcquisitionStore Store { get; }
     Task<AcqCampaignState> LoadStateAsync(string campaign, CancellationToken cancellationToken);
     Task<AcqProspectRecord> InspectAndUpsertAsync(AcqUpsertProspectRequest request, CancellationToken cancellationToken);
-    Task<AcqProspectRecord?> PrepareDraftAsync(string prospectId, CancellationToken cancellationToken);
+    Task<AcqDraftPrepareResult> PrepareDraftAsync(string prospectId, CancellationToken cancellationToken);
     Task<(AcqApprovalRecord? Approval, string? Error)> ApproveBatchAsync(AcqApproveBatchRequest request, string approver, CancellationToken cancellationToken);
     Task<AcqWeekdaySendResult> RunWeekdaySendAsync(string campaign, CancellationToken cancellationToken);
     Task UnsubscribeAsync(string email, CancellationToken cancellationToken);

@@ -162,7 +162,7 @@ export function AcqActionPanel({
         )}
         {wf.primaryAction === 'prepare_draft' && (
           <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={onPrepareDraft}>
-            Prepare Draft
+            {wf.primaryActionLabel || 'Prepare Draft'}
           </button>
         )}
         {wf.canReject && (

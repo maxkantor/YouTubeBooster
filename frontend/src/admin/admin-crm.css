@@ -1187,6 +1187,13 @@
   width: 36px;
 }
 
+.acq-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .acq-row-selected td {
   background: rgba(99, 102, 241, 0.12) !important;
 }
