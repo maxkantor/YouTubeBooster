@@ -24,29 +24,66 @@ public static class CreatorAcquisitionCopy
         {
             var bodyB = JoinParagraphs(
                 $"Hi {name},",
+                $"I ran {channelName} through YouTubeBooster using only public YouTube data.",
                 obs,
-                $"I'd tighten that on the next upload: {fix}",
-                "I ran your channel through YouTubeBooster and found a few specific opportunities in your titles/descriptions. Your free audit is here:",
+                $"Quick win: {fix}",
+                "You can see the free audit (no signup required for the preview) here:",
                 trackedUrl,
-                "Thanks,",
+                "Happy to answer anything if useful — otherwise ignore this.",
                 "Max",
                 "Founder, YouTubeBooster AI"
             );
-            return ("A specific packaging note on your latest uploads", bodyB);
+            return ($"Free audit notes for {channelName}", bodyB);
         }
 
         var bodyA = JoinParagraphs(
             $"Hi {name},",
-            $"I ran {channelName} through YouTubeBooster and found a few specific opportunities in your titles/descriptions.",
+            $"I ran {channelName} through YouTubeBooster and found several concrete opportunities.",
             obs,
-            fix,
-            "Your free audit is here:",
+            $"Suggested first move: {fix}",
+            "See the initial free audit here (preview first — no card required):",
             trackedUrl,
             "Thanks,",
             "Max",
             "Founder, YouTubeBooster AI"
         );
-        return ("I ran a public-data audit of your channel", bodyA);
+        return ($"I found specific growth opportunities on {channelName}", bodyA);
+    }
+
+    public static (string Subject, string Body) BuildFollowUp(
+        int followUpStep,
+        string creatorName,
+        string channelName,
+        string observation,
+        string trackedUrl)
+    {
+        var name = string.IsNullOrWhiteSpace(creatorName) ? channelName : creatorName;
+        var obs = string.IsNullOrWhiteSpace(observation)
+            ? "a few packaging and discoverability opportunities on recent uploads"
+            : observation.Trim();
+        if (followUpStep <= 0)
+        {
+            return (
+                $"Quick follow-up on your {channelName} audit",
+                JoinParagraphs(
+                    $"Hi {name},",
+                    "Just bumping this in case it got buried — I left a free YouTubeBooster audit open for your channel.",
+                    $"Main finding: {obs}",
+                    trackedUrl,
+                    "No pressure either way.",
+                    "Max")
+            );
+        }
+
+        return (
+            $"Last note on the free audit for {channelName}",
+            JoinParagraphs(
+                $"Hi {name},",
+                "Last note from me on this. The free audit is still available if useful:",
+                trackedUrl,
+                "I'll leave it there — no more follow-ups.",
+                "Max")
+        );
     }
 
     public static string WithComplianceFooter(string body, string channelForFooter, string unsubscribeUrl, string postalAddress)

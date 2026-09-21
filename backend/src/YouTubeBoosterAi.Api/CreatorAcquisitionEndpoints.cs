@@ -44,11 +44,11 @@ public static class CreatorAcquisitionEndpoints
             var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
             var runYmd = p.CohortRunId is { Length: >= 10 } ? p.CohortRunId[^10..] : CreatorAcquisitionScoring.EasternDate(DateTimeOffset.UtcNow).ToString("yyyy-MM-dd");
             var dest = $"https://youtubeboosterai.com/share?channel={Uri.EscapeDataString(handle)}"
-                + "&utm_source=outreach&utm_medium=email&utm_campaign=COOK-001"
+                + $"&utm_source=outreach&utm_medium=email&utm_campaign={Uri.EscapeDataString(p.Campaign)}"
                 + $"&utm_content={Uri.EscapeDataString(variant)}"
                 + $"&utm_id={Uri.EscapeDataString(runYmd)}"
                 + $"&yb_oid={Uri.EscapeDataString(token)}"
-                + "&exp=004&seg=cooking";
+                + $"&exp=004&seg={Uri.EscapeDataString(string.IsNullOrWhiteSpace(p.PrimaryNiche) ? "cooking" : p.PrimaryNiche)}";
             return Results.Redirect(dest);
         });
         publicApi.MapPost("/weekday-send", async (
@@ -359,15 +359,26 @@ public static class CreatorAcquisitionEndpoints
                 unsubscribed,
                 cohortFunnel = new
                 {
+                    discovered,
+                    contactable = contactVerified,
+                    approved,
                     emailsSent = sent,
                     delivered,
                     clicked,
                     auditStarts = auditStarted,
                     auditCompletions = auditCompleted,
-                    pricingViewed,
+                    accountsCreated = pricingViewed,
                     checkoutStarts = checkoutStartedCrm,
+                    paid = converted,
                     verifiedCustomers = converted,
                     tracking = "crm_prospect_status"
+                },
+                northStar = new
+                {
+                    paidCustomers = converted,
+                    revenue = 0,
+                    auditsStarted = auditStarted,
+                    accountsCreated = pricingViewed
                 },
                 views,
                 prospectsEvaluated = cookRows.Count,
@@ -447,6 +458,15 @@ public static class CreatorAcquisitionEndpoints
                 return Results.BadRequest(new { error = "channelInput required" });
             var row = await acq.InspectAndUpsertAsync(request, cancellationToken);
             return Results.Ok(ToAdminDto(row));
+        });
+
+        admin.MapPost("/migrate-rescore", async (
+            int? limit,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await acq.MigrateRescoreAsync(limit ?? 15, cancellationToken);
+            return Results.Ok(result);
         });
 
         admin.MapPost("/prospects/{id}/draft", async (string id, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
@@ -545,6 +565,7 @@ public interface ICreatorAcquisitionService
     Task<AcqProspectRecord?> RecordInboundAsync(string email, string subject, string preview, string? messageId, string? inReplyTo, CancellationToken cancellationToken);
     Task ApplySesEventAsync(string prospectId, string eventType, CancellationToken cancellationToken);
     Task RecordFunnelAsync(string token, string eventName, CancellationToken cancellationToken);
+    Task<object> MigrateRescoreAsync(int limit, CancellationToken cancellationToken);
     string Site();
 }
 

@@ -554,6 +554,12 @@ export type AcqSanitizedProspect = {
   subject: string | null;
   evidenceAt: string | null;
   previewPlaceholder: boolean;
+  acquisitionScore?: number;
+  scoreBreakdownJson?: string | null;
+  contactResearchStatus?: string | null;
+  followUpStep?: number;
+  nextFollowUpAt?: string | null;
+  lastContactedAtPublic?: string | null;
 };
 
 export type AcqAdminProspect = {
@@ -589,6 +595,11 @@ export type AcqSummary = {
   sentToday?: number;
   sentLifetime?: number;
   delivered?: number;
+  clicked?: number;
+  auditStarted?: number;
+  auditCompleted?: number;
+  pricingViewed?: number;
+  checkoutStarted?: number;
   converted?: number;
   bounced?: number;
   complained?: number;
@@ -603,5 +614,28 @@ export type AcqSummary = {
   skipReasonCounts?: Record<string, number>;
   lastRun?: Record<string, unknown> | null;
   cohortRunId?: string;
+  cohortFunnel?: {
+    discovered?: number;
+    contactable?: number;
+    approved?: number;
+    emailsSent: number;
+    delivered: number;
+    clicked: number;
+    auditStarts: number;
+    auditCompletions: number;
+    accountsCreated?: number;
+    pricingViewed?: number;
+    checkoutStarts: number;
+    paid?: number;
+    verifiedCustomers: number;
+    tracking?: string;
+  };
+  northStar?: {
+    paidCustomers: number;
+    revenue: number;
+    auditsStarted: number;
+    accountsCreated: number;
+  };
+  pipeline?: Record<string, number>;
 };
 

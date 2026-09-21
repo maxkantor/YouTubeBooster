@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { adminApi } from '../lib/api';
 import type { AcqAdminProspect, AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
@@ -13,6 +13,25 @@ import {
   selectAllEligible,
   selectEligibleIds
 } from './acqApprovalWorkflow';
+
+function acquisitionViewFromPath(pathname: string): 'home' | 'approvals' | 'creators' | 'analytics' | 'campaigns' | 'inbox' {
+  if (pathname.includes('/approvals')) return 'approvals';
+  if (pathname.includes('/creators')) return 'creators';
+  if (pathname.includes('/analytics')) return 'analytics';
+  if (pathname.includes('/campaigns')) return 'campaigns';
+  if (pathname.includes('/inbox')) return 'inbox';
+  return 'home';
+}
+
+function whySelected(p: AcqAdminProspect['public']): string {
+  const bits: string[] = [];
+  if (p.recentUploadAt) bits.push('Active creator');
+  if (p.subscriberRange && p.subscriberRange !== 'unknown') bits.push(`Audience ${p.subscriberRange}`);
+  if (p.observation) bits.push(p.observation);
+  if (p.contactStatus === 'verified_public') bits.push('Public business contact found');
+  else if (!p.contactSourceUrl) bits.push('CONTACT NEEDED');
+  return bits.join(' · ') || '—';
+}
 
 const WORKFLOW_FILTERS: { value: AcqWorkflowStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All statuses' },
@@ -78,9 +97,13 @@ function rateOrNa(numerator: number, denominator: number): string {
 
 export function CreatorAcquisitionPage() {
   useAdminCrm();
+  const location = useLocation();
+  const view = acquisitionViewFromPath(location.pathname);
   const [summary, setSummary] = useState<AcqSummary | null>(null);
   const [allItems, setAllItems] = useState<AcqAdminProspect[]>([]);
-  const [workflowFilter, setWorkflowFilter] = useState<AcqWorkflowStatus | 'all'>('all');
+  const [workflowFilter, setWorkflowFilter] = useState<AcqWorkflowStatus | 'all'>(
+    view === 'approvals' ? 'READY_FOR_APPROVAL' : 'all'
+  );
   const [niche, setNiche] = useState('cooking');
   const [campaign, setCampaign] = useState('COOK-001');
   const [language, setLanguage] = useState('');
@@ -125,6 +148,11 @@ export function CreatorAcquisitionPage() {
       setError(e instanceof Error ? e.message : 'Failed to load acquisition CRM');
     }
   }, [niche, campaign, language, searchApplied]);
+
+  useEffect(() => {
+    if (view === 'approvals') setWorkflowFilter('READY_FOR_APPROVAL');
+    if (view === 'creators') setWorkflowFilter('all');
+  }, [view]);
 
   useEffect(() => {
     void load();
@@ -292,13 +320,39 @@ export function CreatorAcquisitionPage() {
   };
 
   const pipeline = [
-    { key: 'discovered', label: 'Discovered', value: summary?.discovered ?? 0 },
-    { key: 'inspected', label: 'Inspected', value: summary?.inspected ?? 0 },
-    { key: 'verified', label: 'Verified', value: summary?.contactVerified ?? 0 },
-    { key: 'approved', label: 'Approved', value: summary?.approved ?? 0 },
-    { key: 'sent', label: 'Sent', value: summary?.sentLifetime ?? summary?.sent ?? 0 },
-    { key: 'converted', label: 'Converted', value: summary?.converted ?? 0 }
+    { key: 'discovered', label: 'Discovered', value: summary?.cohortFunnel?.discovered ?? summary?.discovered ?? 0 },
+    { key: 'contactable', label: 'Contactable', value: summary?.cohortFunnel?.contactable ?? summary?.contactVerified ?? 0 },
+    { key: 'approved', label: 'Approved', value: summary?.cohortFunnel?.approved ?? summary?.approved ?? 0 },
+    { key: 'sent', label: 'Sent', value: summary?.cohortFunnel?.emailsSent ?? summary?.sentLifetime ?? summary?.sent ?? 0 },
+    { key: 'clicked', label: 'Clicked', value: summary?.cohortFunnel?.clicked ?? summary?.clicked ?? 0 },
+    { key: 'audit', label: 'Audit started', value: summary?.cohortFunnel?.auditStarts ?? summary?.auditStarted ?? 0 },
+    { key: 'account', label: 'Account created', value: summary?.cohortFunnel?.accountsCreated ?? summary?.pricingViewed ?? 0 },
+    { key: 'paid', label: 'Paid', value: summary?.cohortFunnel?.paid ?? summary?.converted ?? 0 }
   ];
+
+  const northStar = [
+    { label: 'Paid customers', value: summary?.northStar?.paidCustomers ?? summary?.converted ?? 0 },
+    { label: 'Revenue', value: summary?.northStar?.revenue != null ? `$${summary.northStar.revenue}` : '—' },
+    { label: 'Audits started', value: summary?.northStar?.auditsStarted ?? summary?.auditStarted ?? 0 },
+    { label: 'Accounts created', value: summary?.northStar?.accountsCreated ?? summary?.pricingViewed ?? 0 }
+  ];
+
+  const pageTitle =
+    view === 'approvals'
+      ? 'Approvals'
+      : view === 'creators'
+        ? 'Creators'
+        : view === 'analytics'
+          ? 'Acquisition analytics'
+          : view === 'campaigns'
+            ? 'Campaigns'
+            : view === 'inbox'
+              ? 'Inbox'
+              : 'Acquisition';
+  const pageSubtitle =
+    view === 'approvals'
+      ? 'Daily work queue — review personalized drafts, then approve & send.'
+      : 'Paid customers first. Pipeline metrics only explain where conversion fails.';
 
   const blocked =
     summary?.outreachBlocked ||
@@ -308,12 +362,12 @@ export function CreatorAcquisitionPage() {
     eligibleVisible.length > 0 && eligibleVisible.every((r) => selected.includes(r.public.prospectId));
 
   return (
-    <AdminShell title="Creator Acquisition" subtitle="Find, qualify, approve and contact creators.">
+    <AdminShell title={pageTitle} subtitle={pageSubtitle}>
       <div className="ops-page-head acq-campaign-head">
         <div className="acq-status-pills">
           <span className="acq-pill">
-            Campaign status
-            <strong className="acq-dot acq-dot-ok"> COOK-001 ACTIVE</strong>
+            Campaign
+            <strong className="acq-dot acq-dot-ok"> COOK-001</strong>
           </span>
           <span className="acq-pill">
             Sending
@@ -328,6 +382,10 @@ export function CreatorAcquisitionPage() {
               {dailyLimit}/day
             </strong>
           </span>
+          <span className="acq-pill">
+            Initial send
+            <strong className="acq-dot acq-dot-ok"> APPROVAL REQUIRED</strong>
+          </span>
         </div>
       </div>
 
@@ -336,7 +394,24 @@ export function CreatorAcquisitionPage() {
 
       <section className="ops-panel">
         <header className="ops-section-head">
-          <h2>Pipeline</h2>
+          <h2>North star</h2>
+        </header>
+        <div className="acq-pipeline">
+          {northStar.map((p) => (
+            <div key={p.label} className="acq-pipeline-card acq-pipeline-card-static">
+              <span>{p.label}</span>
+              <strong>{p.value}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="ops-panel">
+        <header className="ops-section-head">
+          <h2>Conversion funnel</h2>
+          <p className="ops-muted" style={{ margin: 0 }}>
+            From CRM prospect records — find the drop-off, not vanity discovery counts.
+          </p>
         </header>
         <div className="acq-pipeline">
           {pipeline.map((p, i) => (
@@ -883,13 +958,28 @@ export function CreatorAcquisitionPage() {
                   <dt>YouTube</dt>
                   <dd>
                     <a href={drawer.public.channelUrl} target="_blank" rel="noreferrer">
-                      {drawer.public.channelUrl}
+                      {drawer.public.handle || drawer.public.channelUrl}
                     </a>
                   </dd>
                 </div>
                 <div>
                   <dt>Subscribers</dt>
                   <dd>{drawer.public.subscriberRange}</dd>
+                </div>
+                <div>
+                  <dt>Acquisition score</dt>
+                  <dd>
+                    <strong>{drawer.public.acquisitionScore ?? drawer.public.priorityScore}</strong>
+                    {drawer.public.scoreBreakdownJson ? (
+                      <div className="ops-muted" style={{ marginTop: 4, fontSize: 12 }}>
+                        {drawer.public.scoreBreakdownJson}
+                      </div>
+                    ) : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Why selected</dt>
+                  <dd>{whySelected(drawer.public)}</dd>
                 </div>
                 <div>
                   <dt>Category</dt>
@@ -900,11 +990,11 @@ export function CreatorAcquisitionPage() {
                   <dd>{drawer.public.language || '—'}</dd>
                 </div>
                 <div>
-                  <dt>Public email</dt>
-                  <dd>{drawer.publicBusinessEmail || '—'}</dd>
+                  <dt>Contact</dt>
+                  <dd>{drawer.publicBusinessEmail || 'CONTACT NEEDED'}</dd>
                 </div>
                 <div>
-                  <dt>Email source</dt>
+                  <dt>Contact source</dt>
                   <dd>
                     {drawer.public.contactSourceUrl ? (
                       <a href={drawer.public.contactSourceUrl} target="_blank" rel="noreferrer">
@@ -913,6 +1003,9 @@ export function CreatorAcquisitionPage() {
                     ) : (
                       '—'
                     )}
+                    {drawer.public.contactResearchStatus ? (
+                      <div className="ops-muted">{drawer.public.contactResearchStatus}</div>
+                    ) : null}
                   </dd>
                 </div>
                 <div>
@@ -927,11 +1020,11 @@ export function CreatorAcquisitionPage() {
                   <dd>{drawer.public.campaign}</dd>
                 </div>
                 <div>
-                  <dt>Draft subject</dt>
+                  <dt>Personalized message</dt>
                   <dd>{drawer.public.subject || '—'}</dd>
                 </div>
                 <div>
-                  <dt>Draft body</dt>
+                  <dt>Body</dt>
                   <dd className="acq-draft-body">{drawer.body || '—'}</dd>
                 </div>
                 <div>
@@ -941,6 +1034,12 @@ export function CreatorAcquisitionPage() {
                 <div>
                   <dt>Suggested improvement</dt>
                   <dd>{drawer.public.suggestedImprovement || '—'}</dd>
+                </div>
+                <div>
+                  <dt>Tracked audit path</dt>
+                  <dd>
+                    <code>{drawer.public.trackedPath || '—'}</code>
+                  </dd>
                 </div>
                 <div>
                   <dt>Last contacted</dt>

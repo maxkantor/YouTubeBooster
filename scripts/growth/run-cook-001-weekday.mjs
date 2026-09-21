@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Conservative COOK-001 weekday send.
- * Uses only official-site mailto addresses. Never prints emails.
- * Approves at most --max (default 10) verified contacts, then calls weekday-send.
+ * Conservative COOK-001 weekday path.
+ * Inspects/drafts verified official-site mailto prospects into the Approvals queue.
+ * Does NOT auto-approve. Weekday-send only sends previously human-approved recipients.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -18,11 +18,12 @@ const MAX_DEFAULT = 10;
 const SKIP_HANDLES = new Set(['@sohlaandham', '@kelvinskitchen']);
 
 function parseArgs(argv) {
-  const out = { max: MAX_DEFAULT, dryRun: false };
+  const out = { max: MAX_DEFAULT, dryRun: false, autoApprove: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--max') out.max = Math.max(1, Math.min(30, Number(argv[++i] || MAX_DEFAULT)));
     else if (a === '--dry-run') out.dryRun = true;
+    else if (a === '--auto-approve') out.autoApprove = true; // escape hatch only; default OFF
   }
   return out;
 }
@@ -132,16 +133,25 @@ if (!postal || postal.length < 10) {
 
 const cookie = await adminLogin();
 const summaryBefore = await adminJson(cookie, '/api/admin/crm/acquisition/summary');
+
+// Re-score / contact-research existing CRM prospects (preserves IDs).
+let migrate = null;
+if (!args.dryRun) {
+  migrate = await adminJson(cookie, `/api/admin/crm/acquisition/migrate-rescore?limit=${args.max}`, {
+    method: 'POST'
+  });
+}
+
 const candidates = loadCsvCandidates();
 const probes = [];
-const verified = [];
+const drafted = [];
 
 for (const row of candidates) {
-  if (verified.length >= args.max) break;
+  if (drafted.length >= args.max) break;
   let probe;
   try {
     probe = await fetchOfficial(row.contactUrl);
-  } catch (e) {
+  } catch {
     probes.push({ id: row.id, handle: row.handle, result: 'FETCH_FAILED' });
     continue;
   }
@@ -155,7 +165,7 @@ for (const row of candidates) {
   probes.push({ id: row.id, handle: row.handle, result: 'OFFICIAL_MAILTO', emailCount: emails.length });
 
   if (args.dryRun) {
-    verified.push({ id: row.id, handle: row.handle });
+    drafted.push({ id: row.id, handle: row.handle });
     continue;
   }
 
@@ -170,13 +180,13 @@ for (const row of candidates) {
       publicBusinessEmail: email,
       contactSourceUrl: row.contactUrl,
       contactType,
-      notes: 'Official-site mailto verified 2026-08-19 COOK-001 conservative batch'
+      notes: 'Official-site mailto verified COOK-001 — queued for human approval'
     })
   });
   const pub = inspect.json?.public || inspect.json?.Public || {};
   const prospectId = pub.prospectId || pub.ProspectId;
   const placeholder = pub.previewPlaceholder === true || pub.PreviewPlaceholder === true;
-  const score = pub.priorityScore ?? pub.PriorityScore;
+  const score = pub.priorityScore ?? pub.PriorityScore ?? pub.acquisitionScore ?? pub.AcquisitionScore;
   probes[probes.length - 1].score = score ?? null;
   probes[probes.length - 1].subscriberRange = pub.subscriberRange || pub.SubscriberRange || null;
   probes[probes.length - 1].recentUploadAt = pub.recentUploadAt || pub.RecentUploadAt || null;
@@ -196,37 +206,49 @@ for (const row of candidates) {
     continue;
   }
   probes[probes.length - 1].score = score;
-  verified.push({ id: prospectId, handle: row.handle, score });
+  drafted.push({ id: prospectId, handle: row.handle, score });
 }
 
 let approval = null;
 let send = null;
-if (!args.dryRun && verified.length) {
-  const flags = await adminJson(cookie, '/api/admin/crm/acquisition/campaign-flags', {
+if (!args.dryRun) {
+  // Enable sending infrastructure only — does not approve recipients.
+  await adminJson(cookie, '/api/admin/crm/acquisition/campaign-flags', {
     method: 'POST',
     body: JSON.stringify({ campaign: 'COOK-001', sendingEnabled: true, complaintPause: false })
   });
-  const approve = await adminJson(cookie, '/api/admin/crm/acquisition/approvals', {
-    method: 'POST',
-    body: JSON.stringify({
-      campaign: 'COOK-001',
-      prospectIds: verified.map((v) => v.id),
-      maximumSends: args.max,
-      audienceQueryVersion: 'v1'
-    })
-  });
-  approval = {
-    ok: approve.ok,
-    status: approve.status,
-    approvalId: approve.json?.approvalId || approve.json?.ApprovalId,
-    error: approve.json?.error
-  };
+
+  if (args.autoApprove && drafted.length) {
+    const approve = await adminJson(cookie, '/api/admin/crm/acquisition/approvals', {
+      method: 'POST',
+      body: JSON.stringify({
+        campaign: 'COOK-001',
+        prospectIds: drafted.map((v) => v.id),
+        maximumSends: args.max,
+        audienceQueryVersion: 'v1'
+      })
+    });
+    approval = {
+      ok: approve.ok,
+      status: approve.status,
+      approvalId: approve.json?.approvalId || approve.json?.ApprovalId,
+      error: approve.json?.error,
+      note: 'auto_approve_escape_hatch'
+    };
+  } else {
+    approval = {
+      ok: true,
+      skipped: true,
+      awaitingHumanApproval: drafted.length,
+      note: 'Initial outreach requires Admin Approvals — no auto-approve'
+    };
+  }
+
   const cron = ssmGet('/youtubebooster/outreach/cron-key', true);
   if (!cron) {
     send = { status: 'BLOCKED', error: 'cron_key_missing' };
-  } else if (!approval.ok) {
-    send = { status: 'BLOCKED', error: 'approval_failed' };
   } else {
+    // Sends only previously approved + eligible follow-ups. Never sends unapproved initials.
     const weekday = await fetch(`${API}/api/public/acq/weekday-send`, {
       method: 'POST',
       headers: { 'X-Outreach-Cron-Key': cron, 'content-type': 'application/json' }
@@ -247,50 +269,25 @@ if (!args.dryRun && verified.length) {
       sent: json.sent ?? json.Sent,
       skipped: json.skipped ?? json.Skipped,
       reasons: (json.reasons || json.Reasons || []).slice(0, 40),
-      reasonCounts: json.reasonCounts || json.ReasonCounts || null,
       dailyLimit: json.dailyLimit ?? json.DailyLimit,
-      rampBlockReason: json.rampBlockReason ?? json.RampBlockReason
+      cohortRunId: json.cohortRunId ?? json.CohortRunId
     };
   }
-  send.flagsHttp = flags.status;
 }
 
 const summaryAfter = await adminJson(cookie, '/api/admin/crm/acquisition/summary');
-const s = summaryAfter.json || {};
 console.log(
-  JSON.stringify(
-    {
-      ok: (send?.sent || 0) > 0,
-      dryRun: args.dryRun,
-      postalConfigured: true,
-      emailsPrinted: false,
-      probes,
-      verifiedProspectIds: verified.map((v) => v.id),
-      approval,
-      send,
-      funnel: {
-        drafted: s.drafts ?? 0,
-        approved: s.approved ?? 0,
-        sent: s.sent ?? 0,
-        delivered: s.delivered ?? 0,
-        clicked: s.clicked ?? 0,
-        converted: s.converted ?? 0,
-        marketingSendingEnabled: s.marketingSendingEnabled === true
-      },
-      cohortFunnel: s.cohortFunnel || null,
-      pipeline: s.pipeline || null,
-      sendEligible: s.sendEligible ?? 0,
-      summaryBefore: summaryBefore.json
-        ? {
-            marketingSendingEnabled: summaryBefore.json.marketingSendingEnabled,
-            contactVerified: summaryBefore.json.contactVerified,
-            drafts: summaryBefore.json.drafts,
-            approved: summaryBefore.json.approved,
-            sent: summaryBefore.json.sent
-          }
-        : null
-    },
-    null,
-    2
-  )
+  JSON.stringify({
+    ok: true,
+    dryRun: args.dryRun,
+    autoApprove: args.autoApprove,
+    migrate: migrate?.json || migrate,
+    draftedForApproval: drafted.length,
+    drafted,
+    probes: probes.slice(0, 40),
+    approval,
+    send,
+    summaryBefore: summaryBefore.json?.northStar || summaryBefore.json?.cohortFunnel || null,
+    summaryAfter: summaryAfter.json?.northStar || summaryAfter.json?.cohortFunnel || null
+  })
 );

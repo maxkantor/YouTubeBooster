@@ -9,7 +9,7 @@ public static class CreatorAcquisitionCampaigns
 {
     public const string Cook001 = "COOK-001";
     public const string Other001 = "OTHER-001";
-    public const string DefaultSubject = "One idea for your YouTube channel";
+    public const string DefaultSubject = "I found specific growth opportunities on your channel";
 }
 
 public static class CreatorAcquisitionViews
@@ -69,7 +69,17 @@ public sealed record AcqProspectRecord(
     bool PreviewPlaceholder,
     string? EmailVariant = null,
     string? CohortRunId = null,
-    string? LastSesMessageId = null
+    string? LastSesMessageId = null,
+    int WeakDescriptionCount = 0,
+    int TitleIssueCount = 0,
+    int SampleSize = 0,
+    int ContactResearchAttempts = 0,
+    DateTimeOffset? ContactResearchNextAt = null,
+    DateTimeOffset? ContactResearchLastAt = null,
+    string? ContactResearchStatus = null,
+    int FollowUpStep = 0,
+    DateTimeOffset? NextFollowUpAt = null,
+    string? ScoreBreakdownJson = null
 );
 
 public sealed record AcqApprovalRecord(
@@ -134,7 +144,13 @@ public sealed record AcqSanitizedProspectDto(
     string? SuggestedImprovement,
     string? Subject,
     DateTimeOffset? EvidenceAt,
-    bool PreviewPlaceholder
+    bool PreviewPlaceholder,
+    int AcquisitionScore = 0,
+    string? ScoreBreakdownJson = null,
+    string? ContactResearchStatus = null,
+    int FollowUpStep = 0,
+    DateTimeOffset? NextFollowUpAt = null,
+    DateTimeOffset? LastContactedAtPublic = null
 );
 
 public sealed record AcqAdminProspectDto(

@@ -840,7 +840,13 @@ function AppInner() {
           <Route path="orders" element={<OrdersPage />} />
           <Route path="payments" element={<Navigate to="/admin/orders" replace />} />
           <Route path="audits" element={<AuditsPage />} />
-          <Route path="marketing/creator-acquisition" element={<CreatorAcquisitionPage />} />
+          <Route path="acquisition" element={<CreatorAcquisitionPage />} />
+          <Route path="acquisition/approvals" element={<CreatorAcquisitionPage />} />
+          <Route path="acquisition/creators" element={<CreatorAcquisitionPage />} />
+          <Route path="acquisition/analytics" element={<CreatorAcquisitionPage />} />
+          <Route path="acquisition/campaigns" element={<CreatorAcquisitionPage />} />
+          <Route path="acquisition/inbox" element={<CreatorAcquisitionPage />} />
+          <Route path="marketing/creator-acquisition" element={<Navigate to="/admin/acquisition" replace />} />
         <Route path="contacts/:ticketId" element={<ContactTicketPage />} />
           <Route path="support/:ticketId" element={<ContactTicketPage />} />
         <Route path="contacts" element={<ContactListPage />} />

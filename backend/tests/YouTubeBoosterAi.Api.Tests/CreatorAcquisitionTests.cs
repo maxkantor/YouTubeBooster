@@ -50,10 +50,44 @@ public class CreatorAcquisitionTests
         var inBand = CreatorAcquisitionScoring.Score(new AcqScoreInput(5000, now, now, 12, 8, 20, true, true, "en", true, false, false, false, false));
         var tiny = CreatorAcquisitionScoring.Score(new AcqScoreInput(200, now, now, 12, 8, 20, true, true, "en", true, false, false, false, false));
         var celeb = CreatorAcquisitionScoring.Score(new AcqScoreInput(2_000_000, now, now, 12, 8, 20, true, true, "en", true, false, true, false, false));
-        Assert.Equal(15, inBand.TargetRange);
+        Assert.Equal(18, inBand.TargetRange);
         Assert.Equal(0, tiny.TargetRange);
         Assert.Equal(0, celeb.Total);
         Assert.True(inBand.Total >= 70);
+    }
+
+    [Fact]
+    public void PackagingScore_DifferentiatesByRatio()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var weak = CreatorAcquisitionScoring.Score(new AcqScoreInput(8000, now, now, 18, 10, 20, true, true, "en", true, false, false, false, false));
+        var mild = CreatorAcquisitionScoring.Score(new AcqScoreInput(8000, now, now, 4, 2, 20, true, true, "en", true, false, false, false, false));
+        Assert.True(weak.PackagingOpportunity > mild.PackagingOpportunity);
+        Assert.NotEqual(weak.Total, mild.Total);
+    }
+
+    [Fact]
+    public void FollowUpDue_BypassesCooldownGate()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var p = Prospect(lastContacted: now.AddDays(-4), score: 85) with
+        {
+            FollowUpStep = 0,
+            NextFollowUpAt = now.AddHours(-1),
+            OutreachStatus = "sent"
+        };
+        var gate = CreatorAcquisitionScoring.ExplainSendEligibility(p, now, State(), alreadyContacted: true);
+        Assert.True(gate.Ok);
+        Assert.Equal("ok_follow_up", gate.Reason);
+    }
+
+    [Fact]
+    public void InitialSend_RequiresApprovalWhenStandingOff()
+    {
+        var p = Prospect(approvalId: null, score: 85) with { ContentHash = null };
+        var gate = CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, State(), false);
+        Assert.False(gate.Ok);
+        Assert.Equal("not_approved", gate.Reason);
     }
 
     [Fact]

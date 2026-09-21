@@ -56,19 +56,25 @@ public sealed class StripeCheckoutService : ICheckoutService
     private readonly IAppDataStore _appDataStore;
     private readonly IPaymentAdminNotificationService _paymentAdminNotifier;
     private readonly IPaymentCustomerNotificationService _paymentCustomerNotifier;
+    private readonly ICreatorAcquisitionStore _acqStore;
+    private readonly ICreatorAcquisitionService _acq;
 
     public StripeCheckoutService(
         IAppSettingsProvider appSettingsProvider,
         ISecretValueProvider secretValueProvider,
         IAppDataStore appDataStore,
         IPaymentAdminNotificationService paymentAdminNotifier,
-        IPaymentCustomerNotificationService paymentCustomerNotifier)
+        IPaymentCustomerNotificationService paymentCustomerNotifier,
+        ICreatorAcquisitionStore acqStore,
+        ICreatorAcquisitionService acq)
     {
         _appSettingsProvider = appSettingsProvider;
         _secretValueProvider = secretValueProvider;
         _appDataStore = appDataStore;
         _paymentAdminNotifier = paymentAdminNotifier;
         _paymentCustomerNotifier = paymentCustomerNotifier;
+        _acqStore = acqStore;
+        _acq = acq;
     }
 
     public async Task<CheckoutSessionResponse> CreateSessionAsync(CreateCheckoutSessionRequest request, CancellationToken cancellationToken)
@@ -117,7 +123,8 @@ public sealed class StripeCheckoutService : ICheckoutService
                 ["utmSource"] = request.UtmSource ?? string.Empty,
                 ["utmMedium"] = request.UtmMedium ?? string.Empty,
                 ["utmCampaign"] = request.UtmCampaign ?? string.Empty,
-                ["referrer"] = request.Referrer ?? string.Empty
+                ["referrer"] = request.Referrer ?? string.Empty,
+                ["ybOid"] = request.YbOid ?? string.Empty
             },
             ClientReferenceId = string.IsNullOrWhiteSpace(request.UserId) ? null : request.UserId,
             PaymentIntentData = new Stripe.Checkout.SessionPaymentIntentDataOptions
@@ -129,7 +136,8 @@ public sealed class StripeCheckoutService : ICheckoutService
                     ["planCode"] = planCode,
                     ["accountEmail"] = request.AccountEmail ?? request.Email,
                     ["userId"] = request.UserId ?? string.Empty,
-                    ["cognitoSub"] = request.CognitoSub ?? string.Empty
+                    ["cognitoSub"] = request.CognitoSub ?? string.Empty,
+                    ["ybOid"] = request.YbOid ?? string.Empty
                 }
             },
             LineItems =
@@ -528,9 +536,34 @@ public sealed class StripeCheckoutService : ICheckoutService
                 ["checkoutSessionId"] = session.Id,
                 ["amount"] = payment.Amount.ToString("F2", CultureInfo.InvariantCulture),
                 ["livemode"] = isLive ? "true" : "false",
-                ["currency"] = payment.Currency
+                ["currency"] = payment.Currency,
+                ["ybOid"] = metadata.GetValueOrDefault("ybOid")
             },
             cancellationToken);
+
+        // Attribute acquisition prospect → customer via Stripe metadata token or email match.
+        try
+        {
+            var ybOid = metadata.GetValueOrDefault("ybOid");
+            if (!string.IsNullOrWhiteSpace(ybOid))
+            {
+                await _acq.RecordFunnelAsync(ybOid.Trim(), "checkout_paid", cancellationToken);
+            }
+            else
+            {
+                var matchEmail = stripeEmail ?? accountEmail;
+                if (EmailAddressHelpers.LooksLikeEmail(matchEmail))
+                {
+                    var prospect = await _acqStore.GetByEmailAsync(matchEmail.Trim(), cancellationToken);
+                    if (prospect is not null && !string.IsNullOrWhiteSpace(prospect.OpaqueToken))
+                        await _acq.RecordFunnelAsync(prospect.OpaqueToken, "checkout_paid", cancellationToken);
+                }
+            }
+        }
+        catch
+        {
+            // Never fail payment entitlement if acquisition attribution errors.
+        }
 
         if (!isLive)
         {

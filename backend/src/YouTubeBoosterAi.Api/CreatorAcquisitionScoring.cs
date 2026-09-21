@@ -41,18 +41,32 @@ public static class CreatorAcquisitionScoring
             return new AcqScoreBreakdown(0, 0, 0, 0, 0, 0, 0, 0);
         }
 
-        var range = input.SubscriberCount is >= 1000 and <= 100000 ? 15
-            : input.SubscriberCount is > 100000 and <= 120000 ? 6
-            : 0;
+        // Sweet spot: 5k–50k strongest need; still score 1k–100k band.
+        var range = input.SubscriberCount switch
+        {
+            >= 5000 and <= 50000 => 18,
+            >= 1000 and < 5000 => 14,
+            > 50000 and <= 100000 => 12,
+            > 100000 and <= 120000 => 5,
+            _ => 0
+        };
 
         var ageDays = input.RecentUploadAt is null
             ? 999
             : (input.NowUtc - input.RecentUploadAt.Value).TotalDays;
-        var activity = ageDays <= 14 ? 15 : ageDays <= 30 ? 12 : ageDays <= 60 ? 8 : 0;
+        var activity = ageDays <= 7 ? 18
+            : ageDays <= 14 ? 15
+            : ageDays <= 30 ? 12
+            : ageDays <= 60 ? 8
+            : 0;
 
         var sample = Math.Max(1, input.SampleSize);
-        var packRatio = (input.WeakDescriptionCount + input.TitleIssueCount) / (double)(sample * 2);
-        var packaging = packRatio >= 0.5 ? 25 : packRatio >= 0.25 ? 18 : packRatio >= 0.1 ? 10 : 0;
+        var packRatio = Math.Clamp(
+            (input.WeakDescriptionCount + input.TitleIssueCount) / (double)(sample * 2),
+            0,
+            1);
+        // Continuous packaging points (0–25) so creators differentiate instead of clustering at 85.
+        var packaging = (int)Math.Round(packRatio * 25);
 
         var email = input.PublicBusinessEmailVerified ? 15 : 0;
         var independent = input.IndependentCreator ? 10 : 0;
@@ -60,9 +74,12 @@ public static class CreatorAcquisitionScoring
             : input.Language is "ru" or "uk" ? 4
             : 2;
         var offer = input.OneTimeAuditFit ? 10 : 0;
-        var total = range + activity + packaging + email + independent + english + offer;
+        var total = Math.Clamp(range + activity + packaging + email + independent + english + offer, 0, 100);
         return new AcqScoreBreakdown(range, activity, packaging, email, independent, english, offer, total);
     }
+
+    public static string ScoreBreakdownJson(AcqScoreBreakdown b) =>
+        $"{{\"targetRange\":{b.TargetRange},\"recentActivity\":{b.RecentActivity},\"packagingOpportunity\":{b.PackagingOpportunity},\"publicEmail\":{b.PublicEmail},\"independent\":{b.Independent},\"englishSuitability\":{b.EnglishSuitability},\"offerFit\":{b.OfferFit},\"total\":{b.Total}}}";
 
     public static bool IsSendEligible(AcqProspectRecord p, DateTimeOffset nowUtc, AcqCampaignState state)
     {
@@ -95,25 +112,42 @@ public static class CreatorAcquisitionScoring
             return new AcqSendGateResult(false, "suppressed");
         if (OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
             return new AcqSendGateResult(false, "invalid_or_spamtrap");
+        var followUpDue = IsFollowUpDue(p, nowUtc);
         var cooldownDays = state.CooldownDays > 0 ? state.CooldownDays : OutreachPolicy.DefaultCooldownDays;
         if (alreadyContacted && p.LastContactedAt is null)
             return new AcqSendGateResult(false, "already_contacted");
-        if (OutreachPolicy.InCooldown(p.LastContactedAt, nowUtc, cooldownDays))
+        if (!followUpDue && OutreachPolicy.InCooldown(p.LastContactedAt, nowUtc, cooldownDays))
             return new AcqSendGateResult(false, "cooldown");
         if (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60)
             return new AcqSendGateResult(false, "stale_upload");
-        var standing = state.StandingCampaignApproval || state.MarketingSendingEnabled;
-        if (!standing && (string.IsNullOrWhiteSpace(p.ApprovalId) || string.IsNullOrWhiteSpace(p.ContentHash)))
+        var standing = state.StandingCampaignApproval;
+        // Initial send always requires recipient approval. Follow-ups reuse that approval.
+        if (!standing && !followUpDue && (string.IsNullOrWhiteSpace(p.ApprovalId) || string.IsNullOrWhiteSpace(p.ContentHash)))
             return new AcqSendGateResult(false, "not_approved");
         if (string.IsNullOrWhiteSpace(p.Observation))
             return new AcqSendGateResult(false, "draft_incomplete");
-        if (!standing && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body)))
+        if (!followUpDue && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body)))
             return new AcqSendGateResult(false, "draft_incomplete");
-        if (!string.IsNullOrWhiteSpace(p.ContentHash) && !string.Equals(ContentHash(p), p.ContentHash, StringComparison.Ordinal))
+        if (!followUpDue && !string.IsNullOrWhiteSpace(p.ContentHash)
+            && !string.Equals(ContentHash(p), p.ContentHash, StringComparison.Ordinal))
             return new AcqSendGateResult(false, "content_hash_changed");
         if (p.SubscriberCount < 1000 || p.SubscriberCount > 100000)
             return new AcqSendGateResult(false, "subscriber_out_of_band");
-        return new AcqSendGateResult(true, "ok");
+        return new AcqSendGateResult(true, followUpDue ? "ok_follow_up" : "ok");
+    }
+
+    public static bool IsFollowUpDue(AcqProspectRecord p, DateTimeOffset nowUtc)
+    {
+        if (p.LastContactedAt is null) return false;
+        if (p.FollowUpStep is < 0 or >= 2) return false;
+        if (p.NextFollowUpAt is null || p.NextFollowUpAt > nowUtc) return false;
+        var status = (p.OutreachStatus ?? "").ToLowerInvariant();
+        if (status is "replied" or "interested" or "customer" or "unsubscribed"
+            or "bounced" or "complained" or "rejected" or "suppressed")
+            return false;
+        if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return true;
     }
 
     public static bool IsVerifiedPublicEmail(AcqProspectRecord p) =>
@@ -241,7 +275,13 @@ public static class CreatorAcquisitionScoring
         p.SuggestedImprovement,
         p.Subject,
         p.EvidenceAt,
-        p.PreviewPlaceholder
+        p.PreviewPlaceholder,
+        AcquisitionScore: p.PriorityScore,
+        ScoreBreakdownJson: p.ScoreBreakdownJson,
+        ContactResearchStatus: p.ContactResearchStatus,
+        FollowUpStep: p.FollowUpStep,
+        NextFollowUpAt: p.NextFollowUpAt,
+        LastContactedAtPublic: p.LastContactedAt
     );
 
     public static string ContactStatusLabel(AcqProspectRecord p)

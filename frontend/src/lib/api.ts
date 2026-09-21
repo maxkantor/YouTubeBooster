@@ -159,6 +159,16 @@ export const publicApi = {
     });
   },
   async createCheckoutSession(channelInput: string, email: string): Promise<CheckoutSession> {
+    const outreach = typeof window !== 'undefined'
+      ? (() => {
+          try {
+            const raw = sessionStorage.getItem('yb_outreach_attribution');
+            return raw ? (JSON.parse(raw) as Record<string, string>) : null;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
     return fetchJson<CheckoutSession>('/api/checkout/session', {
       method: 'POST',
       body: JSON.stringify({
@@ -167,7 +177,11 @@ export const publicApi = {
         successUrl: `${window.location.origin}/?checkout=success`,
         cancelUrl: `${window.location.origin}/#pricing`,
         planCode: 'premium',
-        priceKey: 'premium'
+        priceKey: 'premium',
+        utmSource: outreach?.utm_source || undefined,
+        utmMedium: outreach?.utm_medium || undefined,
+        utmCampaign: outreach?.utm_campaign || undefined,
+        ybOid: outreach?.yb_oid || undefined
       })
     });
   },
@@ -222,6 +236,16 @@ export const meApi = {
 
 export const billingApi = {
   async createCheckoutSession(idToken: string, channelInput: string, planCode = 'premium'): Promise<CheckoutSession> {
+    const outreach = typeof window !== 'undefined'
+      ? (() => {
+          try {
+            const raw = sessionStorage.getItem('yb_outreach_attribution');
+            return raw ? (JSON.parse(raw) as Record<string, string>) : null;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
     return fetchJsonAuthed<CheckoutSession>('/api/billing/create-checkout-session', idToken, {
       method: 'POST',
       body: JSON.stringify({
@@ -230,7 +254,11 @@ export const billingApi = {
         priceKey: planCode,
         planCode,
         successUrl: `${window.location.origin}/?checkout=success`,
-        cancelUrl: `${window.location.origin}/#pricing`
+        cancelUrl: `${window.location.origin}/#pricing`,
+        utmSource: outreach?.utm_source || undefined,
+        utmMedium: outreach?.utm_medium || undefined,
+        utmCampaign: outreach?.utm_campaign || undefined,
+        ybOid: outreach?.yb_oid || undefined
       })
     });
   },
@@ -528,5 +556,13 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify({ campaign, prospectIds, maximumSends: 5, audienceQueryVersion: 'v1' })
     });
+  },
+  async acqMigrateRescore(limit = 15): Promise<{
+    inspected: number;
+    failed: number;
+    contactVerified: number;
+    considered: number;
+  }> {
+    return fetchJson(`/api/admin/crm/acquisition/migrate-rescore?limit=${limit}`, { method: 'POST' });
   }
 };

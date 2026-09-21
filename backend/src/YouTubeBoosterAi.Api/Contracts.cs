@@ -39,7 +39,8 @@ public sealed record CreateCheckoutSessionRequest(
     string? UtmSource = null,
     string? UtmMedium = null,
     string? UtmCampaign = null,
-    string? Referrer = null
+    string? Referrer = null,
+    string? YbOid = null
 );
 
 public sealed record CheckoutSessionResponse(string CheckoutUrl, string SessionId, decimal Amount, string Currency);

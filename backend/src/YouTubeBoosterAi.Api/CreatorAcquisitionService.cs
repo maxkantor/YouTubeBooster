@@ -17,6 +17,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     private readonly ISecretValueProvider _secrets;
     private readonly IConfiguration _configuration;
     private readonly IPublicDashboardService _dashboard;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public CreatorAcquisitionService(
         ICreatorAcquisitionStore store,
@@ -25,7 +26,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         IAmazonSimpleEmailService ses,
         ISecretValueProvider secrets,
         IConfiguration configuration,
-        IPublicDashboardService dashboard)
+        IPublicDashboardService dashboard,
+        IHttpClientFactory httpClientFactory)
     {
         _store = store;
         _appDataStore = appDataStore;
@@ -34,6 +36,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         _secrets = secrets;
         _configuration = configuration;
         _dashboard = dashboard;
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<AcqCampaignState> LoadStateAsync(string campaign, CancellationToken cancellationToken)
@@ -100,7 +103,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             RampEnabled: rampEnabled,
             CooldownDays: cooldown,
             RampStage: stage,
-            StandingCampaignApproval: sending,
+            StandingCampaignApproval: false,
             RampBlockReason: ramp.BlockReason,
             AllowWeekends: allowWeekends
         );
@@ -127,17 +130,110 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             cadence = span / Math.Max(1, videos.Count - 1);
         }
 
+        var sampleSize = Math.Max(1, videos.Count > 0 ? videos.Count : 20);
+
         var email = request.PublicBusinessEmail?.Trim();
-        if (CreatorAcquisitionContact.IsGuessed(email, request.ContactSourceUrl))
+        var contactSourceUrl = request.ContactSourceUrl?.Trim();
+        var contactType = string.IsNullOrWhiteSpace(request.ContactType) ? "none" : request.ContactType;
+        var officialWebsite = request.OfficialWebsite?.Trim();
+        if (CreatorAcquisitionContact.IsGuessed(email, contactSourceUrl))
             email = null;
         if (!string.IsNullOrWhiteSpace(email) && !EmailAddressHelpers.LooksLikeEmail(email))
             email = null;
+
+        var dup = await _store.FindDuplicateAsync(null, url, handle, email, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var contactAttempts = dup?.ContactResearchAttempts ?? 0;
+        var contactStatus = dup?.ContactResearchStatus;
+        var contactNextAt = dup?.ContactResearchNextAt;
+        var contactLastAt = dup?.ContactResearchLastAt;
+
+        var alreadyVerified = EmailAddressHelpers.LooksLikeEmail(email)
+            && !string.IsNullOrWhiteSpace(contactSourceUrl)
+            && contactType is "business" or "partnership" or "media" or "general";
+
+        // Automated public contact research (never invents emails). Respect backoff.
+        if (!alreadyVerified && !placeholder)
+        {
+            var due = contactNextAt is null || contactNextAt <= now;
+            if (due && contactAttempts < 5)
+            {
+                // Prefer URLs/emails visible in public video descriptions before fetching sites.
+                var descTexts = videos
+                    .SelectMany(v => new[] { v.title, v.description })
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Take(20)
+                    .ToList();
+                descTexts.AddRange(demo.Findings.Take(5));
+                if (!string.IsNullOrWhiteSpace(demo.ChannelTitle))
+                    descTexts.Add(demo.ChannelTitle);
+
+                var fromDescriptions = ExtractEmailsFromPlainText(string.Join('\n', descTexts));
+                if (fromDescriptions.Count > 0 && string.IsNullOrWhiteSpace(email))
+                {
+                    email = PreferBusinessEmailLocal(fromDescriptions);
+                    contactSourceUrl ??= url;
+                    contactType = "business";
+                    contactStatus = "verified_public";
+                    contactAttempts += 1;
+                    contactLastAt = now;
+                    contactNextAt = null;
+                    alreadyVerified = true;
+                }
+
+                if (!alreadyVerified)
+                {
+                    using var http = _httpClientFactory.CreateClient();
+                    http.Timeout = TimeSpan.FromSeconds(12);
+                    var research = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+                        http,
+                        officialWebsite,
+                        descTexts,
+                        cancellationToken);
+
+                    contactAttempts += 1;
+                    contactLastAt = now;
+                    contactStatus = research.Status;
+                    officialWebsite ??= research.OfficialWebsite;
+
+                    if (string.Equals(research.Status, "verified_public", StringComparison.OrdinalIgnoreCase)
+                        && EmailAddressHelpers.LooksLikeEmail(research.Email)
+                        && !string.IsNullOrWhiteSpace(research.SourceUrl))
+                    {
+                        email = research.Email;
+                        contactSourceUrl = research.SourceUrl;
+                        contactType = research.ContactType;
+                        contactNextAt = null;
+                    }
+                    else
+                    {
+                        if (string.Equals(research.ContactType, "form_only", StringComparison.OrdinalIgnoreCase))
+                        {
+                            contactType = "form_only";
+                            contactSourceUrl = research.SourceUrl ?? contactSourceUrl;
+                        }
+                        else if (!string.IsNullOrWhiteSpace(research.SourceUrl) && string.IsNullOrWhiteSpace(contactSourceUrl))
+                        {
+                            contactSourceUrl = research.SourceUrl;
+                            contactType = string.IsNullOrWhiteSpace(research.ContactType) ? "source_recorded_unverified" : research.ContactType;
+                        }
+                        contactNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(contactAttempts));
+                    }
+                }
+            }
+            else if (!due)
+            {
+                contactStatus ??= "contact_needed_backoff";
+            }
+        }
 
         var language = string.IsNullOrWhiteSpace(request.Language) ? GuessLanguage(demo.ChannelTitle, videos) : request.Language!;
         var independent = !IsNetworkName(demo.ChannelTitle);
         var children = IsChildren(demo.ChannelTitle, demo.Findings);
         var inactive = recent is null || (DateTimeOffset.UtcNow - recent.Value).TotalDays > 180;
         var celebrity = demo.SubscriberCount > 1000000;
+        var emailVerified = EmailAddressHelpers.LooksLikeEmail(email) && !string.IsNullOrWhiteSpace(contactSourceUrl)
+            && contactType is "business" or "partnership" or "media" or "general";
 
         var score = CreatorAcquisitionScoring.Score(new AcqScoreInput(
             demo.SubscriberCount,
@@ -145,8 +241,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             DateTimeOffset.UtcNow,
             descriptions,
             titles,
-            Math.Max(videos.Count, 20),
-            EmailAddressHelpers.LooksLikeEmail(email) && !string.IsNullOrWhiteSpace(request.ContactSourceUrl),
+            sampleSize,
+            emailVerified,
             independent,
             language,
             independent && demo.SubscriberCount is >= 1000 and <= 100000,
@@ -156,18 +252,30 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             inactive
         ));
 
-        var dup = await _store.FindDuplicateAsync(null, url, handle, email, cancellationToken);
         var prospectId = dup?.ProspectId ?? $"{request.Campaign}-{Guid.NewGuid().ToString("N")[..8]}";
         var token = dup?.OpaqueToken ?? AcqIds.NewOpaqueToken();
         var example = demo.TopVideos?.FirstOrDefault()?.Title;
-        var observation = placeholder ? null : CreatorAcquisitionScoring.BuildObservation(titles, descriptions, Math.Max(videos.Count, 20), example);
+        var observation = placeholder ? null : CreatorAcquisitionScoring.BuildObservation(titles, descriptions, sampleSize, example);
         var improvement = placeholder ? null : CreatorAcquisitionScoring.BuildImprovement(titles, descriptions);
         var tracked = $"/api/public/acq/go/{token}";
-        var contactType = string.IsNullOrWhiteSpace(request.ContactType) ? "none" : request.ContactType;
-        if (string.IsNullOrWhiteSpace(email) && !string.IsNullOrWhiteSpace(request.ContactSourceUrl) && contactType != "form_only")
+        if (string.IsNullOrWhiteSpace(email) && !string.IsNullOrWhiteSpace(contactSourceUrl) && contactType != "form_only"
+            && contactType is not "business" and not "partnership" and not "media" and not "general")
             contactType = "source_recorded_unverified";
 
-        var now = DateTimeOffset.UtcNow;
+        // Preserve approval only when draft identity is unchanged.
+        string? keepApproval = null;
+        string? keepHash = dup?.ContentHash;
+        string? keepSubject = dup?.Subject;
+        string? keepBody = dup?.Body;
+        if (dup is not null
+            && !string.IsNullOrWhiteSpace(dup.ApprovalId)
+            && string.Equals(dup.Observation, observation, StringComparison.Ordinal)
+            && EmailAddressHelpers.LooksLikeEmail(email)
+            && string.Equals(dup.PublicBusinessEmail, email, StringComparison.OrdinalIgnoreCase))
+        {
+            keepApproval = dup.ApprovalId;
+        }
+
         var record = new AcqProspectRecord(
             ProspectId: prospectId,
             ChannelName: placeholder ? request.ChannelInput : demo.ChannelTitle,
@@ -182,10 +290,10 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             RecentUploadAt: recent,
             CadenceDays: cadence > 0 ? cadence : null,
             TypicalViewRange: demo.TopVideos is { Count: > 0 } ? demo.TopVideos[0].ViewCount.ToString() : null,
-            OfficialWebsite: request.OfficialWebsite,
+            OfficialWebsite: officialWebsite,
             PublicBusinessEmail: email?.ToLowerInvariant(),
-            ContactSourceUrl: request.ContactSourceUrl,
-            ContactVerifiedAt: EmailAddressHelpers.LooksLikeEmail(email) && !string.IsNullOrWhiteSpace(request.ContactSourceUrl) ? now : null,
+            ContactSourceUrl: contactSourceUrl,
+            ContactVerifiedAt: emailVerified ? now : null,
             ContactType: contactType,
             ChannelFitScore: score.TargetRange + score.Independent + score.OfferFit,
             AuditOpportunityScore: score.PackagingOpportunity,
@@ -203,15 +311,28 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             Observation: observation,
             SuggestedImprovement: improvement,
             EvidenceSummary: placeholder ? "Public YouTube data could not be loaded." : string.Join(" ", demo.Findings.Take(3)),
-            Subject: dup?.Subject,
-            Body: dup?.Body,
-            ContentHash: dup?.ContentHash,
-            ApprovalId: null,
+            Subject: keepSubject,
+            Body: keepBody,
+            ContentHash: keepHash,
+            ApprovalId: keepApproval,
             TicketId: dup?.TicketId,
             Notes: request.Notes,
             CreatedAt: dup?.CreatedAt ?? now,
             UpdatedAt: now,
-            PreviewPlaceholder: placeholder
+            PreviewPlaceholder: placeholder,
+            EmailVariant: dup?.EmailVariant,
+            CohortRunId: dup?.CohortRunId,
+            LastSesMessageId: dup?.LastSesMessageId,
+            WeakDescriptionCount: descriptions,
+            TitleIssueCount: titles,
+            SampleSize: sampleSize,
+            ContactResearchAttempts: contactAttempts,
+            ContactResearchNextAt: contactNextAt,
+            ContactResearchLastAt: contactLastAt,
+            ContactResearchStatus: contactStatus ?? (emailVerified ? "verified_public" : "contact_needed"),
+            FollowUpStep: dup?.FollowUpStep ?? 0,
+            NextFollowUpAt: dup?.NextFollowUpAt,
+            ScoreBreakdownJson: CreatorAcquisitionScoring.ScoreBreakdownJson(score)
         );
 
         if (dup is not null && (dup.LastContactedAt is not null || !string.Equals(dup.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)))
@@ -221,7 +342,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 LastContactedAt = dup.LastContactedAt,
                 SuppressionStatus = dup.SuppressionStatus,
                 OutreachStatus = dup.OutreachStatus,
-                TicketId = dup.TicketId
+                TicketId = dup.TicketId,
+                FollowUpStep = dup.FollowUpStep,
+                NextFollowUpAt = dup.NextFollowUpAt
             };
         }
 
@@ -416,8 +539,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 continue;
             }
 
+            var followUpDue = CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow);
             var extraThisRun = 0;
-            if (!state.StandingCampaignApproval)
+            if (!state.StandingCampaignApproval && !followUpDue)
             {
                 var approval = p.ApprovalId is null ? null : await _store.GetApprovalAsync(p.ApprovalId, cancellationToken);
                 if (approval is null || approval.ExpiresAt < DateTimeOffset.UtcNow)
@@ -443,12 +567,27 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             }
 
             var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
-            if (!string.Equals(p.EmailVariant, variant, StringComparison.Ordinal))
+            if (followUpDue)
+            {
+                var siteFu = Site();
+                var trackedFu = OutreachPolicy.BuildTrackedUrl(siteFu, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
+                var (fuSubject, fuBody) = CreatorAcquisitionCopy.BuildFollowUp(
+                    p.FollowUpStep,
+                    p.ChannelName,
+                    p.ChannelName,
+                    p.Observation ?? "",
+                    trackedFu);
+                p = p with { Subject = fuSubject, Body = fuBody, EmailVariant = variant, UpdatedAt = DateTimeOffset.UtcNow };
+                await _store.UpsertProspectAsync(p, cancellationToken);
+            }
+            else if (!string.Equals(p.EmailVariant, variant, StringComparison.Ordinal))
             {
                 p = p with { EmailVariant = variant, UpdatedAt = DateTimeOffset.UtcNow };
                 await _store.UpsertProspectAsync(p, cancellationToken);
             }
-            var idem = $"{p.ProspectId}:{cohortRunId}";
+            var idem = followUpDue
+                ? $"{p.ProspectId}:{cohortRunId}:fu{p.FollowUpStep}"
+                : $"{p.ProspectId}:{cohortRunId}";
             if (!await _store.TryClaimIdempotencyAsync(idem, cancellationToken))
             {
                 Skip(p.ProspectId, "idempotency");
@@ -504,6 +643,12 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     EmailVariant = variant,
                     CohortRunId = cohortRunId,
                     LastSesMessageId = sesRes.MessageId,
+                    FollowUpStep = CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow)
+                        ? Math.Min(2, p.FollowUpStep + 1)
+                        : 0,
+                    NextFollowUpAt = CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow)
+                        ? (p.FollowUpStep + 1 >= 2 ? null : DateTimeOffset.UtcNow.AddDays(5))
+                        : DateTimeOffset.UtcNow.AddDays(4),
                     UpdatedAt = DateTimeOffset.UtcNow
                 }, cancellationToken);
                 await _appDataStore.TrackEventAsync("acq_email_sent", p.ProspectId, new Dictionary<string, string?>
@@ -569,6 +714,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         {
             OutreachStatus = "unsubscribed",
             SuppressionStatus = "unsubscribed",
+            NextFollowUpAt = null,
             UpdatedAt = DateTimeOffset.UtcNow
         }, cancellationToken);
     }
@@ -581,7 +727,13 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         {
             await _appDataStore.SaveSupportInboundAsync(p.TicketId, subject, preview, cancellationToken);
         }
-        var next = p with { OutreachStatus = "replied", UpdatedAt = DateTimeOffset.UtcNow, Notes = TrimPreview(preview) };
+        var next = p with
+        {
+            OutreachStatus = "replied",
+            NextFollowUpAt = null,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Notes = TrimPreview(preview)
+        };
         await _store.UpsertProspectAsync(next, cancellationToken);
         _ = messageId;
         _ = inReplyTo;
@@ -613,6 +765,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         {
             OutreachStatus = nextStatus,
             SuppressionStatus = suppression,
+            NextFollowUpAt = eventType.ToLowerInvariant() is "bounce" or "complaint" or "reject"
+                ? null
+                : p.NextFollowUpAt,
             UpdatedAt = DateTimeOffset.UtcNow
         }, cancellationToken);
     }
@@ -670,7 +825,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     public string UnsubscribeUrl(string email, string hmac) =>
         $"{Site()}/api/public/acq/unsubscribe?token={WebUtility.UrlEncode(OutreachUnsubscribeToken.Create(email, hmac))}";
 
-    private async Task<IReadOnlyList<(DateTimeOffset publishedAt, string title)>> TryLoadVideosAsync(string handle, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<(DateTimeOffset publishedAt, string title, string description)>> TryLoadVideosAsync(
+        string handle,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -679,7 +836,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 .Select(v =>
                 {
                     DateTimeOffset.TryParse(v.PublishedAt, out var dt);
-                    return (dt, v.Title ?? "");
+                    return (dt, v.Title ?? "", v.Description ?? "");
                 })
                 .Where(v => v.dt != default)
                 .OrderByDescending(v => v.dt)
@@ -691,9 +848,92 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         }
     }
 
-    private static string GuessLanguage(string title, IReadOnlyList<(DateTimeOffset, string title)> videos)
+    private static IReadOnlyList<string> ExtractEmailsFromPlainText(string text)
     {
-        var blob = title + " " + string.Join(' ', videos.Select(v => v.title));
+        if (string.IsNullOrWhiteSpace(text)) return [];
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+                     text,
+                     @"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}",
+                     System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            var email = m.Value.Trim().TrimEnd('.').ToLowerInvariant();
+            if (!EmailAddressHelpers.LooksLikeEmail(email)) continue;
+            if (email.Contains("noreply", StringComparison.OrdinalIgnoreCase) ||
+                email.Contains("no-reply", StringComparison.OrdinalIgnoreCase) ||
+                email.EndsWith(".png", StringComparison.Ordinal) ||
+                email.EndsWith(".jpg", StringComparison.Ordinal))
+                continue;
+            found.Add(email);
+        }
+        return found.ToArray();
+    }
+
+    private static string PreferBusinessEmailLocal(IReadOnlyList<string> emails)
+    {
+        var preferred = emails.FirstOrDefault(e =>
+            e.Contains("hello@", StringComparison.OrdinalIgnoreCase) ||
+            e.Contains("contact@", StringComparison.OrdinalIgnoreCase) ||
+            e.Contains("biz@", StringComparison.OrdinalIgnoreCase) ||
+            e.Contains("business@", StringComparison.OrdinalIgnoreCase) ||
+            e.Contains("collab@", StringComparison.OrdinalIgnoreCase) ||
+            e.Contains("partnerships@", StringComparison.OrdinalIgnoreCase) ||
+            e.Contains("press@", StringComparison.OrdinalIgnoreCase));
+        return preferred ?? emails[0];
+    }
+
+    /// <summary>Re-inspect existing prospects to re-score and research public contacts (preserves IDs).</summary>
+    public async Task<object> MigrateRescoreAsync(int limit, CancellationToken cancellationToken)
+    {
+        var all = await _store.ListProspectsAsync(cancellationToken);
+        var targets = all
+            .Where(p => !p.PreviewPlaceholder)
+            .Where(p => p.LastContactedAt is null)
+            .Where(p => !CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)
+                        || string.IsNullOrWhiteSpace(p.ScoreBreakdownJson)
+                        || p.PriorityScore <= 0)
+            .OrderByDescending(p => p.UpdatedAt)
+            .Take(Math.Clamp(limit, 1, 40))
+            .ToList();
+
+        var ok = 0;
+        var failed = 0;
+        var verified = 0;
+        foreach (var p in targets)
+        {
+            try
+            {
+                var next = await InspectAndUpsertAsync(new AcqUpsertProspectRequest(
+                    ChannelInput: string.IsNullOrWhiteSpace(p.Handle) ? p.ChannelUrl : p.Handle,
+                    PrimaryNiche: string.IsNullOrWhiteSpace(p.PrimaryNiche) ? "cooking" : p.PrimaryNiche,
+                    Campaign: string.IsNullOrWhiteSpace(p.Campaign) ? CreatorAcquisitionCampaigns.Cook001 : p.Campaign,
+                    Language: p.Language,
+                    OfficialWebsite: p.OfficialWebsite,
+                    PublicBusinessEmail: p.PublicBusinessEmail,
+                    ContactSourceUrl: p.ContactSourceUrl,
+                    ContactType: string.IsNullOrWhiteSpace(p.ContactType) ? "none" : p.ContactType,
+                    Notes: p.Notes
+                ), cancellationToken);
+                ok++;
+                if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(next)) verified++;
+                if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(next)
+                    && string.IsNullOrWhiteSpace(next.Subject))
+                {
+                    await PrepareDraftAsync(next.ProspectId, cancellationToken);
+                }
+            }
+            catch
+            {
+                failed++;
+            }
+        }
+
+        return new { inspected = ok, failed, contactVerified = verified, considered = targets.Count };
+    }
+
+    private static string GuessLanguage(string title, IReadOnlyList<(DateTimeOffset publishedAt, string title, string description)> videos)
+    {
+        var blob = title + " " + string.Join(' ', videos.Select(v => v.title + " " + v.description));
         if (blob.Any(c => c is >= '\u0400' and <= '\u04FF'))
             return blob.Contains('і') || blob.Contains('ї') || blob.Contains('є') ? "uk" : "ru";
         return "en";

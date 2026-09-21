@@ -5,10 +5,15 @@ import { useAdminCrm } from './useAdminCrm';
 
 const NAV: { to: string; end?: boolean; label: string; icon: string; acq?: boolean }[] = [
   { to: '', end: true, label: 'Dashboard', icon: '▣' },
+  { to: 'acquisition', label: 'Acquisition', icon: '✦', acq: true },
+  { to: 'acquisition/creators', label: 'Creators', icon: '◎' },
+  { to: 'acquisition/approvals', label: 'Approvals', icon: '☑' },
+  { to: 'acquisition/campaigns', label: 'Campaigns', icon: '◈' },
+  { to: 'acquisition/inbox', label: 'Inbox', icon: '✉' },
+  { to: 'acquisition/analytics', label: 'Analytics', icon: '▤' },
   { to: 'users', label: 'Users', icon: '◎' },
   { to: 'orders', label: 'Orders', icon: '◈' },
   { to: 'audits', label: 'Audits', icon: '◉' },
-  { to: 'marketing/creator-acquisition', label: 'Creator acquisition', icon: '✦', acq: true },
   { to: 'contacts', label: 'Support', icon: '✉' },
   { to: 'activity', label: 'Activity logs', icon: '▤' },
   { to: 'diagnostics', label: 'Diagnostics', icon: '⚙' }
@@ -33,8 +38,9 @@ export function AdminShell({
       .then((s) => {
         if (cancelled) return;
         const queue = s.views?.draft_ready ?? s.drafts ?? 0;
-        const blocked = Boolean(s.outreachBlocked) || (s.marketingSendingEnabled && (s.sendEligible ?? 0) === 0);
-        if (blocked || queue > 0) setAcqAttention(queue > 0 ? queue : s.primaryBlocker?.count ?? 1);
+        const ready = (s.sendEligible ?? 0) + (s.pipeline?.approvedEligibleNow ?? 0);
+        const blocked = Boolean(s.outreachBlocked);
+        if (blocked || queue > 0 || ready > 0) setAcqAttention(queue > 0 ? queue : ready || s.primaryBlocker?.count || 1);
         else setAcqAttention(null);
       })
       .catch(() => {
