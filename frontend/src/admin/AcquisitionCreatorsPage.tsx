@@ -1,28 +1,37 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { adminApi } from '../lib/api';
-import type { AcqAdminProspect, AcqSummary } from '../types';
+import type { AcqAdminProspect, AcqEmailDiscoveryJob, AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import { AdminShell } from './AdminShell';
 import { Badge } from './AdminCrmComponents';
 import { AcqProspectDrawer } from './AcqProspectDrawer';
 import {
+  type AcqEmailStatusFilter,
   type AcqPrimaryAction,
   type AcqWorkflowStatus,
+  countEmailStatuses,
   countWorkflowStatuses,
+  filterByEmailStatus,
   filterByWorkflowStatus,
   resolveAcqWorkflow
 } from './acqApprovalWorkflow';
-import { WORKFLOW_FILTERS, formatDt, workflowBadgeKind } from './acqUiShared';
+import { EMAIL_STATUS_FILTERS, WORKFLOW_FILTERS, formatDt, workflowBadgeKind } from './acqUiShared';
+
+type ConfirmMode = 'missing' | 'filtered' | 'selected' | null;
 
 export function AcquisitionCreatorsPage() {
   useAdminCrm();
   const [searchParams, setSearchParams] = useSearchParams();
   const statusParam = (searchParams.get('status') as AcqWorkflowStatus | 'all' | null) || 'all';
+  const emailParam = (searchParams.get('email') as AcqEmailStatusFilter | null) || 'all';
   const [summary, setSummary] = useState<AcqSummary | null>(null);
   const [allItems, setAllItems] = useState<AcqAdminProspect[]>([]);
   const [workflowFilter, setWorkflowFilter] = useState<AcqWorkflowStatus | 'all'>(
     statusParam === 'all' || WORKFLOW_FILTERS.some((f) => f.value === statusParam) ? statusParam : 'all'
+  );
+  const [emailFilter, setEmailFilter] = useState<AcqEmailStatusFilter>(
+    EMAIL_STATUS_FILTERS.some((f) => f.value === emailParam) ? emailParam : 'all'
   );
   const [niche, setNiche] = useState('cooking');
   const [search, setSearch] = useState('');
@@ -33,6 +42,11 @@ export function AcquisitionCreatorsPage() {
   const [busy, setBusy] = useState(false);
   const [inspectInput, setInspectInput] = useState('');
   const [showInspect, setShowInspect] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmMode, setConfirmMode] = useState<ConfirmMode>(null);
+  const [discoveryJob, setDiscoveryJob] = useState<AcqEmailDiscoveryJob | null>(null);
+  const [showResults, setShowResults] = useState(false);
+  const tickRef = useRef<number | null>(null);
 
   const cooldownDays = summary?.cooldownDays ?? 14;
   const sendingEnabled = summary?.marketingSendingEnabled ?? true;
@@ -66,6 +80,18 @@ export function AcquisitionCreatorsPage() {
     }
   }, [statusParam]);
 
+  useEffect(() => {
+    if (emailParam && emailParam !== emailFilter) {
+      setEmailFilter(EMAIL_STATUS_FILTERS.some((f) => f.value === emailParam) ? emailParam : 'all');
+    }
+  }, [emailParam]);
+
+  useEffect(() => {
+    return () => {
+      if (tickRef.current) window.clearTimeout(tickRef.current);
+    };
+  }, []);
+
   const setFilter = (value: AcqWorkflowStatus | 'all') => {
     setWorkflowFilter(value);
     const next = new URLSearchParams(searchParams);
@@ -74,9 +100,35 @@ export function AcquisitionCreatorsPage() {
     setSearchParams(next, { replace: true });
   };
 
+  const setEmailStatus = (value: AcqEmailStatusFilter) => {
+    setEmailFilter(value);
+    const next = new URLSearchParams(searchParams);
+    if (value === 'all') next.delete('email');
+    else next.set('email', value);
+    // Keep workflow in sync when picking email-centric chips
+    if (value === 'all') {
+      /* leave workflow */
+    } else if (value === 'EMAIL_FOUND') {
+      next.set('status', 'EMAIL_FOUND');
+      setWorkflowFilter('EMAIL_FOUND');
+    } else {
+      next.set('status', value);
+      setWorkflowFilter(value);
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  const emailScoped = useMemo(
+    () => filterByEmailStatus(allItems, emailFilter, cooldownDays, Date.now(), sendingEnabled),
+    [allItems, emailFilter, cooldownDays, sendingEnabled]
+  );
+
   const items = useMemo(
-    () => filterByWorkflowStatus(allItems, workflowFilter, cooldownDays, Date.now(), sendingEnabled),
-    [allItems, workflowFilter, cooldownDays, sendingEnabled]
+    () =>
+      emailFilter !== 'all'
+        ? emailScoped
+        : filterByWorkflowStatus(allItems, workflowFilter, cooldownDays, Date.now(), sendingEnabled),
+    [allItems, emailFilter, emailScoped, workflowFilter, cooldownDays, sendingEnabled]
   );
 
   const counts = useMemo(
@@ -84,7 +136,125 @@ export function AcquisitionCreatorsPage() {
     [allItems, cooldownDays, sendingEnabled]
   );
 
+  const emailCounts = useMemo(
+    () => countEmailStatuses(allItems, cooldownDays, Date.now(), sendingEnabled),
+    [allItems, cooldownDays, sendingEnabled]
+  );
+
+  const missingEmailCount = emailCounts.EMAIL_REQUIRED + emailCounts.NOT_FOUND;
+
   const drawer = drawerId ? allItems.find((x) => x.public.prospectId === drawerId) || null : null;
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    const ids = items.map((r) => r.public.prospectId);
+    const allOn = ids.length > 0 && ids.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allOn) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const pollDiscovery = useCallback(
+    async (jobId: string) => {
+      try {
+        let job = await adminApi.acqEmailDiscoveryJob(jobId);
+        while (job.status === 'running') {
+          setDiscoveryJob(job);
+          job = await adminApi.acqEmailDiscoveryTick(jobId);
+          setDiscoveryJob(job);
+          await new Promise<void>((resolve) => {
+            tickRef.current = window.setTimeout(() => resolve(), 400);
+          });
+        }
+        setDiscoveryJob(job);
+        setShowResults(true);
+        setNote(
+          job.dryRun
+            ? `Dry-run complete: ${job.found} found, ${job.review} review, ${job.notFound} not found (no saves).`
+            : `Discovery complete: ${job.found} found, ${job.review} review, ${job.notFound} not found.`
+        );
+        await load();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Email discovery failed');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [load]
+  );
+
+  const startDiscovery = async (mode: ConfirmMode) => {
+    if (!mode) return;
+    setConfirmMode(null);
+    setBusy(true);
+    setError('');
+    setShowResults(false);
+    try {
+      const body =
+        mode === 'selected'
+          ? { prospectIds: [...selected], forceRetry: true }
+          : mode === 'filtered'
+            ? {
+                filter:
+                  emailFilter === 'REVIEW_EMAIL'
+                    ? 'review_email'
+                    : emailFilter === 'NOT_FOUND'
+                      ? 'not_found'
+                      : 'email_required',
+                prospectIds:
+                  emailFilter === 'all' && workflowFilter === 'EMAIL_REQUIRED'
+                    ? undefined
+                    : items
+                        .filter((r) => {
+                          const s = resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).status;
+                          return s === 'EMAIL_REQUIRED' || s === 'NOT_FOUND' || s === 'REVIEW_EMAIL';
+                        })
+                        .map((r) => r.public.prospectId),
+                forceRetry: emailFilter === 'NOT_FOUND' || emailFilter === 'REVIEW_EMAIL'
+              }
+            : { filter: 'email_required' };
+
+      const job = await adminApi.acqEmailDiscoveryStart({
+        campaign: 'COOK-001',
+        dryRun: false,
+        batchSize: 5,
+        ...body
+      });
+      setDiscoveryJob(job);
+      if (job.status === 'running') {
+        void pollDiscovery(job.jobId);
+      } else {
+        setShowResults(true);
+        setBusy(false);
+        setNote(`Discovery finished immediately (${job.processed} processed).`);
+        await load();
+      }
+    } catch (e) {
+      setBusy(false);
+      setError(e instanceof Error ? e.message : 'Failed to start email discovery');
+    }
+  };
+
+  const confirmCount =
+    confirmMode === 'selected'
+      ? selected.size
+      : confirmMode === 'filtered'
+        ? items.filter((r) => {
+            const s = resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).status;
+            return s === 'EMAIL_REQUIRED' || s === 'NOT_FOUND' || s === 'REVIEW_EMAIL';
+          }).length
+        : missingEmailCount;
 
   const runPrimary = (id: string, action: AcqPrimaryAction) => {
     if (action === 'prepare_draft') {
@@ -105,15 +275,147 @@ export function AcquisitionCreatorsPage() {
     setDrawerId(id);
   };
 
+  const remaining = discoveryJob
+    ? Math.max(0, discoveryJob.prospectIds.length - discoveryJob.processed)
+    : 0;
+
   return (
     <AdminShell title="Creators" subtitle="Master prospect database — all COOK-001 creators.">
       {error && <p className="admin-crm-error">{error}</p>}
       {note && <p className="ops-muted">{note}</p>}
 
       <section className="ops-panel">
+        <div className="acq-bulk-bar acq-bulk-bar-sticky">
+          <button
+            type="button"
+            className="ops-btn ops-btn-primary"
+            disabled={busy || missingEmailCount === 0}
+            onClick={() => setConfirmMode('missing')}
+          >
+            Find Missing Emails ({missingEmailCount})
+          </button>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy || items.length === 0}
+            onClick={() => setConfirmMode('filtered')}
+          >
+            Find Emails for Filtered
+          </button>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy || selected.size === 0}
+            onClick={() => setConfirmMode('selected')}
+          >
+            Find Emails for Selected ({selected.size})
+          </button>
+        </div>
+
+        {confirmMode && (
+          <div className="acq-discovery-confirm" role="dialog" aria-modal="true">
+            <h3>Find public business emails for {confirmCount} creators?</h3>
+            <p className="ops-muted">
+              This will research creators with EMAIL REQUIRED and automatically save high-confidence public
+              business emails. Medium-confidence hits go to REVIEW EMAIL. Nothing is sent.
+            </p>
+            <div className="acq-drawer-primary-actions">
+              <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => setConfirmMode(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ops-btn ops-btn-primary"
+                disabled={busy || confirmCount === 0}
+                onClick={() => void startDiscovery(confirmMode)}
+              >
+                Start Discovery
+              </button>
+            </div>
+          </div>
+        )}
+
+        {discoveryJob && (
+          <div className="acq-discovery-progress">
+            <div className="acq-discovery-progress-head">
+              <strong>EMAIL DISCOVERY</strong>
+              <span className="ops-muted">{discoveryJob.status}</span>
+            </div>
+            <p>
+              {discoveryJob.processed} / {discoveryJob.prospectIds.length} processed
+            </p>
+            <ul className="acq-discovery-stats">
+              <li>
+                Found <strong>{discoveryJob.found}</strong>
+              </li>
+              <li>
+                Review <strong>{discoveryJob.review}</strong>
+              </li>
+              <li>
+                Not found <strong>{discoveryJob.notFound}</strong>
+              </li>
+              <li>
+                Remaining <strong>{remaining}</strong>
+              </li>
+            </ul>
+            <button type="button" className="ops-btn ops-btn-ghost ops-btn-sm" onClick={() => setShowResults((v) => !v)}>
+              {showResults ? 'Hide results' : 'View results'}
+            </button>
+            {showResults && discoveryJob.results.length > 0 && (
+              <div className="acq-discovery-results">
+                <table className="admin-crm-table">
+                  <thead>
+                    <tr>
+                      <th>Handle</th>
+                      <th>Outcome</th>
+                      <th>Email</th>
+                      <th>Confidence</th>
+                      <th>Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {discoveryJob.results.map((r) => (
+                      <tr key={`${r.prospectId}-${r.outcome}-${r.email || ''}`}>
+                        <td>{r.handle}</td>
+                        <td>{r.outcome}</td>
+                        <td>{r.email || '—'}</td>
+                        <td>{(r.confidence || '—').toUpperCase()}</td>
+                        <td>
+                          {r.sourceUrl ? (
+                            <a href={r.sourceUrl} target="_blank" rel="noreferrer">
+                              View source
+                            </a>
+                          ) : (
+                            r.detail || '—'
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="acq-toolbar">
           <label>
-            Status
+            Email status
+            <select
+              className="admin-crm-select"
+              value={emailFilter}
+              onChange={(e) => setEmailStatus(e.target.value as AcqEmailStatusFilter)}
+            >
+              {EMAIL_STATUS_FILTERS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                  {o.value !== 'all' ? ` (${emailCounts[o.value]})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Workflow
             <select
               className="admin-crm-select"
               value={workflowFilter}
@@ -210,8 +512,17 @@ export function AcquisitionCreatorsPage() {
             <table className="admin-crm-table acq-table">
               <thead>
                 <tr>
+                  <th className="acq-col-check">
+                    <input
+                      type="checkbox"
+                      checked={items.length > 0 && items.every((r) => selected.has(r.public.prospectId))}
+                      onChange={toggleSelectAllVisible}
+                      aria-label="Select all visible"
+                    />
+                  </th>
                   <th className="acq-col-creator">Creator</th>
                   <th>Audience</th>
+                  <th>Email</th>
                   <th>Status</th>
                   <th>Last contact</th>
                   <th className="acq-col-action">Action</th>
@@ -221,13 +532,52 @@ export function AcquisitionCreatorsPage() {
                 {items.map((row) => {
                   const p = row.public;
                   const wf = resolveAcqWorkflow(row, cooldownDays, Date.now(), sendingEnabled);
+                  const conf = (p.contactConfidence || '').toLowerCase();
                   return (
-                    <tr key={p.prospectId} className="acq-row">
+                    <tr
+                      key={p.prospectId}
+                      className={`acq-row${selected.has(p.prospectId) ? ' acq-row-selected' : ''}`}
+                    >
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(p.prospectId)}
+                          onChange={() => toggleSelect(p.prospectId)}
+                          aria-label={`Select ${p.channelName}`}
+                        />
+                      </td>
                       <td className="acq-col-creator">
                         <div className="acq-creator-name">{p.channelName}</div>
                         <div className="ops-muted">{p.handle}</div>
                       </td>
                       <td>{p.subscriberRange}</td>
+                      <td className="acq-col-email">
+                        {wf.status === 'REVIEW_EMAIL' && row.publicBusinessEmail ? (
+                          <div>
+                            <div>{row.publicBusinessEmail}</div>
+                            <div className="ops-muted">REVIEW · {(conf || 'medium').toUpperCase()}</div>
+                            {p.contactSourceUrl && (
+                              <a href={p.contactSourceUrl} target="_blank" rel="noreferrer">
+                                View source
+                              </a>
+                            )}
+                          </div>
+                        ) : wf.status === 'NOT_FOUND' ? (
+                          <div className="ops-muted">EMAIL NOT FOUND</div>
+                        ) : isVerifiedEmailRow(row) ? (
+                          <div>
+                            <div>{row.publicBusinessEmail}</div>
+                            {conf && <div className="ops-muted">{conf.toUpperCase()} CONFIDENCE</div>}
+                            {p.contactSourceUrl && (
+                              <a href={p.contactSourceUrl} target="_blank" rel="noreferrer">
+                                View source
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="ops-muted">—</span>
+                        )}
+                      </td>
                       <td>
                         <Badge kind={workflowBadgeKind(wf.status)}>{wf.label}</Badge>
                       </td>
@@ -268,5 +618,13 @@ export function AcquisitionCreatorsPage() {
         />
       )}
     </AdminShell>
+  );
+}
+
+function isVerifiedEmailRow(row: AcqAdminProspect): boolean {
+  const s = (row.public.contactStatus || '').toLowerCase();
+  return (
+    !!row.publicBusinessEmail &&
+    (s === 'verified_public' || s === 'admin_attested' || row.adminAttestedContact === true)
   );
 }

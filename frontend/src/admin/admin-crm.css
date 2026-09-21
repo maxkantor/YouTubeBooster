@@ -1127,6 +1127,46 @@
   backdrop-filter: blur(8px);
 }
 
+.acq-discovery-confirm,
+.acq-discovery-progress {
+  margin: 12px 0 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.acq-discovery-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.acq-discovery-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 12px;
+}
+
+.acq-discovery-results {
+  margin-top: 12px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.acq-col-email {
+  max-width: 220px;
+  font-size: 0.92em;
+}
+
+.acq-col-check {
+  width: 36px;
+}
+
 .acq-row-selected td {
   background: rgba(99, 102, 241, 0.12) !important;
 }

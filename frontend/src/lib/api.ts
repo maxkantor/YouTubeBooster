@@ -16,6 +16,7 @@ import type {
   AdminUserDetailResponse,
   AdminUserRow,
   AcqAdminProspect,
+  AcqEmailDiscoveryJob,
   AcqSummary,
   CheckoutSession,
   DashboardOverview,
@@ -647,6 +648,44 @@ export const adminApi = {
         campaign: body.campaign || 'COOK-001',
         prospectIds: body.prospectIds
       })
+    });
+  },
+  async acqEmailDiscoveryStart(body: {
+    campaign?: string;
+    prospectIds?: string[];
+    filter?: string;
+    dryRun?: boolean;
+    forceRetry?: boolean;
+    batchSize?: number;
+  } = {}): Promise<AcqEmailDiscoveryJob> {
+    return fetchJson('/api/admin/crm/acquisition/email-discovery/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        campaign: body.campaign || 'COOK-001',
+        prospectIds: body.prospectIds,
+        filter: body.filter || 'email_required',
+        dryRun: body.dryRun === true,
+        forceRetry: body.forceRetry === true,
+        batchSize: body.batchSize ?? 5
+      })
+    });
+  },
+  async acqEmailDiscoveryJob(jobId: string): Promise<AcqEmailDiscoveryJob> {
+    return fetchJson(`/api/admin/crm/acquisition/email-discovery/${encodeURIComponent(jobId)}`);
+  },
+  async acqEmailDiscoveryTick(jobId: string): Promise<AcqEmailDiscoveryJob> {
+    return fetchJson(`/api/admin/crm/acquisition/email-discovery/${encodeURIComponent(jobId)}/tick`, {
+      method: 'POST'
+    });
+  },
+  async acqEmailDiscoveryAccept(
+    id: string,
+    accept = true,
+    reason?: string
+  ): Promise<AcqAdminProspect> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/email-discovery/accept`, {
+      method: 'POST',
+      body: JSON.stringify({ accept, reason: reason || null })
     });
   },
   async acqRunSend(): Promise<{

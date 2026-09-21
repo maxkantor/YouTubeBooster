@@ -216,22 +216,62 @@ export function AcqProspectDrawer({
               void (async () => {
                 setBusy(true);
                 setError('');
-                setNote('Researching...');
+                setNote('Researching public contact…');
                 try {
-                  await adminApi.acqInspect({
-                    channelInput: row.public.handle || row.public.channelUrl,
-                    primaryNiche: row.public.primaryNiche || 'cooking',
+                  const job = await adminApi.acqEmailDiscoveryStart({
                     campaign: row.public.campaign || 'COOK-001',
-                    language: row.public.language || undefined,
-                    contactType: 'none'
+                    prospectIds: [row.public.prospectId],
+                    forceRetry: true,
+                    batchSize: 1
                   });
+                  let current = job;
+                  while (current.status === 'running') {
+                    current = await adminApi.acqEmailDiscoveryTick(current.jobId);
+                  }
+                  const hit = current.results[0];
                   setEmailManualMode(false);
                   setEmailPanelOpen(true);
                   await onReload();
-                  setNote('Research complete — review or add contact below.');
+                  if (hit?.outcome === 'found') {
+                    setNote(`Email found (${(hit.confidence || 'high').toUpperCase()}): ${hit.email}`);
+                  } else if (hit?.outcome === 'review') {
+                    setNote(`Review candidate: ${hit.email}`);
+                  } else {
+                    setNote(hit?.detail || `Discovery: ${hit?.outcome || current.status}`);
+                  }
                 } catch (e) {
                   setError(e instanceof Error ? e.message : 'Email research failed');
                   setNote('');
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+            onAcceptEmail={() => {
+              void (async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  await adminApi.acqEmailDiscoveryAccept(row.public.prospectId, true);
+                  setNote('Email accepted.');
+                  await onReload();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Accept failed');
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+            onRejectEmail={() => {
+              void (async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  await adminApi.acqEmailDiscoveryAccept(row.public.prospectId, false, 'admin rejected candidate');
+                  setNote('Candidate email rejected.');
+                  await onReload();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Reject failed');
                 } finally {
                   setBusy(false);
                 }

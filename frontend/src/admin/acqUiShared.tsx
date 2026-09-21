@@ -3,6 +3,9 @@ import type { AcqWorkflowStatus } from './acqApprovalWorkflow';
 export const WORKFLOW_FILTERS: { value: AcqWorkflowStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All statuses' },
   { value: 'EMAIL_REQUIRED', label: 'Email required' },
+  { value: 'EMAIL_FOUND', label: 'Email found' },
+  { value: 'REVIEW_EMAIL', label: 'Review email' },
+  { value: 'NOT_FOUND', label: 'Not found' },
   { value: 'EMAIL_VERIFICATION_REQUIRED', label: 'Email verification required' },
   { value: 'READY_FOR_APPROVAL', label: 'Ready for approval' },
   { value: 'NEEDS_REVIEW', label: 'Needs review' },
@@ -12,6 +15,14 @@ export const WORKFLOW_FILTERS: { value: AcqWorkflowStatus | 'all'; label: string
   { value: 'SENT', label: 'Sent' },
   { value: 'REPLIED', label: 'Replies' },
   { value: 'OTHER', label: 'Other / draft incomplete' }
+];
+
+export const EMAIL_STATUS_FILTERS: { value: 'all' | 'EMAIL_FOUND' | 'EMAIL_REQUIRED' | 'REVIEW_EMAIL' | 'NOT_FOUND'; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'EMAIL_FOUND', label: 'Email Found' },
+  { value: 'EMAIL_REQUIRED', label: 'Email Required' },
+  { value: 'REVIEW_EMAIL', label: 'Review Email' },
+  { value: 'NOT_FOUND', label: 'Not Found' }
 ];
 
 export const SKIP_LABELS: Record<string, string> = {
@@ -43,11 +54,14 @@ export function formatDt(iso: string | null | undefined) {
 export function workflowBadgeKind(status: AcqWorkflowStatus): 'ok' | 'warn' | 'bad' | 'info' | 'neutral' {
   switch (status) {
     case 'READY_FOR_APPROVAL':
+    case 'EMAIL_FOUND':
       return 'ok';
     case 'NEEDS_REVIEW':
     case 'EMAIL_REQUIRED':
+    case 'REVIEW_EMAIL':
     case 'EMAIL_VERIFICATION_REQUIRED':
     case 'COOLDOWN':
+    case 'NOT_FOUND':
       return 'warn';
     case 'APPROVED':
     case 'SENT':

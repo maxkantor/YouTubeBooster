@@ -2,6 +2,9 @@ import type { AcqAdminProspect } from '../types';
 
 export type AcqWorkflowStatus =
   | 'EMAIL_REQUIRED'
+  | 'EMAIL_FOUND'
+  | 'REVIEW_EMAIL'
+  | 'NOT_FOUND'
   | 'EMAIL_VERIFICATION_REQUIRED'
   | 'READY_FOR_APPROVAL'
   | 'NEEDS_REVIEW'
@@ -16,6 +19,8 @@ export type AcqWorkflowStatus =
 export type AcqPrimaryAction =
   | 'find_email'
   | 'verify_email'
+  | 'review_email'
+  | 'retry_email'
   | 'review'
   | 'approve'
   | 'send'
@@ -276,6 +281,22 @@ export function resolveAcqWorkflow(
   }
 
   if (!hasUsablePublicEmail(row)) {
+    const research = (p.contactResearchStatus || '').toLowerCase();
+    const discovery = (p.contactDiscoveryResult || '').toLowerCase();
+    if (research === 'not_found' || discovery === 'not_found') {
+      return {
+        ...base,
+        status: 'NOT_FOUND',
+        label: 'EMAIL NOT FOUND',
+        checkboxDisabledReason: 'No public business email found yet.',
+        whyHere: 'Discovery finished without a usable public email.',
+        currentStatusAnswer: 'EMAIL NOT FOUND',
+        nextStep: 'Retry discovery after cooldown, or add a public email manually.',
+        whatICanDo: 'Retry Find Email, Add Email Manually, or Reject.',
+        primaryAction: 'retry_email',
+        primaryActionLabel: 'Retry'
+      };
+    }
     return {
       ...base,
       status: 'EMAIL_REQUIRED',
@@ -287,6 +308,21 @@ export function resolveAcqWorkflow(
       whatICanDo: 'Find Email, Add Email Manually, or Reject.',
       primaryAction: 'find_email',
       primaryActionLabel: 'Find Email'
+    };
+  }
+
+  if ((p.contactResearchStatus || '').toLowerCase() === 'review_email' || (p.contactStatus || '').toLowerCase() === 'review_email') {
+    return {
+      ...base,
+      status: 'REVIEW_EMAIL',
+      label: 'REVIEW EMAIL',
+      checkboxDisabledReason: 'Medium-confidence email needs admin review.',
+      whyHere: 'A possible public business email was found and needs Accept / Reject.',
+      currentStatusAnswer: 'REVIEW EMAIL',
+      nextStep: 'Review the source, then Accept or Reject the candidate email.',
+      whatICanDo: 'Accept email, Reject, View source, or Add Email Manually.',
+      primaryAction: 'review_email',
+      primaryActionLabel: 'Review Email'
     };
   }
 
@@ -369,6 +405,9 @@ export function countWorkflowStatuses(
 ): Record<AcqWorkflowStatus, number> {
   const counts: Record<AcqWorkflowStatus, number> = {
     EMAIL_REQUIRED: 0,
+    EMAIL_FOUND: 0,
+    REVIEW_EMAIL: 0,
+    NOT_FOUND: 0,
     EMAIL_VERIFICATION_REQUIRED: 0,
     READY_FOR_APPROVAL: 0,
     NEEDS_REVIEW: 0,
@@ -381,9 +420,42 @@ export function countWorkflowStatuses(
     OTHER: 0
   };
   for (const row of rows) {
-    counts[resolveAcqWorkflow(row, cooldownDays, nowMs, sendingEnabled).status] += 1;
+    const status = resolveAcqWorkflow(row, cooldownDays, nowMs, sendingEnabled).status;
+    counts[status] += 1;
+    if (isVerifiedPublicContact(row)) counts.EMAIL_FOUND += 1;
   }
   return counts;
+}
+
+/** Email-discovery-centric filter (Creators bulk toolbar). */
+export type AcqEmailStatusFilter = 'all' | 'EMAIL_FOUND' | 'EMAIL_REQUIRED' | 'REVIEW_EMAIL' | 'NOT_FOUND';
+
+export function filterByEmailStatus(
+  rows: AcqAdminProspect[],
+  filter: AcqEmailStatusFilter,
+  cooldownDays = DEFAULT_COOLDOWN_DAYS,
+  nowMs = Date.now(),
+  sendingEnabled = true
+): AcqAdminProspect[] {
+  if (filter === 'all') return rows;
+  if (filter === 'EMAIL_FOUND') return rows.filter((r) => isVerifiedPublicContact(r));
+  return rows.filter(
+    (r) => resolveAcqWorkflow(r, cooldownDays, nowMs, sendingEnabled).status === filter
+  );
+}
+
+export function countEmailStatuses(
+  rows: AcqAdminProspect[],
+  cooldownDays = DEFAULT_COOLDOWN_DAYS,
+  nowMs = Date.now(),
+  sendingEnabled = true
+): Record<Exclude<AcqEmailStatusFilter, 'all'>, number> {
+  return {
+    EMAIL_FOUND: rows.filter((r) => isVerifiedPublicContact(r)).length,
+    EMAIL_REQUIRED: filterByEmailStatus(rows, 'EMAIL_REQUIRED', cooldownDays, nowMs, sendingEnabled).length,
+    REVIEW_EMAIL: filterByEmailStatus(rows, 'REVIEW_EMAIL', cooldownDays, nowMs, sendingEnabled).length,
+    NOT_FOUND: filterByEmailStatus(rows, 'NOT_FOUND', cooldownDays, nowMs, sendingEnabled).length
+  };
 }
 
 export function filterByWorkflowStatus(
@@ -394,6 +466,7 @@ export function filterByWorkflowStatus(
   sendingEnabled = true
 ): AcqAdminProspect[] {
   if (status === 'all') return rows;
+  if (status === 'EMAIL_FOUND') return rows.filter((r) => isVerifiedPublicContact(r));
   return rows.filter((r) => resolveAcqWorkflow(r, cooldownDays, nowMs, sendingEnabled).status === status);
 }
 

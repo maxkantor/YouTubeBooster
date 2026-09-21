@@ -419,13 +419,22 @@ public static class CreatorAcquisitionScoring
         SubjectVariant: p.SubjectVariant,
         MessageVariant: p.MessageVariant,
         FindingType: p.FindingType,
-        ExampleVideoTitle: p.ExampleVideoTitle
+        ExampleVideoTitle: p.ExampleVideoTitle,
+        ContactConfidence: p.ContactConfidence,
+        ContactDiscoveryResult: p.ContactDiscoveryResult,
+        ContactResearchLastAt: p.ContactResearchLastAt,
+        ContactResearchNextAt: p.ContactResearchNextAt
     );
 
     public static string ContactStatusLabel(AcqProspectRecord p)
     {
         if (p.AdminAttestedContact && string.Equals(p.ContactType, "admin_attested", StringComparison.OrdinalIgnoreCase))
             return "admin_attested";
+        if (string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase))
+            return "review_email";
+        if (string.Equals(p.ContactResearchStatus, "not_found", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p.ContactDiscoveryResult, "not_found", StringComparison.OrdinalIgnoreCase))
+            return "not_found";
         if (string.Equals(p.ContactType, "form_only", StringComparison.OrdinalIgnoreCase))
             return "Contact route available — automated email unavailable";
         if (IsVerifiedPublicEmail(p)) return "verified_public";

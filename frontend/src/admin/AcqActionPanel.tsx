@@ -18,6 +18,8 @@ export function AcqActionPanel({
   onSendNow,
   onSaveDraft,
   onFindEmail,
+  onAcceptEmail,
+  onRejectEmail,
   onAddEmail,
   onPrepareDraft,
   onOverrideCooldown,
@@ -38,6 +40,8 @@ export function AcqActionPanel({
   onSendNow: () => void;
   onSaveDraft: () => void;
   onFindEmail: () => void;
+  onAcceptEmail?: () => void;
+  onRejectEmail?: () => void;
   onAddEmail: () => void;
   onPrepareDraft: () => void;
   onOverrideCooldown: () => void;
@@ -119,12 +123,39 @@ export function AcqActionPanel({
             Find Email
           </button>
         )}
+        {wf.primaryAction === 'retry_email' && (
+          <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={onFindEmail}>
+            Retry
+          </button>
+        )}
+        {wf.primaryAction === 'review_email' && (
+          <>
+            {onAcceptEmail && (
+              <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={onAcceptEmail}>
+                Accept
+              </button>
+            )}
+            {onRejectEmail && (
+              <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={onRejectEmail}>
+                Reject
+              </button>
+            )}
+            {row.public.contactSourceUrl && (
+              <a className="ops-btn ops-btn-ghost" href={row.public.contactSourceUrl} target="_blank" rel="noreferrer">
+                View source
+              </a>
+            )}
+          </>
+        )}
         {wf.primaryAction === 'verify_email' && (
           <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={onFindEmail}>
             Verify Email
           </button>
         )}
-        {(wf.primaryAction === 'find_email' || wf.primaryAction === 'verify_email') && (
+        {(wf.primaryAction === 'find_email' ||
+          wf.primaryAction === 'verify_email' ||
+          wf.primaryAction === 'retry_email' ||
+          wf.primaryAction === 'review_email') && (
           <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={onAddEmail}>
             Add Email Manually
           </button>

@@ -88,7 +88,10 @@ public sealed record AcqProspectRecord(
     string? SubjectVariant = null,
     string? MessageVariant = null,
     string? FindingType = null,
-    string? ExampleVideoTitle = null
+    string? ExampleVideoTitle = null,
+    string? ContactConfidence = null,
+    string? ContactDiscoveryDetail = null,
+    string? ContactDiscoveryResult = null
 );
 
 public sealed record AcqApprovalRecord(
@@ -174,7 +177,11 @@ public sealed record AcqSanitizedProspectDto(
     string? SubjectVariant = null,
     string? MessageVariant = null,
     string? FindingType = null,
-    string? ExampleVideoTitle = null
+    string? ExampleVideoTitle = null,
+    string? ContactConfidence = null,
+    string? ContactDiscoveryResult = null,
+    DateTimeOffset? ContactResearchLastAt = null,
+    DateTimeOffset? ContactResearchNextAt = null
 );
 
 public sealed record AcqAdminProspectDto(
@@ -238,6 +245,51 @@ public sealed record AcqSendApprovedBatchResult(
     int Skipped,
     IReadOnlyList<AcqSendApprovedItemResult> Results
 );
+
+public sealed record AcqEmailDiscoveryStartRequest(
+    string? Campaign = null,
+    IReadOnlyList<string>? ProspectIds = null,
+    string? Filter = null,
+    bool DryRun = false,
+    bool ForceRetry = false,
+    int BatchSize = 5
+);
+
+public sealed record AcqEmailDiscoveryItemResult(
+    string ProspectId,
+    string Handle,
+    string Outcome,
+    string? Email,
+    string? SourceUrl,
+    string? SourceType,
+    string? Confidence,
+    string? Detail,
+    bool DraftPrepared = false
+);
+
+public sealed record AcqEmailDiscoveryJobState(
+    string JobId,
+    string Campaign,
+    string AdminEmail,
+    bool DryRun,
+    bool ForceRetry,
+    DateTimeOffset StartedAt,
+    DateTimeOffset UpdatedAt,
+    string Status,
+    IReadOnlyList<string> ProspectIds,
+    int Cursor,
+    int Processed,
+    int Found,
+    int Review,
+    int NotFound,
+    int Failed,
+    int Skipped,
+    IReadOnlyList<AcqEmailDiscoveryItemResult> Results,
+    int HttpFetches = 0
+);
+
+public sealed record AcqEmailDiscoveryAcceptRequest(bool Accept = true, string? Reason = null);
+
 
 public sealed record AcqWeekdaySendResult(
     bool MarketingSendingEnabled,

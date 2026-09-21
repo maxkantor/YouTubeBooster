@@ -565,6 +565,10 @@ export type AcqSanitizedProspect = {
   messageVariant?: string | null;
   findingType?: string | null;
   exampleVideoTitle?: string | null;
+  contactConfidence?: string | null;
+  contactDiscoveryResult?: string | null;
+  contactResearchLastAt?: string | null;
+  contactResearchNextAt?: string | null;
 };
 
 export type AcqAdminProspect = {
@@ -581,6 +585,39 @@ export type AcqAdminProspect = {
   textPreview?: string | null;
   ctaDestination?: string | null;
   findingSource?: string | null;
+};
+
+export type AcqEmailDiscoveryItemResult = {
+  prospectId: string;
+  handle: string;
+  outcome: string;
+  email?: string | null;
+  sourceUrl?: string | null;
+  sourceType?: string | null;
+  confidence?: string | null;
+  detail?: string | null;
+  draftPrepared?: boolean;
+};
+
+export type AcqEmailDiscoveryJob = {
+  jobId: string;
+  campaign: string;
+  adminEmail: string;
+  dryRun: boolean;
+  forceRetry: boolean;
+  startedAt: string;
+  updatedAt: string;
+  status: string;
+  prospectIds: string[];
+  cursor: number;
+  processed: number;
+  found: number;
+  review: number;
+  notFound: number;
+  failed: number;
+  skipped: number;
+  results: AcqEmailDiscoveryItemResult[];
+  httpFetches?: number;
 };
 
 export type AcqSkipReasonPrimary = {

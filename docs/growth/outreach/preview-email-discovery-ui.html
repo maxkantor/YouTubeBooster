@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Creators — Bulk Email Discovery (UI preview)</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --line: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #818cf8;
+      --ok: #34d399;
+      --warn: #fbbf24;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: linear-gradient(160deg, #0b1224, #1a1033 55%, #0f172a);
+      color: var(--text);
+    }
+    .shell { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+    h1 { margin: 0 0 4px; font-size: 1.6rem; }
+    .sub { color: var(--muted); margin-bottom: 18px; }
+    .panel {
+      background: rgba(30, 41, 59, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .bulk {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+      padding: 10px 12px; border-radius: 10px;
+      background: rgba(99, 102, 241, 0.18);
+      border: 1px solid rgba(129, 140, 248, 0.4);
+    }
+    button {
+      border: 1px solid var(--line); background: #0f172a; color: var(--text);
+      border-radius: 8px; padding: 8px 12px; cursor: pointer;
+    }
+    button.primary { background: #4f46e5; border-color: #6366f1; }
+    .progress {
+      margin: 12px 0 16px; padding: 14px 16px; border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.35); background: rgba(15, 23, 42, 0.45);
+    }
+    .stats { display: flex; gap: 18px; list-style: none; padding: 0; margin: 8px 0 0; }
+    .stats strong { color: var(--ok); }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.92rem; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
+      background: rgba(251, 191, 36, 0.15); color: var(--warn); border: 1px solid rgba(251, 191, 36, 0.35);
+    }
+    .badge.ok { background: rgba(52, 211, 153, 0.12); color: var(--ok); border-color: rgba(52, 211, 153, 0.35); }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    .filters { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+    select, input {
+      background: #0f172a; color: var(--text); border: 1px solid var(--line);
+      border-radius: 8px; padding: 6px 8px;
+    }
+    .confirm {
+      margin-bottom: 14px; padding: 14px; border-radius: 10px;
+      border: 1px solid rgba(129, 140, 248, 0.45); background: rgba(79, 70, 229, 0.12);
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <h1>Creators</h1>
+    <p class="sub">Master prospect database — COOK-001 · bulk email discovery preview</p>
+    <div class="panel">
+      <div class="bulk">
+        <button class="primary">Find Missing Emails (123)</button>
+        <button>Find Emails for Filtered</button>
+        <button>Find Emails for Selected (25)</button>
+      </div>
+
+      <div class="confirm">
+        <h3 style="margin:0 0 8px">Find public business emails for 123 creators?</h3>
+        <p class="muted" style="margin:0 0 12px">
+          This will research creators with EMAIL REQUIRED and automatically save high-confidence public business emails.
+        </p>
+        <button>Cancel</button>
+        <button class="primary">Start Discovery</button>
+      </div>
+
+      <div class="progress">
+        <div style="display:flex;justify-content:space-between"><strong>EMAIL DISCOVERY</strong><span class="muted">running</span></div>
+        <p>47 / 123 processed</p>
+        <ul class="stats">
+          <li>Found <strong>31</strong></li>
+          <li>Review <strong>4</strong></li>
+          <li>Not found <strong>12</strong></li>
+          <li>Remaining <strong>76</strong></li>
+        </ul>
+        <p style="margin-top:10px"><button>View results</button></p>
+      </div>
+
+      <div class="filters">
+        <label>Email status
+          <select>
+            <option>All</option>
+            <option>Email Found</option>
+            <option selected>Email Required</option>
+            <option>Review Email</option>
+            <option>Not Found</option>
+          </select>
+        </label>
+        <label>Category
+          <select><option>Cooking</option></select>
+        </label>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th></th><th>Creator</th><th>Audience</th><th>Email</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><input type="checkbox" checked /></td>
+            <td>Home Kitchen Daily<br /><span class="muted">@homekitchendaily</span></td>
+            <td>1k_100k</td>
+            <td>hello@homekitchen.test<br /><span class="muted">HIGH CONFIDENCE</span><br /><a href="#">View source</a></td>
+            <td><span class="badge ok">EMAIL FOUND</span></td>
+            <td><button class="primary">Prepare Draft</button></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" checked /></td>
+            <td>Chef Mira Collabs<br /><span class="muted">@chefmira</span></td>
+            <td>1k_100k</td>
+            <td>mira@gmail.com<br /><span class="muted">REVIEW · MEDIUM</span><br /><a href="#">View source</a></td>
+            <td><span class="badge">REVIEW EMAIL</span></td>
+            <td><button class="primary">Review Email</button></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" /></td>
+            <td>Weeknight Pasta<br /><span class="muted">@weeknightpasta</span></td>
+            <td>1k_100k</td>
+            <td><span class="muted">EMAIL NOT FOUND</span></td>
+            <td><span class="badge">EMAIL NOT FOUND</span></td>
+            <td><button class="primary">Retry</button></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox" checked /></td>
+            <td>Spice Route Cooking<br /><span class="muted">@spiceroute</span></td>
+            <td>1k_100k</td>
+            <td><span class="muted">—</span></td>
+            <td><span class="badge">EMAIL REQUIRED</span></td>
+            <td><button class="primary">Find Email</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

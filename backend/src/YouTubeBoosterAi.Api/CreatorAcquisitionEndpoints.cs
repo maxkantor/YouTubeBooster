@@ -732,6 +732,48 @@ public static class CreatorAcquisitionEndpoints
             return Results.Ok(result);
         });
 
+        admin.MapPost("/email-discovery/start", async (
+            HttpContext http,
+            AcqEmailDiscoveryStartRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var job = await acq.StartEmailDiscoveryAsync(body ?? new AcqEmailDiscoveryStartRequest(), admin, cancellationToken);
+            return Results.Ok(job);
+        });
+
+        admin.MapGet("/email-discovery/{jobId}", async (
+            string jobId,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var job = await acq.GetEmailDiscoveryJobAsync(jobId, cancellationToken);
+            return job is null ? Results.NotFound(new { error = "job_not_found" }) : Results.Ok(job);
+        });
+
+        admin.MapPost("/email-discovery/{jobId}/tick", async (
+            string jobId,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var job = await acq.TickEmailDiscoveryAsync(jobId, batchSize: 5, cancellationToken);
+            return Results.Ok(job);
+        });
+
+        admin.MapPost("/prospects/{id}/email-discovery/accept", async (
+            string id,
+            HttpContext http,
+            AcqEmailDiscoveryAcceptRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var (row, error) = await acq.AcceptDiscoveredEmailAsync(id, body?.Accept != false, admin, body?.Reason, cancellationToken);
+            if (error is not null) return Results.BadRequest(new { error });
+            return Results.Ok(await ToAdminDtoAsync(row!, acq, cancellationToken));
+        });
+
         admin.MapPost("/run-send", async (
             ICreatorAcquisitionService acq,
             CancellationToken cancellationToken) =>
@@ -858,6 +900,10 @@ public interface ICreatorAcquisitionService
     Task<(bool Ok, string? Error, string? MessageId)> SendNowAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
     Task<AcqApproveAndSendResult> ApproveAndSendAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
     Task<AcqSendApprovedBatchResult> SendApprovedBatchAsync(string campaign, IReadOnlyList<string>? prospectIds, string adminEmail, CancellationToken cancellationToken);
+    Task<AcqEmailDiscoveryJobState> StartEmailDiscoveryAsync(AcqEmailDiscoveryStartRequest request, string adminEmail, CancellationToken cancellationToken);
+    Task<AcqEmailDiscoveryJobState?> GetEmailDiscoveryJobAsync(string jobId, CancellationToken cancellationToken);
+    Task<AcqEmailDiscoveryJobState> TickEmailDiscoveryAsync(string jobId, int batchSize, CancellationToken cancellationToken);
+    Task<(AcqProspectRecord? Prospect, string? Error)> AcceptDiscoveredEmailAsync(string prospectId, bool accept, string adminEmail, string? reason, CancellationToken cancellationToken);
     string Site();
     string TrackedSite();
 }

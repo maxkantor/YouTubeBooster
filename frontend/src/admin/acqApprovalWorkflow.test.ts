@@ -73,6 +73,26 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.primaryActionLabel, 'Find Email');
   });
 
+  it('marks discovery not_found as NOT_FOUND with retry', () => {
+    const r = row({ email: null, contactStatus: 'not_found' });
+    r.public.contactResearchStatus = 'not_found';
+    r.public.contactDiscoveryResult = 'not_found';
+    const w = resolveAcqWorkflow(r);
+    assert.equal(w.status, 'NOT_FOUND');
+    assert.equal(w.primaryAction, 'retry_email');
+    assert.equal(w.primaryActionLabel, 'Retry');
+  });
+
+  it('marks medium-confidence candidate as REVIEW_EMAIL', () => {
+    const r = row({ email: 'maybe@cook.test', contactStatus: 'review_email' });
+    r.public.contactResearchStatus = 'review_email';
+    r.public.contactConfidence = 'medium';
+    const w = resolveAcqWorkflow(r);
+    assert.equal(w.status, 'REVIEW_EMAIL');
+    assert.equal(w.primaryAction, 'review_email');
+    assert.equal(w.primaryActionLabel, 'Review Email');
+  });
+
   it('marks unverified email as EMAIL_VERIFICATION_REQUIRED', () => {
     const w = resolveAcqWorkflow(row({ email: 'a@b.com', contactStatus: 'source_recorded_unverified' }));
     assert.equal(w.status, 'EMAIL_VERIFICATION_REQUIRED');

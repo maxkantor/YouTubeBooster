@@ -206,6 +206,16 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                         contactType = research.ContactType;
                         contactNextAt = null;
                     }
+                    else if (string.Equals(research.Status, "review_email", StringComparison.OrdinalIgnoreCase)
+                             && EmailAddressHelpers.LooksLikeEmail(research.Email)
+                             && !string.IsNullOrWhiteSpace(research.SourceUrl))
+                    {
+                        email = research.Email;
+                        contactSourceUrl = research.SourceUrl;
+                        contactType = research.ContactType;
+                        contactStatus = "review_email";
+                        contactNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(contactAttempts));
+                    }
                     else
                     {
                         if (string.Equals(research.ContactType, "form_only", StringComparison.OrdinalIgnoreCase))
@@ -218,6 +228,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                             contactSourceUrl = research.SourceUrl;
                             contactType = string.IsNullOrWhiteSpace(research.ContactType) ? "source_recorded_unverified" : research.ContactType;
                         }
+                        contactStatus = research.Status is "not_found" ? "not_found" : contactStatus;
                         contactNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(contactAttempts));
                     }
                 }
@@ -345,7 +356,10 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             SubjectVariant: dup?.SubjectVariant,
             MessageVariant: dup?.MessageVariant,
             FindingType: findingType ?? dup?.FindingType,
-            ExampleVideoTitle: placeholder ? dup?.ExampleVideoTitle : (example ?? dup?.ExampleVideoTitle)
+            ExampleVideoTitle: placeholder ? dup?.ExampleVideoTitle : (example ?? dup?.ExampleVideoTitle),
+            ContactConfidence: contactStatus == "review_email" ? "medium" : (emailVerified ? "high" : dup?.ContactConfidence),
+            ContactDiscoveryResult: contactStatus == "review_email" ? "review" : (emailVerified ? "found" : dup?.ContactDiscoveryResult),
+            ContactDiscoveryDetail: dup?.ContactDiscoveryDetail
         );
 
         if (dup is not null && (dup.LastContactedAt is not null || !string.Equals(dup.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)))
@@ -998,6 +1012,451 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         }
     }
 
+    private static string PreferBusinessEmailLocal(IReadOnlyList<string> emails) =>
+        CreatorAcquisitionContact.PreferBusinessEmail(emails);
+
+    public async Task<AcqEmailDiscoveryJobState> StartEmailDiscoveryAsync(
+        AcqEmailDiscoveryStartRequest request,
+        string adminEmail,
+        CancellationToken cancellationToken)
+    {
+        var campaign = string.IsNullOrWhiteSpace(request.Campaign)
+            ? CreatorAcquisitionCampaigns.Cook001
+            : request.Campaign!.Trim();
+        var all = await _store.ListProspectsAsync(cancellationToken);
+        IEnumerable<AcqProspectRecord> candidates = all.Where(p =>
+            string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+
+        if (request.ProspectIds is { Count: > 0 })
+        {
+            var idSet = request.ProspectIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            candidates = candidates.Where(p => idSet.Contains(p.ProspectId));
+        }
+        else
+        {
+            var filter = (request.Filter ?? "email_required").Trim().ToLowerInvariant();
+            candidates = filter switch
+            {
+                "review_email" or "email_review" => candidates.Where(p =>
+                    string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase)),
+                "not_found" => candidates.Where(p =>
+                    string.Equals(p.ContactDiscoveryResult, "not_found", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(p.ContactResearchStatus, "not_found", StringComparison.OrdinalIgnoreCase)),
+                _ => candidates.Where(NeedsEmailDiscovery)
+            };
+        }
+
+        var ids = candidates
+            .OrderByDescending(p => p.PriorityScore)
+            .Select(p => p.ProspectId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(500)
+            .ToList();
+
+        var job = new AcqEmailDiscoveryJobState(
+            JobId: "ed-" + Guid.NewGuid().ToString("N")[..12],
+            Campaign: campaign,
+            AdminEmail: adminEmail,
+            DryRun: request.DryRun,
+            ForceRetry: request.ForceRetry,
+            StartedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow,
+            Status: ids.Count == 0 ? "completed" : "running",
+            ProspectIds: ids,
+            Cursor: 0,
+            Processed: 0,
+            Found: 0,
+            Review: 0,
+            NotFound: 0,
+            Failed: 0,
+            Skipped: 0,
+            Results: [],
+            HttpFetches: 0);
+
+        await SaveDiscoveryJobAsync(job, cancellationToken);
+        await _appDataStore.TrackEventAsync("EMAIL_DISCOVERY_STARTED", job.JobId, new Dictionary<string, string?>
+        {
+            ["admin"] = adminEmail,
+            ["campaign"] = campaign,
+            ["count"] = ids.Count.ToString(),
+            ["dryRun"] = request.DryRun ? "true" : "false",
+            ["forceRetry"] = request.ForceRetry ? "true" : "false"
+        }, cancellationToken);
+
+        if (ids.Count == 0) return job;
+        return await TickEmailDiscoveryAsync(job.JobId, Math.Clamp(request.BatchSize, 1, 10), cancellationToken);
+    }
+
+    public async Task<AcqEmailDiscoveryJobState?> GetEmailDiscoveryJobAsync(string jobId, CancellationToken cancellationToken)
+    {
+        var json = await _store.GetCohortRunAsync(CreatorAcquisitionCampaigns.Cook001, "email-discovery-" + jobId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<AcqEmailDiscoveryJobState>(json, AcqJson.Options);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<AcqEmailDiscoveryJobState> TickEmailDiscoveryAsync(
+        string jobId,
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        var job = await GetEmailDiscoveryJobAsync(jobId, cancellationToken)
+            ?? throw new InvalidOperationException("discovery_job_not_found");
+        if (!string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
+            return job;
+
+        batchSize = Math.Clamp(batchSize, 1, 10);
+        var results = job.Results.ToList();
+        var processed = job.Processed;
+        var found = job.Found;
+        var review = job.Review;
+        var notFound = job.NotFound;
+        var failed = job.Failed;
+        var skipped = job.Skipped;
+        var fetches = job.HttpFetches;
+        var cursor = job.Cursor;
+
+        while (batchSize > 0 && cursor < job.ProspectIds.Count)
+        {
+            batchSize--;
+            var prospectId = job.ProspectIds[cursor++];
+            try
+            {
+                var item = await DiscoverEmailForProspectAsync(
+                    prospectId, job.ForceRetry, job.DryRun, job.AdminEmail, cancellationToken);
+                results.Add(item.Result);
+                fetches += item.HttpFetches;
+                processed++;
+                switch (item.Result.Outcome)
+                {
+                    case "found": found++; break;
+                    case "review": review++; break;
+                    case "not_found": notFound++; break;
+                    case "failed": failed++; break;
+                    default: skipped++; break;
+                }
+            }
+            catch (Exception ex)
+            {
+                processed++;
+                failed++;
+                results.Add(new AcqEmailDiscoveryItemResult(
+                    prospectId, prospectId, "failed", null, null, null, null, ex.Message[..Math.Min(ex.Message.Length, 180)]));
+            }
+        }
+
+        var done = cursor >= job.ProspectIds.Count;
+        var next = job with
+        {
+            Cursor = cursor,
+            Processed = processed,
+            Found = found,
+            Review = review,
+            NotFound = notFound,
+            Failed = failed,
+            Skipped = skipped,
+            Results = results,
+            HttpFetches = fetches,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Status = done ? "completed" : "running"
+        };
+        await SaveDiscoveryJobAsync(next, cancellationToken);
+        return next;
+    }
+
+    public async Task<(AcqProspectRecord? Prospect, string? Error)> AcceptDiscoveredEmailAsync(
+        string prospectId,
+        bool accept,
+        string adminEmail,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null) return (null, "not_found");
+        if (!string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase))
+            return (null, "not_in_review");
+
+        if (!accept)
+        {
+            var rejected = p with
+            {
+                PublicBusinessEmail = null,
+                ContactVerifiedAt = null,
+                ContactResearchStatus = "not_found",
+                ContactDiscoveryResult = "rejected",
+                ContactConfidence = null,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                Notes = TrimPreview($"Email review rejected by {adminEmail}: {reason ?? "no reason"}")
+            };
+            await _store.UpsertProspectAsync(rejected, cancellationToken);
+            await _appDataStore.TrackEventAsync("EMAIL_DISCOVERY_FAILED", prospectId, new Dictionary<string, string?>
+            {
+                ["admin"] = adminEmail,
+                ["reason"] = reason ?? "rejected"
+            }, cancellationToken);
+            return (rejected, null);
+        }
+
+        if (!EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail) || string.IsNullOrWhiteSpace(p.ContactSourceUrl))
+            return (null, "review_email_incomplete");
+
+        var accepted = p with
+        {
+            ContactType = string.IsNullOrWhiteSpace(p.ContactType) || p.ContactType == "none" ? "business" : p.ContactType,
+            ContactVerifiedAt = DateTimeOffset.UtcNow,
+            ContactResearchStatus = "verified_public",
+            ContactDiscoveryResult = "found",
+            ContactConfidence = "high",
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        await _store.UpsertProspectAsync(accepted, cancellationToken);
+        await _appDataStore.TrackEventAsync("EMAIL_MANUALLY_ACCEPTED", prospectId, new Dictionary<string, string?>
+        {
+            ["admin"] = adminEmail,
+            ["source"] = accepted.ContactSourceUrl
+        }, cancellationToken);
+
+        if (ShouldAutoPrepareDraft(accepted))
+        {
+            var drafted = await PrepareDraftAsync(prospectId, cancellationToken);
+            return (drafted ?? accepted, null);
+        }
+        return (accepted, null);
+    }
+
+    private static bool NeedsEmailDiscovery(AcqProspectRecord p)
+    {
+        if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)) return false;
+        if (string.Equals(p.ContactType, "form_only", StringComparison.OrdinalIgnoreCase)) return false;
+        if (string.Equals(p.OutreachStatus, "rejected", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
+    }
+
+    private static bool ShouldAutoPrepareDraft(AcqProspectRecord p) =>
+        CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)
+        && !string.IsNullOrWhiteSpace(p.Observation)
+        && p.PriorityScore >= 70
+        && string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase)
+        && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body)
+            || string.Equals(p.OutreachStatus, "contact_needed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase));
+
+    private async Task SaveDiscoveryJobAsync(AcqEmailDiscoveryJobState job, CancellationToken cancellationToken)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(job, AcqJson.Options);
+        await _store.SaveCohortRunAsync(CreatorAcquisitionCampaigns.Cook001, "email-discovery-" + job.JobId, json, cancellationToken);
+    }
+
+    private async Task<(AcqEmailDiscoveryItemResult Result, int HttpFetches)> DiscoverEmailForProspectAsync(
+        string prospectId,
+        bool forceRetry,
+        bool dryRun,
+        string adminEmail,
+        CancellationToken cancellationToken)
+    {
+        var p = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (p is null)
+            return (new AcqEmailDiscoveryItemResult(prospectId, "?", "failed", null, null, null, null, "not_found"), 0);
+
+        if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(p) && !forceRetry)
+        {
+            return (new AcqEmailDiscoveryItemResult(
+                p.ProspectId, p.Handle, "skipped_existing", p.PublicBusinessEmail, p.ContactSourceUrl,
+                null, p.ContactConfidence, "Existing verified email preserved."), 0);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!forceRetry && p.ContactResearchNextAt is not null && p.ContactResearchNextAt > now)
+        {
+            return (new AcqEmailDiscoveryItemResult(
+                p.ProspectId, p.Handle, "skipped_backoff", null, null, null, null,
+                $"Backoff until {p.ContactResearchNextAt:u}"), 0);
+        }
+
+        // Suppression / unsubscribe hard check
+        if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            return (new AcqEmailDiscoveryItemResult(
+                p.ProspectId, p.Handle, "skipped_suppressed", null, null, null, null, p.SuppressionStatus), 0);
+        }
+
+        var descTexts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(p.ChannelName)) descTexts.Add(p.ChannelName);
+        if (!string.IsNullOrWhiteSpace(p.OfficialWebsite)) descTexts.Add(p.OfficialWebsite);
+        if (!string.IsNullOrWhiteSpace(p.Notes)) descTexts.Add(p.Notes);
+
+        // Light YouTube metadata pull for website links in recent titles/descriptions when possible.
+        try
+        {
+            var videos = await TryLoadVideosAsync(p.Handle, cancellationToken);
+            descTexts.AddRange(videos.Select(v => v.title + " " + v.description).Take(12));
+        }
+        catch
+        {
+            /* continue with website seed only */
+        }
+
+        using var http = _httpClientFactory.CreateClient();
+        http.Timeout = TimeSpan.FromSeconds(10);
+        var research = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+            http, p.OfficialWebsite, descTexts, cancellationToken);
+        var fetches = research.SourcesChecked?.Count ?? 0;
+        var attempts = p.ContactResearchAttempts + 1;
+        var detailJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            sourcesChecked = research.SourcesChecked,
+            detail = research.Detail,
+            confidence = research.Confidence,
+            sourceType = research.SourceType,
+            at = now
+        });
+
+        if (string.Equals(research.Status, "verified_public", StringComparison.OrdinalIgnoreCase)
+            && EmailAddressHelpers.LooksLikeEmail(research.Email)
+            && !string.IsNullOrWhiteSpace(research.SourceUrl)
+            && !CreatorAcquisitionContact.IsPlaceholderEmail(research.Email!)
+            && !CreatorAcquisitionContact.IsRejectedLocalPart(research.Email!))
+        {
+            var dup = await _store.FindDuplicateAsync(null, null, null, research.Email, cancellationToken);
+            if (dup is not null && !string.Equals(dup.ProspectId, p.ProspectId, StringComparison.OrdinalIgnoreCase))
+            {
+                return (new AcqEmailDiscoveryItemResult(
+                    p.ProspectId, p.Handle, "failed", research.Email, research.SourceUrl, research.SourceType,
+                    research.Confidence, $"Duplicate of {dup.Handle}"), fetches);
+            }
+
+            if (EmailAddressHelpers.LooksLikeEmail(research.Email))
+            {
+                var outreach = await _appDataStore.GetOutreachContactAsync(research.Email!, cancellationToken);
+                if (outreach is not null && (
+                    string.Equals(outreach.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase)
+                    || outreach.Status.Contains("bounce", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return (new AcqEmailDiscoveryItemResult(
+                        p.ProspectId, p.Handle, "failed", research.Email, research.SourceUrl, research.SourceType,
+                        research.Confidence, $"Suppressed outreach status: {outreach.Status}"), fetches);
+                }
+            }
+
+            if (!dryRun)
+            {
+                var next = p with
+                {
+                    PublicBusinessEmail = research.Email!.Trim().ToLowerInvariant(),
+                    ContactSourceUrl = research.SourceUrl,
+                    ContactType = research.ContactType,
+                    ContactVerifiedAt = now,
+                    OfficialWebsite = p.OfficialWebsite ?? research.OfficialWebsite,
+                    ContactResearchAttempts = attempts,
+                    ContactResearchLastAt = now,
+                    ContactResearchNextAt = null,
+                    ContactResearchStatus = "verified_public",
+                    ContactConfidence = research.Confidence,
+                    ContactDiscoveryDetail = detailJson,
+                    ContactDiscoveryResult = "found",
+                    UpdatedAt = now
+                };
+                await _store.UpsertProspectAsync(next, cancellationToken);
+                await _appDataStore.TrackEventAsync("EMAIL_DISCOVERED", p.ProspectId, new Dictionary<string, string?>
+                {
+                    ["admin"] = adminEmail,
+                    ["confidence"] = research.Confidence,
+                    ["source"] = research.SourceUrl,
+                    ["dryRun"] = "false"
+                }, cancellationToken);
+
+                var drafted = false;
+                if (ShouldAutoPrepareDraft(next))
+                {
+                    await PrepareDraftAsync(p.ProspectId, cancellationToken);
+                    drafted = true;
+                }
+
+                return (new AcqEmailDiscoveryItemResult(
+                    p.ProspectId, p.Handle, "found", research.Email, research.SourceUrl, research.SourceType,
+                    research.Confidence, research.Detail, drafted), fetches);
+            }
+
+            return (new AcqEmailDiscoveryItemResult(
+                p.ProspectId, p.Handle, "found", research.Email, research.SourceUrl, research.SourceType,
+                research.Confidence, "[dry-run] " + research.Detail), fetches);
+        }
+
+        if (string.Equals(research.Status, "review_email", StringComparison.OrdinalIgnoreCase)
+            && EmailAddressHelpers.LooksLikeEmail(research.Email)
+            && !string.IsNullOrWhiteSpace(research.SourceUrl))
+        {
+            if (!dryRun)
+            {
+                var next = p with
+                {
+                    PublicBusinessEmail = research.Email!.Trim().ToLowerInvariant(),
+                    ContactSourceUrl = research.SourceUrl,
+                    ContactType = research.ContactType,
+                    ContactVerifiedAt = null,
+                    OfficialWebsite = p.OfficialWebsite ?? research.OfficialWebsite,
+                    ContactResearchAttempts = attempts,
+                    ContactResearchLastAt = now,
+                    ContactResearchNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(attempts)),
+                    ContactResearchStatus = "review_email",
+                    ContactConfidence = research.Confidence,
+                    ContactDiscoveryDetail = detailJson,
+                    ContactDiscoveryResult = "review",
+                    UpdatedAt = now
+                };
+                await _store.UpsertProspectAsync(next, cancellationToken);
+                await _appDataStore.TrackEventAsync("EMAIL_DISCOVERY_REVIEW_REQUIRED", p.ProspectId, new Dictionary<string, string?>
+                {
+                    ["admin"] = adminEmail,
+                    ["source"] = research.SourceUrl,
+                    ["confidence"] = research.Confidence
+                }, cancellationToken);
+            }
+
+            return (new AcqEmailDiscoveryItemResult(
+                p.ProspectId, p.Handle, "review", research.Email, research.SourceUrl, research.SourceType,
+                research.Confidence, (dryRun ? "[dry-run] " : "") + research.Detail), fetches);
+        }
+
+        if (!dryRun)
+        {
+            var next = p with
+            {
+                ContactResearchAttempts = attempts,
+                ContactResearchLastAt = now,
+                ContactResearchNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(attempts)),
+                ContactResearchStatus = research.Status is "form_only" ? "form_only" : "not_found",
+                ContactType = research.ContactType is "form_only" ? "form_only" : p.ContactType,
+                ContactSourceUrl = research.SourceUrl ?? p.ContactSourceUrl,
+                OfficialWebsite = p.OfficialWebsite ?? research.OfficialWebsite,
+                ContactConfidence = null,
+                ContactDiscoveryDetail = detailJson,
+                ContactDiscoveryResult = research.ContactType is "form_only" ? "form_only" : "not_found",
+                UpdatedAt = now
+            };
+            await _store.UpsertProspectAsync(next, cancellationToken);
+            await _appDataStore.TrackEventAsync("EMAIL_DISCOVERY_FAILED", p.ProspectId, new Dictionary<string, string?>
+            {
+                ["admin"] = adminEmail,
+                ["detail"] = research.Detail
+            }, cancellationToken);
+        }
+
+        return (new AcqEmailDiscoveryItemResult(
+            p.ProspectId, p.Handle, "not_found", null, research.SourceUrl, research.SourceType, null,
+            (dryRun ? "[dry-run] " : "") + research.Detail), fetches);
+    }
+
     private static IReadOnlyList<string> ExtractEmailsFromPlainText(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return [];
@@ -1009,27 +1468,13 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         {
             var email = m.Value.Trim().TrimEnd('.').ToLowerInvariant();
             if (!EmailAddressHelpers.LooksLikeEmail(email)) continue;
-            if (email.Contains("noreply", StringComparison.OrdinalIgnoreCase) ||
-                email.Contains("no-reply", StringComparison.OrdinalIgnoreCase) ||
-                email.EndsWith(".png", StringComparison.Ordinal) ||
-                email.EndsWith(".jpg", StringComparison.Ordinal))
+            if (CreatorAcquisitionContact.IsRejectedLocalPart(email) || CreatorAcquisitionContact.IsPlaceholderEmail(email))
+                continue;
+            if (email.EndsWith(".png", StringComparison.Ordinal) || email.EndsWith(".jpg", StringComparison.Ordinal))
                 continue;
             found.Add(email);
         }
         return found.ToArray();
-    }
-
-    private static string PreferBusinessEmailLocal(IReadOnlyList<string> emails)
-    {
-        var preferred = emails.FirstOrDefault(e =>
-            e.Contains("hello@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("contact@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("biz@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("business@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("collab@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("partnerships@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("press@", StringComparison.OrdinalIgnoreCase));
-        return preferred ?? emails[0];
     }
 
     public async Task<(AcqProspectRecord? Prospect, string? Error)> RejectAsync(

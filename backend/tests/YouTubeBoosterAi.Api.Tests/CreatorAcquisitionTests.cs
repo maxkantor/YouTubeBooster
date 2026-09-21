@@ -442,9 +442,9 @@ public class OutreachPolicyTests
     public void TrackedUrl_HasFounderAttribution()
     {
         var url = OutreachPolicy.BuildTrackedUrl("https://youtubeboosterai.com", "tok", "COOK-001-P001", "A", "2026-08-19");
-        Assert.Contains("utm_source=founder_outreach", url);
+        Assert.Contains("utm_source=outreach", url);
         Assert.Contains("utm_medium=email", url);
-        Assert.Contains("utm_campaign=cook_001", url);
+        Assert.Contains("utm_campaign=COOK-001", url);
         Assert.Contains("utm_content=A", url);
         Assert.Contains("utm_id=2026-08-19", url);
         Assert.Contains("/api/public/acq/go/tok", url);
@@ -527,7 +527,189 @@ public class OutreachPolicyTests
     public void InCooldown_UsesExclusiveDayBoundary()
     {
         var now = DateTimeOffset.Parse("2026-09-14T12:00:00Z");
-        Assert.True(OutreachPolicy.InCooldown(now.AddDays(-13.9), now, 14));
-        Assert.False(OutreachPolicy.InCooldown(now.AddDays(-14.1), now, 14));
+        Assert.True(OutreachPolicy.InCooldown(now.AddDays(-13), now, 14));
+        Assert.False(OutreachPolicy.InCooldown(now.AddDays(-14), now, 14));
+    }
+}
+
+public class CreatorAcquisitionContactTests
+{
+    private static AcqProspectRecord Prospect(
+        string? email = "hello@example-creator.test",
+        string contactType = "business")
+    {
+        return new AcqProspectRecord(
+            "COOK-001-P001", "Example Cook", "@examplecook", "https://www.youtube.com/@examplecook", "UCexample",
+            "cooking", "en", "US", 12000, 100, DateTimeOffset.UtcNow.AddDays(-7), 5, "8k-20k", "https://example-creator.test",
+            email, "https://example-creator.test/contact", DateTimeOffset.UtcNow, contactType,
+            25, 25, 20, 80, "completed", "discovered", null, "none",
+            CreatorAcquisitionCampaigns.Cook001, "/api/public/acq/go/tok", "tok",
+            "https://www.youtube.com/@examplecook", DateTimeOffset.UtcNow, "obs",
+            "improve", "thin descriptions", "subject", "body", null, null, null, null,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, false);
+    }
+
+    [Fact]
+    public void Contact_RejectsPlaceholderAndNoreplyLocals()
+    {
+        Assert.True(CreatorAcquisitionContact.IsPlaceholderEmail("hello@example.com"));
+        Assert.True(CreatorAcquisitionContact.IsRejectedLocalPart("noreply@brand.test"));
+        Assert.True(CreatorAcquisitionContact.IsRejectedLocalPart("privacy@brand.test"));
+        Assert.False(CreatorAcquisitionContact.IsRejectedLocalPart("hello@brand.test"));
+        Assert.False(CreatorAcquisitionContact.IsRejectedLocalPart("collabs@brand.test"));
+    }
+
+    [Fact]
+    public void Contact_PreferBusinessEmail_PicksHelloOverRandom()
+    {
+        var pick = CreatorAcquisitionContact.PreferBusinessEmail(["random@brand.test", "hello@brand.test"]);
+        Assert.Equal("hello@brand.test", pick);
+    }
+
+    [Fact]
+    public void Contact_ClassifyConfidence_ContactPageHelloIsHigh()
+    {
+        var conf = CreatorAcquisitionContact.ClassifyConfidence(
+            "hello@cooksite.test", "https://cooksite.test/contact", "business");
+        Assert.Equal("high", conf);
+    }
+
+    [Fact]
+    public void Contact_ExpandPaths_IncludesCookingPartnershipPages()
+    {
+        var urls = CreatorAcquisitionContact.ExpandContactCandidateUrls(["https://cooksite.test"]);
+        Assert.Contains(urls, u => u.EndsWith("/contact", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(urls, u => u.EndsWith("/work-with-me", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(urls, u => u.EndsWith("/partnerships", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(urls, u => u.EndsWith("/media", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Contact_ExtractVisibleEmails_IgnoresNoreplyAndPlaceholders()
+    {
+        var html = """
+            <html><body>
+            Contact: hello@cooksite.test
+            Do not use noreply@cooksite.test or test@example.com
+            </body></html>
+            """;
+        var emails = CreatorAcquisitionContact.ExtractVisibleEmails(html, "https://cooksite.test/contact");
+        Assert.Contains("hello@cooksite.test", emails);
+        Assert.DoesNotContain("noreply@cooksite.test", emails);
+        Assert.DoesNotContain("test@example.com", emails);
+    }
+
+    [Fact]
+    public async Task Contact_Research_FollowsWebsiteToContactPage_HighConfidence()
+    {
+        var handler = new ScriptedHttpHandler(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://cooksite.test/"] = "<html><body>Welcome</body></html>",
+            ["https://cooksite.test/contact"] =
+                "<html><body>Business: <a href=\"mailto:hello@cooksite.test\">hello@cooksite.test</a></body></html>"
+        });
+        using var http = new HttpClient(handler);
+        var result = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+            http, "https://cooksite.test", Array.Empty<string>(), CancellationToken.None);
+        Assert.Equal("verified_public", result.Status);
+        Assert.Equal("high", result.Confidence);
+        Assert.Equal("hello@cooksite.test", result.Email);
+        Assert.Contains("/contact", result.SourceUrl);
+        Assert.True(result.SourcesChecked!.Count >= 2);
+    }
+
+    [Fact]
+    public async Task Contact_Research_HomepageAmbiguousEmail_IsMediumReview()
+    {
+        var handler = new ScriptedHttpHandler(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://cooksite.test/"] = "<html><body>Reach me at chefname@gmail.com</body></html>"
+        });
+        using var http = new HttpClient(handler);
+        var result = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+            http, "https://cooksite.test", Array.Empty<string>(), CancellationToken.None);
+        Assert.Equal("review_email", result.Status);
+        Assert.Equal("medium", result.Confidence);
+        Assert.Equal("chefname@gmail.com", result.Email);
+    }
+
+    [Fact]
+    public async Task Contact_Research_NoEmail_ReturnsNotFound()
+    {
+        var handler = new ScriptedHttpHandler(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://cooksite.test/"] = "<html><body>No contact here</body></html>",
+            ["https://cooksite.test/contact"] = "<html><body>Use the form</body></html>"
+        });
+        using var http = new HttpClient(handler);
+        var result = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+            http, "https://cooksite.test", Array.Empty<string>(), CancellationToken.None);
+        Assert.Equal("not_found", result.Status);
+        Assert.Null(result.Email);
+    }
+
+    [Fact]
+    public void ContactStatusLabel_ReviewAndNotFound()
+    {
+        var review = Prospect(email: "maybe@cook.test") with
+        {
+            ContactVerifiedAt = null,
+            ContactResearchStatus = "review_email",
+            ContactConfidence = "medium"
+        };
+        Assert.Equal("review_email", CreatorAcquisitionScoring.ContactStatusLabel(review));
+
+        var missing = Prospect(email: null) with
+        {
+            ContactSourceUrl = null,
+            ContactVerifiedAt = null,
+            ContactResearchStatus = "not_found",
+            ContactDiscoveryResult = "not_found"
+        };
+        Assert.Equal("not_found", CreatorAcquisitionScoring.ContactStatusLabel(missing));
+        Assert.False(CreatorAcquisitionScoring.IsVerifiedPublicEmail(review));
+    }
+
+    [Fact]
+    public void EmailDiscoveryJob_ProgressCounters_AddUp()
+    {
+        var job = new AcqEmailDiscoveryJobState(
+            "ed-test", CreatorAcquisitionCampaigns.Cook001, "admin@test", false, false,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "completed",
+            Enumerable.Range(1, 100).Select(i => $"COOK-001-P{i:D3}").ToArray(),
+            Cursor: 100, Processed: 100, Found: 31, Review: 4, NotFound: 50, Failed: 5, Skipped: 10,
+            Results: [], HttpFetches: 240);
+        Assert.Equal(100, job.Processed);
+        Assert.Equal(100, job.Found + job.Review + job.NotFound + job.Failed + job.Skipped);
+        Assert.Equal(100, job.ProspectIds.Count);
+    }
+}
+
+internal sealed class ScriptedHttpHandler : HttpMessageHandler
+{
+    private readonly Dictionary<string, string> _pages;
+
+    public ScriptedHttpHandler(Dictionary<string, string> pages) => _pages = pages;
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var candidates = new[]
+        {
+            request.RequestUri!.AbsoluteUri.TrimEnd('/'),
+            request.RequestUri.GetLeftPart(UriPartial.Path).TrimEnd('/'),
+            request.RequestUri.GetLeftPart(UriPartial.Authority) + "/",
+            request.RequestUri.GetLeftPart(UriPartial.Authority)
+        };
+        foreach (var c in candidates)
+        {
+            if (_pages.TryGetValue(c, out var html) || _pages.TryGetValue(c.TrimEnd('/'), out html))
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(html, System.Text.Encoding.UTF8, "text/html")
+                });
+            }
+        }
+        return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
     }
 }

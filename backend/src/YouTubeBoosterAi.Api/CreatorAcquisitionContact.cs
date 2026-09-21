@@ -9,7 +9,10 @@ public sealed record AcqContactResearchResult(
     string ContactType,
     string Status,
     string? OfficialWebsite,
-    string Detail
+    string Detail,
+    string Confidence = "none",
+    string SourceType = "none",
+    IReadOnlyList<string>? SourcesChecked = null
 );
 
 public static class CreatorAcquisitionContact
@@ -28,13 +31,27 @@ public static class CreatorAcquisitionContact
         "maxoteka.ru", "tydyvy.com", "facebook.com", "instagram.com", "tiktok.com",
         "linkedin.com", "vk.com", "ok.ru", "twitter.com", "x.com", "youtube.com",
         "youtu.be", "google.com", "bit.ly"
-        // linktr.ee allowed — common public business contact page for creators
     ];
 
     private static readonly string[] ContactPathHints =
     [
         "/contact", "/contact-us", "/contactus", "/about", "/about-us", "/work-with-me",
-        "/collaborate", "/collab", "/press", "/media", "/business", "/partnerships"
+        "/workwithme", "/collaborate", "/collab", "/press", "/media", "/business",
+        "/partnerships", "/partnership", "/advertising", "/advertise", "/sponsor",
+        "/sponsors", "/brand", "/brands", "/inquiries", "/enquiry", "/booking"
+    ];
+
+    private static readonly string[] PreferredLocalParts =
+    [
+        "hello", "contact", "biz", "business", "collab", "collabs", "collaborate",
+        "partnerships", "partnership", "press", "media", "creator", "team", "info"
+    ];
+
+    private static readonly string[] RejectedLocalParts =
+    [
+        "noreply", "no-reply", "donotreply", "do-not-reply", "privacy", "legal",
+        "abuse", "webmaster", "billing", "accounts", "invoice", "support",
+        "example", "test", "sample", "placeholder"
     ];
 
     /// <summary>Backoff days after failed contact research attempts (1-indexed attempt count).</summary>
@@ -49,6 +66,29 @@ public static class CreatorAcquisitionContact
     public static bool IsGuessed(string? email, string? sourceUrl) =>
         EmailAddressHelpers.LooksLikeEmail(email) && string.IsNullOrWhiteSpace(sourceUrl);
 
+    public static bool IsRejectedLocalPart(string email)
+    {
+        var at = email.IndexOf('@');
+        if (at <= 0) return true;
+        var local = email[..at].ToLowerInvariant();
+        return RejectedLocalParts.Any(r => local == r || local.StartsWith(r + "+", StringComparison.Ordinal));
+    }
+
+    public static bool IsPlaceholderEmail(string email)
+    {
+        var e = email.ToLowerInvariant();
+        return e.Contains("example.com")
+            || e.Contains("example.org")
+            || e.Contains("test.com")
+            || e.Contains("domain.com")
+            || e.Contains("email.com")
+            || e.Contains("yoursite")
+            || e.Contains("yourdomain")
+            || e.StartsWith("user@")
+            || e.StartsWith("name@")
+            || e.StartsWith("email@");
+    }
+
     public static IReadOnlyList<string> ExtractVisibleEmails(string html, string pageUrl)
     {
         if (string.IsNullOrWhiteSpace(html) || !IsAllowedSource(pageUrl))
@@ -61,9 +101,7 @@ public static class CreatorAcquisitionContact
             if (!EmailAddressHelpers.LooksLikeEmail(email)) continue;
             if (email.EndsWith(".png", StringComparison.Ordinal) || email.EndsWith(".jpg", StringComparison.Ordinal))
                 continue;
-            if (email.Contains("noreply", StringComparison.OrdinalIgnoreCase) ||
-                email.Contains("no-reply", StringComparison.OrdinalIgnoreCase) ||
-                email.Contains("donotreply", StringComparison.OrdinalIgnoreCase))
+            if (IsRejectedLocalPart(email) || IsPlaceholderEmail(email))
                 continue;
             found.Add(email);
         }
@@ -92,7 +130,7 @@ public static class CreatorAcquisitionContact
             }
         }
 
-        return urls.Take(8).ToArray();
+        return urls.Take(10).ToArray();
     }
 
     public static IReadOnlyList<string> ExpandContactCandidateUrls(IReadOnlyList<string> siteRoots)
@@ -106,7 +144,7 @@ public static class CreatorAcquisitionContact
             foreach (var path in ContactPathHints)
                 expanded.Add(origin + path);
         }
-        return expanded.Take(16).ToArray();
+        return expanded.Take(24).ToArray();
     }
 
     public static bool IsAllowedSource(string? url)
@@ -126,9 +164,41 @@ public static class CreatorAcquisitionContact
             return "partnership";
         if (blob.Contains("press") || blob.Contains("media"))
             return "media";
-        if (blob.Contains("contact"))
+        if (blob.Contains("contact") || blob.Contains("advertis") || blob.Contains("sponsor"))
             return "business";
         return "general";
+    }
+
+    public static string ClassifySourceType(string pageUrl)
+    {
+        var path = Uri.TryCreate(pageUrl, UriKind.Absolute, out var u) ? u.AbsolutePath.ToLowerInvariant() : pageUrl.ToLowerInvariant();
+        if (path.Contains("contact")) return "contact_page";
+        if (path.Contains("about")) return "about_page";
+        if (path.Contains("work") || path.Contains("collab") || path.Contains("partner")) return "partnerships_page";
+        if (path.Contains("press") || path.Contains("media")) return "press_page";
+        if (path.Contains("advertis") || path.Contains("sponsor") || path.Contains("brand")) return "advertising_page";
+        if (path is "/" or "") return "homepage";
+        return "website_page";
+    }
+
+    public static string ClassifyConfidence(string email, string pageUrl, string contactType)
+    {
+        var sourceType = ClassifySourceType(pageUrl);
+        var preferred = IsPreferredBusinessEmail(email);
+        var strongPage = sourceType is "contact_page" or "about_page" or "partnerships_page" or "press_page" or "advertising_page";
+        if (preferred && strongPage) return "high";
+        if (preferred || strongPage) return "high";
+        if (contactType is "business" or "partnership" or "media") return "medium";
+        if (sourceType == "homepage") return "medium";
+        return "low";
+    }
+
+    public static bool IsPreferredBusinessEmail(string email)
+    {
+        var at = email.IndexOf('@');
+        if (at <= 0) return false;
+        var local = email[..at].ToLowerInvariant();
+        return PreferredLocalParts.Any(p => local == p || local.StartsWith(p + "+", StringComparison.Ordinal));
     }
 
     public static bool LooksLikeContactFormOnly(string html)
@@ -148,10 +218,12 @@ public static class CreatorAcquisitionContact
     {
         var seedText = string.Join('\n', (descriptionTexts ?? []).Where(t => !string.IsNullOrWhiteSpace(t)).Take(12));
         var siteRoots = ExtractCandidateSiteUrls(seedText, officialWebsite);
+        var checkedUrls = new List<string>();
         if (siteRoots.Count == 0)
         {
             return new AcqContactResearchResult(null, null, "none", "contact_needed", officialWebsite,
-                "No public website or allowed business URL found in channel/video metadata.");
+                "No public website or allowed business URL found in channel/video metadata.",
+                "none", "none", checkedUrls);
         }
 
         var candidates = ExpandContactCandidateUrls(siteRoots);
@@ -160,6 +232,7 @@ public static class CreatorAcquisitionContact
         foreach (var url in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            checkedUrls.Add(url);
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
@@ -178,13 +251,24 @@ public static class CreatorAcquisitionContact
                 if (emails.Count > 0)
                 {
                     var email = PreferBusinessEmail(emails);
+                    var contactType = ClassifyContactType(url, html);
+                    var confidence = ClassifyConfidence(email, url, contactType);
+                    var status = confidence switch
+                    {
+                        "high" => "verified_public",
+                        "medium" => "review_email",
+                        _ => "low_confidence"
+                    };
                     return new AcqContactResearchResult(
                         email,
                         url,
-                        ClassifyContactType(url, html),
-                        "verified_public",
+                        contactType,
+                        status,
                         siteRoots[0],
-                        "Extracted visible mailto/email from public page.");
+                        $"Extracted visible email from public page ({confidence} confidence).",
+                        confidence,
+                        ClassifySourceType(url),
+                        checkedUrls);
                 }
 
                 if (LooksLikeContactFormOnly(html) && formOnlyUrl is null)
@@ -199,23 +283,18 @@ public static class CreatorAcquisitionContact
         if (formOnlyUrl is not null)
         {
             return new AcqContactResearchResult(null, formOnlyUrl, "form_only", "form_only", siteRoots[0],
-                "Public contact form found; automated email unavailable.");
+                "Public contact form found; automated email unavailable.",
+                "none", "contact_form", checkedUrls);
         }
 
-        return new AcqContactResearchResult(null, siteRoots[0], "source_recorded_unverified", "contact_needed", siteRoots[0],
-            "Website found but no visible public business email.");
+        return new AcqContactResearchResult(null, siteRoots[0], "source_recorded_unverified", "not_found", siteRoots[0],
+            "Website found but no visible public business email.",
+            "none", "website", checkedUrls);
     }
 
-    private static string PreferBusinessEmail(IReadOnlyList<string> emails)
+    public static string PreferBusinessEmail(IReadOnlyList<string> emails)
     {
-        var preferred = emails.FirstOrDefault(e =>
-            e.Contains("hello@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("contact@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("biz@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("business@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("collab@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("partnerships@", StringComparison.OrdinalIgnoreCase) ||
-            e.Contains("press@", StringComparison.OrdinalIgnoreCase));
+        var preferred = emails.FirstOrDefault(IsPreferredBusinessEmail);
         return preferred ?? emails[0];
     }
 
