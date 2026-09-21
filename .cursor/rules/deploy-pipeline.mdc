@@ -1,17 +1,28 @@
 ---
-description: When user asks to deploy or ship, run full release test, zip, and push
+description: After backend changes, always push and deploy Lambda; frontend push for Amplify
 alwaysApply: true
 ---
 
 # Deploy / release pipeline
 
-When the user asks to **deploy**, **release**, **ship**, **push**, or run a **full** build:
+## Default after finishing API work
+
+When a task changes **backend** code under `backend/` (especially `YouTubeBoosterAi.Api`):
+
+1. **Commit and push** to the branch Amplify/watchers use (usually `main`) — do not leave backend fixes local-only.
+2. **Deploy Lambda yourself** (do not wait for the user to ask):
+   - Publish zip per `backend/LAMBDA-DEPLOY.md` (Windows PowerShell publish + `Compress-Archive`, or `backend/publish-lambda.sh`).
+   - `aws lambda update-function-code --function-name youtubebooster-ai-api --zip-file fileb://…/backend/youtubebooster-api.zip --region us-east-1`
+   - Wait until the function is updated; smoke-check `GET …/health`.
+3. Never commit `bin/`, `obj/`, `node_modules/`, or `youtubebooster-api.zip`.
+
+Frontend-only changes: push is enough for Amplify; Lambda upload is optional.
+
+## When the user asks to deploy / release / ship / full build
 
 1. From repo root, run **`./scripts/full-release.sh`** (needs network for `npm ci` and NuGet). If NuGet fails in a restricted sandbox, re-run with full permissions.
-2. **Test** = frontend `npm run build` + backend `dotnet build` (both are inside that script). There is no separate Jest/dotnet test suite in this repo yet.
-3. **Zip** = `backend/youtubebooster-api.zip` produced by `backend/publish-lambda.sh` (file is gitignored; upload to Lambda manually per `backend/LAMBDA-DEPLOY.md`).
-4. **Push** = `git push` to the branch Amplify watches (e.g. `main`) so the **frontend** deploys on Amplify. Commit source changes only—never commit `bin/`, `obj/`, `node_modules/`, or the zip.
+2. **Test** = frontend `npm run build` + backend `dotnet build` (both are inside that script).
+3. **Zip** = `backend/youtubebooster-api.zip` from publish; then **upload to Lambda** as above.
+4. **Push** = `git push` so the **frontend** deploys on Amplify.
 
-If `*.amplifyapp.com` paths like `/admin/login/` return **404**, see **`docs/AMPLIFY-SPA-ROUTING.md`** (SPA rewrites in `amplify.yml`, optional console rules).
-
-If the user only changed frontend, Lambda upload is optional.
+If `*.amplifyapp.com` paths like `/admin/login/` return **404**, see **`docs/AMPLIFY-SPA-ROUTING.md`**.

@@ -12,5 +12,6 @@ When you finish a task that changes tracked source files:
 3. Use a concise commit message focused on **why** (1–2 sentences).
 4. **Do not** force-push, amend pushed commits, or skip hooks unless the user explicitly requests it.
 5. If the user said **only** to explain/review (no code changes), or the working tree has no intentional changes, skip commit/push.
+6. If the task changed **backend** API code, also **deploy Lambda** after push (see `deploy-pipeline` rule). Do not leave API changes unpushed or undeployed.
 
 After push, mention the commit hash briefly when relevant (e.g. Amplify/Lambda follow-up).
