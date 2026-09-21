@@ -68,41 +68,56 @@ export function isVerifiedPublicContact(row: AcqAdminProspect): boolean {
 }
 
 /** Matches backend ApproveBatchAsync prerequisites (UI-side). */
-export function isReadyForApproval(row: AcqAdminProspect): boolean {
-  const p = row.public;
-  if (p.previewPlaceholder) return false;
-  const outreach = (p.outreachStatus || '').toLowerCase();
-  if (outreach === 'approved' || (p.approvalStatus || '').toLowerCase() === 'approved') return false;
-  if (
-    ['rejected', 'suppressed', 'bounced', 'complained', 'unsubscribed', 'customer', 'sent', 'delivered', 'replied', 'needs_review'].includes(
-      outreach
-    )
-  ) {
-    return false;
-  }
-  if (!isVerifiedPublicContact(row)) return false;
-  if (!(p.subject || '').trim() || !(p.observation || '').trim()) return false;
-  if (!(row.body || '').trim()) return false;
-  const blob = `${p.subject || ''}\n${row.body || ''}`;
-  if (/\bI'm Max\b/i.test(blob) || /Founder,\s*YouTubeBooster/i.test(blob) || /\bI ran .+ through YouTubeBooster/i.test(blob)) {
-    return false;
-  }
-  const score = p.acquisitionScore ?? p.priorityScore ?? 0;
-  if (score < 70) return false;
-  if ((p.subscriberRange || '') !== '1k_100k') return false;
-  return true;
+export function isReadyForApproval(row: AcqAdminProspect, nowMs = Date.now()): boolean {
+  return approvalBlockReason(row, nowMs) === null && !isTerminalOutreach(row);
 }
 
-export function approvalBlockReason(row: AcqAdminProspect): string | null {
+function isTerminalOutreach(row: AcqAdminProspect): boolean {
+  const outreach = (row.public.outreachStatus || '').toLowerCase();
+  if (outreach === 'approved' || (row.public.approvalStatus || '').toLowerCase() === 'approved') return true;
+  return [
+    'rejected',
+    'suppressed',
+    'bounced',
+    'complained',
+    'unsubscribed',
+    'customer',
+    'sent',
+    'delivered',
+    'replied',
+    'needs_review'
+  ].includes(outreach);
+}
+
+export function approvalBlockReason(row: AcqAdminProspect, nowMs = Date.now()): string | null {
   const p = row.public;
+  if (p.previewPlaceholder) return 'Placeholder inspection — cannot approve.';
+  if (isTerminalOutreach(row) && (p.outreachStatus || '').toLowerCase() === 'needs_review') {
+    return 'Personalization is too weak — retry draft first.';
+  }
+  if (isTerminalOutreach(row) && (p.outreachStatus || '').toLowerCase() !== 'needs_review') {
+    // Already approved / sent / etc. — not an approval-queue candidate.
+    if ((p.outreachStatus || '').toLowerCase() === 'approved' || (p.approvalStatus || '').toLowerCase() === 'approved') {
+      return 'Already approved.';
+    }
+  }
   if (!isVerifiedPublicContact(row)) return 'Verified public email required.';
   if (!(p.subject || '').trim() || !(row.body || '').trim() || !(p.observation || '').trim()) {
     return 'Complete draft required.';
+  }
+  const blob = `${p.subject || ''}\n${row.body || ''}`;
+  if (/\bI'm Max\b/i.test(blob) || /Founder,\s*YouTubeBooster/i.test(blob) || /\bI ran .+ through YouTubeBooster/i.test(blob)) {
+    return 'Legacy personal template — regenerate the draft first.';
   }
   const score = p.acquisitionScore ?? p.priorityScore ?? 0;
   if (score < 70) return `Score ${score} is below 70 — cannot approve or send.`;
   if ((p.subscriberRange || '') !== '1k_100k') {
     return `Audience ${p.subscriberRange || 'unknown'} is outside the 1k–100k COOK-001 band.`;
+  }
+  if (!p.recentUploadAt) return 'Missing recent upload date — re-inspect the channel.';
+  const ageDays = (nowMs - new Date(p.recentUploadAt).getTime()) / (1000 * 60 * 60 * 24);
+  if (Number.isFinite(ageDays) && ageDays > 60) {
+    return `Last upload is ${Math.floor(ageDays)} days old (>60) — re-inspect or pick a more active creator.`;
   }
   return null;
 }
@@ -356,9 +371,9 @@ export function resolveAcqWorkflow(
     };
   }
 
-  if (!isReadyForApproval(row)) {
+  if (!isReadyForApproval(row, nowMs)) {
     const needsDraft = !(p.subject || '').trim() || !(row.body || '').trim() || !(p.observation || '').trim();
-    const block = approvalBlockReason(row);
+    const block = approvalBlockReason(row, nowMs);
     const notQualified = !!block && !needsDraft && isVerifiedPublicContact(row);
     return {
       ...base,
@@ -374,7 +389,7 @@ export function resolveAcqWorkflow(
           : 'Contact is verified; outreach draft still needs work.',
       currentStatusAnswer: needsDraft ? 'DRAFT INCOMPLETE' : notQualified ? 'NOT QUALIFIED' : 'QUALIFIED',
       nextStep: notQualified
-        ? 'Reject or re-inspect. Approve & Send is blocked until score ≥ 70 and audience is 1k–100k.'
+        ? block || 'Reject or re-inspect. Approve & Send is blocked until COOK-001 gates pass.'
         : 'Prepare or edit the draft, then approve when READY FOR APPROVAL.',
       whatICanDo: notQualified ? 'Reject, or re-inspect / find another prospect.' : 'Prepare Draft, Review, or Reject.',
       primaryAction: needsDraft ? 'prepare_draft' : 'review',
@@ -390,10 +405,10 @@ export function resolveAcqWorkflow(
     canApprove: true,
     whyHere: 'Verified contact + complete draft — waiting for your approval.',
     currentStatusAnswer: 'READY FOR APPROVAL',
-    nextStep: 'Review the message, then Approve & Queue. Nothing sends until you approve.',
-    whatICanDo: 'Approve & Queue, Edit Message, or Reject.',
+    nextStep: 'Use Approve & Send to send immediately, or Approve to queue for the weekday sender.',
+    whatICanDo: 'Approve & Send, Approve (queue only), Edit Message, or Reject.',
     primaryAction: 'approve',
-    primaryActionLabel: 'Approve'
+    primaryActionLabel: 'Approve & Send'
   };
 }
 

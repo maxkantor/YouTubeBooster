@@ -115,7 +115,7 @@ export function AcqActionPanel({
         )}
         {wf.canApprove && (
           <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={onApprove}>
-            Approve
+            Approve (queue only)
           </button>
         )}
         {wf.primaryAction === 'find_email' && (

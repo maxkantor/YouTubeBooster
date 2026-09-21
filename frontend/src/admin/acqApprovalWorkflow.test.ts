@@ -109,7 +109,7 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.canSelectForApproval, true);
     assert.equal(w.canApprove, true);
     assert.equal(w.primaryAction, 'approve');
-    assert.equal(w.primaryActionLabel, 'Approve');
+    assert.equal(w.primaryActionLabel, 'Approve & Send');
     assert.match(w.currentStatusAnswer, /READY FOR APPROVAL/i);
   });
 

@@ -707,6 +707,94 @@ export function AcquisitionCreatorsPage() {
                               Open
                             </button>
                           </div>
+                        ) : wf.status === 'READY_FOR_APPROVAL' ? (
+                          <div className="acq-row-actions">
+                            <button
+                              type="button"
+                              className="ops-btn ops-btn-primary ops-btn-sm"
+                              disabled={busy}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    `Approve and send now to ${row.publicBusinessEmail || '(no email)'}?`
+                                  )
+                                ) {
+                                  return;
+                                }
+                                void (async () => {
+                                  setBusy(true);
+                                  setError('');
+                                  try {
+                                    const res = await adminApi.acqApproveAndSend(p.prospectId);
+                                    if (res.ok) setNote(`Approved and sent. Message ID: ${res.messageId || 'ok'}`);
+                                    else setError(res.error || 'Approve & send failed');
+                                    await load();
+                                  } catch (e) {
+                                    setError(e instanceof Error ? e.message : 'Approve & send failed');
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                })();
+                              }}
+                            >
+                              Approve &amp; Send
+                            </button>
+                            <button
+                              type="button"
+                              className="ops-btn ops-btn-ghost ops-btn-sm"
+                              disabled={busy}
+                              onClick={() => {
+                                void (async () => {
+                                  setBusy(true);
+                                  setError('');
+                                  try {
+                                    const res = await adminApi.acqApprove([p.prospectId]);
+                                    setNote(`Approval ${res.approvalId} stored.`);
+                                    await load();
+                                  } catch (e) {
+                                    setError(e instanceof Error ? e.message : 'Approve failed');
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                })();
+                              }}
+                            >
+                              Approve
+                            </button>
+                          </div>
+                        ) : wf.status === 'APPROVED' && wf.canSendNow ? (
+                          <div className="acq-row-actions">
+                            <button
+                              type="button"
+                              className="ops-btn ops-btn-primary ops-btn-sm"
+                              disabled={busy}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    `Send now to ${row.publicBusinessEmail || '(no email)'}?`
+                                  )
+                                ) {
+                                  return;
+                                }
+                                void (async () => {
+                                  setBusy(true);
+                                  setError('');
+                                  try {
+                                    const res = await adminApi.acqSendNow(p.prospectId);
+                                    if (res.ok) setNote(`Sent. Message ID: ${res.messageId || 'ok'}`);
+                                    else setError(res.error || 'Send failed');
+                                    await load();
+                                  } catch (e) {
+                                    setError(e instanceof Error ? e.message : 'Send failed');
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                })();
+                              }}
+                            >
+                              Send Now
+                            </button>
+                          </div>
                         ) : (
                           <button
                             type="button"

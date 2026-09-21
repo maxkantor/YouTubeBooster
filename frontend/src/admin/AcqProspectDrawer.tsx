@@ -42,12 +42,25 @@ export function AcqProspectDrawer({
   const [verifyContactType, setVerifyContactType] = useState(
     row.public.contactType && row.public.contactType !== 'none' ? row.public.contactType : 'business'
   );
+  const [drawerError, setDrawerError] = useState('');
+  const [drawerNote, setDrawerNote] = useState('');
+
+  const showError = (msg: string) => {
+    setDrawerError(msg);
+    setError(msg);
+  };
+  const showNote = (msg: string) => {
+    setDrawerNote(msg);
+    setNote(msg);
+  };
 
   useEffect(() => {
     setEditSubject(row.public.subject || '');
     setEditBody(row.body || '');
     setVerifyEmail(row.publicBusinessEmail || '');
     setVerifySourceUrl(row.public.contactSourceUrl || row.public.officialWebsite || '');
+    setDrawerError('');
+    setDrawerNote('');
   }, [row.public.prospectId, row.public.subject, row.body, row.publicBusinessEmail]);
 
   return (
@@ -64,306 +77,317 @@ export function AcqProspectDrawer({
         </header>
 
         <div className="acq-drawer-decision">
-          <Badge kind={workflowBadgeKind(wf.status)}>{wf.label}</Badge>
+          <div className="acq-drawer-status-row">
+            <Badge kind={workflowBadgeKind(wf.status)}>{wf.label}</Badge>
+            {wf.nextStep ? <span className="acq-drawer-status-hint ops-muted">{wf.nextStep}</span> : null}
+          </div>
+
+          {drawerError ? <p className="admin-crm-error">{drawerError}</p> : null}
+          {drawerNote ? <p className="ops-muted">{drawerNote}</p> : null}
+
+          <div className="acq-drawer-actions-sticky">
+            <AcqActionPanel
+              row={row}
+              wf={wf}
+              busy={busy}
+              sendingEnabled={sendingEnabled}
+              editSubject={editSubject}
+              editBody={editBody}
+              onEditSubject={setEditSubject}
+              onEditBody={setEditBody}
+              onApprove={() => {
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    const res = await adminApi.acqApprove([row.public.prospectId]);
+                    showNote(`Approval ${res.approvalId} stored.`);
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Approve failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onApproveAndSend={() => {
+                if (!window.confirm(`Approve and send now to ${row.publicBusinessEmail || '(no email)'}?`)) return;
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    const res = await adminApi.acqApproveAndSend(row.public.prospectId);
+                    if (res.ok) showNote(`Approved and sent. Message ID: ${res.messageId || 'ok'}`);
+                    else showError(res.error || 'Approve & send failed');
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Approve & send failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onReject={() => {
+                const reason = window.prompt('Rejection reason (optional):', '');
+                if (reason === null) return;
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    await adminApi.acqReject(row.public.prospectId, reason || undefined);
+                    showNote('Rejected.');
+                    onClose();
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Reject failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onUnapprove={() => {
+                if (!window.confirm('Unapprove this creator? They will leave the send queue.')) return;
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    await adminApi.acqUnapprove(row.public.prospectId);
+                    showNote('Unapproved.');
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Unapprove failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onSendNow={() => {
+                if (wf.status === 'COOLDOWN') return;
+                const email = row.publicBusinessEmail || '(no email)';
+                const subject = editSubject || row.public.subject || '(no subject)';
+                if (!window.confirm(`Send now to ${email}?\n\nSubject: ${subject}`)) return;
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    const res = await adminApi.acqSendNow(row.public.prospectId);
+                    if (res.ok) showNote(`Sent. Message ID: ${res.messageId || 'ok'}`);
+                    else showError(res.error || 'Send failed');
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Send failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onSaveDraft={() => {
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    await adminApi.acqDraftEdit(row.public.prospectId, editSubject, editBody);
+                    showNote('Draft saved.');
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Save draft failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onFindEmail={() => {
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  showNote('Researching public contact…');
+                  try {
+                    const job = await adminApi.acqEmailDiscoveryStart({
+                      campaign: row.public.campaign || 'COOK-001',
+                      prospectIds: [row.public.prospectId],
+                      forceRetry: true,
+                      batchSize: 1
+                    });
+                    let current = job;
+                    while (current.status === 'running') {
+                      current = await adminApi.acqEmailDiscoveryTick(current.jobId);
+                    }
+                    const hit = current.results[0];
+                    setEmailManualMode(false);
+                    setEmailPanelOpen(true);
+                    await onReload();
+                    if (hit?.outcome === 'found') {
+                      showNote(`Email found (${(hit.confidence || 'high').toUpperCase()}): ${hit.email}`);
+                    } else if (hit?.outcome === 'review') {
+                      showNote(`Review candidate: ${hit.email}`);
+                    } else {
+                      showNote(hit?.detail || `Discovery: ${hit?.outcome || current.status}`);
+                    }
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Email research failed');
+                    showNote('');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onAcceptEmail={() => {
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    await adminApi.acqEmailDiscoveryAccept(row.public.prospectId, true);
+                    showNote('Email accepted.');
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Accept failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onRejectEmail={() => {
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    await adminApi.acqEmailDiscoveryAccept(row.public.prospectId, false, 'admin rejected candidate');
+                    showNote('Candidate email rejected.');
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Reject failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onAddEmail={() => {
+                setEmailManualMode(true);
+                setEmailPanelOpen(true);
+                setManualAttested(false);
+              }}
+              onPrepareDraft={() => {
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    let res = await adminApi.acqDraft(row.public.prospectId);
+                    if (res.draftPrepared === false) {
+                      showNote('Evidence weak — re-inspecting channel, then retrying draft…');
+                      await adminApi.acqInspect({
+                        channelInput: row.public.handle || row.public.channelUrl,
+                        primaryNiche: row.public.primaryNiche || 'cooking',
+                        campaign: row.public.campaign || 'COOK-001',
+                        language: row.public.language || undefined,
+                        officialWebsite: row.public.officialWebsite || undefined,
+                        publicBusinessEmail: row.publicBusinessEmail || undefined,
+                        contactSourceUrl: row.public.contactSourceUrl || undefined,
+                        contactType:
+                          row.public.contactType && row.public.contactType !== 'none'
+                            ? row.public.contactType
+                            : 'business'
+                      });
+                      res = await adminApi.acqDraft(row.public.prospectId);
+                    }
+                    if (res.draftPrepared === false) {
+                      showError(
+                        res.reason === 'weak_personalization'
+                          ? 'Still needs stronger channel evidence before a draft can be built. Reject or re-inspect later.'
+                          : res.reason === 'missing_observation'
+                            ? 'No channel finding yet — re-inspect the channel first.'
+                            : `Draft not ready (${res.reason || 'unknown'}).`
+                      );
+                      showNote('');
+                    } else {
+                      showNote('Draft prepared.');
+                    }
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Prepare draft failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onOverrideCooldown={() => {
+                if (
+                  !window.confirm(
+                    'Override cooldown? This allows contacting the creator before the cooldown ends. Use only when necessary.'
+                  )
+                ) {
+                  return;
+                }
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    await adminApi.acqOverrideCooldown(row.public.prospectId, 'admin override from drawer');
+                    showNote('Cooldown overridden.');
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Override failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+              onStatusChange={(status) => {
+                if (!window.confirm(`Change status to "${status}"?`)) return;
+                void (async () => {
+                  setBusy(true);
+                  showError('');
+                  try {
+                    await adminApi.acqSetStatus(row.public.prospectId, status);
+                    showNote(`Status set to ${status}.`);
+                    await onReload();
+                  } catch (e) {
+                    showError(e instanceof Error ? e.message : 'Status change failed');
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            />
+          </div>
 
           {(showEmailPreview || wf.status === 'READY_FOR_APPROVAL' || wf.status === 'APPROVED' || wf.status === 'NEEDS_REVIEW') && (
-            <div className="acq-email-preview">
-              <span className="ops-kpi-label">EMAIL PREVIEW (exact recipient view)</span>
-              <p>
-                <strong>From:</strong> {row.fromDisplay || 'YouTubeBooster AI'}
-              </p>
-              <p>
-                <strong>To:</strong> {row.publicBusinessEmail || '—'}
-              </p>
-              <p>
-                <strong>Subject:</strong> {editSubject || row.public.subject || '—'}
-              </p>
-              <p>
-                <strong>Primary finding:</strong> {row.public.observation || '—'}
-              </p>
-              <p>
-                <strong>Source data:</strong> {row.findingSource || '—'}
-              </p>
-              <p>
-                <strong>CTA destination:</strong>{' '}
-                {row.ctaDestination ? (
-                  <a href={row.ctaDestination} target="_blank" rel="noreferrer">
-                    {row.ctaDestination}
-                  </a>
-                ) : (
-                  '—'
-                )}
-              </p>
-              {row.htmlPreview ? (
-                <div className="acq-html-preview" dangerouslySetInnerHTML={{ __html: row.htmlPreview }} />
-              ) : null}
-              <span className="ops-kpi-label">PLAIN TEXT</span>
-              <pre className="acq-draft-body">{row.textPreview || editBody || row.body || '—'}</pre>
-            </div>
+            <details className="acq-email-preview-details">
+              <summary>EMAIL PREVIEW (click to expand)</summary>
+              <div className="acq-email-preview">
+                <span className="ops-kpi-label">EMAIL PREVIEW (exact recipient view)</span>
+                <p>
+                  <strong>From:</strong> {row.fromDisplay || 'YouTubeBooster AI'}
+                </p>
+                <p>
+                  <strong>To:</strong> {row.publicBusinessEmail || '—'}
+                </p>
+                <p>
+                  <strong>Subject:</strong> {editSubject || row.public.subject || '—'}
+                </p>
+                <p>
+                  <strong>Primary finding:</strong> {row.public.observation || '—'}
+                </p>
+                <p>
+                  <strong>Source data:</strong> {row.findingSource || '—'}
+                </p>
+                <p>
+                  <strong>CTA destination:</strong>{' '}
+                  {row.ctaDestination ? (
+                    <a href={row.ctaDestination} target="_blank" rel="noreferrer">
+                      {row.ctaDestination}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </p>
+                {row.htmlPreview ? (
+                  <div className="acq-html-preview" dangerouslySetInnerHTML={{ __html: row.htmlPreview }} />
+                ) : null}
+                <span className="ops-kpi-label">PLAIN TEXT</span>
+                <pre className="acq-draft-body">{row.textPreview || editBody || row.body || '—'}</pre>
+              </div>
+            </details>
           )}
-
-          <AcqActionPanel
-            row={row}
-            wf={wf}
-            busy={busy}
-            sendingEnabled={sendingEnabled}
-            editSubject={editSubject}
-            editBody={editBody}
-            onEditSubject={setEditSubject}
-            onEditBody={setEditBody}
-            onApprove={() => {
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  const res = await adminApi.acqApprove([row.public.prospectId]);
-                  setNote(`Approval ${res.approvalId} stored.`);
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Approve failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onApproveAndSend={() => {
-              if (!window.confirm(`Approve and send now to ${row.publicBusinessEmail || '(no email)'}?`)) return;
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  const res = await adminApi.acqApproveAndSend(row.public.prospectId);
-                  if (res.ok) setNote(`Approved and sent. Message ID: ${res.messageId || 'ok'}`);
-                  else setError(res.error || 'Approve & send failed');
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Approve & send failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onReject={() => {
-              const reason = window.prompt('Rejection reason (optional):', '');
-              if (reason === null) return;
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await adminApi.acqReject(row.public.prospectId, reason || undefined);
-                  setNote('Rejected.');
-                  onClose();
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Reject failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onUnapprove={() => {
-              if (!window.confirm('Unapprove this creator? They will leave the send queue.')) return;
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await adminApi.acqUnapprove(row.public.prospectId);
-                  setNote('Unapproved.');
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Unapprove failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onSendNow={() => {
-              if (wf.status === 'COOLDOWN') return;
-              const email = row.publicBusinessEmail || '(no email)';
-              const subject = editSubject || row.public.subject || '(no subject)';
-              if (!window.confirm(`Send now to ${email}?\n\nSubject: ${subject}`)) return;
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  const res = await adminApi.acqSendNow(row.public.prospectId);
-                  if (res.ok) setNote(`Sent. Message ID: ${res.messageId || 'ok'}`);
-                  else setError(res.error || 'Send failed');
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Send failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onSaveDraft={() => {
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await adminApi.acqDraftEdit(row.public.prospectId, editSubject, editBody);
-                  setNote('Draft saved.');
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Save draft failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onFindEmail={() => {
-              void (async () => {
-                setBusy(true);
-                setError('');
-                setNote('Researching public contact…');
-                try {
-                  const job = await adminApi.acqEmailDiscoveryStart({
-                    campaign: row.public.campaign || 'COOK-001',
-                    prospectIds: [row.public.prospectId],
-                    forceRetry: true,
-                    batchSize: 1
-                  });
-                  let current = job;
-                  while (current.status === 'running') {
-                    current = await adminApi.acqEmailDiscoveryTick(current.jobId);
-                  }
-                  const hit = current.results[0];
-                  setEmailManualMode(false);
-                  setEmailPanelOpen(true);
-                  await onReload();
-                  if (hit?.outcome === 'found') {
-                    setNote(`Email found (${(hit.confidence || 'high').toUpperCase()}): ${hit.email}`);
-                  } else if (hit?.outcome === 'review') {
-                    setNote(`Review candidate: ${hit.email}`);
-                  } else {
-                    setNote(hit?.detail || `Discovery: ${hit?.outcome || current.status}`);
-                  }
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Email research failed');
-                  setNote('');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onAcceptEmail={() => {
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await adminApi.acqEmailDiscoveryAccept(row.public.prospectId, true);
-                  setNote('Email accepted.');
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Accept failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onRejectEmail={() => {
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await adminApi.acqEmailDiscoveryAccept(row.public.prospectId, false, 'admin rejected candidate');
-                  setNote('Candidate email rejected.');
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Reject failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onAddEmail={() => {
-              setEmailManualMode(true);
-              setEmailPanelOpen(true);
-              setManualAttested(false);
-            }}
-            onPrepareDraft={() => {
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  let res = await adminApi.acqDraft(row.public.prospectId);
-                  if (res.draftPrepared === false) {
-                    setNote('Evidence weak — re-inspecting channel, then retrying draft…');
-                    await adminApi.acqInspect({
-                      channelInput: row.public.handle || row.public.channelUrl,
-                      primaryNiche: row.public.primaryNiche || 'cooking',
-                      campaign: row.public.campaign || 'COOK-001',
-                      language: row.public.language || undefined,
-                      officialWebsite: row.public.officialWebsite || undefined,
-                      publicBusinessEmail: row.publicBusinessEmail || undefined,
-                      contactSourceUrl: row.public.contactSourceUrl || undefined,
-                      contactType:
-                        row.public.contactType && row.public.contactType !== 'none'
-                          ? row.public.contactType
-                          : 'business'
-                    });
-                    res = await adminApi.acqDraft(row.public.prospectId);
-                  }
-                  if (res.draftPrepared === false) {
-                    setError(
-                      res.reason === 'weak_personalization'
-                        ? 'Still needs stronger channel evidence before a draft can be built. Reject or re-inspect later.'
-                        : res.reason === 'missing_observation'
-                          ? 'No channel finding yet — re-inspect the channel first.'
-                          : `Draft not ready (${res.reason || 'unknown'}).`
-                    );
-                    setNote('');
-                  } else {
-                    setNote('Draft prepared.');
-                  }
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Prepare draft failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onOverrideCooldown={() => {
-              if (
-                !window.confirm(
-                  'Override cooldown? This allows contacting the creator before the cooldown ends. Use only when necessary.'
-                )
-              ) {
-                return;
-              }
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await adminApi.acqOverrideCooldown(row.public.prospectId, 'admin override from drawer');
-                  setNote('Cooldown overridden.');
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Override failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-            onStatusChange={(status) => {
-              if (!window.confirm(`Change status to "${status}"?`)) return;
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await adminApi.acqSetStatus(row.public.prospectId, status);
-                  setNote(`Status set to ${status}.`);
-                  await onReload();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Status change failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-          />
 
           {emailPanelOpen && (
             <div className="acq-verify-panel">
@@ -409,15 +433,15 @@ export function AcqProspectDrawer({
                 onClick={() => {
                   void (async () => {
                     if (!verifyEmail.trim() || !verifySourceUrl.trim()) {
-                      setError('Public email and source URL are required.');
+                      showError('Public email and source URL are required.');
                       return;
                     }
                     if (emailManualMode && !manualAttested) {
-                      setError('Confirm this is a legitimate public/business contact before saving.');
+                      showError('Confirm this is a legitimate public/business contact before saving.');
                       return;
                     }
                     setBusy(true);
-                    setError('');
+                    showError('');
                     try {
                       if (emailManualMode) {
                         await adminApi.acqManualContact(row.public.prospectId, {
@@ -444,11 +468,11 @@ export function AcqProspectDrawer({
                       } catch {
                         /* optional */
                       }
-                      setNote(emailManualMode ? 'Manual contact saved.' : 'Contact saved.');
+                      showNote(emailManualMode ? 'Manual contact saved.' : 'Contact saved.');
                       setEmailPanelOpen(false);
                       await onReload();
                     } catch (e) {
-                      setError(e instanceof Error ? e.message : 'Contact save failed');
+                      showError(e instanceof Error ? e.message : 'Contact save failed');
                     } finally {
                       setBusy(false);
                     }

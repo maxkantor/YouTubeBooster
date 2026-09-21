@@ -1250,6 +1250,12 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
+.acq-drawer-status-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+.acq-drawer-status-hint { font-size:0.9em; }
+.acq-drawer-actions-sticky { position:sticky; top:0; z-index:4; padding:10px 0 12px; background: rgba(15,23,42,0.92); border-bottom:1px solid rgba(148,163,184,0.25); margin-bottom:12px; }
+.acq-email-preview-details { margin: 12px 0; }
+.acq-email-preview-details > summary { cursor:pointer; margin-bottom:8px; }
+
 .acq-decision-q {
   margin-top: 10px;
 }
