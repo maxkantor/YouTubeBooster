@@ -102,6 +102,24 @@ export function approvalBlockReason(row: AcqAdminProspect): string | null {
   return null;
 }
 
+/** Hard blocks for manual admin send (cooldown is NOT a hard block). */
+export function manualSendHardBlockReason(row: AcqAdminProspect): string | null {
+  const p = row.public;
+  const outreach = (p.outreachStatus || '').toLowerCase();
+  if (['unsubscribed', 'bounced', 'complained', 'suppressed', 'rejected'].includes(outreach)) {
+    return `Blocked: ${outreach}`;
+  }
+  const email = (row.publicBusinessEmail || '').trim();
+  if (!email || !email.includes('@')) return 'Missing or invalid email';
+  if (!hasUsablePublicEmail(row)) return 'Verified public email required';
+  const score = p.acquisitionScore ?? p.priorityScore ?? 0;
+  if (score < 70) return `Score ${score} is below 70`;
+  if ((p.subscriberRange || '') !== '1k_100k') {
+    return `Audience ${p.subscriberRange || 'unknown'} outside 1k–100k band`;
+  }
+  return null;
+}
+
 export function cooldownEndsAt(
   lastContactedAt: string | null | undefined,
   cooldownDays = DEFAULT_COOLDOWN_DAYS,
@@ -159,23 +177,6 @@ export function resolveAcqWorkflow(
     };
   }
 
-  if (ends) {
-    return {
-      ...base,
-      status: 'COOLDOWN',
-      label: 'COOLDOWN',
-      canOverrideCooldown: true,
-      canReject: true,
-      checkboxDisabledReason: `In cooldown until ${endsLabel}.`,
-      whyHere: 'This creator was already contacted recently.',
-      currentStatusAnswer: `COOLDOWN until ${endsLabel}`,
-      nextStep: `Automatic re-evaluation after ${endsLabel}. Follow-ups may send if already approved and due.`,
-      whatICanDo: 'View previous outreach, reject, or (rarely) override cooldown with confirmation.',
-      primaryAction: 'view',
-      primaryActionLabel: 'View'
-    };
-  }
-
   if (outreach === 'customer') {
     return {
       ...base,
@@ -221,25 +222,56 @@ export function resolveAcqWorkflow(
     };
   }
 
+  // Approved: manual SEND NOW is allowed even during automation cooldown (hard blocks still apply).
   if (outreach === 'approved' || (p.approvalStatus || '').toLowerCase() === 'approved') {
-    const readyNow = sendingEnabled;
+    const hard = manualSendHardBlockReason(row);
+    const canManual = sendingEnabled && !hard;
+    const inCooldown = !!ends;
     return {
       ...base,
-      status: 'APPROVED',
-      label: 'APPROVED',
-      canSendNow: readyNow,
+      status: inCooldown ? 'COOLDOWN' : 'APPROVED',
+      label: inCooldown ? 'COOLDOWN' : 'APPROVED',
+      canSendNow: canManual,
+      canApprove: false,
       canUnapprove: true,
+      canOverrideCooldown: inCooldown,
       checkboxDisabledReason: 'Already approved.',
-      whyHere: 'You approved this creator for initial outreach.',
-      currentStatusAnswer: readyNow ? 'APPROVED — ready to send' : 'APPROVED — sending disabled',
-      nextStep: readyNow
-        ? 'Send now, or wait for the weekday sender (daily limit + gates still apply).'
-        : 'Enable marketing sending, then Send Now or wait for the scheduler.',
-      whatICanDo: readyNow
-        ? 'Send Now, edit message (requires re-approve), unapprove, or reject.'
-        : 'Unapprove, edit message, or reject. Sending is currently disabled.',
-      primaryAction: readyNow ? 'send' : 'scheduled',
-      primaryActionLabel: readyNow ? 'Send' : 'Scheduled'
+      whyHere: inCooldown
+        ? 'Approved for outreach; automation cooldown is active (manual send still allowed).'
+        : 'You approved this creator for initial outreach.',
+      currentStatusAnswer: inCooldown
+        ? `APPROVED — automation cooldown until ${endsLabel}`
+        : canManual
+          ? 'APPROVED — ready to send'
+          : hard || 'APPROVED — sending disabled',
+      nextStep: inCooldown
+        ? `Automation waits until ${endsLabel}. You can Send Now anytime (manual override).`
+        : canManual
+          ? 'Send now, or wait for the weekday sender (automation still respects cooldown + daily limit).'
+          : hard || 'Enable marketing sending, then Send Now.',
+      whatICanDo: canManual
+        ? 'Send Now (bypasses automation cooldown), unapprove, or reject.'
+        : hard || 'Unapprove, edit message, or reject.',
+      primaryAction: canManual ? 'send' : 'view',
+      primaryActionLabel: canManual ? 'Send Now' : 'View'
+    };
+  }
+
+  // Non-approved rows still in cooldown (already contacted, not re-approved).
+  if (ends) {
+    return {
+      ...base,
+      status: 'COOLDOWN',
+      label: 'COOLDOWN',
+      canOverrideCooldown: true,
+      canReject: true,
+      checkboxDisabledReason: `In cooldown until ${endsLabel}.`,
+      whyHere: 'This creator was already contacted recently.',
+      currentStatusAnswer: `COOLDOWN until ${endsLabel}`,
+      nextStep: `Automatic re-evaluation after ${endsLabel}. Follow-ups may send if already approved and due.`,
+      whatICanDo: 'View previous outreach, reject, or (rarely) override cooldown with confirmation.',
+      primaryAction: 'view',
+      primaryActionLabel: 'View'
     };
   }
 

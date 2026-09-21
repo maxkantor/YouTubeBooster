@@ -136,8 +136,9 @@ export function AcquisitionOverviewPage() {
           <header className="ops-section-head">
             <h2>Send approved now</h2>
             <p className="ops-muted" style={{ margin: 0 }}>
-              {approvedEligible} approved creator{approvedEligible === 1 ? '' : 's'} eligible under daily gates (
-              {dailyRemaining} remaining today).
+              {approvedEligible} approved creator{approvedEligible === 1 ? '' : 's'} ready for manual send
+              {blockedCooldown > 0 ? ` (${blockedCooldown} in automation cooldown — manual still allowed)` : ''}.
+              Automation daily remaining: {dailyRemaining}.
             </p>
           </header>
           <Link className="ops-btn ops-btn-primary" to="/admin/acquisition/approvals?tab=ready">

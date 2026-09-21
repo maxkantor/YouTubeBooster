@@ -113,14 +113,13 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.status, 'APPROVED');
     assert.equal(w.canSelectForApproval, false);
     assert.equal(w.primaryAction, 'send');
-    assert.equal(w.primaryActionLabel, 'Send');
+    assert.equal(w.primaryActionLabel, 'Send Now');
     assert.match(w.currentStatusAnswer, /APPROVED/i);
   });
 
-  it('marks approved as scheduled when sending disabled', () => {
+  it('marks approved as blocked when sending disabled', () => {
     const w = resolveAcqWorkflow(row({ outreachStatus: 'approved', approvalStatus: 'approved' }), 14, Date.now(), false);
     assert.equal(w.status, 'APPROVED');
-    assert.equal(w.primaryAction, 'scheduled');
     assert.equal(w.canSendNow, false);
   });
 
@@ -131,14 +130,24 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.primaryActionLabel, 'Reply');
   });
 
-  it('marks cooldown with eligible end time', () => {
+  it('approved in automation cooldown can still manual Send Now', () => {
     const now = Date.parse('2026-09-17T17:00:00Z');
     const last = '2026-09-10T12:00:00Z';
     const ends = cooldownEndsAt(last, 14, now);
     assert.ok(ends);
-    const w = resolveAcqWorkflow(row({ lastContactedAt: last, outreachStatus: 'approved' }), 14, now);
+    const w = resolveAcqWorkflow(row({ lastContactedAt: last, outreachStatus: 'approved', approvalStatus: 'approved' }), 14, now);
     assert.equal(w.status, 'COOLDOWN');
     assert.ok(w.cooldownEndsAt);
+    assert.equal(w.canSendNow, true);
+    assert.equal(w.primaryAction, 'send');
+  });
+
+  it('non-approved cooldown cannot Send Now', () => {
+    const now = Date.parse('2026-09-17T17:00:00Z');
+    const last = '2026-09-10T12:00:00Z';
+    const w = resolveAcqWorkflow(row({ lastContactedAt: last, outreachStatus: 'draft_ready' }), 14, now);
+    assert.equal(w.status, 'COOLDOWN');
+    assert.equal(w.canSendNow, false);
   });
 
   it('selectEligibleIds only toggles ready rows', () => {

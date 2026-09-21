@@ -125,6 +125,16 @@ public sealed record AcqCampaignState(
 
 public sealed record AcqSendGateResult(bool Ok, string Reason);
 
+/// <summary>
+/// automated: full safety + cooldown + daily pacing (pacing enforced by caller).
+/// manual_admin: authenticated admin override — skips automation cooldown/pacing only.
+/// </summary>
+public enum AcqSendMode
+{
+    Automated = 0,
+    ManualAdmin = 1
+}
+
 public sealed record AcqSanitizedProspectDto(
     string ProspectId,
     string ChannelName,

@@ -112,8 +112,17 @@ export function AcquisitionApprovalsPage() {
 
   const approvedEligibleNow =
     summary?.approvedReadyToSend ??
-    summary?.pipeline?.approvedEligibleNow ??
+    summary?.pipeline?.approvedManualEligibleNow ??
     readyRows.filter((r) => resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).canSendNow).length;
+
+  const approvedAutomationEligible =
+    summary?.pipeline?.approvedEligibleNow ??
+    readyRows.filter((r) => {
+      const wf = resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled);
+      return wf.canSendNow && !wf.cooldownEndsAt;
+    }).length;
+
+  const approvedHardBlocked = readyRows.length - approvedEligibleNow;
 
   const drawer = drawerId ? allItems.find((x) => x.public.prospectId === drawerId) || null : null;
 
@@ -161,14 +170,18 @@ export function AcquisitionApprovalsPage() {
 
   const sendAllApproved = async () => {
     const n = approvedEligibleNow;
+    const cooldownBypass = readyRows.filter((r) => {
+      const wf = resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled);
+      return wf.canSendNow && !!wf.cooldownEndsAt;
+    }).length;
+    const hardBlocked = Math.max(0, readyRows.length - n);
     const msg = [
-      `Send all ${n} approved eligible creator(s)?`,
+      `Send ${n} approved email${n === 1 ? '' : 's'} now?`,
       '',
-      `Daily limit: ${dailyLimit}`,
-      `Sent today: ${sentToday}`,
-      `Remaining: ${dailyRemaining}`,
+      `${cooldownBypass} will bypass automation cooldown.`,
+      `${hardBlocked} are blocked by suppression/safety rules.`,
       '',
-      'Uses the same SES path as Send Now. Ineligible rows are skipped.'
+      '(Manual admin send does not use the automation daily pacing cap.)'
     ].join('\n');
     if (!window.confirm(msg)) return;
     setBusy(true);
@@ -223,16 +236,23 @@ export function AcquisitionApprovalsPage() {
           <header className="ops-section-head">
             <h2>Send queue</h2>
             <p className="ops-muted" style={{ margin: 0 }}>
-              Sent today {sentToday} / {dailyLimit} · Remaining {dailyRemaining} · Eligible now {approvedEligibleNow}
+              Sent today {sentToday} / {dailyLimit} (automation) · Manual-sendable {approvedEligibleNow}
+              {approvedHardBlocked > 0 ? ` · Hard-blocked ${approvedHardBlocked}` : ''}
+              {approvedAutomationEligible !== approvedEligibleNow
+                ? ` · Automation-eligible ${approvedAutomationEligible}`
+                : ''}
             </p>
           </header>
           <button
             type="button"
             className="ops-btn ops-btn-primary"
             disabled={busy || approvedEligibleNow <= 0}
+            title="Manual admin send. Bypasses automation cooldown; never bypasses unsubscribe, bounce, or suppression."
             onClick={() => void sendAllApproved()}
           >
-            SEND ALL APPROVED ({approvedEligibleNow})
+            {approvedHardBlocked > 0 && approvedEligibleNow > 0
+              ? `SEND ALL ELIGIBLE (${approvedEligibleNow})`
+              : `SEND ALL APPROVED (${approvedEligibleNow})`}
           </button>
         </section>
       )}
@@ -354,7 +374,7 @@ export function AcquisitionApprovalsPage() {
                               disabled={busy}
                               onClick={() => setDrawerId(p.prospectId)}
                             >
-                              Edit
+                              View
                             </button>
                             <button
                               type="button"
@@ -391,8 +411,14 @@ export function AcquisitionApprovalsPage() {
                               type="button"
                               className="ops-btn ops-btn-primary ops-btn-sm"
                               disabled={busy || !wf.canApprove}
+                              title="Approve and send immediately via SES (manual admin; bypasses automation cooldown)."
                               onClick={() => {
-                                if (!window.confirm(`Approve & send to ${row.publicBusinessEmail}?`)) return;
+                                if (
+                                  !window.confirm(
+                                    `Approve & send to ${row.publicBusinessEmail} now?\n\nThis sends immediately (manual admin). Automation cooldown does not block this.`
+                                  )
+                                )
+                                  return;
                                 void approveIds([p.prospectId], true);
                               }}
                             >
@@ -402,15 +428,33 @@ export function AcquisitionApprovalsPage() {
                         )}
                         {tab === 'ready' && (
                           <>
+                            <button
+                              type="button"
+                              className="ops-btn ops-btn-ghost ops-btn-sm"
+                              onClick={() => setDrawerId(p.prospectId)}
+                            >
+                              View
+                            </button>
+                            {wf.cooldownEndsAt && (
+                              <div className="acq-cooldown-hint" style={{ marginBottom: 6 }}>
+                                <div className="ops-muted">
+                                  Automation cooldown until: {formatDt(wf.cooldownEndsAt)}
+                                </div>
+                              </div>
+                            )}
                             {wf.canSendNow ? (
                               <button
                                 type="button"
                                 className="ops-btn ops-btn-primary ops-btn-sm"
                                 disabled={busy}
+                                title="Manual send overrides the automation cooldown."
                                 onClick={() => {
+                                  const cooldownNote = wf.cooldownEndsAt
+                                    ? '\n\nThis will bypass automation cooldown (manual admin send).'
+                                    : '';
                                   if (
                                     !window.confirm(
-                                      `Send now to ${row.publicBusinessEmail}?\n\nSubject: ${p.subject || '(none)'}`
+                                      `Send now to ${row.publicBusinessEmail}?${cooldownNote}\n\nSubject: ${p.subject || '(none)'}`
                                     )
                                   )
                                     return;
@@ -435,18 +479,9 @@ export function AcquisitionApprovalsPage() {
                               </button>
                             ) : (
                               <span className="ops-muted">
-                                {wf.status === 'COOLDOWN'
-                                  ? `Cooldown${wf.cooldownEndsAt ? ` → ${formatDt(wf.cooldownEndsAt)}` : ''}`
-                                  : 'Blocked by send gates'}
+                                {wf.currentStatusAnswer || 'Blocked by safety rules'}
                               </span>
                             )}
-                            <button
-                              type="button"
-                              className="ops-btn ops-btn-ghost ops-btn-sm"
-                              onClick={() => setDrawerId(p.prospectId)}
-                            >
-                              View
-                            </button>
                           </>
                         )}
                         {tab === 'sent' && (

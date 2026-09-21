@@ -254,6 +254,7 @@ public static class CreatorAcquisitionEndpoints
             var skipReasons = new Dictionary<string, int>(StringComparer.Ordinal);
             var sendEligible = 0;
             var approvedEligible = 0;
+            var approvedManualEligible = 0;
             var approvedBlockedCooldown = 0;
             var approvedBlockedEmail = 0;
             var approvedBlockedQualification = 0;
@@ -261,16 +262,24 @@ public static class CreatorAcquisitionEndpoints
             var approvedBlockedOther = 0;
             foreach (var p in cookRows)
             {
-                var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
-                    p, now, state, alreadyContacted: p.LastContactedAt is not null);
-                if (gate.Ok)
+                var autoGate = CreatorAcquisitionScoring.ExplainSendEligibility(
+                    p, now, state, alreadyContacted: p.LastContactedAt is not null, AcqSendMode.Automated);
+                var manualGate = CreatorAcquisitionScoring.ExplainSendEligibility(
+                    p, now, state, alreadyContacted: p.LastContactedAt is not null, AcqSendMode.ManualAdmin);
+                if (autoGate.Ok)
                 {
                     sendEligible++;
                     if (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
                         approvedEligible++;
-                    continue;
                 }
-                var code = OutreachPolicy.NormalizeSkipReason(gate.Reason);
+                if (manualGate.Ok
+                    && string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+                    approvedManualEligible++;
+
+                if (autoGate.Ok)
+                    continue;
+
+                var code = OutreachPolicy.NormalizeSkipReason(autoGate.Reason);
                 skipReasons[code] = skipReasons.GetValueOrDefault(code) + 1;
                 if (!string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -332,7 +341,8 @@ public static class CreatorAcquisitionEndpoints
 
             var needsApproval = cookRows.Count(CreatorAcquisitionScoring.IsReadyForApproval);
             var approvedWaiting = approved;
-            var approvedReadyToSend = approvedEligible;
+            // Admin Ready-to-Send button uses manual eligibility (cooldown may be bypassed).
+            var approvedReadyToSend = approvedManualEligible;
             var blockedCooldown = approvedBlockedCooldown;
             var followUpsDue = cookRows.Count(r => CreatorAcquisitionScoring.IsFollowUpDue(r, now));
             var repliesNeedingAction = cookRows.Count(r =>
@@ -415,6 +425,7 @@ public static class CreatorAcquisitionEndpoints
                     approved,
                     eligibleNow = sendEligible,
                     approvedEligibleNow = approvedEligible,
+                    approvedManualEligibleNow = approvedManualEligible,
                     blockedByCooldown = approvedBlockedCooldown,
                     blockedByEmailValidation = approvedBlockedEmail,
                     blockedByQualification = approvedBlockedQualification,

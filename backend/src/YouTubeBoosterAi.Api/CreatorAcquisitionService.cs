@@ -1222,29 +1222,48 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         if (string.IsNullOrWhiteSpace(hmac))
             return (false, "unsubscribe_signing_missing", null);
 
+        // Hard unsubscribe / bounce from outreach contact ledger (manual cannot bypass).
+        if (EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
+        {
+            var outreach = await _appDataStore.GetOutreachContactAsync(p.PublicBusinessEmail!, cancellationToken);
+            if (outreach is not null && string.Equals(outreach.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+                return (false, "unsubscribed", null);
+            if (outreach is not null && outreach.Status.Contains("bounce", StringComparison.OrdinalIgnoreCase))
+                return (false, "hard_bounce", null);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var cooldownDays = state.CooldownDays > 0 ? state.CooldownDays : OutreachPolicy.DefaultCooldownDays;
+        var inAutomationCooldown = OutreachPolicy.InCooldown(p.LastContactedAt, now, cooldownDays)
+            && !CreatorAcquisitionScoring.HasActiveCooldownOverride(p, now)
+            && !CreatorAcquisitionScoring.IsFollowUpDue(p, now);
+        DateTimeOffset? previousCooldownExpiration = null;
+        if (inAutomationCooldown && p.LastContactedAt is not null)
+            previousCooldownExpiration = p.LastContactedAt.Value.AddDays(cooldownDays);
+
         var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
-            p, DateTimeOffset.UtcNow, state, alreadyContacted: p.LastContactedAt is not null);
+            p, now, state, alreadyContacted: p.LastContactedAt is not null, AcqSendMode.ManualAdmin);
         if (!gate.Ok)
             return (false, gate.Reason, null);
 
-        var followUpDue = CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow);
+        var followUpDue = CreatorAcquisitionScoring.IsFollowUpDue(p, now);
         if (!followUpDue && !state.StandingCampaignApproval)
         {
             var approval = p.ApprovalId is null ? null : await _store.GetApprovalAsync(p.ApprovalId, cancellationToken);
-            if (approval is null || approval.ExpiresAt < DateTimeOffset.UtcNow)
+            if (approval is null || approval.ExpiresAt < now)
                 return (false, "approval_expired", null);
             if (!approval.ContentHashes.TryGetValue(p.ProspectId, out var approvedHash)
                 || !string.Equals(approvedHash, CreatorAcquisitionScoring.ContentHash(p), StringComparison.Ordinal))
                 return (false, "approval_invalidated", null);
         }
 
-        var today = CreatorAcquisitionScoring.EasternDate(DateTimeOffset.UtcNow).Date;
+        var today = CreatorAcquisitionScoring.EasternDate(now).Date;
         var runYmd = today.ToString("yyyy-MM-dd");
         var cohortRunId = $"{p.Campaign}-{runYmd}-manual";
         var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
         var idem = followUpDue
-            ? $"{p.ProspectId}:{cohortRunId}:fu{p.FollowUpStep}"
-            : $"{p.ProspectId}:{cohortRunId}";
+            ? $"{p.ProspectId}:{cohortRunId}:fu{p.FollowUpStep}:manual_admin"
+            : $"{p.ProspectId}:{cohortRunId}:manual_admin";
         if (!await _store.TryClaimIdempotencyAsync(idem, cancellationToken))
             return (false, "idempotency", null);
 
@@ -1307,7 +1326,27 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     : DateTimeOffset.UtcNow.AddDays(4),
                 UpdatedAt = DateTimeOffset.UtcNow
             }, cancellationToken);
-            await AuditAsync("acq_send_now", prospectId, adminEmail, "approved", "sent", null, cancellationToken);
+            await _appDataStore.TrackEventAsync("acq_manual_send", prospectId, new Dictionary<string, string?>
+            {
+                ["sendMode"] = "manual_admin",
+                ["admin"] = adminEmail,
+                ["creator"] = prospectId,
+                ["campaign"] = p.Campaign,
+                ["recipientDomain"] = p.PublicBusinessEmail!.Contains('@')
+                    ? p.PublicBusinessEmail[(p.PublicBusinessEmail.IndexOf('@') + 1)..]
+                    : null,
+                ["cooldownBypassed"] = inAutomationCooldown ? "true" : "false",
+                ["previousCooldownExpiration"] = previousCooldownExpiration?.ToString("O"),
+                ["messageId"] = sesRes.MessageId,
+                ["oldStatus"] = "approved",
+                ["newStatus"] = "sent",
+                ["at"] = DateTimeOffset.UtcNow.ToString("O"),
+                ["note"] = inAutomationCooldown
+                    ? "MANUAL SEND — Admin manually sent approved outreach. Automation cooldown overridden."
+                    : "MANUAL SEND — Admin manually sent approved outreach."
+            }, cancellationToken);
+            await AuditAsync("acq_send_now", prospectId, adminEmail, "approved", "sent",
+                inAutomationCooldown ? "manual_admin;cooldown_bypassed" : "manual_admin", cancellationToken);
             return (true, null, sesRes.MessageId);
         }
         catch (Exception ex)
@@ -1382,7 +1421,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 continue;
             }
             var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
-                p, now, state, alreadyContacted: p.LastContactedAt is not null);
+                p, now, state, alreadyContacted: p.LastContactedAt is not null, AcqSendMode.ManualAdmin);
             if (!gate.Ok)
             {
                 skipped++;

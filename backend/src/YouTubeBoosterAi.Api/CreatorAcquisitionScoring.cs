@@ -90,8 +90,12 @@ public static class CreatorAcquisitionScoring
         AcqProspectRecord p,
         DateTimeOffset nowUtc,
         AcqCampaignState state,
-        bool alreadyContacted)
+        bool alreadyContacted,
+        AcqSendMode mode = AcqSendMode.Automated)
     {
+        var manual = mode == AcqSendMode.ManualAdmin;
+
+        // Account / SES configuration (both modes)
         if (!state.MarketingSendingEnabled)
             return new AcqSendGateResult(false, "marketing_sending_disabled");
         if (state.ComplaintPause)
@@ -100,26 +104,36 @@ public static class CreatorAcquisitionScoring
             return new AcqSendGateResult(false, "postal_address_missing");
         if (string.IsNullOrWhiteSpace(state.FromEmail) || !EmailAddressHelpers.LooksLikeEmail(state.FromEmail))
             return new AcqSendGateResult(false, "from_email_unconfigured");
+
+        // Hard blocks (both modes)
         if (p.PreviewPlaceholder)
             return new AcqSendGateResult(false, "preview_placeholder");
-        if (p.PriorityScore < 70)
-            return new AcqSendGateResult(false, "score_below_70");
-        if (!string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
-            return new AcqSendGateResult(false, "inspection_incomplete");
         if (!IsVerifiedPublicEmail(p))
             return new AcqSendGateResult(false, "public_email_unverified");
         if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
             return new AcqSendGateResult(false, "suppressed");
         if (OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
             return new AcqSendGateResult(false, "invalid_or_spamtrap");
+
         var followUpDue = IsFollowUpDue(p, nowUtc);
         var cooldownDays = state.CooldownDays > 0 ? state.CooldownDays : OutreachPolicy.DefaultCooldownDays;
-        if (alreadyContacted && p.LastContactedAt is null)
-            return new AcqSendGateResult(false, "already_contacted");
-        if (!followUpDue
-            && !HasActiveCooldownOverride(p, nowUtc)
-            && OutreachPolicy.InCooldown(p.LastContactedAt, nowUtc, cooldownDays))
-            return new AcqSendGateResult(false, "cooldown");
+
+        // Automation-only: cooldown / already-contacted pacing
+        if (!manual)
+        {
+            if (alreadyContacted && p.LastContactedAt is null)
+                return new AcqSendGateResult(false, "already_contacted");
+            if (!followUpDue
+                && !HasActiveCooldownOverride(p, nowUtc)
+                && OutreachPolicy.InCooldown(p.LastContactedAt, nowUtc, cooldownDays))
+                return new AcqSendGateResult(false, "cooldown");
+        }
+
+        // Qualification / draft quality (both modes)
+        if (p.PriorityScore < 70)
+            return new AcqSendGateResult(false, "score_below_70");
+        if (!string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
+            return new AcqSendGateResult(false, "inspection_incomplete");
         if (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60)
             return new AcqSendGateResult(false, "stale_upload");
         var standing = state.StandingCampaignApproval;

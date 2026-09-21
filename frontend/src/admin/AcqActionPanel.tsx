@@ -80,16 +80,27 @@ export function AcqActionPanel({
               {row.lastContactedAt ? new Date(row.lastContactedAt).toLocaleString() : '—'}
             </p>
             <p>
-              <span className="ops-kpi-label">COOLDOWN ENDS</span> {new Date(wf.cooldownEndsAt).toLocaleString()}
+              <span className="ops-kpi-label">AUTOMATION COOLDOWN UNTIL</span>{' '}
+              {new Date(wf.cooldownEndsAt).toLocaleString()}
             </p>
-            <p className="ops-muted">Send is blocked until cooldown ends.</p>
+            <p className="ops-muted">
+              {wf.canSendNow
+                ? 'Automation waits for cooldown. Manual Send Now overrides it.'
+                : 'Send is blocked by a safety rule (not just cooldown).'}
+            </p>
           </div>
         )}
       </div>
 
       <div className="acq-drawer-primary-actions">
         {wf.canSendNow && (
-          <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={onSendNow}>
+          <button
+            type="button"
+            className="ops-btn ops-btn-primary"
+            disabled={busy}
+            title="Manual send overrides the automation cooldown."
+            onClick={onSendNow}
+          >
             Send Now
           </button>
         )}

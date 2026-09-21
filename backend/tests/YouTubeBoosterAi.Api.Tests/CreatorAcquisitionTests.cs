@@ -252,6 +252,51 @@ public class CreatorAcquisitionTests
     }
 
     [Fact]
+    public void Automated_CooldownBlocks_ManualAdmin_Allows()
+    {
+        var p = Prospect(lastContacted: DateTimeOffset.UtcNow.AddDays(-2));
+        var auto = CreatorAcquisitionScoring.ExplainSendEligibility(
+            p, DateTimeOffset.UtcNow, State(), true, AcqSendMode.Automated);
+        var manual = CreatorAcquisitionScoring.ExplainSendEligibility(
+            p, DateTimeOffset.UtcNow, State(), true, AcqSendMode.ManualAdmin);
+        Assert.False(auto.Ok);
+        Assert.Equal("cooldown", auto.Reason);
+        Assert.True(manual.Ok);
+    }
+
+    [Fact]
+    public void ManualAdmin_StillBlocks_UnsubscribedSuppressedAndBounce()
+    {
+        var unsub = Prospect() with { SuppressionStatus = "unsubscribed" };
+        var bounce = Prospect() with { SuppressionStatus = "bounced" };
+        var complaint = Prospect() with { SuppressionStatus = "complained" };
+        Assert.Equal("suppressed", CreatorAcquisitionScoring.ExplainSendEligibility(
+            unsub, DateTimeOffset.UtcNow, State(), false, AcqSendMode.ManualAdmin).Reason);
+        Assert.Equal("suppressed", CreatorAcquisitionScoring.ExplainSendEligibility(
+            bounce, DateTimeOffset.UtcNow, State(), false, AcqSendMode.ManualAdmin).Reason);
+        Assert.Equal("suppressed", CreatorAcquisitionScoring.ExplainSendEligibility(
+            complaint, DateTimeOffset.UtcNow, State(), false, AcqSendMode.ManualAdmin).Reason);
+    }
+
+    [Fact]
+    public void ManualAdmin_StillBlocks_InvalidEmail()
+    {
+        var p = Prospect(email: null) with { ContactVerifiedAt = null, ContactSourceUrl = null };
+        Assert.Equal("public_email_unverified", CreatorAcquisitionScoring.ExplainSendEligibility(
+            p, DateTimeOffset.UtcNow, State(), false, AcqSendMode.ManualAdmin).Reason);
+    }
+
+    [Fact]
+    public void Automated_StillRespectsCooldown_AfterManualModeExists()
+    {
+        var p = Prospect(lastContacted: DateTimeOffset.UtcNow.AddDays(-1));
+        Assert.Equal("cooldown", CreatorAcquisitionScoring.ExplainSendEligibility(
+            p, DateTimeOffset.UtcNow, State(), true, AcqSendMode.Automated).Reason);
+        Assert.True(CreatorAcquisitionScoring.ExplainSendEligibility(
+            p, DateTimeOffset.UtcNow, State(), true, AcqSendMode.ManualAdmin).Ok);
+    }
+
+    [Fact]
     public void Mime_IsUtf8AndHasUnsubscribeWithoutPiiTags()
     {
         var mime = CreatorAcquisitionMail.Build(
