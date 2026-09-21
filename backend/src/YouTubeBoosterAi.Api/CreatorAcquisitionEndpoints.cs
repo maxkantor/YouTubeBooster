@@ -449,7 +449,7 @@ public static class CreatorAcquisitionEndpoints
             var rows = await acq.Store.ListProspectsAsync(cancellationToken);
             var campaignKey = string.IsNullOrWhiteSpace(campaign) ? CreatorAcquisitionCampaigns.Cook001 : campaign.Trim();
             var state = await acq.LoadStateAsync(campaignKey, cancellationToken);
-            var site = acq.Site();
+            var site = acq.TrackedSite();
             IEnumerable<AcqProspectRecord> query = rows;
             if (!string.IsNullOrWhiteSpace(campaign))
                 query = query.Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
@@ -479,7 +479,7 @@ public static class CreatorAcquisitionEndpoints
             var row = await acq.Store.GetProspectAsync(id, cancellationToken);
             if (row is null) return Results.NotFound();
             var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
-            return Results.Ok(ToAdminDto(row, state, acq.Site()));
+            return Results.Ok(ToAdminDto(row, state, acq.TrackedSite()));
         });
 
         admin.MapPost("/inspect", async (AcqUpsertProspectRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
@@ -488,7 +488,7 @@ public static class CreatorAcquisitionEndpoints
                 return Results.BadRequest(new { error = "channelInput required" });
             var row = await acq.InspectAndUpsertAsync(request, cancellationToken);
             var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
-            return Results.Ok(ToAdminDto(row, state, acq.Site()));
+            return Results.Ok(ToAdminDto(row, state, acq.TrackedSite()));
         });
 
         admin.MapPost("/migrate-rescore", async (
@@ -512,13 +512,13 @@ public static class CreatorAcquisitionEndpoints
         admin.MapPost("/prospects/{id}/draft", async (string id, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var row = await acq.PrepareDraftAsync(id, cancellationToken);
-            return row is null ? Results.NotFound() : Results.Ok(ToAdminDto(row, await acq.LoadStateAsync(row.Campaign, cancellationToken), acq.Site()));
+            return row is null ? Results.NotFound() : Results.Ok(ToAdminDto(row, await acq.LoadStateAsync(row.Campaign, cancellationToken), acq.TrackedSite()));
         });
 
         admin.MapPost("/preview", async (AcqApproveBatchRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var state = await acq.LoadStateAsync(request.Campaign, cancellationToken);
-            var site = acq.Site();
+            var site = acq.TrackedSite();
             var items = new List<object>();
             foreach (var id in request.ProspectIds.Take(CreatorAcquisitionService.MaxBatchApprove))
             {
@@ -749,7 +749,7 @@ public static class CreatorAcquisitionEndpoints
         CancellationToken cancellationToken)
     {
         var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
-        return ToAdminDto(row, state, acq.Site());
+        return ToAdminDto(row, state, acq.TrackedSite());
     }
 
     private static AcqAdminProspectDto ToAdminDto(AcqProspectRecord row, AcqCampaignState state, string site)
@@ -848,5 +848,6 @@ public interface ICreatorAcquisitionService
     Task<AcqApproveAndSendResult> ApproveAndSendAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
     Task<AcqSendApprovedBatchResult> SendApprovedBatchAsync(string campaign, IReadOnlyList<string>? prospectIds, string adminEmail, CancellationToken cancellationToken);
     string Site();
+    string TrackedSite();
 }
 

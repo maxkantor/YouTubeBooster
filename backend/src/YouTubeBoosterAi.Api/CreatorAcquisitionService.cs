@@ -467,7 +467,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             return weak;
         }
 
-        var site = Site();
+        var site = TrackedSite();
         var tracked = $"{site}{p.TrackedPath}";
         var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
         var subjectVariant = CreatorAcquisitionCopy.SubjectVariantCode(variant);
@@ -704,7 +704,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
             if (followUpDue)
             {
-                var siteFu = Site();
+                var siteFu = TrackedSite();
                 var trackedFu = OutreachPolicy.BuildTrackedUrl(siteFu, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
                 var (fuSubject, fuBody) = CreatorAcquisitionCopy.BuildFollowUp(
                     p.FollowUpStep,
@@ -730,10 +730,10 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             }
 
             var unsub = UnsubscribeUrl(p.PublicBusinessEmail!, hmac);
-            var site = Site();
+            var site = TrackedSite();
             var tracked = OutreachPolicy.BuildTrackedUrl(site, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
             var prepared = p with { EmailVariant = variant, CohortRunId = cohortRunId, Subject = p.Subject, Body = p.Body };
-            var mime = CreatorAcquisitionMail.Build(prepared, state, site, unsub, tracked);
+            var mime = CreatorAcquisitionMail.Build(prepared, state, Site(), unsub, tracked);
             if (CreatorAcquisitionMail.TagsContainPii(mime.SesTags))
             {
                 Skip(p.ProspectId, "pii_in_tags");
@@ -957,8 +957,16 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     public string Site() =>
         (_configuration["App:PublicSiteUrl"] ?? _configuration["PUBLIC_SITE_URL"] ?? "https://youtubeboosterai.com").TrimEnd('/');
 
+    /// <summary>
+    /// Host for tracked acquisition click URLs. Must hit API Gateway (Amplify static hosting does not serve /api/*).
+    /// </summary>
+    public string TrackedSite() =>
+        (_configuration["App:PublicApiUrl"]
+         ?? _configuration["PUBLIC_API_URL"]
+         ?? "https://yri8sw6k1h.execute-api.us-east-1.amazonaws.com").TrimEnd('/');
+
     public string UnsubscribeUrl(string email, string hmac) =>
-        $"{Site()}/api/public/acq/unsubscribe?token={WebUtility.UrlEncode(OutreachUnsubscribeToken.Create(email, hmac))}";
+        $"{TrackedSite()}/api/public/acq/unsubscribe?token={WebUtility.UrlEncode(OutreachUnsubscribeToken.Create(email, hmac))}";
 
     private async Task<IReadOnlyList<(DateTimeOffset publishedAt, string title, string description)>> TryLoadVideosAsync(
         string handle,
@@ -1235,7 +1243,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
 
         if (followUpDue)
         {
-            var siteFu = Site();
+            var siteFu = TrackedSite();
             var trackedFu = OutreachPolicy.BuildTrackedUrl(siteFu, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
             var (fuSubject, fuBody) = CreatorAcquisitionCopy.BuildFollowUp(
                 p.FollowUpStep, p.ChannelName, p.ChannelName, p.Observation ?? "", trackedFu);
@@ -1243,9 +1251,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         }
 
         var unsub = UnsubscribeUrl(p.PublicBusinessEmail!, hmac);
-        var site = Site();
+        var site = TrackedSite();
         var tracked = OutreachPolicy.BuildTrackedUrl(site, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
-        var mime = CreatorAcquisitionMail.Build(p with { EmailVariant = variant, CohortRunId = cohortRunId }, state, site, unsub, tracked);
+        var mime = CreatorAcquisitionMail.Build(p with { EmailVariant = variant, CohortRunId = cohortRunId }, state, Site(), unsub, tracked);
         if (CreatorAcquisitionMail.TagsContainPii(mime.SesTags))
             return (false, "pii_in_tags", null);
 
