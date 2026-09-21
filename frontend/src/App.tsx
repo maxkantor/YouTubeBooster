@@ -38,7 +38,12 @@ import {
   ContactListPage,
   ActivityLogsPage,
   DiagnosticsPage,
-  CreatorAcquisitionPage
+  AcquisitionOverviewPage,
+  AcquisitionCreatorsPage,
+  AcquisitionApprovalsPage,
+  AcquisitionCampaignsPage,
+  AcquisitionInboxPage,
+  AcquisitionAnalyticsPage
 } from './admin/crmPages.lazy';
 
 /**
@@ -840,12 +845,12 @@ function AppInner() {
           <Route path="orders" element={<OrdersPage />} />
           <Route path="payments" element={<Navigate to="/admin/orders" replace />} />
           <Route path="audits" element={<AuditsPage />} />
-          <Route path="acquisition" element={<CreatorAcquisitionPage />} />
-          <Route path="acquisition/approvals" element={<CreatorAcquisitionPage />} />
-          <Route path="acquisition/creators" element={<CreatorAcquisitionPage />} />
-          <Route path="acquisition/analytics" element={<CreatorAcquisitionPage />} />
-          <Route path="acquisition/campaigns" element={<CreatorAcquisitionPage />} />
-          <Route path="acquisition/inbox" element={<CreatorAcquisitionPage />} />
+          <Route path="acquisition" element={<AcquisitionOverviewPage />} />
+          <Route path="acquisition/approvals" element={<AcquisitionApprovalsPage />} />
+          <Route path="acquisition/creators" element={<AcquisitionCreatorsPage />} />
+          <Route path="acquisition/analytics" element={<AcquisitionAnalyticsPage />} />
+          <Route path="acquisition/campaigns" element={<AcquisitionCampaignsPage />} />
+          <Route path="acquisition/inbox" element={<AcquisitionInboxPage />} />
           <Route path="marketing/creator-acquisition" element={<Navigate to="/admin/acquisition" replace />} />
         <Route path="contacts/:ticketId" element={<ContactTicketPage />} />
           <Route path="support/:ticketId" element={<ContactTicketPage />} />

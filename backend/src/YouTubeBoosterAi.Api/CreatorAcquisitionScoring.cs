@@ -354,4 +354,40 @@ public static class CreatorAcquisitionScoring
         var d = EasternDate(utc).DayOfWeek;
         return d is >= DayOfWeek.Monday and <= DayOfWeek.Friday;
     }
+
+    /// <summary>UI/admin queue: verified contact + complete draft, not yet approved or terminal.</summary>
+    public static bool IsReadyForApproval(AcqProspectRecord p)
+    {
+        if (p.PreviewPlaceholder) return false;
+        var outreach = (p.OutreachStatus ?? "").ToLowerInvariant();
+        if (outreach is "approved"
+            or "rejected" or "suppressed" or "bounced" or "complained" or "unsubscribed"
+            or "customer" or "sent" or "delivered" or "replied" or "interested"
+            or "clicked" or "audit_started" or "audit_completed" or "pricing_viewed" or "checkout_started")
+            return false;
+        if (!string.IsNullOrWhiteSpace(p.ApprovalId)
+            && string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!IsVerifiedPublicEmail(p)) return false;
+        if (string.IsNullOrWhiteSpace(p.Subject)
+            || string.IsNullOrWhiteSpace(p.Observation)
+            || string.IsNullOrWhiteSpace(p.Body))
+            return false;
+        return true;
+    }
+
+    /// <summary>Next weekday 8:00 America/New_York strictly after <paramref name="utcNow"/>.</summary>
+    public static DateTimeOffset NextWeekdaySendEastern(DateTimeOffset utcNow, int hourEt = 8)
+    {
+        var et = EasternDate(utcNow);
+        var d = et.Date;
+        for (var i = 0; i < 10; i++)
+        {
+            var day = d.AddDays(i);
+            if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
+            var sendAt = new DateTimeOffset(day.Year, day.Month, day.Day, hourEt, 0, 0, et.Offset);
+            if (sendAt > et) return sendAt;
+        }
+        return et.AddDays(1);
+    }
 }

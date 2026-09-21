@@ -643,5 +643,16 @@ export type AcqSummary = {
     accountsCreated: number;
   };
   pipeline?: Record<string, number>;
+  /** READY_FOR_APPROVAL count (verified + draft, not approved). */
+  needsApproval?: number;
+  /** Approved and currently send-eligible. */
+  approvedReadyToSend?: number;
+  /** Approved waiting (includes cooldown / blocked). */
+  approvedWaiting?: number;
+  blockedCooldown?: number;
+  followUpsDue?: number;
+  repliesNeedingAction?: number;
+  dailyRemaining?: number;
+  nextScheduledSendEt?: string | null;
 };
 

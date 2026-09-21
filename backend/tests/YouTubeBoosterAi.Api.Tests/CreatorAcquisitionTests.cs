@@ -91,6 +91,36 @@ public class CreatorAcquisitionTests
     }
 
     [Fact]
+    public void IsReadyForApproval_RequiresVerifiedDraftNotApproved()
+    {
+        var ready = Prospect(approvalId: null, score: 85) with
+        {
+            OutreachStatus = "draft_ready",
+            ContentHash = null,
+            ContactVerifiedAt = DateTimeOffset.UtcNow
+        };
+        Assert.True(CreatorAcquisitionScoring.IsReadyForApproval(ready));
+
+        var approved = ready with { OutreachStatus = "approved", ApprovalId = "APR-1" };
+        Assert.False(CreatorAcquisitionScoring.IsReadyForApproval(approved));
+
+        var noBody = ready with { Body = null };
+        Assert.False(CreatorAcquisitionScoring.IsReadyForApproval(noBody));
+    }
+
+    [Fact]
+    public void NextWeekdaySendEastern_IsAfterNowOnWeekdayMorning()
+    {
+        // Wednesday 10:00 ET → Thursday 08:00 ET
+        var wed = new DateTimeOffset(2026, 9, 16, 14, 0, 0, TimeSpan.Zero); // ~10am ET
+        var next = CreatorAcquisitionScoring.NextWeekdaySendEastern(wed);
+        Assert.True(next > CreatorAcquisitionScoring.EasternDate(wed));
+        Assert.Equal(8, next.Hour);
+        Assert.NotEqual(DayOfWeek.Saturday, next.DayOfWeek);
+        Assert.NotEqual(DayOfWeek.Sunday, next.DayOfWeek);
+    }
+
+    [Fact]
     public void RecentActivity_RequiresUploadWithin60DaysForEligibility()
     {
         var fresh = Prospect(recent: DateTimeOffset.UtcNow.AddDays(-10));

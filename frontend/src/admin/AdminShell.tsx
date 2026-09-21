@@ -3,14 +3,25 @@ import { NavLink } from 'react-router-dom';
 import { adminApi } from '../lib/api';
 import { useAdminCrm } from './useAdminCrm';
 
-const NAV: { to: string; end?: boolean; label: string; icon: string; acq?: boolean }[] = [
-  { to: '', end: true, label: 'Dashboard', icon: '▣' },
-  { to: 'acquisition', label: 'Acquisition', icon: '✦', acq: true },
+type NavItem = {
+  to: string;
+  end?: boolean;
+  label: string;
+  icon: string;
+  badge?: 'approvals' | 'inbox' | 'acq-parent';
+};
+
+const TOP_NAV: NavItem[] = [{ to: '', end: true, label: 'Dashboard', icon: '▣' }];
+
+const ACQ_CHILDREN: NavItem[] = [
   { to: 'acquisition/creators', label: 'Creators', icon: '◎' },
-  { to: 'acquisition/approvals', label: 'Approvals', icon: '☑' },
+  { to: 'acquisition/approvals', label: 'Approvals', icon: '☑', badge: 'approvals' },
   { to: 'acquisition/campaigns', label: 'Campaigns', icon: '◈' },
-  { to: 'acquisition/inbox', label: 'Inbox', icon: '✉' },
-  { to: 'acquisition/analytics', label: 'Analytics', icon: '▤' },
+  { to: 'acquisition/inbox', label: 'Inbox', icon: '✉', badge: 'inbox' },
+  { to: 'acquisition/analytics', label: 'Analytics', icon: '▤' }
+];
+
+const BOTTOM_NAV: NavItem[] = [
   { to: 'users', label: 'Users', icon: '◎' },
   { to: 'orders', label: 'Orders', icon: '◈' },
   { to: 'audits', label: 'Audits', icon: '◉' },
@@ -18,6 +29,36 @@ const NAV: { to: string; end?: boolean; label: string; icon: string; acq?: boole
   { to: 'activity', label: 'Activity logs', icon: '▤' },
   { to: 'diagnostics', label: 'Diagnostics', icon: '⚙' }
 ];
+
+function NavRow({
+  item,
+  badgeCount,
+  nested
+}: {
+  item: NavItem;
+  badgeCount?: number | null;
+  nested?: boolean;
+}) {
+  return (
+    <NavLink
+      to={item.to ? `/admin/${item.to}` : '/admin'}
+      end={!!item.end}
+      className={({ isActive }) =>
+        [isActive ? 'active' : '', nested ? 'admin-crm-nav-nested' : ''].filter(Boolean).join(' ')
+      }
+    >
+      <span className="admin-crm-nav-icon" aria-hidden>
+        {item.icon}
+      </span>
+      <span className="admin-crm-nav-label">{item.label}</span>
+      {badgeCount != null && badgeCount > 0 && (
+        <span className="admin-crm-nav-badge" title="Attention required">
+          {badgeCount}
+        </span>
+      )}
+    </NavLink>
+  );
+}
 
 export function AdminShell({
   title,
@@ -29,7 +70,9 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   const { adminSession, onSignOut } = useAdminCrm();
-  const [acqAttention, setAcqAttention] = useState<number | null>(null);
+  const [needsApproval, setNeedsApproval] = useState<number | null>(null);
+  const [inboxReplies, setInboxReplies] = useState<number | null>(null);
+  const [acqSystemBadge, setAcqSystemBadge] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,14 +80,23 @@ export function AdminShell({
       .acqSummary()
       .then((s) => {
         if (cancelled) return;
-        const queue = s.views?.draft_ready ?? s.drafts ?? 0;
-        const ready = (s.sendEligible ?? 0) + (s.pipeline?.approvedEligibleNow ?? 0);
-        const blocked = Boolean(s.outreachBlocked);
-        if (blocked || queue > 0 || ready > 0) setAcqAttention(queue > 0 ? queue : ready || s.primaryBlocker?.count || 1);
-        else setAcqAttention(null);
+        const needs = s.needsApproval ?? 0;
+        const replies = s.repliesNeedingAction ?? 0;
+        setNeedsApproval(needs > 0 ? needs : null);
+        setInboxReplies(replies > 0 ? replies : null);
+        const systemProblem =
+          Boolean(s.outreachBlocked) ||
+          s.sesConfigured === false ||
+          Boolean(s.complaintPause) ||
+          s.fromEmailConfigured === false;
+        setAcqSystemBadge(systemProblem ? 1 : null);
       })
       .catch(() => {
-        if (!cancelled) setAcqAttention(null);
+        if (!cancelled) {
+          setNeedsApproval(null);
+          setInboxReplies(null);
+          setAcqSystemBadge(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -56,23 +108,31 @@ export function AdminShell({
       <aside className="admin-crm-sidebar">
         <div className="admin-crm-brand">YouTubeBooster AI · Ops</div>
         <nav className="admin-crm-nav">
-          {NAV.map(({ to, label, end, icon, acq }) => (
-            <NavLink
-              key={to || 'home'}
-              to={to ? `/admin/${to}` : '/admin'}
-              end={!!end}
-              className={({ isActive }) => (isActive ? 'active' : '')}
-            >
-              <span className="admin-crm-nav-icon" aria-hidden>
-                {icon}
-              </span>
-              <span className="admin-crm-nav-label">{label}</span>
-              {acq && acqAttention != null && acqAttention > 0 && (
-                <span className="admin-crm-nav-badge" title="Attention required">
-                  ⚠ {acqAttention}
-                </span>
-              )}
-            </NavLink>
+          {TOP_NAV.map((item) => (
+            <NavRow key={item.to || 'home'} item={item} />
+          ))}
+
+          <div className="admin-crm-nav-section">
+            <NavRow
+              item={{ to: 'acquisition', end: true, label: 'Acquisition', icon: '✦', badge: 'acq-parent' }}
+              badgeCount={acqSystemBadge}
+            />
+            <div className="admin-crm-nav-children">
+              {ACQ_CHILDREN.map((item) => (
+                <NavRow
+                  key={item.to}
+                  item={item}
+                  nested
+                  badgeCount={
+                    item.badge === 'approvals' ? needsApproval : item.badge === 'inbox' ? inboxReplies : null
+                  }
+                />
+              ))}
+            </div>
+          </div>
+
+          {BOTTOM_NAV.map((item) => (
+            <NavRow key={item.to} item={item} />
           ))}
         </nav>
       </aside>

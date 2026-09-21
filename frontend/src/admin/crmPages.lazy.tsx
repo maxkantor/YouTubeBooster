@@ -14,4 +14,24 @@ export const ContactTicketPage = lazy(() => m().then((x) => ({ default: x.Contac
 export const ActivityLogsPage = lazy(() => m().then((x) => ({ default: x.ActivityLogsPage })));
 export const DiagnosticsPage = lazy(() => m().then((x) => ({ default: x.DiagnosticsPage })));
 export const SystemLogsPage = lazy(() => m().then((x) => ({ default: x.SystemLogsPage })));
-export const CreatorAcquisitionPage = lazy(() => import('./CreatorAcquisitionPage').then((x) => ({ default: x.CreatorAcquisitionPage })));
+export const CreatorAcquisitionPage = lazy(() =>
+  import('./AcquisitionOverviewPage').then((x) => ({ default: x.AcquisitionOverviewPage }))
+);
+export const AcquisitionOverviewPage = lazy(() =>
+  import('./AcquisitionOverviewPage').then((x) => ({ default: x.AcquisitionOverviewPage }))
+);
+export const AcquisitionCreatorsPage = lazy(() =>
+  import('./AcquisitionCreatorsPage').then((x) => ({ default: x.AcquisitionCreatorsPage }))
+);
+export const AcquisitionApprovalsPage = lazy(() =>
+  import('./AcquisitionApprovalsPage').then((x) => ({ default: x.AcquisitionApprovalsPage }))
+);
+export const AcquisitionCampaignsPage = lazy(() =>
+  import('./AcquisitionCampaignsPage').then((x) => ({ default: x.AcquisitionCampaignsPage }))
+);
+export const AcquisitionInboxPage = lazy(() =>
+  import('./AcquisitionInboxPage').then((x) => ({ default: x.AcquisitionInboxPage }))
+);
+export const AcquisitionAnalyticsPage = lazy(() =>
+  import('./AcquisitionAnalyticsPage').then((x) => ({ default: x.AcquisitionAnalyticsPage }))
+);

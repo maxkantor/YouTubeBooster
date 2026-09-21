@@ -132,7 +132,7 @@ export function AdminDashboardPage() {
           explain: acq.primaryBlocker
             ? `Dominant reason: ${acq.primaryBlocker.code} — ${acq.primaryBlocker.count}`
             : undefined,
-          cta: { label: 'Open Creator Acquisition', to: '/admin/marketing/creator-acquisition' },
+          cta: { label: 'Open Creator Acquisition', to: '/admin/acquisition' },
           severity: 'bad'
         });
       }
@@ -357,7 +357,7 @@ export function AdminDashboardPage() {
                       Dominant reason: <strong>{acq.primaryBlocker.code}</strong> — {acq.primaryBlocker.count}
                     </p>
                   )}
-                  <Link className="ops-btn ops-btn-primary" to="/admin/marketing/creator-acquisition">
+                  <Link className="ops-btn ops-btn-primary" to="/admin/acquisition">
                     Manage outreach
                   </Link>
                 </>

@@ -187,6 +187,33 @@ public sealed record AcqApproveBatchRequest(
     string AudienceQueryVersion
 );
 
+public sealed record AcqSendApprovedRequest(
+    string? Campaign = null,
+    IReadOnlyList<string>? ProspectIds = null
+);
+
+public sealed record AcqApproveAndSendResult(
+    bool Ok,
+    bool Approved,
+    bool Sent,
+    string? Error,
+    string? MessageId,
+    AcqProspectRecord? Prospect
+);
+
+public sealed record AcqSendApprovedItemResult(
+    string ProspectId,
+    bool Sent,
+    string? Error,
+    string? MessageId
+);
+
+public sealed record AcqSendApprovedBatchResult(
+    int Sent,
+    int Skipped,
+    IReadOnlyList<AcqSendApprovedItemResult> Results
+);
+
 public sealed record AcqWeekdaySendResult(
     bool MarketingSendingEnabled,
     int Attempted,

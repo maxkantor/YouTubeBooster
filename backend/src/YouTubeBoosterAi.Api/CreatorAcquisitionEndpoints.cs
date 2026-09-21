@@ -330,6 +330,17 @@ public static class CreatorAcquisitionEndpoints
                 && !string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
                 && r.LastContactedAt is null);
 
+            var needsApproval = cookRows.Count(CreatorAcquisitionScoring.IsReadyForApproval);
+            var approvedWaiting = approved;
+            var approvedReadyToSend = approvedEligible;
+            var blockedCooldown = approvedBlockedCooldown;
+            var followUpsDue = cookRows.Count(r => CreatorAcquisitionScoring.IsFollowUpDue(r, now));
+            var repliesNeedingAction = cookRows.Count(r =>
+                string.Equals(r.OutreachStatus, "replied", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(r.OutreachStatus, "interested", StringComparison.OrdinalIgnoreCase));
+            var dailyRemaining = Math.Max(0, state.DailyLimit - sentToday);
+            var nextScheduledSendEt = CreatorAcquisitionScoring.NextWeekdaySendEastern(now).ToString("o");
+
             return Results.Ok(new
             {
                 verifiedCustomers = converted,
@@ -410,9 +421,17 @@ public static class CreatorAcquisitionEndpoints
                     blockedBySuppression = approvedBlockedSuppression,
                     blockedByOther = approvedBlockedOther,
                     dailyLimit = state.DailyLimit,
-                    dailyRemaining = Math.Max(0, state.DailyLimit - sentToday),
-                    expectedToAttempt = Math.Min(sendEligible, Math.Max(0, state.DailyLimit - sentToday))
+                    dailyRemaining,
+                    expectedToAttempt = Math.Min(sendEligible, dailyRemaining)
                 },
+                needsApproval,
+                approvedReadyToSend,
+                approvedWaiting,
+                blockedCooldown,
+                followUpsDue,
+                repliesNeedingAction,
+                dailyRemaining,
+                nextScheduledSendEt,
                 lastRun,
                 cohortRunId
             });
@@ -627,6 +646,53 @@ public static class CreatorAcquisitionEndpoints
             return Results.Ok(new { ok = true, messageId, prospect = row is null ? null : ToAdminDto(row) });
         });
 
+        admin.MapPost("/prospects/{id}/approve-and-send", async (
+            string id,
+            HttpContext http,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var result = await acq.ApproveAndSendAsync(id, admin, cancellationToken);
+            if (!result.Ok)
+                return Results.BadRequest(new
+                {
+                    error = result.Error,
+                    approved = result.Approved,
+                    sent = result.Sent
+                });
+            return Results.Ok(new
+            {
+                ok = result.Ok,
+                approved = result.Approved,
+                sent = result.Sent,
+                messageId = result.MessageId,
+                prospect = result.Prospect is null ? null : ToAdminDto(result.Prospect)
+            });
+        });
+
+        admin.MapPost("/send-approved", async (
+            HttpContext http,
+            AcqSendApprovedRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var campaign = string.IsNullOrWhiteSpace(body?.Campaign)
+                ? CreatorAcquisitionCampaigns.Cook001
+                : body!.Campaign!.Trim();
+            var result = await acq.SendApprovedBatchAsync(campaign, body?.ProspectIds, admin, cancellationToken);
+            return Results.Ok(result);
+        });
+
+        admin.MapPost("/run-send", async (
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await acq.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
+            return Results.Ok(result);
+        });
+
         admin.MapPost("/test-send", async (
             [FromBody] AcqTestSendRequest request,
             ICreatorAcquisitionService acq,
@@ -682,6 +748,8 @@ public interface ICreatorAcquisitionService
     Task<(AcqProspectRecord? Prospect, string? Error)> SetManualContactAsync(string prospectId, string email, string sourceUrl, bool attested, string adminEmail, string? contactName, string? notes, CancellationToken cancellationToken);
     Task<(AcqProspectRecord? Prospect, string? Error)> SetStatusAsync(string prospectId, string newStatus, string adminEmail, string? reason, CancellationToken cancellationToken);
     Task<(bool Ok, string? Error, string? MessageId)> SendNowAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
+    Task<AcqApproveAndSendResult> ApproveAndSendAsync(string prospectId, string adminEmail, CancellationToken cancellationToken);
+    Task<AcqSendApprovedBatchResult> SendApprovedBatchAsync(string campaign, IReadOnlyList<string>? prospectIds, string adminEmail, CancellationToken cancellationToken);
     string Site();
 }
 

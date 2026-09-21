@@ -603,5 +603,66 @@ export const adminApi = {
   },
   async acqSendNow(id: string): Promise<{ ok: boolean; messageId?: string; prospect?: AcqAdminProspect; error?: string }> {
     return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/send-now`, { method: 'POST' });
+  },
+  async acqApproveAndSend(
+    id: string
+  ): Promise<{
+    ok: boolean;
+    approved?: boolean;
+    sent?: boolean;
+    messageId?: string;
+    prospect?: AcqAdminProspect;
+    error?: string;
+  }> {
+    return fetchJson(`/api/admin/crm/acquisition/prospects/${encodeURIComponent(id)}/approve-and-send`, {
+      method: 'POST'
+    });
+  },
+  async acqSendApproved(
+    body: { campaign?: string; prospectIds?: string[] } = {}
+  ): Promise<{
+    sent: number;
+    skipped: number;
+    results: { prospectId: string; sent: boolean; error?: string | null; messageId?: string | null }[];
+  }> {
+    return fetchJson('/api/admin/crm/acquisition/send-approved', {
+      method: 'POST',
+      body: JSON.stringify({
+        campaign: body.campaign || 'COOK-001',
+        prospectIds: body.prospectIds
+      })
+    });
+  },
+  async acqRunSend(): Promise<{
+    marketingSendingEnabled?: boolean;
+    attempted?: number;
+    sent?: number;
+    skipped?: number;
+    reasons?: string[];
+    dailyLimit?: number;
+    cohortRunId?: string;
+    evaluated?: number;
+    sesAttempted?: number;
+  }> {
+    return fetchJson('/api/admin/crm/acquisition/run-send', { method: 'POST' });
+  },
+  async acqCampaignFlags(body: {
+    campaign?: string;
+    sendingEnabled?: boolean;
+    complaintPause?: boolean;
+  }): Promise<{
+    campaign: string;
+    campaignFlagSendingEnabled: boolean;
+    complaintPause: boolean;
+    marketingSendingEnabled: boolean;
+  }> {
+    return fetchJson('/api/admin/crm/acquisition/campaign-flags', {
+      method: 'POST',
+      body: JSON.stringify({
+        campaign: body.campaign || 'COOK-001',
+        sendingEnabled: body.sendingEnabled,
+        complaintPause: body.complaintPause
+      })
+    });
   }
 };

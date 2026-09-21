@@ -1174,6 +1174,94 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         }
     }
 
+    public async Task<AcqApproveAndSendResult> ApproveAndSendAsync(
+        string prospectId,
+        string adminEmail,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (existing is null)
+            return new AcqApproveAndSendResult(false, false, false, "not_found", null, null);
+
+        var alreadyApproved = string.Equals(existing.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(existing.ApprovalId);
+        if (!alreadyApproved)
+        {
+            var (approval, error) = await ApproveBatchAsync(
+                new AcqApproveBatchRequest(
+                    existing.Campaign,
+                    [prospectId],
+                    1,
+                    "v1"),
+                adminEmail,
+                cancellationToken);
+            if (error is not null || approval is null)
+                return new AcqApproveAndSendResult(false, false, false, error ?? "approve_failed", null, existing);
+        }
+
+        var (ok, sendError, messageId) = await SendNowAsync(prospectId, adminEmail, cancellationToken);
+        var row = await _store.GetProspectAsync(prospectId, cancellationToken);
+        if (!ok)
+            return new AcqApproveAndSendResult(false, true, false, sendError, null, row);
+        return new AcqApproveAndSendResult(true, true, true, null, messageId, row);
+    }
+
+    public async Task<AcqSendApprovedBatchResult> SendApprovedBatchAsync(
+        string campaign,
+        IReadOnlyList<string>? prospectIds,
+        string adminEmail,
+        CancellationToken cancellationToken)
+    {
+        var state = await LoadStateAsync(campaign, cancellationToken);
+        var all = await _store.ListProspectsAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        IEnumerable<AcqProspectRecord> candidates;
+        if (prospectIds is { Count: > 0 })
+        {
+            var idSet = prospectIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            candidates = all.Where(p => idSet.Contains(p.ProspectId));
+        }
+        else
+        {
+            candidates = all.Where(p =>
+                string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase));
+        }
+
+        var results = new List<AcqSendApprovedItemResult>();
+        var sent = 0;
+        var skipped = 0;
+        foreach (var p in candidates)
+        {
+            if (!string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+            {
+                skipped++;
+                results.Add(new AcqSendApprovedItemResult(p.ProspectId, false, "not_approved", null));
+                continue;
+            }
+            var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
+                p, now, state, alreadyContacted: p.LastContactedAt is not null);
+            if (!gate.Ok)
+            {
+                skipped++;
+                results.Add(new AcqSendApprovedItemResult(p.ProspectId, false, gate.Reason, null));
+                continue;
+            }
+            var (ok, error, messageId) = await SendNowAsync(p.ProspectId, adminEmail, cancellationToken);
+            if (ok)
+            {
+                sent++;
+                results.Add(new AcqSendApprovedItemResult(p.ProspectId, true, null, messageId));
+            }
+            else
+            {
+                skipped++;
+                results.Add(new AcqSendApprovedItemResult(p.ProspectId, false, error, null));
+            }
+        }
+        return new AcqSendApprovedBatchResult(sent, skipped, results);
+    }
+
     private async Task AuditAsync(
         string eventName,
         string prospectId,
