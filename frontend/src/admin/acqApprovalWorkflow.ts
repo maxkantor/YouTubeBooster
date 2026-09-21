@@ -416,3 +416,35 @@ export function selectAllEligible(rows: AcqAdminProspect[], max = 25): string[] 
     .slice(0, max)
     .map((r) => r.public.prospectId);
 }
+
+/** Toggle selection for Ready-to-Send (manual-sendable) rows. */
+export function selectSendableIds(
+  rows: AcqAdminProspect[],
+  currentlySelected: string[],
+  id: string,
+  cooldownDays = DEFAULT_COOLDOWN_DAYS,
+  nowMs = Date.now(),
+  sendingEnabled = true,
+  max = 50
+): string[] {
+  const row = rows.find((r) => r.public.prospectId === id);
+  if (!row || !resolveAcqWorkflow(row, cooldownDays, nowMs, sendingEnabled).canSendNow) {
+    return currentlySelected;
+  }
+  if (currentlySelected.includes(id)) return currentlySelected.filter((x) => x !== id);
+  if (currentlySelected.length >= max) return currentlySelected;
+  return [...currentlySelected, id];
+}
+
+export function selectAllSendable(
+  rows: AcqAdminProspect[],
+  cooldownDays = DEFAULT_COOLDOWN_DAYS,
+  nowMs = Date.now(),
+  sendingEnabled = true,
+  max = 50
+): string[] {
+  return rows
+    .filter((r) => resolveAcqWorkflow(r, cooldownDays, nowMs, sendingEnabled).canSendNow)
+    .slice(0, max)
+    .map((r) => r.public.prospectId);
+}

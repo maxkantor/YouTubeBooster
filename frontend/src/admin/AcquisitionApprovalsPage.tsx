@@ -8,9 +8,12 @@ import { Badge } from './AdminCrmComponents';
 import { AcqProspectDrawer } from './AcqProspectDrawer';
 import {
   filterByWorkflowStatus,
+  manualSendHardBlockReason,
   resolveAcqWorkflow,
   selectAllEligible,
-  selectEligibleIds
+  selectAllSendable,
+  selectEligibleIds,
+  selectSendableIds
 } from './acqApprovalWorkflow';
 import { formatDt, workflowBadgeKind } from './acqUiShared';
 
@@ -52,9 +55,9 @@ export function AcquisitionApprovalsPage() {
       setSelected((cur) =>
         cur.filter((id) => {
           const row = (list.items || []).find((x) => x.public.prospectId === id);
-          return row
-            ? resolveAcqWorkflow(row, s.cooldownDays ?? 14, Date.now(), enabled).canSelectForApproval
-            : false;
+          if (!row) return false;
+          const wf = resolveAcqWorkflow(row, s.cooldownDays ?? 14, Date.now(), enabled);
+          return wf.canSelectForApproval || wf.canSendNow;
         })
       );
     } catch (e) {
@@ -77,14 +80,10 @@ export function AcquisitionApprovalsPage() {
     () => filterByWorkflowStatus(allItems, 'READY_FOR_APPROVAL', cooldownDays, Date.now(), sendingEnabled),
     [allItems, cooldownDays, sendingEnabled]
   );
-  // Ready to Send = all currently APPROVED prospects (including cooldown/score-blocked).
-  // Send Now / Send All only enable for canSendNow.
+  // Ready to Send = outreachStatus approved only (ApprovalId can linger after send).
   const readyRows = useMemo(
     () =>
-      allItems.filter((r) => {
-        const st = (r.public.outreachStatus || '').toLowerCase();
-        return st === 'approved' || (r.public.approvalStatus || '').toLowerCase() === 'approved';
-      }),
+      allItems.filter((r) => (r.public.outreachStatus || '').toLowerCase() === 'approved'),
     [allItems]
   );
   const sentRows = useMemo(() => {
@@ -110,19 +109,24 @@ export function AcquisitionApprovalsPage() {
   const allEligibleSelected =
     eligibleVisible.length > 0 && eligibleVisible.every((r) => selected.includes(r.public.prospectId));
 
-  const approvedEligibleNow =
-    summary?.approvedReadyToSend ??
-    summary?.pipeline?.approvedManualEligibleNow ??
-    readyRows.filter((r) => resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).canSendNow).length;
+  const sendableReady = useMemo(
+    () =>
+      readyRows.filter((r) =>
+        resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).canSendNow
+      ),
+    [readyRows, cooldownDays, sendingEnabled]
+  );
+  const approvedEligibleNow = sendableReady.length;
+  const allSendableSelected =
+    sendableReady.length > 0 && sendableReady.every((r) => selected.includes(r.public.prospectId));
 
-  const approvedAutomationEligible =
-    summary?.pipeline?.approvedEligibleNow ??
-    readyRows.filter((r) => {
-      const wf = resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled);
-      return wf.canSendNow && !wf.cooldownEndsAt;
-    }).length;
+  const approvedAutomationEligible = readyRows.filter((r) => {
+    const wf = resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled);
+    return wf.canSendNow && !wf.cooldownEndsAt;
+  }).length;
 
-  const approvedHardBlocked = readyRows.length - approvedEligibleNow;
+  const approvedHardBlocked = readyRows.filter((r) => !!manualSendHardBlockReason(r)).length;
+  const selectedSendable = selected.filter((id) => sendableReady.some((r) => r.public.prospectId === id));
 
   const drawer = drawerId ? allItems.find((x) => x.public.prospectId === drawerId) || null : null;
 
@@ -168,18 +172,26 @@ export function AcquisitionApprovalsPage() {
     }
   };
 
-  const sendAllApproved = async () => {
-    const n = approvedEligibleNow;
-    const cooldownBypass = readyRows.filter((r) => {
-      const wf = resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled);
-      return wf.canSendNow && !!wf.cooldownEndsAt;
+  const sendAllApproved = async (idsOverride?: string[]) => {
+    const ids =
+      idsOverride ??
+      readyRows
+        .filter((r) => resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).canSendNow)
+        .map((r) => r.public.prospectId);
+    const n = ids.length;
+    if (n <= 0) return;
+    const cooldownBypass = ids.filter((id) => {
+      const row = readyRows.find((r) => r.public.prospectId === id);
+      if (!row) return false;
+      const wf = resolveAcqWorkflow(row, cooldownDays, Date.now(), sendingEnabled);
+      return !!wf.cooldownEndsAt;
     }).length;
-    const hardBlocked = Math.max(0, readyRows.length - n);
+    const hardBlocked = Math.max(0, readyRows.length - approvedEligibleNow);
     const msg = [
       `Send ${n} approved email${n === 1 ? '' : 's'} now?`,
       '',
       `${cooldownBypass} will bypass automation cooldown.`,
-      `${hardBlocked} are blocked by suppression/safety rules.`,
+      `${hardBlocked} approved row${hardBlocked === 1 ? '' : 's'} remain blocked by suppression/safety rules.`,
       '',
       '(Manual admin send does not use the automation daily pacing cap.)'
     ].join('\n');
@@ -188,12 +200,10 @@ export function AcquisitionApprovalsPage() {
     setError('');
     setNote('');
     try {
-      const ids = readyRows
-        .filter((r) => resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).canSendNow)
-        .map((r) => r.public.prospectId);
       const res = await adminApi.acqSendApproved({ campaign: 'COOK-001', prospectIds: ids });
-      setNote(`Send all approved: ${res.sent} sent, ${res.skipped} skipped.`);
+      setNote(`Send approved: ${res.sent} sent, ${res.skipped} skipped.`);
       if (res.sent > 0) setTab('sent');
+      setSelected([]);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Send approved failed');
@@ -236,25 +246,58 @@ export function AcquisitionApprovalsPage() {
           <header className="ops-section-head">
             <h2>Send queue</h2>
             <p className="ops-muted" style={{ margin: 0 }}>
-              Sent today {sentToday} / {dailyLimit} (automation) · Manual-sendable {approvedEligibleNow}
+              Approved waiting {readyRows.length} · Manual-sendable {approvedEligibleNow}
               {approvedHardBlocked > 0 ? ` · Hard-blocked ${approvedHardBlocked}` : ''}
+              {' · '}
+              Sent today {sentToday} / {dailyLimit} (automation)
               {approvedAutomationEligible !== approvedEligibleNow
                 ? ` · Automation-eligible ${approvedAutomationEligible}`
                 : ''}
             </p>
           </header>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <button
+              type="button"
+              className="ops-btn ops-btn-primary"
+              disabled={busy || approvedEligibleNow <= 0}
+              title="Manual admin send. Bypasses automation cooldown; never bypasses unsubscribe, bounce, or suppression."
+              onClick={() => void sendAllApproved()}
+            >
+              {approvedHardBlocked > 0 && approvedEligibleNow > 0
+                ? `SEND ALL ELIGIBLE (${approvedEligibleNow})`
+                : `SEND ALL APPROVED (${approvedEligibleNow})`}
+            </button>
+            {selectedSendable.length > 0 && (
+              <button
+                type="button"
+                className="ops-btn ops-btn-primary"
+                disabled={busy}
+                onClick={() => void sendAllApproved(selectedSendable)}
+              >
+                SEND SELECTED ({selectedSendable.length})
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {tab === 'ready' && selectedSendable.length > 0 && (
+        <div className="acq-bulk-bar acq-bulk-bar-sticky">
+          <span>
+            <strong>{selectedSendable.length}</strong> selected
+          </span>
+          <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => setSelected([])}>
+            Clear
+          </button>
           <button
             type="button"
             className="ops-btn ops-btn-primary"
-            disabled={busy || approvedEligibleNow <= 0}
-            title="Manual admin send. Bypasses automation cooldown; never bypasses unsubscribe, bounce, or suppression."
-            onClick={() => void sendAllApproved()}
+            disabled={busy}
+            onClick={() => void sendAllApproved(selectedSendable)}
           >
-            {approvedHardBlocked > 0 && approvedEligibleNow > 0
-              ? `SEND ALL ELIGIBLE (${approvedEligibleNow})`
-              : `SEND ALL APPROVED (${approvedEligibleNow})`}
+            Send Selected ({selectedSendable.length})
           </button>
-        </section>
+        </div>
       )}
 
       {tab === 'needs' && selected.length > 0 && (
@@ -303,9 +346,9 @@ export function AcquisitionApprovalsPage() {
             <table className="admin-crm-table acq-table">
               <thead>
                 <tr>
-                  {tab === 'needs' && (
+                  {(tab === 'needs' || tab === 'ready') && (
                     <th className="acq-col-check">
-                      {eligibleVisible.length > 0 && (
+                      {tab === 'needs' && eligibleVisible.length > 0 && (
                         <input
                           type="checkbox"
                           checked={allEligibleSelected}
@@ -313,6 +356,20 @@ export function AcquisitionApprovalsPage() {
                           onChange={() => {
                             if (allEligibleSelected) setSelected([]);
                             else setSelected(selectAllEligible(needsRows, 25));
+                          }}
+                        />
+                      )}
+                      {tab === 'ready' && sendableReady.length > 0 && (
+                        <input
+                          type="checkbox"
+                          checked={allSendableSelected}
+                          aria-label="Select all sendable"
+                          onChange={() => {
+                            if (allSendableSelected) setSelected([]);
+                            else
+                              setSelected(
+                                selectAllSendable(readyRows, cooldownDays, Date.now(), sendingEnabled, 50)
+                              );
                           }}
                         />
                       )}
@@ -339,6 +396,32 @@ export function AcquisitionApprovalsPage() {
                               checked={selectedRow}
                               aria-label={`Select ${p.channelName}`}
                               onChange={() => setSelected((cur) => selectEligibleIds(allItems, cur, p.prospectId, 25))}
+                            />
+                          ) : (
+                            <span className="acq-check-placeholder" />
+                          )}
+                        </td>
+                      )}
+                      {tab === 'ready' && (
+                        <td className="acq-col-check">
+                          {wf.canSendNow ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedRow}
+                              aria-label={`Select ${p.channelName}`}
+                              onChange={() =>
+                                setSelected((cur) =>
+                                  selectSendableIds(
+                                    readyRows,
+                                    cur,
+                                    p.prospectId,
+                                    cooldownDays,
+                                    Date.now(),
+                                    sendingEnabled,
+                                    50
+                                  )
+                                )
+                              }
                             />
                           ) : (
                             <span className="acq-check-placeholder" />

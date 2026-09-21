@@ -8,7 +8,8 @@ import {
   isReadyForApproval,
   resolveAcqWorkflow,
   selectAllEligible,
-  selectEligibleIds
+  selectEligibleIds,
+  selectAllSendable
 } from './acqApprovalWorkflow';
 
 function row(partial: {
@@ -148,6 +149,34 @@ describe('acqApprovalWorkflow', () => {
     const w = resolveAcqWorkflow(row({ lastContactedAt: last, outreachStatus: 'draft_ready' }), 14, now);
     assert.equal(w.status, 'COOLDOWN');
     assert.equal(w.canSendNow, false);
+  });
+
+  it('sent status is SENT even when approvalStatus was approved', () => {
+    const w = resolveAcqWorkflow(
+      row({
+        outreachStatus: 'sent',
+        approvalStatus: 'approved',
+        lastContactedAt: '2026-09-21T15:00:00Z'
+      })
+    );
+    assert.equal(w.status, 'SENT');
+    assert.equal(w.canSendNow, false);
+  });
+
+  it('selectAllSendable picks canSendNow rows including cooldown approved', () => {
+    const now = Date.parse('2026-09-17T17:00:00Z');
+    const rows = [
+      row({
+        prospectId: 'a',
+        outreachStatus: 'approved',
+        approvalStatus: 'approved',
+        lastContactedAt: '2026-09-10T12:00:00Z'
+      }),
+      row({ prospectId: 'b', outreachStatus: 'sent', lastContactedAt: '2026-09-16T12:00:00Z' }),
+      row({ prospectId: 'c', outreachStatus: 'approved', approvalStatus: 'approved' })
+    ];
+    const ids = selectAllSendable(rows, 14, now, true, 50);
+    assert.deepEqual(ids.sort(), ['a', 'c']);
   });
 
   it('selectEligibleIds only toggles ready rows', () => {

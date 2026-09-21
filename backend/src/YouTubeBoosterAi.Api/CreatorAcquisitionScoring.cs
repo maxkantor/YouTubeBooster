@@ -398,7 +398,10 @@ public static class CreatorAcquisitionScoring
         OpportunityFromProspect(p),
         p.InspectionStatus,
         p.OutreachStatus,
-        string.IsNullOrWhiteSpace(p.ApprovalId) ? "none" : "approved",
+        // Approval badge is only for currently awaiting send — not retained after SES send.
+        string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(p.ApprovalId)
+            ? "approved"
+            : "none",
         p.Campaign,
         p.TrackedPath,
         p.Observation,
