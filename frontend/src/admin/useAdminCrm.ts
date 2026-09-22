@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/api';
 import { useAdminSessionContext } from './AdminSessionContext';
@@ -7,12 +7,23 @@ import { useAdminSessionContext } from './AdminSessionContext';
 export function useAdminCrm() {
   const { adminSession, refreshAdminSession } = useAdminSessionContext();
   const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
 
   const onSignOut = useCallback(async () => {
-    await adminApi.logout();
-    await refreshAdminSession();
-    navigate('/admin/login', { replace: true });
-  }, [refreshAdminSession, navigate]);
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      try {
+        await adminApi.logout();
+      } catch {
+        // Still clear local session even if the network call fails.
+      }
+      await refreshAdminSession();
+      navigate('/admin/login', { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
+  }, [refreshAdminSession, navigate, signingOut]);
 
-  return { adminSession, onSignOut };
+  return { adminSession, onSignOut, signingOut };
 }

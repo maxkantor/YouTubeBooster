@@ -69,7 +69,7 @@ export function AdminShell({
   subtitle?: string;
   children: React.ReactNode;
 }) {
-  const { adminSession, onSignOut } = useAdminCrm();
+  const { adminSession, onSignOut, signingOut } = useAdminCrm();
   const [needsApproval, setNeedsApproval] = useState<number | null>(null);
   const [inboxReplies, setInboxReplies] = useState<number | null>(null);
   const [acqSystemBadge, setAcqSystemBadge] = useState<number | null>(null);
@@ -144,8 +144,8 @@ export function AdminShell({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="admin-crm-pill">{adminSession.email}</span>
-            <button type="button" className="admin-crm-btn" onClick={onSignOut}>
-              Sign out
+            <button type="button" className="admin-crm-btn" onClick={() => void onSignOut()} disabled={signingOut}>
+              {signingOut ? 'Signing out…' : 'Sign out'}
             </button>
           </div>
         </header>

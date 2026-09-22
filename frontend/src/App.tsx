@@ -497,7 +497,11 @@ function AdminLoginPage({
                   setSigningOut(true);
                   setError('');
                   try {
-                    await adminApi.logout();
+                    try {
+                      await adminApi.logout();
+                    } catch {
+                      /* clear local state anyway */
+                    }
                     await refreshAdminSession();
                   } catch (err) {
                     setError(err instanceof Error ? err.message : 'Sign out failed.');
@@ -532,7 +536,7 @@ function AdminLoginPage({
                 <input
                   name="admin-password"
                   autoComplete="current-password"
-                  placeholder="Password stored in SSM (admin/password)"
+                  placeholder="Password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

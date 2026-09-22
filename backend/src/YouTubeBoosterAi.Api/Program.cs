@@ -1328,8 +1328,7 @@ adminApi.MapPost("/login", async (AdminLoginRequest request, HttpContext httpCon
             new
             {
                 error = "invalid_admin_credentials",
-                detail =
-                    "Email or password does not match Parameter Store. Under your Lambda SSM__BASEPATH (e.g. /youtubebooster), set admin/email (String) and admin/password (SecureString). Optional admin/password-format: plain (default) or bcrypt (stored value must be a bcrypt hash)."
+                detail = "Incorrect email or password."
             },
             statusCode: StatusCodes.Status401Unauthorized);
     }

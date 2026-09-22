@@ -167,22 +167,40 @@ public sealed class SessionCookieService
         // Aggressively delete the cookie across common paths and secure modes.
         // Cookie `Path` defaults to the request path when not explicitly set,
         // so older cookies might exist under `/api/auth` instead of `/`.
-        var paths = new[] { "/", "/api", "/api/auth" };
+        var paths = new[] { "/", "/api", "/api/auth", "/api/admin" };
         var secureModes = new[] { secure, !secure };
+        var sameSiteModes = secure
+            ? new[] { SameSiteMode.None, SameSiteMode.Lax }
+            : new[] { SameSiteMode.Lax, SameSiteMode.None };
 
         foreach (var s in secureModes)
         {
-            foreach (var p in paths)
+            foreach (var site in sameSiteModes)
             {
-                response.Cookies.Delete(name, new CookieOptions
+                foreach (var p in paths)
                 {
-                    HttpOnly = true,
-                    IsEssential = true,
-                    SameSite = sameSite,
-                    Secure = s,
-                    Path = p,
-                    Expires = DateTimeOffset.UnixEpoch
-                });
+                    // Cookies.Delete alone is unreliable for cross-site SameSite=None cookies.
+                    // Explicitly overwrite with an expired value using matching attributes.
+                    response.Cookies.Append(name, string.Empty, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        IsEssential = true,
+                        SameSite = site,
+                        Secure = s,
+                        Path = p,
+                        Expires = DateTimeOffset.UnixEpoch,
+                        MaxAge = TimeSpan.Zero
+                    });
+                    response.Cookies.Delete(name, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        IsEssential = true,
+                        SameSite = site,
+                        Secure = s,
+                        Path = p,
+                        Expires = DateTimeOffset.UnixEpoch
+                    });
+                }
             }
         }
     }
