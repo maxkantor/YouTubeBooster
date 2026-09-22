@@ -129,12 +129,14 @@ public static class CreatorAcquisitionScoring
                 return new AcqSendGateResult(false, "cooldown");
         }
 
-        // Qualification / draft quality (both modes)
-        if (p.PriorityScore < 70)
+        // Qualification / draft quality
+        // Manual admin Approve & Send may override score / band / stale-upload (human reviewed on Approvals).
+        // Automation keeps COOK-001 gates strict.
+        if (!manual && p.PriorityScore < 70)
             return new AcqSendGateResult(false, "score_below_70");
         if (!string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
             return new AcqSendGateResult(false, "inspection_incomplete");
-        if (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60)
+        if (!manual && (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60))
             return new AcqSendGateResult(false, "stale_upload");
         var standing = state.StandingCampaignApproval;
         // Initial send always requires recipient approval. Follow-ups reuse that approval.
@@ -151,7 +153,7 @@ public static class CreatorAcquisitionScoring
         if (!followUpDue && !string.IsNullOrWhiteSpace(p.ContentHash)
             && !string.Equals(ContentHash(p), p.ContentHash, StringComparison.Ordinal))
             return new AcqSendGateResult(false, "content_hash_changed");
-        if (p.SubscriberCount < 1000 || p.SubscriberCount > 100000)
+        if (!manual && (p.SubscriberCount < 1000 || p.SubscriberCount > 100000))
             return new AcqSendGateResult(false, "subscriber_out_of_band");
         return new AcqSendGateResult(true, followUpDue ? "ok_follow_up" : "ok");
     }

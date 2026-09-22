@@ -114,14 +114,14 @@ describe('acqApprovalWorkflow', () => {
     assert.match(w.currentStatusAnswer, /NEEDS APPROVAL/i);
   });
 
-  it('keeps complete drafts in Needs Approval when COOK-001 send gates fail', () => {
+  it('keeps complete drafts selectable in Needs Approval when COOK-001 gates warn', () => {
     const low = row({ priorityScore: 60 });
     assert.equal(isReadyForApproval(low), true);
     const wLow = resolveAcqWorkflow(low);
     assert.equal(wLow.status, 'READY_FOR_APPROVAL');
     assert.equal(wLow.label, 'NEEDS APPROVAL');
-    assert.equal(wLow.canApprove, false);
-    assert.equal(wLow.canSelectForApproval, false);
+    assert.equal(wLow.canApprove, true);
+    assert.equal(wLow.canSelectForApproval, true);
     assert.match(wLow.checkboxDisabledReason || '', /below 70/i);
 
     const celeb = row({});
@@ -129,8 +129,18 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(isReadyForApproval(celeb), true);
     const wCeleb = resolveAcqWorkflow(celeb);
     assert.equal(wCeleb.status, 'READY_FOR_APPROVAL');
-    assert.equal(wCeleb.canApprove, false);
+    assert.equal(wCeleb.canApprove, true);
+    assert.equal(wCeleb.canSelectForApproval, true);
     assert.match(wCeleb.checkboxDisabledReason || '', /1k/);
+  });
+
+  it('already-contacted drafts do not reappear as Needs Approval', () => {
+    const w = resolveAcqWorkflow(
+      row({ outreachStatus: 'draft_ready', lastContactedAt: '2026-09-01T12:00:00Z' })
+    );
+    assert.equal(w.status, 'SENT');
+    assert.equal(w.canSelectForApproval, false);
+    assert.equal(w.canApprove, false);
   });
 
   it('does not treat incomplete draft as ready', () => {
@@ -172,12 +182,13 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.primaryAction, 'send');
   });
 
-  it('non-approved cooldown cannot Send Now', () => {
+  it('already-contacted draft_ready stays out of Needs Approval (no repeat)', () => {
     const now = Date.parse('2026-09-17T17:00:00Z');
     const last = '2026-09-10T12:00:00Z';
     const w = resolveAcqWorkflow(row({ lastContactedAt: last, outreachStatus: 'draft_ready' }), 14, now);
-    assert.equal(w.status, 'COOLDOWN');
+    assert.equal(w.status, 'SENT');
     assert.equal(w.canSendNow, false);
+    assert.equal(w.canSelectForApproval, false);
   });
 
   it('sent status is SENT even when approvalStatus was approved', () => {
@@ -224,8 +235,8 @@ describe('acqApprovalWorkflow', () => {
       row({ prospectId: '3' }),
       row({ prospectId: '4', outreachStatus: 'approved', approvalStatus: 'approved' })
     ];
-    assert.deepEqual(selectAllEligible(rows, 25), ['1', '3']);
-    assert.deepEqual(selectAllEligible(rows, 1), ['1']);
+    assert.deepEqual(selectAllEligible(rows, 14, Date.now(), true, 25), ['1', '3']);
+    assert.deepEqual(selectAllEligible(rows, 14, Date.now(), true, 1), ['1']);
   });
 
   it('counts and filters ready-for-approval accurately', () => {

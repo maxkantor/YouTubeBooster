@@ -291,6 +291,22 @@ export function resolveAcqWorkflow(
     };
   }
 
+  // Already contacted once — keep out of Needs Approval even if draft was regenerated.
+  if (row.lastContactedAt) {
+    return {
+      ...base,
+      status: 'SENT',
+      label: 'SENT',
+      checkboxDisabledReason: 'Already contacted — not shown for re-approval.',
+      whyHere: 'This creator was already contacted. They belong under Recently Sent, not Needs Approval.',
+      currentStatusAnswer: 'ALREADY CONTACTED',
+      nextStep: 'Use Inbox / View Thread for replies. Follow-ups run automatically when due.',
+      whatICanDo: 'View Thread.',
+      primaryAction: 'view_thread',
+      primaryActionLabel: 'View Thread'
+    };
+  }
+
   // Non-approved rows still in cooldown (already contacted, not re-approved).
   if (ends) {
     return {
@@ -411,19 +427,16 @@ export function resolveAcqWorkflow(
     ...base,
     status: 'READY_FOR_APPROVAL',
     label: 'NEEDS APPROVAL',
-    canSelectForApproval: sendGate === null,
-    canApprove: sendGate === null,
+    // Approvals tab is the human gate — always allow selection / approve actions here.
+    canSelectForApproval: true,
+    canApprove: true,
     checkboxDisabledReason: sendGate,
     whyHere: sendGate
-      ? `Draft is ready for review, but Approve & Send is blocked: ${sendGate}`
+      ? `Draft is ready. COOK-001 automation gates warn: ${sendGate} — admin Approve & Send still allowed.`
       : 'Verified contact + complete draft — waiting for your approval.',
     currentStatusAnswer: 'NEEDS APPROVAL',
-    nextStep: sendGate
-      ? `Review the draft. Approve is blocked until: ${sendGate}`
-      : 'Review the draft, then Approve & Send or Approve (queue only). Nothing sends until you approve.',
-    whatICanDo: sendGate
-      ? 'Review Draft, Edit Message, or Reject. Approve stays blocked by COOK-001 gates.'
-      : 'Review Draft, Approve & Send, Approve (queue only), Edit Message, or Reject.',
+    nextStep: 'Review the draft, then Approve & Send or Approve (queue only). Nothing sends until you approve.',
+    whatICanDo: 'Review Draft, Approve & Send, Approve (queue only), Edit Message, or Reject.',
     primaryAction: 'approve',
     primaryActionLabel: 'Review Draft'
   };
@@ -506,18 +519,29 @@ export function selectEligibleIds(
   rows: AcqAdminProspect[],
   currentlySelected: string[],
   id: string,
-  max = 25
+  max = 30,
+  cooldownDays = DEFAULT_COOLDOWN_DAYS,
+  nowMs = Date.now(),
+  sendingEnabled = true
 ): string[] {
   const row = rows.find((r) => r.public.prospectId === id);
-  if (!row || !resolveAcqWorkflow(row).canSelectForApproval) return currentlySelected;
+  if (!row || !resolveAcqWorkflow(row, cooldownDays, nowMs, sendingEnabled).canSelectForApproval) {
+    return currentlySelected;
+  }
   if (currentlySelected.includes(id)) return currentlySelected.filter((x) => x !== id);
   if (currentlySelected.length >= max) return currentlySelected;
   return [...currentlySelected, id];
 }
 
-export function selectAllEligible(rows: AcqAdminProspect[], max = 25): string[] {
+export function selectAllEligible(
+  rows: AcqAdminProspect[],
+  cooldownDays = DEFAULT_COOLDOWN_DAYS,
+  nowMs = Date.now(),
+  sendingEnabled = true,
+  max = 30
+): string[] {
   return rows
-    .filter((r) => resolveAcqWorkflow(r).canSelectForApproval)
+    .filter((r) => resolveAcqWorkflow(r, cooldownDays, nowMs, sendingEnabled).canSelectForApproval)
     .slice(0, max)
     .map((r) => r.public.prospectId);
 }

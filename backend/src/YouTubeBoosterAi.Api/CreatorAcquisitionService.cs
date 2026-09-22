@@ -616,25 +616,14 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             draftProbe.SuggestedImprovement ?? improvement ?? "",
             tracked);
 
-        // Keep already-contacted creators out of the first-touch approval queue unless admin is explicitly repairing.
+        // Keep already-contacted creators out of the first-touch approval queue.
         var nextStatus = p.LastContactedAt is not null
             ? (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
-                ? "sent"
-                : (string.IsNullOrWhiteSpace(p.OutreachStatus)
-                   || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase)
-                    ? "draft_ready"
-                    : p.OutreachStatus))
+                || string.Equals(p.OutreachStatus, "sent", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.OutreachStatus, "delivered", StringComparison.OrdinalIgnoreCase)
+                    ? (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase) ? "sent" : p.OutreachStatus)
+                    : "sent")
             : "draft_ready";
-
-        // For prepare-draft UX: if they were only contacted historically but we rebuilt a fresh brand draft, allow approval queue.
-        if (p.LastContactedAt is not null
-            && string.Equals(nextStatus, "sent", StringComparison.OrdinalIgnoreCase)
-            && string.IsNullOrWhiteSpace(p.ApprovalId))
-        {
-            nextStatus = "draft_ready";
-        }
 
         var next = p with
         {
@@ -844,19 +833,17 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 return (null, $"{id} personalization is too weak for outreach (needs_review).");
             if (!CreatorAcquisitionScoring.IsVerifiedPublicEmail(p))
                 return (null, $"{id} has no verified public business email.");
-            // Align approval with send gates (except cooldown / already contacted — those are temporal).
-            if (p.PriorityScore < 70)
-                return (null, $"{id} score is below 70 and cannot be approved for sending.");
-            if (!string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
+            // Admin Approvals is the human gate — score / band / stale are automation-only.
+            if (!string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase)
+                && !p.PreviewPlaceholder
+                && string.IsNullOrWhiteSpace(p.Observation))
                 return (null, $"{id} inspection is incomplete.");
-            if (p.SubscriberCount < 1000 || p.SubscriberCount > 100000)
-                return (null, $"{id} subscriber count is outside the 1k–100k COOK-001 band.");
             if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
                 return (null, $"{id} is suppressed.");
             if (OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
                 return (null, $"{id} email looks invalid or spamtrap.");
-            if (p.RecentUploadAt is null || (DateTimeOffset.UtcNow - p.RecentUploadAt.Value).TotalDays > 60)
-                return (null, $"{id} recent upload is stale (>60 days).");
+            if (p.LastContactedAt is not null)
+                return (null, $"{id} was already contacted — use Ready to Send / follow-up, not re-approve.");
             var hash = CreatorAcquisitionScoring.ContentHash(p);
             included.Add(p.ProspectId);
             hashes[p.ProspectId] = hash;

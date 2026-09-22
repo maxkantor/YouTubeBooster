@@ -300,18 +300,42 @@ export function AcquisitionApprovalsPage() {
         </div>
       )}
 
-      {tab === 'needs' && selected.length > 0 && (
+      {tab === 'needs' && (
         <div className="acq-bulk-bar acq-bulk-bar-sticky">
           <span>
-            <strong>{selected.length}</strong> selected
+            {selected.length > 0 ? (
+              <>
+                <strong>{selected.length}</strong> selected
+              </>
+            ) : (
+              <>
+                <strong>{eligibleVisible.length}</strong> ready for approval
+              </>
+            )}
           </span>
-          <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => setSelected([])}>
-            Clear
-          </button>
           <button
             type="button"
-            className="ops-btn ops-btn-primary"
-            disabled={busy}
+            className="ops-btn ops-btn-ghost"
+            disabled={busy || eligibleVisible.length === 0}
+            onClick={() =>
+              setSelected(
+                allEligibleSelected
+                  ? []
+                  : selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled, 30)
+              )
+            }
+          >
+            {allEligibleSelected ? 'Clear selection' : `Select all (${Math.min(30, eligibleVisible.length)})`}
+          </button>
+          {selected.length > 0 && (
+            <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => setSelected([])}>
+              Clear
+            </button>
+          )}
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy || selected.length === 0}
             onClick={() => void approveIds(selected, false)}
           >
             Approve Selected
@@ -319,13 +343,25 @@ export function AcquisitionApprovalsPage() {
           <button
             type="button"
             className="ops-btn ops-btn-primary"
-            disabled={busy}
+            disabled={busy || (selected.length === 0 && eligibleVisible.length === 0)}
             onClick={() => {
-              if (!window.confirm(`Approve & send ${selected.length} selected?`)) return;
-              void approveIds(selected, true);
+              const ids =
+                selected.length > 0
+                  ? selected
+                  : selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled, 30);
+              if (!ids.length) return;
+              if (
+                !window.confirm(
+                  `Approve & send ${ids.length} creator${ids.length === 1 ? '' : 's'} now?\n\nEach will leave Needs Approval after a successful send.`
+                )
+              )
+                return;
+              void approveIds(ids, true);
             }}
           >
-            Approve &amp; Send Selected
+            {selected.length > 0
+              ? `Approve & Send Selected (${selected.length})`
+              : `Approve & Send All (${Math.min(30, eligibleVisible.length)})`}
           </button>
         </div>
       )}
@@ -348,14 +384,18 @@ export function AcquisitionApprovalsPage() {
                 <tr>
                   {(tab === 'needs' || tab === 'ready') && (
                     <th className="acq-col-check">
-                      {tab === 'needs' && eligibleVisible.length > 0 && (
+                      {tab === 'needs' && (
                         <input
                           type="checkbox"
                           checked={allEligibleSelected}
                           aria-label="Select all eligible"
+                          disabled={eligibleVisible.length === 0}
                           onChange={() => {
                             if (allEligibleSelected) setSelected([]);
-                            else setSelected(selectAllEligible(needsRows, 25));
+                            else
+                              setSelected(
+                                selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled, 30)
+                              );
                           }}
                         />
                       )}
@@ -395,10 +435,25 @@ export function AcquisitionApprovalsPage() {
                               type="checkbox"
                               checked={selectedRow}
                               aria-label={`Select ${p.channelName}`}
-                              onChange={() => setSelected((cur) => selectEligibleIds(allItems, cur, p.prospectId, 25))}
+                              onChange={() =>
+                                setSelected((cur) =>
+                                  selectEligibleIds(
+                                    allItems,
+                                    cur,
+                                    p.prospectId,
+                                    30,
+                                    cooldownDays,
+                                    Date.now(),
+                                    sendingEnabled
+                                  )
+                                )
+                              }
                             />
                           ) : (
-                            <span className="acq-check-placeholder" />
+                            <span
+                              className="acq-check-placeholder"
+                              title={wf.checkboxDisabledReason || 'Not selectable'}
+                            />
                           )}
                         </td>
                       )}

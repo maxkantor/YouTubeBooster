@@ -87,7 +87,8 @@ describe('acqVisibleActions + approve readiness', () => {
     assert.match(approvalBlockReason(r, now) || '', /60/);
     const wf = resolveAcqWorkflow(r, 14, now, true);
     assert.equal(wf.status, 'READY_FOR_APPROVAL');
-    assert.equal(wf.canApprove, false);
+    assert.equal(wf.canApprove, true);
+    assert.equal(wf.canSelectForApproval, true);
   });
 
   it('REVIEW_EMAIL exposes Accept / Reject / Add Email', () => {
