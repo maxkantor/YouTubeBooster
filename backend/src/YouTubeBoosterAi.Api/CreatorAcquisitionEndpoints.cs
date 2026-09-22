@@ -212,8 +212,6 @@ public static class CreatorAcquisitionEndpoints
             var inspected = rows.Count(r => r.InspectionStatus == "completed");
             var contactVerified = rows.Count(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
             var drafts = rows.Count(r => !string.IsNullOrWhiteSpace(r.Observation) && !string.IsNullOrWhiteSpace(r.Subject));
-            // APPROVED = currently awaiting send (do not count sent/delivered that still retain ApprovalId).
-            var approved = rows.Count(r => string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase));
             var everApproved = rows.Count(r =>
                 !string.IsNullOrWhiteSpace(r.ApprovalId)
                 || r.ApprovedAt is not null
@@ -251,6 +249,8 @@ public static class CreatorAcquisitionEndpoints
             var cookRows = rows
                 .Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
                 .ToList();
+            // COOK-001-scoped approved (matches Admin Approvals Ready to Send).
+            var approved = cookRows.Count(r => string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase));
             var skipReasons = new Dictionary<string, int>(StringComparer.Ordinal);
             var sendEligible = 0;
             var approvedEligible = 0;
@@ -333,6 +333,8 @@ public static class CreatorAcquisitionEndpoints
                 && sendEligible == 0
                 && sentToday == 0;
 
+            var draftsCook = cookRows.Count(r =>
+                !string.IsNullOrWhiteSpace(r.Observation) && !string.IsNullOrWhiteSpace(r.Subject));
             var draftedNotApproved = cookRows.Count(r =>
                 !string.IsNullOrWhiteSpace(r.Observation)
                 && !string.IsNullOrWhiteSpace(r.Subject)
@@ -351,6 +353,93 @@ public static class CreatorAcquisitionEndpoints
             var dailyRemaining = Math.Max(0, state.DailyLimit - sentToday);
             var nextScheduledSendEt = CreatorAcquisitionScoring.NextWeekdaySendEastern(now).ToString("o");
 
+            var cutoff7 = now.AddDays(-7);
+            var sentLast7Days = cookRows.Count(r =>
+                r.LastContactedAt is not null && r.LastContactedAt.Value >= cutoff7);
+
+            // Not-reviewable breakdown among COOK-001 drafts that are NOT Needs Approval.
+            // Exclusive categories — every drafted-but-not-needs-approval row lands in exactly one bucket.
+            var nrInvalidEmail = 0;
+            var nrNoEmail = 0;
+            var nrQualification = 0;
+            var nrCooldown = 0;
+            var nrSuppressed = 0;
+            var nrAlreadyContacted = 0;
+            var nrRejected = 0;
+            var nrOther = 0;
+            foreach (var r in cookRows)
+            {
+                var hasDraft = !string.IsNullOrWhiteSpace(r.Observation)
+                    && !string.IsNullOrWhiteSpace(r.Subject);
+                if (!hasDraft) continue;
+                if (CreatorAcquisitionScoring.IsReadyForApproval(r)) continue;
+                if (string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+                    continue; // Ready to Send — counted separately
+
+                var outreach = (r.OutreachStatus ?? "").ToLowerInvariant();
+                var suppression = (r.SuppressionStatus ?? "none").ToLowerInvariant();
+                if (outreach is "rejected")
+                {
+                    nrRejected++;
+                    continue;
+                }
+                if (suppression is not "none" || outreach is "suppressed" or "bounced" or "complained" or "unsubscribed")
+                {
+                    nrSuppressed++;
+                    continue;
+                }
+                if (r.LastContactedAt is not null)
+                {
+                    nrAlreadyContacted++;
+                    continue;
+                }
+                if (OutreachPolicy.InCooldown(r.LastContactedAt, now, state.CooldownDays > 0 ? state.CooldownDays : OutreachPolicy.DefaultCooldownDays)
+                    && r.LastContactedAt is not null)
+                {
+                    nrCooldown++;
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(r.PublicBusinessEmail)
+                    || !EmailAddressHelpers.LooksLikeEmail(r.PublicBusinessEmail))
+                {
+                    nrNoEmail++;
+                    continue;
+                }
+                if (!CreatorAcquisitionScoring.IsVerifiedPublicEmail(r)
+                    || OutreachPolicy.IsSpamTrapOrInvalid(r.PublicBusinessEmail))
+                {
+                    nrInvalidEmail++;
+                    continue;
+                }
+                if (outreach is "needs_review"
+                    || string.IsNullOrWhiteSpace(r.Body)
+                    || !CreatorAcquisitionScoring.HasStrongPersonalization(r)
+                    || r.PriorityScore < 70
+                    || (r.SubscriberCount is < 1000 or > 100000))
+                {
+                    nrQualification++;
+                    continue;
+                }
+                nrOther++;
+            }
+
+            var notReviewable = new
+            {
+                invalidEmail = nrInvalidEmail,
+                noUsableEmail = nrNoEmail,
+                qualificationFailed = nrQualification,
+                cooldown = nrCooldown,
+                suppressed = nrSuppressed,
+                alreadyContacted = nrAlreadyContacted,
+                rejected = nrRejected,
+                other = nrOther
+            };
+            var notReviewableTotal = nrInvalidEmail + nrNoEmail + nrQualification + nrCooldown
+                + nrSuppressed + nrAlreadyContacted + nrRejected + nrOther;
+
+            var contactVerifiedCook = cookRows.Count(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
+            var needsEmailCook = cookRows.Count(r => !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r));
+
             return Results.Ok(new
             {
                 verifiedCustomers = converted,
@@ -368,12 +457,16 @@ public static class CreatorAcquisitionEndpoints
                 inspected,
                 contactVerified,
                 drafts,
+                draftsGenerated = draftsCook,
+                draftsAllCampaigns = drafts,
                 approved,
                 currentlyApprovedWaitingToSend = approved,
                 everApproved,
                 sent,
                 sentToday,
+                sentLast7Days,
                 sentLifetime = sent,
+                recentlySentWindowDays = 7,
                 delivered,
                 clicked,
                 auditStarted,
@@ -386,8 +479,8 @@ public static class CreatorAcquisitionEndpoints
                 unsubscribed,
                 cohortFunnel = new
                 {
-                    discovered,
-                    contactable = contactVerified,
+                    discovered = cookRows.Count,
+                    contactable = contactVerifiedCook,
                     approved,
                     emailsSent = sent,
                     delivered,
@@ -418,11 +511,18 @@ public static class CreatorAcquisitionEndpoints
                 skipReasonCounts = skipReasons
                     .OrderByDescending(kv => kv.Value)
                     .ToDictionary(kv => kv.Key, kv => kv.Value),
+                // Candidate-wide skip tallies (all COOK-001). Distinct from approved-only blocks below.
+                skipReasonCountsAllCandidates = skipReasons
+                    .OrderByDescending(kv => kv.Value)
+                    .ToDictionary(kv => kv.Key, kv => kv.Value),
                 pipeline = new
                 {
-                    drafted = drafts,
+                    drafted = draftsCook,
                     draftedNotApproved,
                     approved,
+                    needsApproval,
+                    readyToSend = approved,
+                    recentlySent = sentLast7Days,
                     eligibleNow = sendEligible,
                     approvedEligibleNow = approvedEligible,
                     approvedManualEligibleNow = approvedManualEligible,
@@ -433,7 +533,25 @@ public static class CreatorAcquisitionEndpoints
                     blockedByOther = approvedBlockedOther,
                     dailyLimit = state.DailyLimit,
                     dailyRemaining,
-                    expectedToAttempt = Math.Min(sendEligible, dailyRemaining)
+                    expectedToAttempt = Math.Min(approvedEligible, dailyRemaining),
+                    notReviewable,
+                    notReviewableTotal
+                },
+                crmBoard = new
+                {
+                    totalProspects = cookRows.Count,
+                    draftsGenerated = draftsCook,
+                    needsApproval,
+                    readyToSend = approved,
+                    recentlySent = sentLast7Days,
+                    recentlySentWindowDays = 7,
+                    sentToday,
+                    sentLifetime = sent,
+                    usableEmails = contactVerifiedCook,
+                    needsEmail = needsEmailCook,
+                    notReviewable,
+                    notReviewableTotal,
+                    approvalsUrl = "https://youtubeboosterai.com/admin/acquisition/approvals"
                 },
                 needsApproval,
                 approvedReadyToSend,

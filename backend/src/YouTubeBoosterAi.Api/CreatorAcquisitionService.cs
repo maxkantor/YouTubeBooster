@@ -1976,6 +1976,15 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         if (!gate.Ok)
             return (false, gate.Reason, null);
 
+        // Same daily pacing cap as weekday automation — approved leftovers stay Ready to Send.
+        var allForLimit = await _store.ListProspectsAsync(cancellationToken);
+        var todayEt = CreatorAcquisitionScoring.EasternDate(now).Date;
+        var sentTodayCount = allForLimit.Count(x =>
+            x.LastContactedAt is not null
+            && CreatorAcquisitionScoring.EasternDate(x.LastContactedAt.Value).Date == todayEt);
+        if (sentTodayCount >= state.DailyLimit)
+            return (false, "daily_limit_reached", null);
+
         var followUpDue = CreatorAcquisitionScoring.IsFollowUpDue(p, now);
         if (!followUpDue && !state.StandingCampaignApproval)
         {
@@ -2142,12 +2151,23 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         var results = new List<AcqSendApprovedItemResult>();
         var sent = 0;
         var skipped = 0;
+        var todayEt = CreatorAcquisitionScoring.EasternDate(now).Date;
+        var sentTodayCount = all.Count(x =>
+            x.LastContactedAt is not null
+            && CreatorAcquisitionScoring.EasternDate(x.LastContactedAt.Value).Date == todayEt);
+        var remaining = Math.Max(0, state.DailyLimit - sentTodayCount);
         foreach (var p in candidates)
         {
             if (!string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
             {
                 skipped++;
                 results.Add(new AcqSendApprovedItemResult(p.ProspectId, false, "not_approved", null));
+                continue;
+            }
+            if (sent >= remaining)
+            {
+                skipped++;
+                results.Add(new AcqSendApprovedItemResult(p.ProspectId, false, "daily_limit_reached", null));
                 continue;
             }
             var gate = CreatorAcquisitionScoring.ExplainSendEligibility(

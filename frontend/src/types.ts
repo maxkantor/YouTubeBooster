@@ -642,11 +642,15 @@ export type AcqSummary = {
   inspected: number;
   contactVerified: number;
   drafts: number;
+  draftsGenerated?: number;
+  draftsAllCampaigns?: number;
   approved: number;
   currentlyApprovedWaitingToSend?: number;
   everApproved?: number;
   sent: number;
   sentToday?: number;
+  sentLast7Days?: number;
+  recentlySentWindowDays?: number;
   sentLifetime?: number;
   delivered?: number;
   clicked?: number;
@@ -690,7 +694,60 @@ export type AcqSummary = {
     auditsStarted: number;
     accountsCreated: number;
   };
-  pipeline?: Record<string, number>;
+  pipeline?: {
+    drafted?: number;
+    draftedNotApproved?: number;
+    approved?: number;
+    needsApproval?: number;
+    readyToSend?: number;
+    recentlySent?: number;
+    eligibleNow?: number;
+    approvedEligibleNow?: number;
+    approvedManualEligibleNow?: number;
+    blockedByCooldown?: number;
+    blockedByEmailValidation?: number;
+    blockedByQualification?: number;
+    blockedBySuppression?: number;
+    blockedByOther?: number;
+    dailyLimit?: number;
+    dailyRemaining?: number;
+    expectedToAttempt?: number;
+    notReviewable?: {
+      invalidEmail?: number;
+      noUsableEmail?: number;
+      qualificationFailed?: number;
+      cooldown?: number;
+      suppressed?: number;
+      alreadyContacted?: number;
+      rejected?: number;
+      other?: number;
+    };
+    notReviewableTotal?: number;
+  };
+  crmBoard?: {
+    totalProspects?: number;
+    draftsGenerated?: number;
+    needsApproval?: number;
+    readyToSend?: number;
+    recentlySent?: number;
+    recentlySentWindowDays?: number;
+    sentToday?: number;
+    sentLifetime?: number;
+    usableEmails?: number;
+    needsEmail?: number;
+    notReviewable?: {
+      invalidEmail?: number;
+      noUsableEmail?: number;
+      qualificationFailed?: number;
+      cooldown?: number;
+      suppressed?: number;
+      alreadyContacted?: number;
+      rejected?: number;
+      other?: number;
+    };
+    notReviewableTotal?: number;
+    approvalsUrl?: string;
+  };
   /** READY_FOR_APPROVAL count (verified + draft, not approved). */
   needsApproval?: number;
   /** Approved and currently send-eligible. */

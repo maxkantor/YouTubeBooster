@@ -198,10 +198,126 @@ export function emptyDistribution() {
       clicked: 0,
       converted: 0
     },
+    pipeline: null,
+    crmBoard: null,
+    needsApproval: 0,
+    crmActionRequired: false,
+    crmActionMessage: 'No action required.',
+    approvalsUrl: 'https://youtubeboosterai.com/admin/acquisition/approvals',
+    crmSummaryOk: null,
     cohort: emptyCohort(),
     deliverability: emptyDeliverability()
   };
 }
+
+/** Format a pipeline metric: number when known, Unavailable only when CRM summary failed. */
+export function pipelineMetric(value, crmOk) {
+  if (value != null && Number.isFinite(Number(value))) return String(Number(value));
+  if (crmOk === false) return 'Unavailable';
+  if (crmOk === true) return '0';
+  return 'Unavailable';
+}
+
+/**
+ * Build CRM-reconciled acquisition text blocks (Admin Approvals is source of truth).
+ */
+export function formatCrmAcquisitionText(dist) {
+  const d = dist || emptyDistribution();
+  const board = d.crmBoard || {};
+  const pipe = d.pipeline || {};
+  const funnel = d.outreachFunnel || emptyDistribution().outreachFunnel;
+  const nr = board.notReviewable || pipe.notReviewable || {};
+  const needsApproval = Number(board.needsApproval ?? d.needsApproval ?? 0) || 0;
+  const readyToSend = Number(board.readyToSend ?? pipe.readyToSend ?? funnel.approved ?? 0) || 0;
+  const recentlySent = Number(board.recentlySent ?? pipe.recentlySent ?? 0) || 0;
+  const windowDays = board.recentlySentWindowDays ?? 7;
+  const draftsGenerated = Number(board.draftsGenerated ?? pipe.drafted ?? funnel.drafted ?? 0) || 0;
+  const totalProspects = Number(board.totalProspects ?? d.prospectsEvaluated ?? 0) || 0;
+  const crmOk = d.crmSummaryOk;
+  const lines = [];
+
+  lines.push('YOUTUBEBOOSTER — CUSTOMER ACQUISITION');
+  lines.push('====================================');
+  lines.push('TODAY');
+  lines.push('-----');
+  lines.push(`Prospects discovered: ${totalProspects || d.prospectsEvaluated || 0}`);
+  lines.push(`Contacts found (verified): ${board.usableEmails ?? '—'}`);
+  lines.push(`Needs approval: ${needsApproval}`);
+  lines.push(`Ready to send: ${readyToSend}`);
+  lines.push(`Sent today: ${d.sentToday ?? d.sesAcceptedThisRun ?? 0}`);
+  lines.push(`Delivered: ${funnel.delivered ?? 0}`);
+  lines.push(`Clicks: ${funnel.clicked ?? 0}`);
+  lines.push(`Audits completed: ${d.cohort?.auditCompletions ?? 0}`);
+  lines.push(`Signups: ${d.cohort?.signups ?? 0}`);
+  lines.push(`Customers: ${d.cohort?.verifiedCustomers ?? funnel.converted ?? 0}`);
+  lines.push(`Revenue: ${d.verifiedRevenue ?? '$0.00'}`);
+  lines.push('');
+
+  if (needsApproval > 0 || d.crmActionRequired) {
+    lines.push('MAX — ACTION REQUIRED');
+    lines.push('---------------------');
+    lines.push(
+      d.crmActionMessage ||
+        `${needsApproval} outreach draft${needsApproval === 1 ? '' : 's'} waiting for approval.`
+    );
+    lines.push(`OPEN APPROVALS: ${d.approvalsUrl || board.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals'}`);
+  } else {
+    lines.push('OWNER ACTION');
+    lines.push('------------');
+    lines.push(d.crmActionMessage || 'No action required.');
+  }
+  lines.push('');
+
+  lines.push('OUTREACH PIPELINE (Admin CRM)');
+  lines.push('-----------------------------');
+  lines.push(`Total creators: ${totalProspects}`);
+  lines.push(`Usable emails: ${board.usableEmails ?? '—'}`);
+  lines.push(`Needs email: ${board.needsEmail ?? '—'}`);
+  lines.push(`Drafts generated (obs+subject): ${draftsGenerated}`);
+  lines.push(`Needs approval: ${needsApproval}`);
+  lines.push(`Ready to send: ${readyToSend}`);
+  lines.push(`Recently sent (last ${windowDays}d): ${recentlySent}`);
+  lines.push(`Sent lifetime: ${board.sentLifetime ?? funnel.sent ?? 0}`);
+  lines.push(`Cooldown / suppressed / invalid (not reviewable):`);
+  lines.push(`  invalid email: ${nr.invalidEmail ?? 0}`);
+  lines.push(`  no usable email: ${nr.noUsableEmail ?? 0}`);
+  lines.push(`  qualification failed: ${nr.qualificationFailed ?? 0}`);
+  lines.push(`  cooldown: ${nr.cooldown ?? 0}`);
+  lines.push(`  suppressed: ${nr.suppressed ?? 0}`);
+  lines.push(`  already contacted: ${nr.alreadyContacted ?? 0}`);
+  lines.push(`  rejected: ${nr.rejected ?? 0}`);
+  lines.push(`  other: ${nr.other ?? 0}`);
+  const nrTotal = Number(board.notReviewableTotal ?? pipe.notReviewableTotal);
+  if (Number.isFinite(nrTotal)) {
+    lines.push(
+      `Reconciliation: drafts ${draftsGenerated} = needsApproval ${needsApproval} + notReviewable ${nrTotal} (+ ready ${readyToSend} if approved drafts counted separately).`
+    );
+  }
+  lines.push('');
+
+  lines.push('SEND GATES (same rules as weekday sender + Approvals)');
+  lines.push('----------------------------------------------------');
+  lines.push(`ELIGIBLE NOW: ${pipelineMetric(pipe.eligibleNow, crmOk)}`);
+  lines.push(`APPROVED ELIGIBLE NOW: ${pipelineMetric(pipe.approvedEligibleNow, crmOk)}`);
+  lines.push(
+    `BLOCKED BY EMAIL VALIDATION (approved only): ${pipelineMetric(pipe.blockedByEmailValidation, crmOk)}`
+  );
+  lines.push(`BLOCKED BY COOLDOWN (approved only): ${pipelineMetric(pipe.blockedByCooldown, crmOk)}`);
+  lines.push(
+    `BLOCKED BY QUALIFICATION (approved only): ${pipelineMetric(pipe.blockedByQualification, crmOk)}`
+  );
+  lines.push(
+    `BLOCKED BY SUPPRESSION (approved only): ${pipelineMetric(pipe.blockedBySuppression, crmOk)}`
+  );
+  lines.push(`DAILY REMAINING: ${pipelineMetric(pipe.dailyRemaining ?? d.dailyRemaining, crmOk)} / limit ${pipe.dailyLimit ?? d.dailyLimit ?? d.deliverability?.dailyLimit ?? 10}`);
+  lines.push(`EXPECTED TO ATTEMPT: ${pipelineMetric(pipe.expectedToAttempt, crmOk)}`);
+  lines.push(
+    'Note: SKIPPED REASONS / INVALID_EMAIL tallies below are all COOK-001 candidates. Approved-only email blocks are separate (0 when Ready to Send is empty).'
+  );
+  lines.push('');
+  return lines;
+}
+
 
 export function emptyCohort() {
   return {
@@ -310,6 +426,24 @@ export function normalizeDistribution(input, ctx = {}) {
   d.cohort = { ...emptyCohort(), ...(input?.cohort || d.cohort || {}) };
   d.deliverability = { ...emptyDeliverability(), ...(input?.deliverability || d.deliverability || {}) };
   d.skipReasonCounts = { ...(input?.skipReasonCounts || d.skipReasonCounts || {}) };
+  d.pipeline = input?.pipeline ?? d.pipeline ?? null;
+  d.crmBoard = input?.crmBoard ?? d.crmBoard ?? null;
+  d.needsApproval = Number(input?.needsApproval ?? d.crmBoard?.needsApproval ?? d.needsApproval ?? 0) || 0;
+  d.crmActionRequired = input?.crmActionRequired === true || d.needsApproval > 0;
+  d.crmActionMessage =
+    input?.crmActionMessage ||
+    (d.needsApproval > 0
+      ? `${d.needsApproval} outreach draft${d.needsApproval === 1 ? '' : 's'} waiting for approval.`
+      : 'No action required.');
+  d.approvalsUrl =
+    input?.approvalsUrl ||
+    d.crmBoard?.approvalsUrl ||
+    'https://youtubeboosterai.com/admin/acquisition/approvals';
+  d.crmSummaryOk = input?.crmSummaryOk ?? d.crmSummaryOk ?? null;
+  d.sentToday = Number(input?.sentToday ?? d.sentToday ?? 0) || 0;
+  d.sentLast7Days = Number(input?.sentLast7Days ?? d.crmBoard?.recentlySent ?? d.sentLast7Days ?? 0) || 0;
+  d.dailyLimit = Number(input?.dailyLimit ?? d.pipeline?.dailyLimit ?? d.dailyLimit ?? 10) || 10;
+  d.dailyRemaining = Number(input?.dailyRemaining ?? d.pipeline?.dailyRemaining ?? d.dailyRemaining ?? 0) || 0;
   d.prospectsEvaluated = Number(input?.prospectsEvaluated ?? d.prospectsEvaluated ?? 0) || 0;
   d.sesAttemptedThisRun = Number(input?.sesAttemptedThisRun ?? input?.sendAttempts ?? d.sesAttemptedThisRun ?? 0) || 0;
   d.distributionAttempted = d.distributionAttempted === true || d.prospectsEvaluated > 0 || d.sesAttemptedThisRun > 0;
@@ -512,14 +646,17 @@ export function buildSubject({ prefix, et, dist }) {
   const d = dist || emptyDistribution();
   const newCust = d.newCustomersThisRun ?? 0;
   const ses = Number(d.sesAcceptedThisRun ?? d.cohort?.emailsSent ?? 0) || 0;
+  const needs = Number(d.needsApproval ?? d.crmBoard?.needsApproval ?? 0) || 0;
   const lead =
-    ses > 0 || d.executed
-      ? 'Distribution executed'
-      : d.blockingApproval
-        ? 'Blocking approval required'
-        : d.distributionAttempted || (d.prospectsEvaluated || 0) > 0 || (d.sesAttemptedThisRun || 0) > 0
-          ? 'Distribution failed'
-          : 'Distribution not executed';
+    needs > 0
+      ? `MAX — ACTION REQUIRED (${needs} need approval)`
+      : ses > 0 || d.executed
+        ? 'Distribution executed'
+        : d.blockingApproval
+          ? 'Blocking approval required'
+          : d.distributionAttempted || (d.prospectsEvaluated || 0) > 0 || (d.sesAttemptedThisRun || 0) > 0
+            ? 'Distribution failed'
+            : 'Distribution not executed';
   return typographicNormalize(
     `${prefix || 'YouTubeBooster Growth'} · ${lead} · ${newCust} new customers this run · ${et.date}`
   );
@@ -574,10 +711,15 @@ function nextActions({ classified, nextFuture, reportYmd, dist }) {
   const items = [];
   const d = dist || emptyDistribution();
   const dueMissed = classified.filter((e) => e.dueUnevaluated);
+  const needs = Number(d.needsApproval ?? d.crmBoard?.needsApproval ?? 0) || 0;
 
-  if (d.blockingApproval) {
+  if (needs > 0) {
     items.push(
-      `BLOCKING: ${d.requiredOwnerApproval}${d.exactActionPrepared && d.exactActionPrepared !== 'none' ? ` Exact action prepared: ${d.exactActionPrepared}` : ''}`
+      `MAX — ACTION REQUIRED: ${needs} draft${needs === 1 ? '' : 's'} in Admin Approvals. Open ${d.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals'}`
+    );
+  } else if (d.blockingApproval) {
+    items.push(
+      `BLOCKING (new channel): ${d.requiredOwnerApproval}${d.exactActionPrepared && d.exactActionPrepared !== 'none' ? ` Exact action prepared: ${d.exactActionPrepared}` : ''}`
     );
   } else if (!d.executed) {
     items.push('Execute one allowed external distribution action this run. Deployed pages are not distribution.');
@@ -696,10 +838,14 @@ export function composeGrowthReport(opts) {
   const rates = cohortConversionLines(cohort);
   const deliv = dist.deliverability || emptyDeliverability();
 
+  // CRM-first acquisition board (Admin Approvals is source of truth).
+  for (const line of formatCrmAcquisitionText(dist)) t.push(line);
+
   t.push('TODAY (this-run SES ledger)');
   t.push('---------------------------');
   t.push(`SES accepted this run: ${dist.sesAcceptedThisRun ?? cohort.emailsSent}`);
   t.push(`Lifetime CRM SENT (not today): ${dist.lifetimeCrmSent ?? dist.outreachFunnel?.sent ?? 'Unknown'}`);
+  t.push(`Recently sent (last ${dist.crmBoard?.recentlySentWindowDays ?? 7}d): ${dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0}`);
   t.push(`Clicks (this-run cohort): ${cohort.auditClicks}`);
   t.push(`Audits: ${cohort.auditStarts} start / ${cohort.auditCompletions} complete`);
   t.push(`Signups: ${cohort.signups}`);
@@ -712,6 +858,23 @@ export function composeGrowthReport(opts) {
   t.push(`Send → Paid: ${rates.sendToPaid}`);
   t.push(`Revenue per 100 emails: ${rates.revenuePer100}`);
   t.push(`Cohort: ${cohort.runId}`);
+  t.push('');
+  t.push('7-DAY CUSTOMER FUNNEL (site-wide GA4 + CRM)');
+  t.push('------------------------------------------');
+  t.push(`External visitors (sessions): ${cell(m7?.sessions)}`);
+  t.push(`Audit started: ${cell(m7?.audit_starts)}`);
+  t.push(`Audit completed: ${cell(m7?.audit_completions)}`);
+  t.push(`Signup / pricing: ${cell(m7?.pricing_viewers)}`);
+  t.push(`Checkout: ${cell(m7?.checkout_starts)}`);
+  t.push(`Paid (verified): ${cell(m7?.unique_paying_customers)}`);
+  t.push('');
+  t.push('AUTOMATION HEALTH');
+  t.push('-----------------');
+  t.push(`Creator discovery / CRM: ${opts.snapshot?.sources?.crm === 'ok' || dist.crmSummaryOk ? 'OK' : dist.crmSummaryOk === false ? 'ERROR' : 'UNAVAILABLE'}`);
+  t.push(`Contact discovery: ${dist.crmSummaryOk === true ? 'OK' : dist.crmSummaryOk === false ? 'ERROR' : 'UNAVAILABLE'}`);
+  t.push(`SES: ${(dist.sesAttemptedThisRun || 0) >= 0 && dist.crmSummaryOk !== false ? 'OK' : 'UNAVAILABLE'}`);
+  t.push(`GA4: ${opts.snapshot?.sources?.ga4 === 'ok' ? 'OK' : opts.snapshot?.sources?.ga4 ? 'ERROR' : 'UNAVAILABLE'}`);
+  t.push(`Stripe: ${opts.snapshot?.sources?.stripe === 'ok' ? 'OK' : opts.snapshot?.sources?.stripe ? 'ERROR' : 'UNAVAILABLE'}`);
   t.push('');
   t.push('DELIVERABILITY');
   t.push('--------------');
@@ -793,11 +956,14 @@ export function composeGrowthReport(opts) {
   t.push(`Newly attributed external customers (this run): ${dist.newCustomersThisRun}`);
   t.push(`Verified revenue: ${dist.verifiedRevenue}`);
   t.push(
-    `Required owner approval: ${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
+    `Channel owner approval (new distribution channel): ${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
+  );
+  t.push(
+    `CRM Approvals queue: ${Number(dist.needsApproval ?? 0) > 0 ? `ACTION REQUIRED — ${dist.needsApproval} need approval` : 'No drafts waiting'}`
   );
   t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
   const funnel = dist.outreachFunnel || emptyDistribution().outreachFunnel;
-  t.push('COOK-001 outreach funnel (CRM lifetime unless labeled; a draft is not distribution):');
+  t.push('COOK-001 outreach funnel (CRM; a draft is not distribution):');
   t.push(`  PROSPECTS EVALUATED: ${dist.prospectsEvaluated ?? 0}`);
   t.push(`  SES ATTEMPTS (API calls): ${dist.sesAttemptedThisRun ?? dist.sendAttempts ?? 0}`);
   t.push(`  SES ACCEPTED TODAY: ${dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0}`);
@@ -806,7 +972,7 @@ export function composeGrowthReport(opts) {
   }
   const skipCounts = dist.skipReasonCounts || {};
   if (Object.keys(skipCounts).length) {
-    t.push('  SKIPPED REASONS:');
+    t.push('  SKIPPED REASONS (all COOK-001 candidates this run):');
     for (const [code, n] of Object.entries(skipCounts).sort((a, b) => b[1] - a[1])) {
       t.push(`    ${code}: ${n}`);
     }
@@ -814,22 +980,23 @@ export function composeGrowthReport(opts) {
     t.push(`  SKIPPED BY REASON: ${dist.skippedByReason.slice(0, 15).join('; ')}`);
   }
   if (dist.eligibleProspects != null) {
-    t.push(`  ELIGIBLE PROSPECTS (CSV probe): ${dist.eligibleProspects}`);
+    t.push(`  ELIGIBLE PROSPECTS (run probe): ${dist.eligibleProspects}`);
   }
-  t.push(`  DRAFTED (CRM): ${funnel.drafted}`);
-  t.push(`  APPROVED (CRM): ${funnel.approved}`);
+  t.push(`  DRAFTS GENERATED (obs+subject, COOK-001): ${funnel.drafted}`);
+  t.push(`  NEEDS APPROVAL (Admin queue): ${dist.needsApproval ?? dist.crmBoard?.needsApproval ?? 0}`);
+  t.push(`  READY TO SEND (approved): ${funnel.approved}`);
+  t.push(`  RECENTLY SENT (last ${dist.crmBoard?.recentlySentWindowDays ?? 7}d): ${dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0}`);
   const pipe = dist.pipeline || {};
-  if (pipe.eligibleNow != null || pipe.approvedEligibleNow != null) {
-    t.push(`  ELIGIBLE NOW (send gates): ${pipe.eligibleNow ?? 'Unknown'}`);
-    t.push(`  APPROVED ELIGIBLE NOW: ${pipe.approvedEligibleNow ?? 'Unknown'}`);
-    t.push(`  BLOCKED BY COOLDOWN (approved): ${pipe.blockedByCooldown ?? 0}`);
-    t.push(`  BLOCKED BY EMAIL VALIDATION (approved): ${pipe.blockedByEmailValidation ?? 0}`);
-    t.push(`  BLOCKED BY QUALIFICATION (approved): ${pipe.blockedByQualification ?? 0}`);
-    t.push(`  BLOCKED BY SUPPRESSION (approved): ${pipe.blockedBySuppression ?? 0}`);
-    t.push(`  BLOCKED BY OTHER (approved): ${pipe.blockedByOther ?? 0}`);
-    t.push(`  DAILY REMAINING: ${pipe.dailyRemaining ?? 'Unknown'} / limit ${pipe.dailyLimit ?? dist.deliverability?.dailyLimit ?? 10}`);
-    t.push(`  EXPECTED TO ATTEMPT: ${pipe.expectedToAttempt ?? 'Unknown'}`);
-  }
+  const crmOk = dist.crmSummaryOk;
+  t.push(`  ELIGIBLE NOW (send gates): ${pipelineMetric(pipe.eligibleNow, crmOk)}`);
+  t.push(`  APPROVED ELIGIBLE NOW: ${pipelineMetric(pipe.approvedEligibleNow, crmOk)}`);
+  t.push(`  BLOCKED BY COOLDOWN (approved): ${pipelineMetric(pipe.blockedByCooldown, crmOk)}`);
+  t.push(`  BLOCKED BY EMAIL VALIDATION (approved): ${pipelineMetric(pipe.blockedByEmailValidation, crmOk)}`);
+  t.push(`  BLOCKED BY QUALIFICATION (approved): ${pipelineMetric(pipe.blockedByQualification, crmOk)}`);
+  t.push(`  BLOCKED BY SUPPRESSION (approved): ${pipelineMetric(pipe.blockedBySuppression, crmOk)}`);
+  t.push(`  BLOCKED BY OTHER (approved): ${pipelineMetric(pipe.blockedByOther, crmOk)}`);
+  t.push(`  DAILY REMAINING: ${pipelineMetric(pipe.dailyRemaining ?? dist.dailyRemaining, crmOk)} / limit ${pipe.dailyLimit ?? dist.deliverability?.dailyLimit ?? 10}`);
+  t.push(`  EXPECTED TO ATTEMPT: ${pipelineMetric(pipe.expectedToAttempt, crmOk)}`);
   t.push(`  SENT LIFETIME (CRM): ${dist.lifetimeCrmSent ?? funnel.sent}`);
   t.push(`  DELIVERED: ${funnel.delivered}`);
   t.push(`  CLICKED: ${funnel.clicked}`);
@@ -916,21 +1083,32 @@ export function composeGrowthReport(opts) {
     )
     .join('');
 
-  const distLeadBg = dist.blockingApproval
+  const distLeadBg = Number(dist.needsApproval ?? 0) > 0
     ? '#fef3c7'
-    : dist.executed
-      ? '#ecfdf5'
-      : dist.distributionAttempted
-        ? '#fee2e2'
-        : '#f1f5f9';
-  const distLeadBorder = dist.blockingApproval
+    : dist.blockingApproval
+      ? '#fef3c7'
+      : dist.executed
+        ? '#ecfdf5'
+        : dist.distributionAttempted
+          ? '#fee2e2'
+          : '#f1f5f9';
+  const distLeadBorder = Number(dist.needsApproval ?? 0) > 0
     ? '#f59e0b'
-    : dist.executed
-      ? '#6ee7b7'
-      : dist.distributionAttempted
-        ? '#f87171'
-        : '#cbd5e1';
+    : dist.blockingApproval
+      ? '#f59e0b'
+      : dist.executed
+        ? '#6ee7b7'
+        : dist.distributionAttempted
+          ? '#f87171'
+          : '#cbd5e1';
   const distRows = [
+    [
+      'CRM Approvals queue',
+      Number(dist.needsApproval ?? 0) > 0
+        ? `ACTION REQUIRED — ${dist.needsApproval} need approval`
+        : 'No drafts waiting'
+    ],
+    ['OPEN APPROVALS', String(dist.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals')],
     ['Distribution executed', dist.executed && (dist.sesAcceptedThisRun || 0) > 0 ? 'yes' : 'no'],
     ['Distribution attempted', dist.distributionAttempted ? 'yes' : 'no'],
     ['Audience/channel', `${dist.audience} / ${dist.channel}`],
@@ -940,7 +1118,7 @@ export function composeGrowthReport(opts) {
     ['Newly attributed external customers (this run)', String(dist.newCustomersThisRun)],
     ['Verified revenue', String(dist.verifiedRevenue)],
     [
-      'Required owner approval',
+      'Channel owner approval (new distribution)',
       `${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
     ],
     ['Existing customers', String(dist.existingCustomers)],
@@ -952,15 +1130,29 @@ export function composeGrowthReport(opts) {
     ['New customers acquired by the current run', String(dist.newCustomersThisRun)],
     ['COOK-001 PROSPECTS EVALUATED', String(dist.prospectsEvaluated ?? 0)],
     ['COOK-001 SES ATTEMPTS', String(dist.sesAttemptedThisRun ?? dist.sendAttempts ?? 0)],
-    ['COOK-001 DRAFTED (CRM)', String(dist.outreachFunnel?.drafted ?? 0)],
-    ['COOK-001 APPROVED (CRM)', String(dist.outreachFunnel?.approved ?? 0)],
-    ['COOK-001 ELIGIBLE NOW', String(dist.pipeline?.eligibleNow ?? 'Unknown')],
-    ['COOK-001 APPROVED ELIGIBLE NOW', String(dist.pipeline?.approvedEligibleNow ?? 'Unknown')],
-    ['COOK-001 BLOCKED BY COOLDOWN', String(dist.pipeline?.blockedByCooldown ?? 0)],
-    ['COOK-001 BLOCKED BY EMAIL VALIDATION', String(dist.pipeline?.blockedByEmailValidation ?? 0)],
-    ['COOK-001 BLOCKED BY QUALIFICATION', String(dist.pipeline?.blockedByQualification ?? 0)],
-    ['COOK-001 BLOCKED BY SUPPRESSION', String(dist.pipeline?.blockedBySuppression ?? 0)],
-    ['COOK-001 BLOCKED BY OTHER', String(dist.pipeline?.blockedByOther ?? 0)],
+    ['COOK-001 DRAFTS GENERATED', String(dist.outreachFunnel?.drafted ?? 0)],
+    ['COOK-001 NEEDS APPROVAL', String(dist.needsApproval ?? dist.crmBoard?.needsApproval ?? 0)],
+    ['COOK-001 READY TO SEND', String(dist.outreachFunnel?.approved ?? 0)],
+    [
+      `COOK-001 RECENTLY SENT (${dist.crmBoard?.recentlySentWindowDays ?? 7}d)`,
+      String(dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0)
+    ],
+    ['COOK-001 ELIGIBLE NOW', pipelineMetric(dist.pipeline?.eligibleNow, dist.crmSummaryOk)],
+    ['COOK-001 APPROVED ELIGIBLE NOW', pipelineMetric(dist.pipeline?.approvedEligibleNow, dist.crmSummaryOk)],
+    ['COOK-001 BLOCKED BY COOLDOWN (approved)', pipelineMetric(dist.pipeline?.blockedByCooldown, dist.crmSummaryOk)],
+    [
+      'COOK-001 BLOCKED BY EMAIL VALIDATION (approved)',
+      pipelineMetric(dist.pipeline?.blockedByEmailValidation, dist.crmSummaryOk)
+    ],
+    [
+      'COOK-001 BLOCKED BY QUALIFICATION (approved)',
+      pipelineMetric(dist.pipeline?.blockedByQualification, dist.crmSummaryOk)
+    ],
+    [
+      'COOK-001 BLOCKED BY SUPPRESSION (approved)',
+      pipelineMetric(dist.pipeline?.blockedBySuppression, dist.crmSummaryOk)
+    ],
+    ['COOK-001 BLOCKED BY OTHER (approved)', pipelineMetric(dist.pipeline?.blockedByOther, dist.crmSummaryOk)],
     ['COOK-001 SES ACCEPTED TODAY', String(dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0)],
     ['COOK-001 SENT LIFETIME (CRM)', String(dist.lifetimeCrmSent ?? dist.outreachFunnel?.sent ?? 0)],
     ['COOK-001 DELIVERED', String(dist.outreachFunnel?.delivered ?? 'Unknown')],
@@ -972,6 +1164,27 @@ export function composeGrowthReport(opts) {
         `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;width:220px;font-weight:600;color:#334155;">${escapeHtml(k)}</td><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(v)}</td></tr>`
     )
     .join('');
+
+  const crmBoardHtml = (() => {
+    const needs = Number(dist.needsApproval ?? 0) || 0;
+    const bg = needs > 0 ? '#fef3c7' : '#ecfdf5';
+    const border = needs > 0 ? '#f59e0b' : '#6ee7b7';
+    const title = needs > 0 ? 'MAX — ACTION REQUIRED' : 'OWNER ACTION';
+    const msg =
+      dist.crmActionMessage ||
+      (needs > 0
+        ? `${needs} outreach drafts waiting for approval.`
+        : 'No action required.');
+    const url = dist.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals';
+    return `<div style="margin:0 0 20px;padding:16px 18px;background:${bg};border:1px solid ${border};border-radius:8px;">
+      <div style="font-size:17px;font-weight:700;">${escapeHtml(title)}</div>
+      <div style="margin-top:8px;font-size:15px;">${escapeHtml(msg)}</div>
+      ${needs > 0 ? `<div style="margin-top:12px;"><a href="${escapeHtml(url)}" style="color:#1d4ed8;font-weight:700;">OPEN APPROVALS</a></div>` : ''}
+      <div style="margin-top:12px;font-size:14px;color:#334155;">
+        Needs approval <b>${needs}</b> · Ready to send <b>${escapeHtml(String(dist.crmBoard?.readyToSend ?? dist.outreachFunnel?.approved ?? 0))}</b> · Recently sent (${escapeHtml(String(dist.crmBoard?.recentlySentWindowDays ?? 7))}d) <b>${escapeHtml(String(dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0))}</b> · Drafts generated <b>${escapeHtml(String(dist.outreachFunnel?.drafted ?? 0))}</b>
+      </div>
+    </div>`;
+  })();
 
   const warnHtml = warnings.length
     ? `<h2 style="font-size:18px;margin:28px 0 10px;color:#9a3412;">Data quality</h2>
@@ -1047,6 +1260,7 @@ export function composeGrowthReport(opts) {
           </div>
         </td></tr>
         <tr><td style="padding:24px 28px 32px;">
+          ${crmBoardHtml}
           <h2 style="font-size:18px;margin:0 0 10px;">Today</h2>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #cbd5e1;border-radius:8px;border-collapse:separate;font-size:15px;">
             <tr>

@@ -157,16 +157,46 @@ if (invokedAsCli) {
   const crmSummary = await loadCrmAcquisitionSummary();
   if (crmSummary.ok) {
     const base = distribution || {};
+    const needsApproval = Number(crmSummary.needsApproval ?? crmSummary.crmBoard?.needsApproval ?? 0) || 0;
+    const approvalsUrl =
+      crmSummary.crmBoard?.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals';
     distribution = {
       ...base,
       outreachFunnel: {
         ...(base.outreachFunnel || {}),
         ...crmSummary.outreachFunnel
-      }
+      },
+      // Authoritative CRM pipeline — never leave ELIGIBLE NOW as Unknown when /summary works.
+      pipeline: crmSummary.pipeline || base.pipeline || null,
+      crmBoard: crmSummary.crmBoard || base.crmBoard || null,
+      needsApproval,
+      sentToday: crmSummary.sentToday ?? base.sentToday,
+      sentLast7Days: crmSummary.sentLast7Days ?? base.sentLast7Days,
+      dailyLimit: crmSummary.dailyLimit ?? base.dailyLimit,
+      dailyRemaining: crmSummary.dailyRemaining ?? base.dailyRemaining,
+      crmSummaryOk: true,
+      // Owner action = Approvals queue (not channel gate). Prefer CRM truth over hardcoded none.
+      crmActionRequired: needsApproval > 0,
+      crmActionMessage:
+        needsApproval > 0
+          ? `${needsApproval} outreach draft${needsApproval === 1 ? '' : 's'} waiting for approval.`
+          : 'No action required.',
+      approvalsUrl,
+      // Keep channel-level requiredOwnerApproval from distribution file when present;
+      // do not invent a second approval CRM.
+      skipReasonCountsAllCandidates:
+        crmSummary.skipReasonCounts || base.skipReasonCountsAllCandidates || base.skipReasonCounts || {}
     };
   } else if (!distribution) {
     distribution = undefined;
+  } else {
+    distribution = {
+      ...distribution,
+      crmSummaryOk: false,
+      crmSummaryError: crmSummary.error || 'crm_unavailable'
+    };
   }
+
 
   const lockPath = path.join(ROOT, 'docs/growth/strategy-lock.json');
   let strategyLock = undefined;

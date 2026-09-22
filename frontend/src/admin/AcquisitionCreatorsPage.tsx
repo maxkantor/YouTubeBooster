@@ -731,6 +731,7 @@ export function AcquisitionCreatorsPage() {
                   <th>Audience</th>
                   <th>Email</th>
                   <th>Status</th>
+                  <th>Campaign</th>
                   <th>Last contact</th>
                   <th className="acq-col-action">Action</th>
                 </tr>
@@ -756,6 +757,11 @@ export function AcquisitionCreatorsPage() {
                       <td className="acq-col-creator">
                         <div className="acq-creator-name">{p.channelName}</div>
                         <div className="ops-muted">{p.handle}</div>
+                        {p.channelUrl && (
+                          <a href={p.channelUrl} target="_blank" rel="noreferrer" className="ops-muted">
+                            Channel
+                          </a>
+                        )}
                       </td>
                       <td>{p.subscriberRange}</td>
                       <td className="acq-col-email">
@@ -774,12 +780,21 @@ export function AcquisitionCreatorsPage() {
                         ) : isVerifiedEmailRow(row) ? (
                           <div>
                             <div>{row.publicBusinessEmail}</div>
-                            {conf && <div className="ops-muted">{conf.toUpperCase()} CONFIDENCE</div>}
+                            <div className="ops-muted">
+                              {[conf ? `${conf.toUpperCase()} CONFIDENCE` : null, 'VERIFIED']
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </div>
                             {p.contactSourceUrl && (
                               <a href={p.contactSourceUrl} target="_blank" rel="noreferrer">
                                 View source
                               </a>
                             )}
+                          </div>
+                        ) : row.publicBusinessEmail ? (
+                          <div>
+                            <div>{row.publicBusinessEmail}</div>
+                            <div className="ops-muted">UNVERIFIED</div>
                           </div>
                         ) : (
                           <span className="ops-muted">—</span>
@@ -787,7 +802,11 @@ export function AcquisitionCreatorsPage() {
                       </td>
                       <td>
                         <Badge kind={workflowBadgeKind(wf.status)}>{wf.label}</Badge>
+                        <div className="ops-muted" style={{ fontSize: 12, marginTop: 2 }}>
+                          {(p.outreachStatus || '—').toLowerCase()}
+                        </div>
                       </td>
+                      <td className="ops-muted">{p.campaign || '—'}</td>
                       <td className="admin-crm-nowrap">{formatDt(row.lastContactedAt)}</td>
                       <td className="acq-col-action">
                         {wf.status === 'REVIEW_EMAIL' ? (

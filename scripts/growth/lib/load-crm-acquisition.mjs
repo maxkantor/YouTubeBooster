@@ -55,7 +55,8 @@ async function adminJson(cookie, pathName, opts = {}) {
 }
 
 /**
- * @returns {Promise<{ ok: boolean, outreachFunnel?: object, error?: string }>}
+ * Authoritative CRM board for reports — same /summary the Admin Approvals page uses.
+ * @returns {Promise<{ ok: boolean, outreachFunnel?: object, pipeline?: object, crmBoard?: object, error?: string }>}
  */
 export async function loadCrmAcquisitionSummary() {
   try {
@@ -65,10 +66,11 @@ export async function loadCrmAcquisitionSummary() {
       return { ok: false, error: `crm_summary_http_${summary.status}` };
     }
     const s = summary.json || {};
+    const draftsGenerated = s.draftsGenerated ?? s.pipeline?.drafted ?? s.drafts ?? 0;
     return {
       ok: true,
       outreachFunnel: {
-        drafted: s.drafts ?? 0,
+        drafted: draftsGenerated,
         approved: s.approved ?? 0,
         sent: s.sent ?? 0,
         delivered: s.delivered ?? 0,
@@ -77,10 +79,32 @@ export async function loadCrmAcquisitionSummary() {
       },
       cohortFunnel: s.cohortFunnel || null,
       pipeline: s.pipeline || null,
+      crmBoard: s.crmBoard || {
+        totalProspects: s.prospectsEvaluated ?? s.discovered ?? 0,
+        draftsGenerated,
+        needsApproval: s.needsApproval ?? 0,
+        readyToSend: s.approved ?? 0,
+        recentlySent: s.sentLast7Days ?? 0,
+        recentlySentWindowDays: s.recentlySentWindowDays ?? 7,
+        sentToday: s.sentToday ?? 0,
+        sentLifetime: s.sent ?? 0,
+        usableEmails: s.contactVerified ?? 0,
+        needsEmail: Math.max(0, (s.prospectsEvaluated ?? 0) - (s.contactVerified ?? 0)),
+        notReviewable: s.pipeline?.notReviewable || null,
+        notReviewableTotal: s.pipeline?.notReviewableTotal ?? 0,
+        approvalsUrl: 'https://youtubeboosterai.com/admin/acquisition/approvals'
+      },
+      needsApproval: s.needsApproval ?? 0,
+      sentToday: s.sentToday ?? 0,
+      sentLast7Days: s.sentLast7Days ?? 0,
+      dailyLimit: s.dailyLimit ?? 10,
+      dailyRemaining: s.dailyRemaining ?? 0,
       sendEligible: s.sendEligible ?? 0,
       marketingSendingEnabled: s.marketingSendingEnabled === true,
       contactVerified: s.contactVerified ?? 0,
-      discovered: s.discovered ?? 0
+      discovered: s.discovered ?? 0,
+      skipReasonCounts: s.skipReasonCounts || null,
+      primaryBlocker: s.primaryBlocker || null
     };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

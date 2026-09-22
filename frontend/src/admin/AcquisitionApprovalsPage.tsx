@@ -137,27 +137,49 @@ export function AcquisitionApprovalsPage() {
     setNote('');
     try {
       if (andSend) {
+        // Approve all first so daily-limit leftovers stay Ready to Send.
+        const approveRes = await adminApi.acqApprove(ids);
         let sent = 0;
         let failed = 0;
+        let deferred = 0;
         const failReasons: string[] = [];
+        let capacity = dailyRemaining;
         for (const id of ids) {
           const label =
             allItems.find((r) => r.public.prospectId === id)?.public.channelName || id;
+          if (capacity <= 0) {
+            deferred++;
+            continue;
+          }
           try {
             const res = await adminApi.acqApproveAndSend(id);
-            if (res.ok && res.sent) sent++;
-            else {
-              failed++;
-              failReasons.push(`${label}: ${res.error || 'send failed'}`);
+            if (res.ok && res.sent) {
+              sent++;
+              capacity--;
+            } else {
+              // Already approved above — stays Ready to Send unless hard-blocked.
+              if (res.error === 'daily_limit_reached') deferred++;
+              else {
+                failed++;
+                failReasons.push(`${label}: ${res.error || 'send failed'}`);
+              }
             }
           } catch (e) {
             failed++;
             failReasons.push(`${label}: ${e instanceof Error ? e.message : 'send failed'}`);
           }
         }
-        const detail = failReasons.length ? ` — ${failReasons.slice(0, 3).join('; ')}${failReasons.length > 3 ? '…' : ''}` : '';
-        setNote(`Approve & send: ${sent} sent${failed ? `, ${failed} failed${detail}` : ''}.`);
+        const detail = failReasons.length
+          ? ` — ${failReasons.slice(0, 3).join('; ')}${failReasons.length > 3 ? '…' : ''}`
+          : '';
+        setNote(
+          `Approve & send: ${sent} sent` +
+            (deferred ? `, ${deferred} left Ready to Send (daily capacity)` : '') +
+            (failed ? `, ${failed} blocked${detail}` : '') +
+            `. Approval ${approveRes.approvalId}. Capacity was ${dailyRemaining}/${dailyLimit}.`
+        );
         if (sent > 0) setTab('sent');
+        else setTab('ready');
       } else {
         const res = await adminApi.acqApprove(ids);
         setNote(`Approval ${res.approvalId} stored. Nothing sends until Send Now / scheduled send.`);
@@ -193,7 +215,11 @@ export function AcquisitionApprovalsPage() {
       `${cooldownBypass} will bypass automation cooldown.`,
       `${hardBlocked} approved row${hardBlocked === 1 ? '' : 's'} remain blocked by suppression/safety rules.`,
       '',
-      '(Manual admin send does not use the automation daily pacing cap.)'
+      `Daily send capacity remaining: ${dailyRemaining} / ${dailyLimit}.`,
+      n > dailyRemaining
+        ? `Only ${dailyRemaining} will send now; the rest stay Ready to Send.`
+        : 'All selected fit within today’s daily capacity.',
+      'Suppression, bounce, and unsubscribe are never bypassed.'
     ].join('\n');
     if (!window.confirm(msg)) return;
     setBusy(true);
@@ -238,6 +264,9 @@ export function AcquisitionApprovalsPage() {
           onClick={() => setTab('sent')}
         >
           Recently Sent <strong>{sentRows.length}</strong>
+          <span className="ops-muted" style={{ fontSize: 12, marginLeft: 4 }}>
+            (7d)
+          </span>
         </button>
       </div>
 
@@ -306,10 +335,19 @@ export function AcquisitionApprovalsPage() {
             {selected.length > 0 ? (
               <>
                 <strong>{selected.length}</strong> selected
+                {' · '}
+                Daily capacity remaining: <strong>{dailyRemaining}</strong>/{dailyLimit}
+                {' · '}
+                Will send now: <strong>{Math.min(selected.length, dailyRemaining)}</strong>
+                {selected.length > dailyRemaining
+                  ? ` · ${selected.length - dailyRemaining} stay Ready to Send`
+                  : ''}
               </>
             ) : (
               <>
                 <strong>{eligibleVisible.length}</strong> ready for approval
+                {' · '}
+                Daily capacity: <strong>{dailyRemaining}</strong>/{dailyLimit}
               </>
             )}
           </span>
@@ -350,9 +388,21 @@ export function AcquisitionApprovalsPage() {
                   ? selected
                   : selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled, 30);
               if (!ids.length) return;
+              const willSend = Math.min(ids.length, dailyRemaining);
+              const stayReady = Math.max(0, ids.length - willSend);
               if (
                 !window.confirm(
-                  `Approve & send ${ids.length} creator${ids.length === 1 ? '' : 's'} now?\n\nEach will leave Needs Approval after a successful send.`
+                  [
+                    `Approve ${ids.length} creator${ids.length === 1 ? '' : 's'}.`,
+                    '',
+                    `Daily send capacity remaining: ${dailyRemaining} / ${dailyLimit}`,
+                    `Will attempt SES now: ${willSend}`,
+                    stayReady > 0
+                      ? `Remainder staying Ready to Send for scheduled send: ${stayReady}`
+                      : 'All selected fit within today’s capacity.',
+                    '',
+                    'Nothing bypasses suppression, invalid email, or daily limit.'
+                  ].join('\n')
                 )
               )
                 return;
@@ -499,6 +549,15 @@ export function AcquisitionApprovalsPage() {
                       </td>
                       <td>
                         <Badge kind={workflowBadgeKind(wf.status)}>{wf.label}</Badge>
+                        {tab === 'ready' && (
+                          <div className="ops-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                            {wf.canSendNow
+                              ? dailyRemaining <= 0
+                                ? 'DAILY LIMIT'
+                                : 'READY'
+                              : manualSendHardBlockReason(row)?.toUpperCase() || wf.currentStatusAnswer}
+                          </div>
+                        )}
                         {tab === 'sent' && (
                           <div className="ops-muted admin-crm-nowrap">{formatDt(row.lastContactedAt)}</div>
                         )}
