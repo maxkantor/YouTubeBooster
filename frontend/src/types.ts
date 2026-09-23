@@ -634,6 +634,8 @@ export type AcqCreatorDiscoveryJob = {
   added: number;
   failed: number;
   results: AcqCreatorDiscoveryItem[];
+  lastError?: string | null;
+  lastErrorStatus?: string | null;
 };
 
 export type AcqCampaignConfig = {

@@ -175,7 +175,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             && contactType is "business" or "partnership" or "media" or "general";
 
         // Automated public contact research (never invents emails). Respect backoff.
-        if (!alreadyVerified && !placeholder)
+        if (!alreadyVerified && !placeholder && !request.SkipContactResearch)
         {
             var due = contactNextAt is null || contactNextAt <= now;
             if (due && contactAttempts < 5)
@@ -1611,7 +1611,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             Failed: 0,
             Results: []);
         await SaveCreatorDiscoveryJobAsync(job, cancellationToken);
-        return await TickCreatorDiscoveryAsync(job.JobId, cancellationToken);
+        return job;
     }
 
     public async Task<AcqCreatorDiscoveryJobState?> GetCreatorDiscoveryJobAsync(string jobId, CancellationToken cancellationToken)
@@ -1632,11 +1632,45 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     {
         var job = await GetCreatorDiscoveryJobAsync(jobId, cancellationToken)
             ?? throw new InvalidOperationException("creator_discovery_job_not_found");
-        if (!string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(job.Status, "completed", StringComparison.OrdinalIgnoreCase) && job.Added >= job.Target)
+            return job;
+        if (string.Equals(job.Status, "failed", StringComparison.OrdinalIgnoreCase) && job.Added <= 0)
             return job;
         if (_channelSearch is null)
-            return job with { Status = "failed", UpdatedAt = DateTimeOffset.UtcNow };
+            return await SaveInterruptedAsync(job, "youtube_search_unavailable", "503", cancellationToken);
+        if (!string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
+        {
+            job = job with { Status = "running", LastError = null, LastErrorStatus = null, UpdatedAt = DateTimeOffset.UtcNow };
+            await SaveCreatorDiscoveryJobAsync(job, cancellationToken);
+        }
 
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(20));
+        try
+        {
+            return await TickCreatorDiscoveryCoreAsync(job, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return await SaveInterruptedAsync(job, "tick_timeout", "503", cancellationToken);
+        }
+        catch (Exception ex) when (IsTransientDiscoveryException(ex))
+        {
+            return await SaveInterruptedAsync(
+                job,
+                ex.Message[..Math.Min(ex.Message.Length, 180)],
+                InferDiscoveryHttpStatus(ex),
+                cancellationToken);
+        }
+    }
+
+    public Task<AcqCreatorDiscoveryJobState> ResumeCreatorDiscoveryAsync(string jobId, CancellationToken cancellationToken)
+        => TickCreatorDiscoveryAsync(jobId, cancellationToken);
+
+    private async Task<AcqCreatorDiscoveryJobState> TickCreatorDiscoveryCoreAsync(
+        AcqCreatorDiscoveryJobState job,
+        CancellationToken cancellationToken)
+    {
         var queue = job.Queue.ToList();
         var queueIndex = job.QueueIndex;
         var queryIndex = job.QueryIndex;
@@ -1655,6 +1689,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 var doneEmpty = job with
                 {
                     Status = "completed",
+                    LastError = null,
+                    LastErrorStatus = null,
                     UpdatedAt = DateTimeOffset.UtcNow,
                     Queue = queue,
                     QueueIndex = queueIndex
@@ -1663,7 +1699,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 return doneEmpty;
             }
 
-            var page = await _channelSearch.SearchAsync(
+            var page = await SearchWithRetryAsync(
                 job.Queries[queryIndex],
                 AcquisitionDiscoveryQueries.RelevanceLanguage(job.Language),
                 AcquisitionDiscoveryQueries.RegionCode(job.Market),
@@ -1675,64 +1711,84 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             pageToken = page.NextPageToken;
             if (page.Hits.Count == 0 || string.IsNullOrWhiteSpace(pageToken))
                 queryIndex++;
+            var afterSearch = job with
+            {
+                QueryIndex = queryIndex,
+                PageToken = pageToken,
+                Queue = queue,
+                QueueIndex = queueIndex,
+                LastError = null,
+                LastErrorStatus = null,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                Status = queryIndex >= job.Queries.Count && queue.Count == 0 ? "completed" : "running"
+            };
+            await SaveCreatorDiscoveryJobAsync(afterSearch, cancellationToken);
+            return afterSearch;
         }
 
-        if (queueIndex < queue.Count)
+        var hit = queue[queueIndex];
+        try
         {
-            var hit = queue[queueIndex++];
-            evaluated++;
-            try
+            var skip = AcquisitionDiscoveryQueries.Qualify(
+                job.Category, job.Language, job.Market, hit.Title, hit.Description, hit.Country,
+                hit.SubscriberCount, hit.VideoCount);
+            if (skip is not null)
             {
-                var skip = AcquisitionDiscoveryQueries.Qualify(
-                    job.Category, job.Language, job.Market, hit.Title, hit.Description, hit.Country,
-                    hit.SubscriberCount, hit.VideoCount);
-                if (skip is not null)
+                results.Add(new AcqCreatorDiscoveryItem(hit.ChannelId, hit.Handle, hit.Title, "skipped", skip, null));
+            }
+            else
+            {
+                qualified++;
+                var handle = string.IsNullOrWhiteSpace(hit.Handle) ? hit.ChannelId : hit.Handle;
+                var url = "https://www.youtube.com/channel/" + hit.ChannelId;
+                var existing = await _store.FindDuplicateAsync(hit.ChannelId, url, handle, null, cancellationToken);
+                if (existing is not null)
                 {
-                    results.Add(new AcqCreatorDiscoveryItem(hit.ChannelId, hit.Handle, hit.Title, "skipped", skip, null));
+                    duplicates++;
+                    results.Add(new AcqCreatorDiscoveryItem(hit.ChannelId, existing.Handle, hit.Title, "duplicate", existing.ProspectId, existing.ProspectId));
                 }
                 else
                 {
-                    qualified++;
-                    var handle = string.IsNullOrWhiteSpace(hit.Handle) ? hit.ChannelId : hit.Handle;
-                    var url = "https://www.youtube.com/channel/" + hit.ChannelId;
-                    var existing = await _store.FindDuplicateAsync(hit.ChannelId, url, handle, null, cancellationToken);
-                    if (existing is not null)
-                    {
-                        duplicates++;
-                        results.Add(new AcqCreatorDiscoveryItem(hit.ChannelId, existing.Handle, hit.Title, "duplicate", existing.ProspectId, existing.ProspectId));
-                    }
-                    else
-                    {
-                        var market = AcquisitionDiscoveryQueries.ReliableMarket(job.Market, hit.Country);
-                        var created = await InspectAndUpsertAsync(new AcqUpsertProspectRequest(
-                            ChannelInput: hit.ChannelId,
-                            PrimaryNiche: job.Category,
-                            Campaign: job.Campaign,
-                            Language: string.IsNullOrWhiteSpace(job.Language)
-                                ? AcquisitionDiscoveryQueries.DetectScriptLanguage(hit.Title + " " + (hit.Description ?? ""))
-                                : job.Language,
-                            OfficialWebsite: null,
-                            PublicBusinessEmail: null,
-                            ContactSourceUrl: null,
-                            ContactType: "none",
-                            Notes: $"creator-discovery {job.Category}/{job.Language}/{job.Market} {DateTime.UtcNow:yyyy-MM-dd}",
-                            Market: string.IsNullOrWhiteSpace(market) ? null : market
-                        ), cancellationToken);
-                        added++;
-                        results.Add(new AcqCreatorDiscoveryItem(
-                            hit.ChannelId, created.Handle, created.ChannelName, "added", null, created.ProspectId));
-                    }
+                    var market = AcquisitionDiscoveryQueries.ReliableMarket(job.Market, hit.Country);
+                    var created = await InspectAndUpsertAsync(new AcqUpsertProspectRequest(
+                        ChannelInput: hit.ChannelId,
+                        PrimaryNiche: job.Category,
+                        Campaign: job.Campaign,
+                        Language: string.IsNullOrWhiteSpace(job.Language)
+                            ? AcquisitionDiscoveryQueries.DetectScriptLanguage(hit.Title + " " + (hit.Description ?? ""))
+                            : job.Language,
+                        OfficialWebsite: null,
+                        PublicBusinessEmail: null,
+                        ContactSourceUrl: null,
+                        ContactType: "none",
+                        Notes: $"creator-discovery {job.Category}/{job.Language}/{job.Market} {DateTime.UtcNow:yyyy-MM-dd}",
+                        Market: string.IsNullOrWhiteSpace(market) ? null : market,
+                        SkipContactResearch: true
+                    ), cancellationToken);
+                    added++;
+                    results.Add(new AcqCreatorDiscoveryItem(
+                        hit.ChannelId, created.Handle, created.ChannelName, "added", null, created.ProspectId));
                 }
             }
-            catch (Exception ex)
-            {
-                failed++;
-                results.Add(new AcqCreatorDiscoveryItem(
-                    hit.ChannelId, hit.Handle, hit.Title, "failed",
-                    ex.Message[..Math.Min(ex.Message.Length, 180)], null));
-            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsTransientDiscoveryException(ex))
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            failed++;
+            results.Add(new AcqCreatorDiscoveryItem(
+                hit.ChannelId, hit.Handle, hit.Title, "failed",
+                ex.Message[..Math.Min(ex.Message.Length, 180)], null));
         }
 
+        queueIndex++;
+        evaluated++;
         var exhausted = queryIndex >= job.Queries.Count && queueIndex >= queue.Count;
         var next = job with
         {
@@ -1746,6 +1802,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             Added = added,
             Failed = failed,
             Results = results,
+            LastError = null,
+            LastErrorStatus = null,
             UpdatedAt = DateTimeOffset.UtcNow,
             Status = added >= job.Target || exhausted ? "completed" : "running"
         };
@@ -1829,6 +1887,82 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     {
         var json = System.Text.Json.JsonSerializer.Serialize(job, AcqJson.Options);
         await _store.SaveCohortRunAsync(CreatorAcquisitionCampaigns.Cook001, "creator-discovery-" + job.JobId, json, cancellationToken);
+    }
+
+    private async Task<AcqCreatorDiscoveryJobState> SaveInterruptedAsync(
+        AcqCreatorDiscoveryJobState job,
+        string message,
+        string status,
+        CancellationToken cancellationToken)
+    {
+        var next = job with
+        {
+            Status = job.Added > 0 ? "interrupted" : "failed",
+            LastError = message,
+            LastErrorStatus = status,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        await SaveCreatorDiscoveryJobAsync(next, cancellationToken);
+        return next;
+    }
+
+    private async Task<AcqYoutubeSearchPage> SearchWithRetryAsync(
+        string query,
+        string? relevanceLanguage,
+        string? regionCode,
+        int maxResults,
+        string? pageToken,
+        CancellationToken cancellationToken)
+    {
+        var delayMs = 400;
+        Exception? last = null;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            try
+            {
+                return await _channelSearch!.SearchAsync(
+                    query, relevanceLanguage, regionCode, maxResults, pageToken, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (attempt < 3 && IsTransientDiscoveryException(ex))
+            {
+                last = ex;
+                await Task.Delay(delayMs, cancellationToken);
+                delayMs *= 2;
+            }
+        }
+        throw last ?? new InvalidOperationException("youtube_search_failed");
+    }
+
+    private static bool IsTransientDiscoveryException(Exception ex)
+    {
+        if (ex is HttpRequestException or TimeoutException)
+            return true;
+        if (ex is TaskCanceledException)
+            return true;
+        var msg = ex.Message ?? "";
+        return msg.Contains("429", StringComparison.Ordinal)
+            || msg.Contains("500", StringComparison.Ordinal)
+            || msg.Contains("502", StringComparison.Ordinal)
+            || msg.Contains("503", StringComparison.Ordinal)
+            || msg.Contains("504", StringComparison.Ordinal)
+            || msg.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("ServiceUnavailable", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string InferDiscoveryHttpStatus(Exception ex)
+    {
+        var msg = ex.Message ?? "";
+        if (msg.Contains("429", StringComparison.Ordinal) || msg.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase))
+            return "429";
+        if (msg.Contains("504", StringComparison.Ordinal)) return "504";
+        if (msg.Contains("502", StringComparison.Ordinal)) return "502";
+        if (msg.Contains("500", StringComparison.Ordinal)) return "500";
+        return "503";
     }
 
     private async Task SaveDiscoveryJobAsync(AcqEmailDiscoveryJobState job, CancellationToken cancellationToken)

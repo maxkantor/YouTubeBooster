@@ -41,6 +41,15 @@ import {
   marketLabel,
   tierLabel
 } from './acqTaxonomy';
+import {
+  creatorDiscoveryBadge,
+  creatorDiscoveryPhase,
+  creatorDiscoveryProgress,
+  creatorDiscoveryTitle,
+  discoveryHttpHint,
+  discoveryInterruptMessage,
+  isTransientDiscoveryError
+} from './acqCreatorDiscoveryUi';
 
 type ConfirmMode = 'missing' | 'filtered' | 'selected' | 'force_retry' | null;
 
@@ -92,6 +101,9 @@ export function AcquisitionCreatorsPage() {
   const [creatorDiscoverConfirm, setCreatorDiscoverConfirm] = useState(false);
   const [creatorDiscoverBusy, setCreatorDiscoverBusy] = useState(false);
   const [creatorDiscoverJob, setCreatorDiscoverJob] = useState<AcqCreatorDiscoveryJob | null>(null);
+  const [creatorDiscoverInterrupted, setCreatorDiscoverInterrupted] = useState(false);
+  const [creatorDiscoverErrorDetail, setCreatorDiscoverErrorDetail] = useState('');
+  const [creatorDiscoverShowDetails, setCreatorDiscoverShowDetails] = useState(false);
   const creatorTickRef = useRef<number | null>(null);
   const creatorTarget = 25;
 
@@ -315,25 +327,72 @@ export function AcquisitionCreatorsPage() {
     }
   };
 
+  const sleepTick = (ms: number) =>
+    new Promise<void>((resolve) => {
+      creatorTickRef.current = window.setTimeout(() => resolve(), ms);
+    });
+
+  const tickCreatorDiscoveryWithRetry = async (jobId: string): Promise<AcqCreatorDiscoveryJob> => {
+    let delay = 800;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await adminApi.acqCreatorDiscoveryTick(jobId);
+      } catch (e) {
+        lastError = e;
+        if (!isTransientDiscoveryError(e) || attempt === 3) throw e;
+        await sleepTick(delay);
+        delay *= 2;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('Creator discovery tick failed');
+  };
+
   const pollCreatorDiscovery = useCallback(
     async (jobId: string) => {
       try {
         let job = await adminApi.acqCreatorDiscoveryJob(jobId);
-        while (job.status === 'running') {
-          setCreatorDiscoverJob(job);
-          job = await adminApi.acqCreatorDiscoveryTick(jobId);
-          setCreatorDiscoverJob(job);
-          await new Promise<void>((resolve) => {
-            creatorTickRef.current = window.setTimeout(() => resolve(), 400);
-          });
-        }
         setCreatorDiscoverJob(job);
+        while (job.status === 'running') {
+          try {
+            job = await tickCreatorDiscoveryWithRetry(jobId);
+          } catch (e) {
+            if (isTransientDiscoveryError(e)) {
+              const latest = await adminApi.acqCreatorDiscoveryJob(jobId).catch(() => job);
+              setCreatorDiscoverJob(latest);
+              setCreatorDiscoverInterrupted(true);
+              setCreatorDiscoverErrorDetail(e instanceof Error ? e.message : String(e));
+              setError('');
+              await load();
+              return;
+            }
+            throw e;
+          }
+          setCreatorDiscoverJob(job);
+          if (job.status === 'interrupted' || job.status === 'failed') {
+            setCreatorDiscoverInterrupted(true);
+            setCreatorDiscoverErrorDetail(
+              [job.lastErrorStatus ? `HTTP ${job.lastErrorStatus}` : '', job.lastError || '']
+                .filter(Boolean)
+                .join(' — ')
+            );
+            await load();
+            return;
+          }
+          await sleepTick(400);
+        }
+        setCreatorDiscoverInterrupted(false);
         setNote(
           `Creator discovery finished: ${job.added} added · ${job.duplicatesSkipped} duplicates · ${job.sourcesEvaluated} sources evaluated.`
         );
         await load();
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Creator discovery failed');
+        setCreatorDiscoverInterrupted(true);
+        setCreatorDiscoverErrorDetail(e instanceof Error ? e.message : String(e));
+        if (!isTransientDiscoveryError(e)) {
+          setError(e instanceof Error ? e.message : 'Creator discovery failed');
+        }
+        await load();
       } finally {
         setCreatorDiscoverBusy(false);
       }
@@ -342,13 +401,16 @@ export function AcquisitionCreatorsPage() {
   );
 
   const startCreatorDiscovery = async () => {
-    if (!niche) {
-      setError('Select a category before discovering creators.');
+    if (!niche || creatorDiscoverBusy) {
+      if (!niche) setError('Select a category before discovering creators.');
       setCreatorDiscoverConfirm(false);
       return;
     }
     setCreatorDiscoverConfirm(false);
     setCreatorDiscoverBusy(true);
+    setCreatorDiscoverInterrupted(false);
+    setCreatorDiscoverErrorDetail('');
+    setCreatorDiscoverShowDetails(false);
     setError('');
     try {
       const job = await adminApi.acqCreatorDiscoveryStart({
@@ -371,7 +433,47 @@ export function AcquisitionCreatorsPage() {
       }
     } catch (e) {
       setCreatorDiscoverBusy(false);
-      setError(e instanceof Error ? e.message : 'Failed to start creator discovery');
+      setCreatorDiscoverInterrupted(true);
+      setCreatorDiscoverErrorDetail(e instanceof Error ? e.message : String(e));
+      if (!isTransientDiscoveryError(e)) {
+        setError(e instanceof Error ? e.message : 'Failed to start creator discovery');
+      }
+    }
+  };
+
+  const resumeCreatorDiscovery = async () => {
+    if (!creatorDiscoverJob || creatorDiscoverBusy) return;
+    setCreatorDiscoverBusy(true);
+    setCreatorDiscoverInterrupted(false);
+    setCreatorDiscoverErrorDetail('');
+    setCreatorDiscoverShowDetails(false);
+    setError('');
+    try {
+      const job = await adminApi.acqCreatorDiscoveryResume(creatorDiscoverJob.jobId);
+      setCreatorDiscoverJob(job);
+      if (job.status === 'running') {
+        void pollCreatorDiscovery(job.jobId);
+      } else {
+        setCreatorDiscoverBusy(false);
+        setNote(
+          `Creator discovery finished: ${job.added} added · ${job.duplicatesSkipped} duplicates · ${job.sourcesEvaluated} sources evaluated.`
+        );
+        await load();
+      }
+    } catch (e) {
+      if (isTransientDiscoveryError(e)) {
+        const latest = await adminApi.acqCreatorDiscoveryJob(creatorDiscoverJob.jobId).catch(() => creatorDiscoverJob);
+        setCreatorDiscoverJob(latest);
+        setCreatorDiscoverInterrupted(true);
+        setCreatorDiscoverErrorDetail(e instanceof Error ? e.message : String(e));
+        setCreatorDiscoverBusy(false);
+        await load();
+        return;
+      }
+      setCreatorDiscoverBusy(false);
+      setCreatorDiscoverInterrupted(true);
+      setCreatorDiscoverErrorDetail(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : 'Failed to resume creator discovery');
     }
   };
 
@@ -568,6 +670,21 @@ export function AcquisitionCreatorsPage() {
     ? !String(lastResult.outcome || '').toLowerCase().startsWith('skipped')
     : false;
 
+  const creatorAdded = creatorDiscoverJob?.added ?? 0;
+  const creatorJobTarget = creatorDiscoverJob?.target ?? creatorTarget;
+  const creatorProgress = creatorDiscoveryProgress(creatorAdded, creatorJobTarget);
+  const creatorPhase = creatorDiscoveryPhase(
+    creatorDiscoverJob?.status,
+    creatorAdded,
+    creatorJobTarget,
+    creatorDiscoverInterrupted || creatorDiscoverJob?.status === 'interrupted'
+  );
+  const creatorInterruptCopy = discoveryInterruptMessage(creatorAdded, creatorJobTarget);
+  const creatorHttpHint =
+    creatorDiscoverJob?.lastErrorStatus
+      ? `HTTP ${creatorDiscoverJob.lastErrorStatus}`
+      : discoveryHttpHint(creatorDiscoverErrorDetail);
+
   return (
     <AdminShell title="Creators" subtitle="Master prospect database — discover and manage creators.">
       {error && <p className="admin-crm-error">{error}</p>}
@@ -634,7 +751,7 @@ export function AcquisitionCreatorsPage() {
                 setCreatorDiscoverConfirm(true);
               }}
             >
-              Discover Creators
+              {creatorDiscoverBusy ? 'Discovering...' : 'Discover Creators'}
             </button>
             <button
               type="button"
@@ -745,26 +862,50 @@ export function AcquisitionCreatorsPage() {
         {(creatorDiscoverBusy || creatorDiscoverJob) && (
           <div className="acq-discovery-progress" aria-live="polite">
             <div className="acq-discovery-progress-head">
-              <strong>
-                {creatorDiscoverJob?.status === 'completed' ? 'CREATOR DISCOVERY COMPLETE' : 'DISCOVERING CREATORS'}
-              </strong>
-              <span className="ops-muted">{creatorDiscoverJob?.status || 'starting'}</span>
+              <strong>{creatorDiscoveryTitle(creatorPhase)}</strong>
+              <span className={`acq-phase-badge acq-phase-${creatorPhase}`}>{creatorDiscoveryBadge(creatorPhase)}</span>
             </div>
-            <p className="ops-muted">
-              Scope: {categoryLabel(creatorDiscoverJob?.category || niche)}
-              {' / '}
-              {creatorDiscoverJob?.language ? languageLabel(creatorDiscoverJob.language) : language ? languageLabel(language) : 'All'}
-              {' / '}
-              {creatorDiscoverJob?.market ? marketLabel(creatorDiscoverJob.market) : market ? marketLabel(market) : 'All Markets'}
+            <p>
+              {categoryLabel(creatorDiscoverJob?.category || niche)}
+              {' · '}
+              {creatorDiscoverJob?.language
+                ? languageLabel(creatorDiscoverJob.language)
+                : language
+                  ? languageLabel(language)
+                  : 'All Languages'}
+              {' · '}
+              {creatorDiscoverJob?.market
+                ? marketLabel(creatorDiscoverJob.market)
+                : market
+                  ? marketLabel(market)
+                  : 'All Markets'}
             </p>
             <p>
-              Target: {creatorDiscoverJob?.target ?? creatorTarget}
+              Target: {creatorJobTarget} new creators
             </p>
-            {creatorDiscoverBusy && creatorDiscoverJob?.status !== 'completed' && (
-              <div className="acq-progress acq-discovery-progress-bar" role="progressbar" aria-label="Creator discovery in progress">
-                <div className="acq-progress-fill acq-progress-fill-active" style={{ width: '100%' }} />
+            <div className="acq-creator-progress">
+              <div className="acq-creator-progress-meta">
+                <strong>
+                  {creatorAdded} / {creatorJobTarget} added
+                </strong>
+                <span>{creatorProgress.pct == null ? '—' : `${creatorProgress.pct}%`}</span>
               </div>
-            )}
+              <div
+                className={`acq-progress acq-creator-progress-bar ${creatorPhase}${
+                  creatorProgress.pct == null && creatorPhase === 'running' ? ' acq-creator-progress-bar-indeterminate' : ''
+                }`}
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={creatorProgress.pct ?? undefined}
+                aria-label="Creator discovery progress"
+              >
+                <div
+                  className={`acq-progress-fill${creatorPhase === 'running' ? ' acq-progress-fill-active' : ''}`}
+                  style={{ width: `${creatorProgress.pct == null ? 36 : Math.max(creatorProgress.pct, creatorAdded > 0 ? 4 : 0)}%` }}
+                />
+              </div>
+            </div>
             <ul className="acq-discovery-stats">
               <li>
                 Sources evaluated <strong>{creatorDiscoverJob?.sourcesEvaluated ?? 0}</strong>
@@ -776,15 +917,66 @@ export function AcquisitionCreatorsPage() {
                 Duplicates skipped <strong>{creatorDiscoverJob?.duplicatesSkipped ?? 0}</strong>
               </li>
               <li>
-                Added <strong>{creatorDiscoverJob?.added ?? 0}</strong>
+                Added <strong>{creatorAdded}</strong>
               </li>
               <li>
-                Remaining target{' '}
-                <strong>
-                  {Math.max(0, (creatorDiscoverJob?.target ?? creatorTarget) - (creatorDiscoverJob?.added ?? 0))}
-                </strong>
+                Remaining <strong>{creatorProgress.remaining}</strong>
               </li>
             </ul>
+            {creatorPhase === 'running' && <p className="ops-muted">Searching for more creators...</p>}
+            {creatorPhase === 'complete' && (
+              <p>
+                {creatorAdded} / {creatorJobTarget} creators added
+              </p>
+            )}
+            {creatorPhase === 'partial' && (
+              <>
+                <p>
+                  {creatorAdded} / {creatorJobTarget} creators added
+                  {creatorProgress.remaining > 0 ? ` · ${creatorProgress.remaining} remaining` : ''}
+                </p>
+                <p>{creatorInterruptCopy}</p>
+                <button
+                  type="button"
+                  className="ops-btn ops-btn-primary"
+                  disabled={creatorDiscoverBusy}
+                  onClick={() => void resumeCreatorDiscovery()}
+                >
+                  Resume Discovery
+                </button>
+              </>
+            )}
+            {creatorPhase === 'failed' && (
+              <>
+                <p>{creatorInterruptCopy}</p>
+                <button
+                  type="button"
+                  className="ops-btn ops-btn-primary"
+                  disabled={creatorDiscoverBusy}
+                  onClick={() => void resumeCreatorDiscovery()}
+                >
+                  Resume Discovery
+                </button>
+              </>
+            )}
+            {(creatorDiscoverErrorDetail || creatorDiscoverJob?.lastError || creatorHttpHint) && (
+              <div style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="ops-btn ops-btn-ghost ops-btn-sm"
+                  onClick={() => setCreatorDiscoverShowDetails((v) => !v)}
+                >
+                  {creatorDiscoverShowDetails ? 'Hide details' : 'View details'}
+                </button>
+                {creatorDiscoverShowDetails && (
+                  <pre className="admin-crm-meta-pre" style={{ marginTop: 8 }}>
+                    {[creatorHttpHint, creatorDiscoverJob?.lastError, creatorDiscoverErrorDetail]
+                      .filter(Boolean)
+                      .join('\n')}
+                  </pre>
+                )}
+              </div>
+            )}
           </div>
         )}
 

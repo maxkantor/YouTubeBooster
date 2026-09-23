@@ -7,7 +7,7 @@
     "dev": "vite",
     "build:seo": "tsx scripts/generate-sitemap.ts",
     "build": "npm run build:seo && tsc -b && vite build && tsx scripts/generate-static-route-html.ts",
-    "test:admin": "tsx --test src/admin/acqApprovalWorkflow.test.ts src/admin/acqVisibleActions.test.ts src/admin/acqEmailDiscoveryStats.test.ts src/admin/acqTaxonomy.test.ts src/admin/acqWeekdaySendResult.test.ts",
+    "test:admin": "tsx --test src/admin/acqApprovalWorkflow.test.ts src/admin/acqVisibleActions.test.ts src/admin/acqEmailDiscoveryStats.test.ts src/admin/acqTaxonomy.test.ts src/admin/acqWeekdaySendResult.test.ts src/admin/acqCreatorDiscoveryUi.test.ts",
     "preview": "vite preview",
     "optimize-og": "node scripts/optimize-og-image.mjs"
   },

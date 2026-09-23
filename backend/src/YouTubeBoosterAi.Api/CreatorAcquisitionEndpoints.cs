@@ -956,6 +956,15 @@ public static class CreatorAcquisitionEndpoints
             return Results.Ok(job);
         });
 
+        admin.MapPost("/creator-discovery/{jobId}/resume", async (
+            string jobId,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var job = await acq.ResumeCreatorDiscoveryAsync(jobId, cancellationToken);
+            return Results.Ok(job);
+        });
+
         admin.MapGet("/campaigns", async (ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var extra = await acq.ListCampaignConfigsAsync(cancellationToken);
@@ -1165,6 +1174,7 @@ public interface ICreatorAcquisitionService
     Task<AcqCreatorDiscoveryJobState> StartCreatorDiscoveryAsync(AcqCreatorDiscoveryStartRequest request, string adminEmail, CancellationToken cancellationToken);
     Task<AcqCreatorDiscoveryJobState?> GetCreatorDiscoveryJobAsync(string jobId, CancellationToken cancellationToken);
     Task<AcqCreatorDiscoveryJobState> TickCreatorDiscoveryAsync(string jobId, CancellationToken cancellationToken);
+    Task<AcqCreatorDiscoveryJobState> ResumeCreatorDiscoveryAsync(string jobId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AcqCampaignConfig>> ListCampaignConfigsAsync(CancellationToken cancellationToken);
     Task<AcqCampaignConfig> UpsertCampaignConfigAsync(AcqCampaignConfigRequest request, CancellationToken cancellationToken);
     string Site();

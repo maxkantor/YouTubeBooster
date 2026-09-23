@@ -223,7 +223,8 @@ public sealed record AcqUpsertProspectRequest(
     string? Notes,
     string? Market = null,
     bool Strategic = false,
-    string? StrategicGoal = null
+    string? StrategicGoal = null,
+    bool SkipContactResearch = false
 );
 
 public sealed record AcqApproveBatchRequest(
@@ -344,7 +345,9 @@ public sealed record AcqCreatorDiscoveryJobState(
     int DuplicatesSkipped,
     int Added,
     int Failed,
-    IReadOnlyList<AcqCreatorDiscoveryItem> Results
+    IReadOnlyList<AcqCreatorDiscoveryItem> Results,
+    string? LastError = null,
+    string? LastErrorStatus = null
 );
 
 public sealed record AcqCampaignConfig(

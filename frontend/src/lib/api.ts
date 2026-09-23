@@ -707,6 +707,11 @@ export const adminApi = {
       method: 'POST'
     });
   },
+  async acqCreatorDiscoveryResume(jobId: string): Promise<AcqCreatorDiscoveryJob> {
+    return fetchJson(`/api/admin/crm/acquisition/creator-discovery/${encodeURIComponent(jobId)}/resume`, {
+      method: 'POST'
+    });
+  },
   async acqCampaigns(): Promise<{ items: AcqCampaignConfig[] }> {
     return fetchJson('/api/admin/crm/acquisition/campaigns');
   },
