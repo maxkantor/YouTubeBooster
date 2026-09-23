@@ -191,7 +191,7 @@ public static class CreatorAcquisitionMail
                         <td style="padding:8px 24px 24px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#6b7280;">
                           <p style="margin:0 0 8px;">You received this one-time business email because a business contact address was publicly listed for {{E(channelForFooter)}}.</p>
                           <p style="margin:0 0 8px;">YouTubeBooster AI is not affiliated with YouTube or Google.</p>
-                          <p style="margin:0 0 8px;"><a href="{{E(unsubscribeUrl)}}" style="color:#374151;">Unsubscribe</a></p>
+                          <p style="margin:0 0 8px;"><a href="{{E(unsubscribeUrl)}}" style="color:#374151;">Unsubscribe from future emails</a></p>
                           <p style="margin:0;">{{E(postalAddress)}}</p>
                         </td>
                       </tr>

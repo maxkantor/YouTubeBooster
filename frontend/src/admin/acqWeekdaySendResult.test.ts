@@ -48,6 +48,6 @@ describe('deliveredDisplay', () => {
   it('does not present untracked SES delivery as zero deliveries', () => {
     assert.equal(deliveredDisplay(33, 0, false), 'Not tracked');
     assert.equal(deliveredDisplay(33, 4, true), '4');
-    assert.equal(deliveredDisplay(0, 0, false), '0');
+    assert.equal(deliveredDisplay(0, 0, false), 'Not tracked');
   });
 });

@@ -6,6 +6,9 @@ public static class OutreachPolicy
 {
     public const int DefaultDailyLimit = 10;
     public const int DefaultMaxLimit = 30;
+    /// <summary>Hard ceiling for campaign-configured daily volume. Ramp for COOK-001 still uses DefaultMaxLimit unless a campaign override is saved.</summary>
+    public const int ConfiguredMaxDailyLimit = 500;
+    public const int DefaultMaxFollowUps = 2;
     public const int DefaultCooldownDays = 14;
     public const int MinSendsForRate = 30;
     public const int SendingDaysBeforeRamp = 3;
@@ -20,6 +23,13 @@ public static class OutreachPolicy
     public static int ClampDailyLimit(int requested, int maxLimit = DefaultMaxLimit)
     {
         var max = Math.Clamp(maxLimit, Stages[0], DefaultMaxLimit);
+        return Math.Clamp(requested, 1, max);
+    }
+
+    /// <summary>Campaign daily limit: 1–500. Does not auto-ramp.</summary>
+    public static int ClampConfiguredDailyLimit(int requested, int maxLimit = ConfiguredMaxDailyLimit)
+    {
+        var max = Math.Clamp(maxLimit, 1, ConfiguredMaxDailyLimit);
         return Math.Clamp(requested, 1, max);
     }
 
@@ -107,7 +117,17 @@ public static class OutreachPolicy
         {
             "cooldown" => "COOLDOWN",
             "already_contacted" => "ALREADY_CONTACTED",
+            "already_processing" => "ALREADY_CONTACTED",
+            "already_sent_follow_up" => "ALREADY_CONTACTED",
+            "duplicate_email" => "ALREADY_CONTACTED",
             "idempotency" => "ALREADY_CONTACTED",
+            "replied" => "REPLIED",
+            "converted" => "CONVERTED",
+            "global_suppression_unsubscribed" => "GLOBAL_SUPPRESSION_UNSUBSCRIBED",
+            "global_suppression_bounced" => "GLOBAL_SUPPRESSION_BOUNCED",
+            "global_suppression_complaint" => "GLOBAL_SUPPRESSION_COMPLAINT",
+            "global_suppression_manual_suppression" => "GLOBAL_SUPPRESSION_MANUAL_SUPPRESSION",
+            "global_suppression_invalid_address" => "GLOBAL_SUPPRESSION_INVALID_ADDRESS",
             "public_email_unverified" => "INVALID_EMAIL",
             "invalid_or_spamtrap" => "INVALID_EMAIL",
             "suppressed" => "SUPPRESSED",
@@ -136,6 +156,7 @@ public static class OutreachPolicy
             "pii_in_tags" => "NOT_QUALIFIED",
             "complaint_pause" => "SUPPRESSED",
             _ when r.StartsWith("health_stop", StringComparison.Ordinal) => "SUPPRESSED",
+            _ when r.StartsWith("global_suppression", StringComparison.Ordinal) => r.ToUpperInvariant(),
             _ when string.IsNullOrEmpty(r) => "NOT_QUALIFIED",
             _ => "NOT_QUALIFIED"
         };

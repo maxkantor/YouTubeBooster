@@ -23,7 +23,16 @@ export function AcquisitionCampaignsPage() {
   const [newLanguage, setNewLanguage] = useState('ru');
   const [newMarket, setNewMarket] = useState('');
   const [newTier, setNewTier] = useState('');
-  const [newLimit, setNewLimit] = useState(5);
+  const [newLimit, setNewLimit] = useState(10);
+  const [cookLimit, setCookLimit] = useState(10);
+  const [cookMode, setCookMode] = useState('automatic');
+  const [cookDry, setCookDry] = useState(false);
+  const [cookAutoSend, setCookAutoSend] = useState(true);
+  const [cookDiscover, setCookDiscover] = useState(true);
+  const [cookEmails, setCookEmails] = useState(true);
+  const [cookDrafts, setCookDrafts] = useState(true);
+  const [cookFollow, setCookFollow] = useState(true);
+  const [cookFollowMax, setCookFollowMax] = useState(2);
 
   const load = useCallback(async () => {
     setError('');
@@ -34,6 +43,20 @@ export function AcquisitionCampaignsPage() {
       ]);
       setSummary(s);
       setCampaigns(camps.items || []);
+      const cook = (camps.items || []).find((c) => c.campaignId === 'COOK-001');
+      if (cook) {
+        setCookLimit(cook.dailyLimit);
+        setCookMode(cook.sendingMode || 'automatic');
+        setCookDry(cook.dryRun === true);
+        setCookAutoSend(cook.autoSend !== false);
+        setCookDiscover(cook.autoDiscover !== false);
+        setCookEmails(cook.autoFindEmails !== false);
+        setCookDrafts(cook.autoPrepareDrafts !== false);
+        setCookFollow(cook.autoFollowUps !== false);
+        setCookFollowMax(cook.maxFollowUps ?? 2);
+      } else {
+        setCookLimit(s.dailyLimit ?? 10);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load campaign');
     }
@@ -118,8 +141,20 @@ export function AcquisitionCampaignsPage() {
               <strong>{sentToday}</strong>
             </div>
             <div>
-              <span>Daily remaining</span>
+              <span>Remaining today</span>
               <strong>{summary.dailyRemaining ?? Math.max(0, dailyLimit - sentToday)}</strong>
+            </div>
+            <div>
+              <span>Sending mode</span>
+              <strong>{(campaigns.find((c) => c.campaignId === 'COOK-001')?.sendingMode || 'automatic').toUpperCase()}</strong>
+            </div>
+            <div>
+              <span>Ready to send</span>
+              <strong>{eligibleNow}</strong>
+            </div>
+            <div>
+              <span>Needs approval</span>
+              <strong>{needsApproval}</strong>
             </div>
             <div>
               <span>Cooldown days</span>
@@ -147,6 +182,108 @@ export function AcquisitionCampaignsPage() {
             <strong>Follow-up policy:</strong> After initial send, up to 2 follow-ups may run when due (same SES path,
             cooldown / suppression / daily limit still apply). Replies and conversions stop further follow-ups.
           </p>
+        </div>
+
+        <div className="acq-toolbar" style={{ marginTop: 16 }}>
+          <label>
+            Sending mode
+            <select className="admin-crm-select" value={cookMode} onChange={(e) => setCookMode(e.target.value)}>
+              <option value="manual">Manual approval</option>
+              <option value="automatic">Automatic</option>
+            </select>
+          </label>
+          <label>
+            Daily send limit
+            <input
+              className="admin-crm-input"
+              type="number"
+              min={1}
+              max={500}
+              value={cookLimit}
+              onChange={(e) => setCookLimit(Number(e.target.value) || 10)}
+            />
+          </label>
+          <label>
+            Maximum follow-ups
+            <input
+              className="admin-crm-input"
+              type="number"
+              min={0}
+              max={2}
+              value={cookFollowMax}
+              onChange={(e) => setCookFollowMax(Number(e.target.value) || 0)}
+            />
+          </label>
+        </div>
+        <div style={{ marginTop: 12 }} className="ops-muted">
+          <label><input type="checkbox" checked={cookDiscover} onChange={(e) => setCookDiscover(e.target.checked)} /> Discover new creators automatically</label><br />
+          <label><input type="checkbox" checked={cookEmails} onChange={(e) => setCookEmails(e.target.checked)} /> Find public business emails automatically</label><br />
+          <label><input type="checkbox" checked={cookDrafts} onChange={(e) => setCookDrafts(e.target.checked)} /> Prepare personalized drafts automatically</label><br />
+          <label><input type="checkbox" checked={cookAutoSend} onChange={(e) => setCookAutoSend(e.target.checked)} /> Send qualified emails automatically</label><br />
+          <label><input type="checkbox" checked={cookFollow} onChange={(e) => setCookFollow(e.target.checked)} /> Send permitted follow-ups</label><br />
+          <label><input type="checkbox" checked={cookDry} onChange={(e) => setCookDry(e.target.checked)} /> Dry run (complete decisions, send zero emails)</label>
+        </div>
+        <div className="acq-blocker-actions" style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  await adminApi.acqUpdateCampaign('COOK-001', {
+                    sendingMode: cookMode,
+                    dailyLimit: cookLimit,
+                    dryRun: cookDry,
+                    maxFollowUps: cookFollowMax,
+                    autoDiscover: cookDiscover,
+                    autoFindEmails: cookEmails,
+                    autoPrepareDrafts: cookDrafts,
+                    autoSend: cookAutoSend,
+                    autoFollowUps: cookFollow
+                  });
+                  setNote(
+                    cookDry
+                      ? 'COOK-001 saved. Dry run is on — the next job sends zero emails.'
+                      : 'COOK-001 settings saved. Volume only changes when you set it here.'
+                  );
+                  await load();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Could not save campaign settings');
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            Save automation settings
+          </button>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  const res = await adminApi.acqRunSend({ campaign: 'COOK-001', dryRun: true });
+                  setNote(
+                    `DRY RUN — COOK-001. Would send ${res.wouldSend ?? 0}. External emails sent: ${res.sent ?? 0}. Drafts prepared ${res.draftsPrepared ?? 0}.`
+                  );
+                  await load();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Dry run failed');
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            Dry run now
+          </button>
         </div>
 
         <div className="acq-blocker-actions" style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -319,8 +456,8 @@ export function AcquisitionCampaignsPage() {
           <h2>Additional campaigns</h2>
         </header>
         <p className="ops-muted">
-          Discovery does not require a campaign. COOK-001 stays the only automatic weekday sender. New campaigns start
-          with sending off.
+          New campaigns start in Manual approval with dry run on and sending off. Enable Automatic only when you are
+          ready. Daily limit is a maximum, not a target.
         </p>
         {campaigns.filter((c) => c.campaignId !== 'COOK-001').length > 0 && (
           <div className="acq-skip-list" style={{ marginBottom: 12 }}>
@@ -329,8 +466,11 @@ export function AcquisitionCampaignsPage() {
               .map((c) => (
                 <div key={c.campaignId} className="acq-skip-row">
                   <span>
-                    {c.campaignId} · {categoryLabel(c.category)} / {languageLabel(c.language)} / {marketLabel(c.market)} ·
-                    daily {c.dailyLimit}
+                    {c.campaignId} · {categoryLabel(c.category)} / {languageLabel(c.language)} / {marketLabel(c.market)}
+                    <br />
+                    {c.status || 'PAUSED'} · {(c.sendingMode || 'manual').toUpperCase()}
+                    {c.dryRun ? ' · DRY RUN' : ''} · Daily {c.dailyLimit} · Sent today {c.sentToday ?? 0} · Remaining{' '}
+                    {c.remainingToday ?? c.dailyLimit} · Ready {c.readyToSend ?? 0} · Needs approval {c.needsApproval ?? 0}
                   </span>
                   <strong>{c.sendingEnabled ? 'Sending on' : 'Sending off'}</strong>
                 </div>
@@ -389,9 +529,9 @@ export function AcquisitionCampaignsPage() {
               className="admin-crm-input"
               type="number"
               min={1}
-              max={30}
+              max={500}
               value={newLimit}
-              onChange={(e) => setNewLimit(Number(e.target.value) || 5)}
+              onChange={(e) => setNewLimit(Number(e.target.value) || 10)}
             />
           </label>
         </div>
@@ -412,9 +552,11 @@ export function AcquisitionCampaignsPage() {
                     market: newMarket || undefined,
                     tier: newTier || undefined,
                     dailyLimit: newLimit,
-                    sendingEnabled: false
+                    sendingEnabled: false,
+                    sendingMode: 'manual',
+                    dryRun: true
                   });
-                  setNote(`Campaign ${row.campaignId} saved. Sending is off.`);
+                  setNote(`Campaign ${row.campaignId} saved. Manual approval, dry run on, sending off.`);
                   await load();
                 } catch (e) {
                   setError(e instanceof Error ? e.message : 'Could not save campaign');

@@ -153,6 +153,17 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+    options.AddPolicy("acq-public", httpContext =>
+    {
+        var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 40,
+            Window = TimeSpan.FromMinutes(10),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
 });
 
 var app = builder.Build();
@@ -358,6 +369,7 @@ app.MapPost("/api/contact", HandleContactSubmission).RequireRateLimiting("contac
 publicApi.MapGet("/outreach/unsubscribe", async (
     string? token,
     IAppDataStore appDataStore,
+    ICreatorAcquisitionService acq,
     ISecretValueProvider secrets,
     CancellationToken cancellationToken) =>
 {
@@ -368,8 +380,9 @@ publicApi.MapGet("/outreach/unsubscribe", async (
     }
 
     await appDataStore.UnsubscribeOutreachAsync(email, DateTimeOffset.UtcNow, cancellationToken);
-    return Results.Ok(new { ok = true, unsubscribed = true, email });
-});
+    await acq.UnsubscribeAsync(email, cancellationToken);
+    return Results.Ok(new { ok = true, unsubscribed = true, already = false });
+}).RequireRateLimiting("acq-public");
 
 publicApi.MapPost("/outreach/daily-send", async (
     HttpContext httpContext,

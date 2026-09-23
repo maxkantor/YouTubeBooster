@@ -16,6 +16,8 @@ import {
   selectSendableIds
 } from './acqApprovalWorkflow';
 import { formatDt, workflowBadgeKind } from './acqUiShared';
+import { AdminConfirmDialog } from './AdminConfirmDialog';
+import type { AcqBulkSendJob, AcqSendPreview } from '../types';
 
 type ApprovalsTab = 'needs' | 'ready' | 'sent';
 
@@ -35,6 +37,10 @@ export function AcquisitionApprovalsPage() {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [sendPreview, setSendPreview] = useState<AcqSendPreview | null>(null);
+  const [pendingSendIds, setPendingSendIds] = useState<string[]>([]);
+  const [approveFirst, setApproveFirst] = useState(false);
+  const [bulkJob, setBulkJob] = useState<AcqBulkSendJob | null>(null);
 
   const cooldownDays = summary?.cooldownDays ?? 14;
   const sendingEnabled = summary?.marketingSendingEnabled ?? true;
@@ -130,67 +136,82 @@ export function AcquisitionApprovalsPage() {
 
   const drawer = drawerId ? allItems.find((x) => x.public.prospectId === drawerId) || null : null;
 
+  const pollBulk = async (jobId: string) => {
+    let job = await adminApi.acqBulkSendJob(jobId);
+    setBulkJob(job);
+    while (job.status === 'running' && job.remaining > 0) {
+      await new Promise((r) => setTimeout(r, 400));
+      job = await adminApi.acqBulkSendTick(jobId);
+      setBulkJob(job);
+    }
+    return job;
+  };
+
   const approveIds = async (ids: string[], andSend: boolean) => {
     if (!ids.length) return;
+    if (andSend) {
+      setBusy(true);
+      setError('');
+      setNote('');
+      try {
+        const preview = await adminApi.acqPreviewSend({ campaign: 'COOK-001', prospectIds: ids });
+        setSendPreview(preview);
+        setPendingSendIds(ids);
+        setApproveFirst(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not validate selection');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     setBusy(true);
     setError('');
     setNote('');
     try {
-      if (andSend) {
-        // Approve all first so daily-limit leftovers stay Ready to Send.
-        const approveRes = await adminApi.acqApprove(ids);
-        let sent = 0;
-        let failed = 0;
-        let deferred = 0;
-        const failReasons: string[] = [];
-        let capacity = dailyRemaining;
-        for (const id of ids) {
-          const label =
-            allItems.find((r) => r.public.prospectId === id)?.public.channelName || id;
-          if (capacity <= 0) {
-            deferred++;
-            continue;
-          }
-          try {
-            const res = await adminApi.acqApproveAndSend(id);
-            if (res.ok && res.sent) {
-              sent++;
-              capacity--;
-            } else {
-              // Already approved above — stays Ready to Send unless hard-blocked.
-              if (res.error === 'daily_limit_reached') deferred++;
-              else {
-                failed++;
-                failReasons.push(`${label}: ${res.error || 'send failed'}`);
-              }
-            }
-          } catch (e) {
-            failed++;
-            failReasons.push(`${label}: ${e instanceof Error ? e.message : 'send failed'}`);
-          }
-        }
-        const detail = failReasons.length
-          ? ` — ${failReasons.slice(0, 3).join('; ')}${failReasons.length > 3 ? '…' : ''}`
-          : '';
-        setNote(
-          `Approve & send: ${sent} sent` +
-            (deferred ? `, ${deferred} left Ready to Send (daily capacity)` : '') +
-            (failed ? `, ${failed} blocked${detail}` : '') +
-            `. Approval ${approveRes.approvalId}. Capacity was ${dailyRemaining}/${dailyLimit}.`
-        );
-        if (sent > 0) setTab('sent');
-        else setTab('ready');
-      } else {
-        const res = await adminApi.acqApprove(ids);
-        setNote(`Approval ${res.approvalId} stored. Nothing sends until Send Now / scheduled send.`);
-        if (ids.length) setTab('ready');
-      }
+      const res = await adminApi.acqApprove(ids);
+      setNote(
+        `Approved ${ids.length} creator${ids.length === 1 ? '' : 's'}. Nothing sends until you choose Approve & Send or scheduled send.`
+      );
+      if (ids.length) setTab('ready');
       setSelected([]);
       await load();
+      void res;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Approve failed');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const confirmBulkSend = async () => {
+    const ids = pendingSendIds;
+    const preview = sendPreview;
+    setSendPreview(null);
+    if (!ids.length || !preview) return;
+    setBusy(true);
+    setError('');
+    setNote(`Starting send of ${preview.willSend}…`);
+    try {
+      const started = await adminApi.acqBulkSendStart({
+        campaign: preview.campaign || 'COOK-001',
+        prospectIds: ids,
+        approveFirst,
+        dryRun: false
+      });
+      const done = await pollBulk(started.jobId);
+      setNote(
+        `Send finished. Sent ${done.sent} · Skipped ${done.skipped} · Failed ${done.failed}. Closing this page does not resend.`
+      );
+      if (done.sent > 0) setTab('sent');
+      else if (approveFirst) setTab('ready');
+      setSelected([]);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Bulk send failed');
+    } finally {
+      setBusy(false);
+      setPendingSendIds([]);
     }
   };
 
@@ -200,39 +221,17 @@ export function AcquisitionApprovalsPage() {
       readyRows
         .filter((r) => resolveAcqWorkflow(r, cooldownDays, Date.now(), sendingEnabled).canSendNow)
         .map((r) => r.public.prospectId);
-    const n = ids.length;
-    if (n <= 0) return;
-    const cooldownBypass = ids.filter((id) => {
-      const row = readyRows.find((r) => r.public.prospectId === id);
-      if (!row) return false;
-      const wf = resolveAcqWorkflow(row, cooldownDays, Date.now(), sendingEnabled);
-      return !!wf.cooldownEndsAt;
-    }).length;
-    const hardBlocked = Math.max(0, readyRows.length - approvedEligibleNow);
-    const msg = [
-      `Send ${n} approved email${n === 1 ? '' : 's'} now?`,
-      '',
-      `${cooldownBypass} will bypass automation cooldown.`,
-      `${hardBlocked} approved row${hardBlocked === 1 ? '' : 's'} remain blocked by suppression/safety rules.`,
-      '',
-      `Daily send capacity remaining: ${dailyRemaining} / ${dailyLimit}.`,
-      n > dailyRemaining
-        ? `Only ${dailyRemaining} will send now; the rest stay Ready to Send.`
-        : 'All selected fit within today’s daily capacity.',
-      'Suppression, bounce, and unsubscribe are never bypassed.'
-    ].join('\n');
-    if (!window.confirm(msg)) return;
+    if (ids.length <= 0) return;
     setBusy(true);
     setError('');
     setNote('');
     try {
-      const res = await adminApi.acqSendApproved({ campaign: 'COOK-001', prospectIds: ids });
-      setNote(`Send approved: ${res.sent} sent, ${res.skipped} skipped.`);
-      if (res.sent > 0) setTab('sent');
-      setSelected([]);
-      await load();
+      const preview = await adminApi.acqPreviewSend({ campaign: 'COOK-001', prospectIds: ids });
+      setSendPreview(preview);
+      setPendingSendIds(ids);
+      setApproveFirst(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Send approved failed');
+      setError(e instanceof Error ? e.message : 'Could not validate selection');
     } finally {
       setBusy(false);
     }
@@ -242,6 +241,54 @@ export function AcquisitionApprovalsPage() {
     <AdminShell title="Approvals" subtitle="Review drafts, approve, and send. Nothing external sends without your action here.">
       {error && <p className="admin-crm-error">{error}</p>}
       {note && <p className="ops-muted">{note}</p>}
+      {bulkJob && bulkJob.status === 'running' && (
+        <section className="ops-panel" style={{ marginBottom: 16 }}>
+          <h2>Bulk send</h2>
+          <p className="ops-muted">
+            Sent {bulkJob.sent} · Skipped {bulkJob.skipped} · Failed {bulkJob.failed} · Remaining {bulkJob.remaining}
+          </p>
+          <progress
+            max={Math.max(1, bulkJob.sent + bulkJob.skipped + bulkJob.failed + bulkJob.remaining)}
+            value={bulkJob.sent + bulkJob.skipped + bulkJob.failed}
+          />
+          <p className="ops-muted">You can close this page. Emails continue on the server and will not send twice.</p>
+        </section>
+      )}
+      {sendPreview && (
+        <AdminConfirmDialog
+          title="Send outreach"
+          confirmLabel={`Approve & Send ${sendPreview.willSend}`}
+          confirmDisabled={sendPreview.willSend <= 0}
+          onCancel={() => {
+            setSendPreview(null);
+            setPendingSendIds([]);
+          }}
+          onConfirm={() => void confirmBulkSend()}
+        >
+          <p>
+            Selected: {sendPreview.selected}
+            <br />
+            Eligible now: {sendPreview.eligible}
+            <br />
+            Already contacted: {sendPreview.alreadyContacted}
+            <br />
+            Unsubscribed/suppressed: {sendPreview.unsubscribed}
+            <br />
+            Cooldown/follow-up blocked: {sendPreview.cooldown}
+            <br />
+            Invalid/unverified: {sendPreview.invalid}
+          </p>
+          <p>
+            <strong>WILL SEND: {sendPreview.willSend}</strong>
+          </p>
+          <p>
+            Campaign: {sendPreview.campaign}
+            <br />
+            Daily remaining: {sendPreview.remainingCapacity} / {sendPreview.dailyLimit}
+          </p>
+          <p>Nothing will be sent to suppressed or ineligible contacts. Counts come from the server right now.</p>
+        </AdminConfirmDialog>
+      )}
 
       <div className="acq-action-required-chips" style={{ marginBottom: 16 }}>
         <button
@@ -359,11 +406,25 @@ export function AcquisitionApprovalsPage() {
               setSelected(
                 allEligibleSelected
                   ? []
-                  : selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled, 30)
+                  : selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled)
               )
             }
           >
-            {allEligibleSelected ? 'Clear selection' : `Select all (${Math.min(30, eligibleVisible.length)})`}
+            {allEligibleSelected
+              ? 'Clear selection'
+              : `Select all ${eligibleVisible.length} eligible`}
+          </button>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy || rows.length === 0}
+            onClick={() =>
+              setSelected(
+                selectAllEligible(rows, cooldownDays, Date.now(), sendingEnabled)
+              )
+            }
+          >
+            Select page
           </button>
           {selected.length > 0 && (
             <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => setSelected([])}>
@@ -386,32 +447,14 @@ export function AcquisitionApprovalsPage() {
               const ids =
                 selected.length > 0
                   ? selected
-                  : selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled, 30);
+                  : selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled);
               if (!ids.length) return;
-              const willSend = Math.min(ids.length, dailyRemaining);
-              const stayReady = Math.max(0, ids.length - willSend);
-              if (
-                !window.confirm(
-                  [
-                    `Approve ${ids.length} creator${ids.length === 1 ? '' : 's'}.`,
-                    '',
-                    `Daily send capacity remaining: ${dailyRemaining} / ${dailyLimit}`,
-                    `Will attempt SES now: ${willSend}`,
-                    stayReady > 0
-                      ? `Remainder staying Ready to Send for scheduled send: ${stayReady}`
-                      : 'All selected fit within today’s capacity.',
-                    '',
-                    'Nothing bypasses suppression, invalid email, or daily limit.'
-                  ].join('\n')
-                )
-              )
-                return;
               void approveIds(ids, true);
             }}
           >
             {selected.length > 0
-              ? `Approve & Send Selected (${selected.length})`
-              : `Approve & Send All (${Math.min(30, eligibleVisible.length)})`}
+              ? `Approve & Send ${selected.length}`
+              : `Approve & Send ${eligibleVisible.length}`}
           </button>
         </div>
       )}
@@ -444,7 +487,7 @@ export function AcquisitionApprovalsPage() {
                             if (allEligibleSelected) setSelected([]);
                             else
                               setSelected(
-                                selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled, 30)
+                                selectAllEligible(needsRows, cooldownDays, Date.now(), sendingEnabled)
                               );
                           }}
                         />

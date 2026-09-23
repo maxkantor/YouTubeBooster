@@ -538,7 +538,7 @@ export function selectAllEligible(
   cooldownDays = DEFAULT_COOLDOWN_DAYS,
   nowMs = Date.now(),
   sendingEnabled = true,
-  max = 30
+  max = 500
 ): string[] {
   return rows
     .filter((r) => resolveAcqWorkflow(r, cooldownDays, nowMs, sendingEnabled).canSelectForApproval)

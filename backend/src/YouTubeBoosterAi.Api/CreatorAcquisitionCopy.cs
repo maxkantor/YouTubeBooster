@@ -129,7 +129,7 @@ public static class CreatorAcquisitionCopy
         sb.Append("\n\n");
         sb.Append($"You received this one-time business email because a business contact address was publicly listed for {channelForFooter}.\n\n");
         sb.Append("YouTubeBooster AI is not affiliated with YouTube or Google.\n\n");
-        sb.Append($"Unsubscribe: {unsubscribeUrl}\n\n");
+        sb.Append($"Unsubscribe from future emails: {unsubscribeUrl}\n\n");
         sb.Append(postalAddress.Trim());
         return sb.ToString().Replace("\r\n", "\n");
     }

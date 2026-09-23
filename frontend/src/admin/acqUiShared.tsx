@@ -76,6 +76,7 @@ export function workflowBadgeKind(status: AcqWorkflowStatus): 'ok' | 'warn' | 'b
 }
 
 export function deliveredDisplay(sent: number, delivered: number | undefined, telemetryAvailable?: boolean): string {
+  if (telemetryAvailable === false) return 'Not tracked';
   if (telemetryAvailable) return String(delivered ?? 0);
   if (sent > 0 && (delivered ?? 0) === 0) return 'Not tracked';
   return String(delivered ?? 0);

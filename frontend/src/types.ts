@@ -647,8 +647,58 @@ export type AcqCampaignConfig = {
   market: string;
   tier?: string | null;
   dailyLimit: number;
+  sentToday?: number;
+  remainingToday?: number;
+  readyToSend?: number;
+  needsApproval?: number;
+  replies?: number;
+  unsubscribes?: number;
   sendingEnabled: boolean;
+  sendingMode?: string;
+  dryRun?: boolean;
+  autoDiscover?: boolean;
+  autoFindEmails?: boolean;
+  autoPrepareDrafts?: boolean;
+  autoSend?: boolean;
+  autoFollowUps?: boolean;
+  maxFollowUps?: number;
+  status?: string;
+  statusReason?: string | null;
+  nextRunEt?: string | null;
   createdAt?: string;
+};
+
+export type AcqSendPreview = {
+  campaign: string;
+  selected: number;
+  eligible: number;
+  alreadyContacted: number;
+  unsubscribed: number;
+  cooldown: number;
+  invalid: number;
+  otherBlocked: number;
+  dailyLimit: number;
+  sentToday: number;
+  remainingCapacity: number;
+  willSend: number;
+  dryRun: boolean;
+  sendingMode: string;
+  reasonCounts: Record<string, number>;
+};
+
+export type AcqBulkSendJob = {
+  jobId: string;
+  campaign: string;
+  trigger: string;
+  dryRun: boolean;
+  status: string;
+  requested: number;
+  eligible: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+  remaining: number;
+  reasonCounts: Record<string, number>;
 };
 
 export type AcqEmailDiscoveryJob = {

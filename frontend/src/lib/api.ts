@@ -16,8 +16,10 @@ import type {
   AdminUserDetailResponse,
   AdminUserRow,
   AcqAdminProspect,
+  AcqBulkSendJob,
   AcqCampaignConfig,
   AcqCreatorDiscoveryJob,
+  AcqSendPreview,
   AcqEmailDiscoveryJob,
   AcqSummary,
   CheckoutSession,
@@ -585,13 +587,18 @@ export const adminApi = {
   async acqPreview(prospectIds: string[], campaign = 'COOK-001'): Promise<{ preview: boolean; sent: boolean; items: unknown[] }> {
     return fetchJson('/api/admin/crm/acquisition/preview', {
       method: 'POST',
-      body: JSON.stringify({ campaign, prospectIds, maximumSends: 5, audienceQueryVersion: 'v1' })
+      body: JSON.stringify({ campaign, prospectIds, maximumSends: Math.max(prospectIds.length, 1), audienceQueryVersion: 'v1' })
     });
   },
   async acqApprove(prospectIds: string[], campaign = 'COOK-001'): Promise<{ approvalId: string }> {
     return fetchJson('/api/admin/crm/acquisition/approvals', {
       method: 'POST',
-      body: JSON.stringify({ campaign, prospectIds, maximumSends: 5, audienceQueryVersion: 'v1' })
+      body: JSON.stringify({
+        campaign,
+        prospectIds,
+        maximumSends: Math.max(prospectIds.length, 1),
+        audienceQueryVersion: 'v1'
+      })
     });
   },
   async acqMigrateRescore(limit = 15): Promise<{
@@ -724,10 +731,60 @@ export const adminApi = {
     dailyLimit?: number;
     sendingEnabled?: boolean;
     campaignId?: string;
+    sendingMode?: string;
+    dryRun?: boolean;
   }): Promise<AcqCampaignConfig> {
     return fetchJson('/api/admin/crm/acquisition/campaigns', {
       method: 'POST',
+      body: JSON.stringify({ ...body, sendingEnabled: body.sendingEnabled === true, sendingMode: body.sendingMode || 'manual', dryRun: body.dryRun !== false })
+    });
+  },
+  async acqUpdateCampaign(id: string, body: Record<string, unknown>): Promise<AcqCampaignConfig> {
+    return fetchJson(`/api/admin/crm/acquisition/campaigns/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
       body: JSON.stringify(body)
+    });
+  },
+  async acqPreviewSend(body: {
+    campaign?: string;
+    prospectIds?: string[];
+    selectAllEligible?: boolean;
+    dryRun?: boolean;
+  }): Promise<AcqSendPreview> {
+    return fetchJson('/api/admin/crm/acquisition/preview-send', {
+      method: 'POST',
+      body: JSON.stringify({
+        campaign: body.campaign || 'COOK-001',
+        prospectIds: body.prospectIds,
+        selectAllEligible: body.selectAllEligible === true,
+        dryRun: body.dryRun === true
+      })
+    });
+  },
+  async acqBulkSendStart(body: {
+    campaign?: string;
+    prospectIds?: string[];
+    approveFirst?: boolean;
+    dryRun?: boolean;
+    selectAllEligible?: boolean;
+  }): Promise<AcqBulkSendJob> {
+    return fetchJson('/api/admin/crm/acquisition/bulk-send/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        campaign: body.campaign || 'COOK-001',
+        prospectIds: body.prospectIds,
+        approveFirst: body.approveFirst === true,
+        dryRun: body.dryRun === true,
+        selectAllEligible: body.selectAllEligible === true
+      })
+    });
+  },
+  async acqBulkSendJob(jobId: string): Promise<AcqBulkSendJob> {
+    return fetchJson(`/api/admin/crm/acquisition/bulk-send/${encodeURIComponent(jobId)}`);
+  },
+  async acqBulkSendTick(jobId: string): Promise<AcqBulkSendJob> {
+    return fetchJson(`/api/admin/crm/acquisition/bulk-send/${encodeURIComponent(jobId)}/tick`, {
+      method: 'POST'
     });
   },
   async acqEmailDiscoveryStart(body: {
@@ -768,7 +825,7 @@ export const adminApi = {
       body: JSON.stringify({ accept, reason: reason || null })
     });
   },
-  async acqRunSend(): Promise<{
+  async acqRunSend(opts?: { campaign?: string; dryRun?: boolean }): Promise<{
     marketingSendingEnabled?: boolean;
     attempted?: number;
     sent?: number;
@@ -780,8 +837,19 @@ export const adminApi = {
     evaluated?: number;
     sesAttempted?: number;
     rampBlockReason?: string | null;
+    dryRun?: boolean;
+    wouldSend?: number;
+    discovered?: number;
+    emailsFound?: number;
+    draftsPrepared?: number;
+    sendingMode?: string | null;
+    campaign?: string | null;
   }> {
-    return fetchJson('/api/admin/crm/acquisition/run-send', { method: 'POST' });
+    const q = new URLSearchParams();
+    if (opts?.campaign) q.set('campaign', opts.campaign);
+    if (opts?.dryRun) q.set('dryRun', 'true');
+    const suffix = q.toString() ? `?${q.toString()}` : '';
+    return fetchJson(`/api/admin/crm/acquisition/run-send${suffix}`, { method: 'POST' });
   },
   async acqCampaignFlags(body: {
     campaign?: string;

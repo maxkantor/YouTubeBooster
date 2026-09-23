@@ -360,7 +360,15 @@ public sealed record AcqCampaignConfig(
     string? Tier,
     int DailyLimit,
     bool SendingEnabled,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    string SendingMode = "manual",
+    bool DryRun = true,
+    int MaxFollowUps = 2,
+    bool AutoDiscover = true,
+    bool AutoFindEmails = true,
+    bool AutoPrepareDrafts = true,
+    bool AutoSend = false,
+    bool AutoFollowUps = true
 );
 
 public sealed record AcqCampaignConfigRequest(
@@ -371,7 +379,15 @@ public sealed record AcqCampaignConfigRequest(
     string? Tier = null,
     int? DailyLimit = null,
     bool? SendingEnabled = null,
-    string? CampaignId = null
+    string? CampaignId = null,
+    string? SendingMode = null,
+    bool? DryRun = null,
+    int? MaxFollowUps = null,
+    bool? AutoDiscover = null,
+    bool? AutoFindEmails = null,
+    bool? AutoPrepareDrafts = null,
+    bool? AutoSend = null,
+    bool? AutoFollowUps = null
 );
 
 public sealed record AcqDraftPrepareResult(
@@ -417,7 +433,15 @@ public sealed record AcqWeekdaySendResult(
     int Evaluated = 0,
     /// <summary>SES SendRawEmail calls made this run (accepted or rejected).</summary>
     int SesAttempted = 0,
-    IReadOnlyDictionary<string, int>? ReasonCounts = null
+    IReadOnlyDictionary<string, int>? ReasonCounts = null,
+    bool DryRun = false,
+    int WouldSend = 0,
+    int Discovered = 0,
+    int EmailsFound = 0,
+    int DraftsPrepared = 0,
+    string? SendingMode = null,
+    string? Campaign = null,
+    bool MoreWork = false
 );
 
 public static class AcqJson

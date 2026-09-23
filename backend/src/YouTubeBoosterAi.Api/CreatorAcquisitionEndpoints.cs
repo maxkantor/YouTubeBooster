@@ -10,18 +10,21 @@ public static class CreatorAcquisitionEndpoints
         var publicApi = app.MapGroup("/api/public/acq");
         publicApi.MapGet("/unsubscribe-health", () => Results.Ok(new { ok = true, service = "creator-acquisition-unsubscribe" }));
         publicApi.MapGet("/unsubscribe", async (
+            HttpContext http,
             string? token,
             ICreatorAcquisitionService acq,
-            IAppDataStore store,
             ISecretValueProvider secrets,
             CancellationToken cancellationToken) =>
         {
             var hmac = (await secrets.GetValueAsync("outreach/unsubscribe-hmac", secure: true, cancellationToken))?.Trim();
             if (string.IsNullOrWhiteSpace(hmac) || !OutreachUnsubscribeToken.TryValidate(token ?? "", hmac, out var email))
-                return Results.BadRequest(new { ok = false, error = "Invalid unsubscribe link." });
+                return UnsubscribeResponse(http, false, false, "This unsubscribe link is not valid.");
+            var already = await acq.IsGloballyUnsubscribedAsync(email, cancellationToken);
             await acq.UnsubscribeAsync(email, cancellationToken);
-            return Results.Ok(new { ok = true, unsubscribed = true });
-        });
+            return UnsubscribeResponse(http, true, already, already
+                ? "You're already unsubscribed."
+                : "You have been unsubscribed.");
+        }).RequireRateLimiting("acq-public");
         publicApi.MapPost("/unsubscribe", async (
             HttpContext http,
             ICreatorAcquisitionService acq,
@@ -32,9 +35,10 @@ public static class CreatorAcquisitionEndpoints
             var hmac = (await secrets.GetValueAsync("outreach/unsubscribe-hmac", secure: true, cancellationToken))?.Trim();
             if (string.IsNullOrWhiteSpace(hmac) || !OutreachUnsubscribeToken.TryValidate(token, hmac, out var email))
                 return Results.BadRequest(new { ok = false, error = "Invalid unsubscribe link." });
+            var already = await acq.IsGloballyUnsubscribedAsync(email, cancellationToken);
             await acq.UnsubscribeAsync(email, cancellationToken);
-            return Results.Ok(new { ok = true, unsubscribed = true });
-        });
+            return Results.Ok(new { ok = true, unsubscribed = true, already });
+        }).RequireRateLimiting("acq-public");
         publicApi.MapGet("/go/{token}", async (string token, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
             var p = await acq.Store.GetByTokenAsync(token, cancellationToken);
@@ -61,7 +65,7 @@ public static class CreatorAcquisitionEndpoints
             var provided = http.Request.Headers["X-Outreach-Cron-Key"].ToString();
             if (string.IsNullOrWhiteSpace(expected) || !string.Equals(expected, provided, StringComparison.Ordinal))
                 return Results.Unauthorized();
-            var result = await acq.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
+            var result = await acq.RunScheduledAcquisitionAsync(cancellationToken);
             return Results.Ok(result);
         });
         publicApi.MapPost("/ses-events", async (
@@ -967,19 +971,27 @@ public static class CreatorAcquisitionEndpoints
 
         admin.MapGet("/campaigns", async (ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
-            var extra = await acq.ListCampaignConfigsAsync(cancellationToken);
-            var cookFlags = await acq.Store.GetCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
-            var cook = new AcqCampaignConfig(
-                CreatorAcquisitionCampaigns.Cook001,
-                "COOK-001",
-                AcquisitionTaxonomy.DefaultCategory,
-                AcquisitionTaxonomy.DefaultLanguage,
-                "",
-                null,
-                OutreachPolicy.DefaultDailyLimit,
-                cookFlags.SendingEnabled,
-                DateTimeOffset.UnixEpoch);
-            return Results.Ok(new { items = new[] { cook }.Concat(extra).ToArray() });
+            var cards = await acq.ListCampaignCardsAsync(cancellationToken);
+            return Results.Ok(new { items = cards });
+        });
+
+        admin.MapPatch("/campaigns/{id}", async (
+            string id,
+            AcqCampaignSettingsRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            if (string.IsNullOrWhiteSpace(id) || id.Length > 32)
+                return Results.BadRequest(new { error = "invalid_campaign" });
+            try
+            {
+                var row = await acq.UpdateCampaignSettingsAsync(id, body ?? new AcqCampaignSettingsRequest(), cancellationToken);
+                return Results.Ok(row);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         admin.MapPost("/campaigns", async (
@@ -1041,11 +1053,67 @@ public static class CreatorAcquisitionEndpoints
         });
 
         admin.MapPost("/run-send", async (
+            HttpContext http,
             ICreatorAcquisitionService acq,
             CancellationToken cancellationToken) =>
         {
-            var result = await acq.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
+            var campaign = http.Request.Query["campaign"].ToString();
+            if (string.IsNullOrWhiteSpace(campaign)) campaign = CreatorAcquisitionCampaigns.Cook001;
+            var dry = string.Equals(http.Request.Query["dryRun"].ToString(), "true", StringComparison.OrdinalIgnoreCase);
+            var result = await acq.RunWeekdaySendAsync(campaign, cancellationToken, dry ? true : null);
             return Results.Ok(result);
+        });
+
+        admin.MapPost("/preview-send", async (
+            AcqSendPreviewRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await acq.PreviewSendAsync(body ?? new AcqSendPreviewRequest(), cancellationToken);
+            return Results.Ok(result);
+        });
+
+        admin.MapPost("/bulk-send/start", async (
+            HttpContext http,
+            AcqBulkSendStartRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var adminEmail = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            try
+            {
+                var job = await acq.StartBulkSendAsync(body ?? new AcqBulkSendStartRequest(), adminEmail, cancellationToken);
+                return Results.Ok(job);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        admin.MapGet("/bulk-send/{jobId}", async (
+            string jobId,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var job = await acq.GetBulkSendJobAsync(jobId, cancellationToken);
+            return job is null ? Results.NotFound(new { error = "job_not_found" }) : Results.Ok(job);
+        });
+
+        admin.MapPost("/bulk-send/{jobId}/tick", async (
+            string jobId,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var job = await acq.TickBulkSendAsync(jobId, cancellationToken);
+                return Results.Ok(job);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         admin.MapPost("/test-send", async (
@@ -1060,6 +1128,43 @@ public static class CreatorAcquisitionEndpoints
                 return Results.BadRequest(new { error = "Test send only to Max’s configured test address (SSM outreach/test-recipient). External creators are blocked." });
             return Results.Ok(new { ok = true, sent = false, note = "External and test sending remain disabled until marketing sending is explicitly enabled after SES identity setup." });
         });
+    }
+
+    private static IResult UnsubscribeResponse(HttpContext http, bool ok, bool already, string message)
+    {
+        var accept = http.Request.Headers.Accept.ToString();
+        var wantsHtml = accept.Contains("text/html", StringComparison.OrdinalIgnoreCase)
+                        || !accept.Contains("application/json", StringComparison.OrdinalIgnoreCase);
+        if (!wantsHtml)
+            return ok
+                ? Results.Ok(new { ok = true, unsubscribed = true, already, message })
+                : Results.BadRequest(new { ok = false, error = message });
+
+        var title = ok
+            ? (already ? "You're already unsubscribed." : "You have been unsubscribed.")
+            : "Unsubscribe";
+        var body = ok
+            ? (already
+                ? "You're already unsubscribed."
+                : "You have been unsubscribed.\n\nYou will no longer receive marketing emails from YouTubeBoosterAI.")
+            : message;
+        var html = $"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>{System.Net.WebUtility.HtmlEncode(title)}</title>
+            </head>
+            <body style="margin:0;padding:48px 20px;font-family:Arial,Helvetica,sans-serif;background:#f8fafc;color:#111827;">
+              <main style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:32px 24px;">
+                <h1 style="margin:0 0 12px;font-size:22px;">{System.Net.WebUtility.HtmlEncode(title)}</h1>
+                <p style="margin:0;line-height:1.55;color:#374151;">{System.Net.WebUtility.HtmlEncode(body).Replace("\n", "<br/>")}</p>
+              </main>
+            </body>
+            </html>
+            """;
+        return Results.Content(html, "text/html; charset=utf-8");
     }
 
     private static async Task<AcqAdminProspectDto> ToAdminDtoAsync(
@@ -1151,8 +1256,10 @@ public interface ICreatorAcquisitionService
     Task<AcqDraftPrepareResult> PrepareDraftAsync(string prospectId, CancellationToken cancellationToken);
     Task<AcqDraftPrepareBatchResult> PrepareDraftBatchAsync(AcqDraftPrepareBatchRequest request, CancellationToken cancellationToken);
     Task<(AcqApprovalRecord? Approval, string? Error)> ApproveBatchAsync(AcqApproveBatchRequest request, string approver, CancellationToken cancellationToken);
-    Task<AcqWeekdaySendResult> RunWeekdaySendAsync(string campaign, CancellationToken cancellationToken);
+    Task<AcqWeekdaySendResult> RunWeekdaySendAsync(string campaign, CancellationToken cancellationToken, bool? dryRunOverride = null);
+    Task<AcqWeekdaySendResult> RunScheduledAcquisitionAsync(CancellationToken cancellationToken);
     Task UnsubscribeAsync(string email, CancellationToken cancellationToken);
+    Task<bool> IsGloballyUnsubscribedAsync(string email, CancellationToken cancellationToken);
     Task<AcqProspectRecord?> RecordInboundAsync(string email, string subject, string preview, string? messageId, string? inReplyTo, CancellationToken cancellationToken);
     Task ApplySesEventAsync(string prospectId, string eventType, CancellationToken cancellationToken);
     Task RecordFunnelAsync(string token, string eventName, CancellationToken cancellationToken);
@@ -1176,7 +1283,13 @@ public interface ICreatorAcquisitionService
     Task<AcqCreatorDiscoveryJobState> TickCreatorDiscoveryAsync(string jobId, CancellationToken cancellationToken);
     Task<AcqCreatorDiscoveryJobState> ResumeCreatorDiscoveryAsync(string jobId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AcqCampaignConfig>> ListCampaignConfigsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<AcqCampaignCard>> ListCampaignCardsAsync(CancellationToken cancellationToken);
     Task<AcqCampaignConfig> UpsertCampaignConfigAsync(AcqCampaignConfigRequest request, CancellationToken cancellationToken);
+    Task<AcqCampaignConfig> UpdateCampaignSettingsAsync(string campaignId, AcqCampaignSettingsRequest request, CancellationToken cancellationToken);
+    Task<AcqSendPreviewResult> PreviewSendAsync(AcqSendPreviewRequest request, CancellationToken cancellationToken);
+    Task<AcqBulkSendJobState> StartBulkSendAsync(AcqBulkSendStartRequest request, string adminEmail, CancellationToken cancellationToken);
+    Task<AcqBulkSendJobState?> GetBulkSendJobAsync(string jobId, CancellationToken cancellationToken);
+    Task<AcqBulkSendJobState> TickBulkSendAsync(string jobId, CancellationToken cancellationToken);
     string Site();
     string TrackedSite();
 }
