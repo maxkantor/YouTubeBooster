@@ -728,10 +728,12 @@ export const adminApi = {
     sent?: number;
     skipped?: number;
     reasons?: string[];
+    reasonCounts?: Record<string, number>;
     dailyLimit?: number;
     cohortRunId?: string;
     evaluated?: number;
     sesAttempted?: number;
+    rampBlockReason?: string | null;
   }> {
     return fetchJson('/api/admin/crm/acquisition/run-send', { method: 'POST' });
   },

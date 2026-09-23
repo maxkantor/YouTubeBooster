@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { adminApi } from '../lib/api';
 import type { AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import { AdminShell } from './AdminShell';
 import { rateOrNa } from './acqUiShared';
+import { explainWeekdaySendResult, type AcqWeekdaySendView } from './acqWeekdaySendResult';
 
 export function AcquisitionCampaignsPage() {
   useAdminCrm();
@@ -11,6 +13,9 @@ export function AcquisitionCampaignsPage() {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmSend, setConfirmSend] = useState(false);
+  const [runView, setRunView] = useState<AcqWeekdaySendView | null>(null);
+  const [runAt, setRunAt] = useState('');
 
   const load = useCallback(async () => {
     setError('');
@@ -29,6 +34,30 @@ export function AcquisitionCampaignsPage() {
   const sentToday = summary?.sentToday ?? 0;
   const cooldownDays = summary?.cooldownDays ?? 14;
   const sentLifetime = summary?.sentLifetime ?? summary?.sent ?? 0;
+  const approvedWaiting = summary?.approvedWaiting ?? summary?.currentlyApprovedWaitingToSend ?? summary?.approved ?? 0;
+  const eligibleNow = summary?.approvedReadyToSend ?? summary?.pipeline?.approvedEligibleNow ?? 0;
+  const needsApproval = summary?.needsApproval ?? 0;
+
+  const runScheduledSend = async () => {
+    setConfirmSend(false);
+    setBusy(true);
+    setError('');
+    setNote('Running scheduled send…');
+    setRunView(null);
+    setRunAt('');
+    try {
+      const res = await adminApi.acqRunSend();
+      const view = explainWeekdaySendResult(res, { approvedWaiting, eligibleNow, needsApproval });
+      setRunView(view);
+      setRunAt(new Date().toLocaleString());
+      setNote(view.headline);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Run send failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <AdminShell title="Campaigns" subtitle="COOK-001 controls and scheduled send — no prospect table.">
@@ -142,32 +171,73 @@ export function AcquisitionCampaignsPage() {
             className="ops-btn ops-btn-primary"
             disabled={busy}
             onClick={() => {
-              if (
-                !window.confirm(
-                  'Run scheduled weekday send now? Uses RunWeekdaySendAsync (same gates as cron). Will send real SES mail if sending is enabled.'
-                )
-              )
-                return;
-              void (async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  const res = await adminApi.acqRunSend();
-                  setNote(
-                    `Weekday send finished: attempted ${res.attempted ?? res.sesAttempted ?? 0}, sent ${res.sent ?? 0}, skipped ${res.skipped ?? 0}.`
-                  );
-                  await load();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Run send failed');
-                } finally {
-                  setBusy(false);
-                }
-              })();
+              setError('');
+              setConfirmSend(true);
             }}
           >
-            Run Scheduled Send Now
+            {busy ? 'Running…' : 'Run Scheduled Send Now'}
           </button>
         </div>
+
+        {confirmSend && (
+          <div className="acq-discovery-confirm" role="dialog" aria-modal="true" style={{ marginTop: 16 }}>
+            <h3>Run weekday send now?</h3>
+            <p className="ops-muted">
+              Same gates as the 8:00 AM ET job. Sends real SES mail when COOK-001 sending is enabled.
+            </p>
+            <p className="ops-muted">
+              Ready to send: <strong>{eligibleNow}</strong>
+              {' · '}
+              Approved waiting: <strong>{approvedWaiting}</strong>
+              {' · '}
+              Needs approval: <strong>{needsApproval}</strong>
+            </p>
+            {eligibleNow <= 0 && (
+              <p className="ops-muted">
+                Nothing is eligible now. This will still evaluate the cohort and will likely send 0.
+              </p>
+            )}
+            <div className="acq-blocker-actions" style={{ marginTop: 12 }}>
+              <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => setConfirmSend(false)}>
+                Cancel
+              </button>
+              <button type="button" className="ops-btn ops-btn-primary" disabled={busy} onClick={() => void runScheduledSend()}>
+                Confirm &amp; send
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(busy || runView) && (
+          <div className="acq-discovery-confirm" style={{ marginTop: 16 }} aria-live="polite">
+            {busy && !runView ? (
+              <>
+                <h3>Running scheduled send…</h3>
+                <p className="ops-muted">Evaluating COOK-001 against weekday gates. This can take a minute.</p>
+              </>
+            ) : runView ? (
+              <>
+                <h3>{runView.headline}</h3>
+                {runAt && <p className="ops-muted">Finished {runAt}</p>}
+                <p className="ops-muted">{runView.explanation}</p>
+                {runView.skipLines.length > 0 && (
+                  <ul className="acq-discovery-stats">
+                    {runView.skipLines.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                )}
+                {runView.openApprovals && (
+                  <div className="acq-blocker-actions">
+                    <Link className="ops-btn ops-btn-primary" to="/admin/acquisition/approvals?tab=needs">
+                      Open Approvals
+                    </Link>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
       </section>
 
       <section className="ops-panel">
