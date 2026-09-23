@@ -513,6 +513,10 @@ export const adminApi = {
     niche?: string;
     campaign?: string;
     language?: string;
+    market?: string;
+    tier?: string;
+    format?: string;
+    strategic?: boolean;
     q?: string;
   } = {}): Promise<{
     items: AcqAdminProspect[];
@@ -523,6 +527,11 @@ export const adminApi = {
     if (params.niche) q.set('niche', params.niche);
     if (params.campaign) q.set('campaign', params.campaign);
     if (params.language) q.set('language', params.language);
+    if (params.market) q.set('market', params.market);
+    if (params.tier) q.set('tier', params.tier);
+    if (params.format) q.set('format', params.format);
+    if (params.strategic === true) q.set('strategic', 'true');
+    if (params.strategic === false) q.set('strategic', 'false');
     if (params.q) q.set('q', params.q);
     const qs = q.toString();
     return fetchJson(`/api/admin/crm/acquisition/prospects${qs ? `?${qs}` : ''}`);
@@ -537,6 +546,9 @@ export const adminApi = {
     contactSourceUrl?: string;
     contactType: string;
     notes?: string;
+    market?: string;
+    strategic?: boolean;
+    strategicGoal?: string;
   }): Promise<AcqAdminProspect> {
     return fetchJson('/api/admin/crm/acquisition/inspect', {
       method: 'POST',

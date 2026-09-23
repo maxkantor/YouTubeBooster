@@ -91,7 +91,12 @@ public sealed record AcqProspectRecord(
     string? ExampleVideoTitle = null,
     string? ContactConfidence = null,
     string? ContactDiscoveryDetail = null,
-    string? ContactDiscoveryResult = null
+    string? ContactDiscoveryResult = null,
+    string? Market = null,
+    string? CreatorTier = null,
+    string? ContentFormat = null,
+    bool Strategic = false,
+    string? StrategicGoal = null
 );
 
 public sealed record AcqApprovalRecord(
@@ -182,7 +187,12 @@ public sealed record AcqSanitizedProspectDto(
     string? ContactDiscoveryResult = null,
     DateTimeOffset? ContactResearchLastAt = null,
     DateTimeOffset? ContactResearchNextAt = null,
-    string? TicketId = null
+    string? TicketId = null,
+    string? Market = null,
+    string? CreatorTier = null,
+    string? ContentFormat = null,
+    bool Strategic = false,
+    string? StrategicGoal = null
 );
 
 public sealed record AcqAdminProspectDto(
@@ -210,7 +220,10 @@ public sealed record AcqUpsertProspectRequest(
     string? PublicBusinessEmail,
     string? ContactSourceUrl,
     string ContactType,
-    string? Notes
+    string? Notes,
+    string? Market = null,
+    bool Strategic = false,
+    string? StrategicGoal = null
 );
 
 public sealed record AcqApproveBatchRequest(

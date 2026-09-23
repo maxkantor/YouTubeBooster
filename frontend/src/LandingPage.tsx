@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate } from 'react-router-dom';
 import { BRAND } from './config/brand';
 import { MarketingFooter } from './components/MarketingFooter';
-import { analytics } from './lib/analytics';
+import { analytics, trackFounderYoutubeClick } from './lib/analytics';
 import { beginAuditAttempt } from './lib/auditEventGate';
 import {
   buildYoutubeChannelCanonicalUrl,
@@ -1095,7 +1095,12 @@ export function LandingPage() {
               </div>
               <p className="landing-hero-audit-hint" id="hero-audit-hint">
                 Instant demo runs on{' '}
-                <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={heroChannelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => trackFounderYoutubeClick('founder_channel_click', { surface: 'landing' })}
+                >
                   {heroChannelLabel}
                 </a>
                 . Free preview — no Studio login.
@@ -1178,7 +1183,12 @@ export function LandingPage() {
               </ul>
               <p className="landing-insight-footer">
                 Example:{' '}
-                <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={heroChannelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => trackFounderYoutubeClick('founder_channel_click', { surface: 'landing' })}
+                >
                   {heroChannelLabel}
                 </a>
                 . Paste your channel to see yours.
@@ -1371,7 +1381,12 @@ export function LandingPage() {
           <h2 className="landing-section-title">Built by a Real Creator, for Real YouTube Growth</h2>
           <p className="landing-section-sub">
             YouTubeBooster AI is designed for creators who are tired of guessing. It reviews your channel like a growth consultant and gives you practical fixes for titles, thumbnails, SEO, packaging, and content strategy.{' '}
-            <a href={heroChannelUrl} target="_blank" rel="noopener noreferrer">
+            <a
+                  href={heroChannelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => trackFounderYoutubeClick('founder_channel_click', { surface: 'landing' })}
+                >
               See the same audit flow on the creator&apos;s public channel ({heroChannelLabel})
             </a>
             .

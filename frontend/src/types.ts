@@ -570,6 +570,11 @@ export type AcqSanitizedProspect = {
   contactResearchLastAt?: string | null;
   contactResearchNextAt?: string | null;
   ticketId?: string | null;
+  market?: string | null;
+  creatorTier?: string | null;
+  contentFormat?: string | null;
+  strategic?: boolean;
+  strategicGoal?: string | null;
 };
 
 export type AcqAdminProspect = {
@@ -759,5 +764,16 @@ export type AcqSummary = {
   repliesNeedingAction?: number;
   dailyRemaining?: number;
   nextScheduledSendEt?: string | null;
+  taxonomy?: Record<string, unknown>;
+  segments?: {
+    byCategory?: Record<string, number>;
+    byLanguage?: Record<string, number>;
+    byMarket?: Record<string, number>;
+    byTier?: Record<string, number>;
+    byFormat?: Record<string, number>;
+    sentByCategory?: Record<string, number>;
+    clickedByLanguage?: Record<string, number>;
+    strategic?: number;
+  };
 };
 

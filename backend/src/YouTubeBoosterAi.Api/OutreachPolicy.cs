@@ -119,6 +119,8 @@ public static class OutreachPolicy
             "approval_cap" => "NOT_APPROVED",
             "approval_invalidated" => "NOT_APPROVED",
             "daily_limit_reached" => "DAILY_LIMIT_REACHED",
+            "strategic_manual_only" => "STRATEGIC_MANUAL",
+            "china_not_a_priority" => "NOT_QUALIFIED",
             "marketing_sending_disabled" => "MISSING_CONFIG",
             "postal_address_missing" => "MISSING_CONFIG",
             "from_email_unconfigured" => "MISSING_CONFIG",

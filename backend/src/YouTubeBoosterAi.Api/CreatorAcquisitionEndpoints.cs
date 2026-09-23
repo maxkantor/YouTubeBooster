@@ -562,7 +562,35 @@ public static class CreatorAcquisitionEndpoints
                 dailyRemaining,
                 nextScheduledSendEt,
                 lastRun,
-                cohortRunId
+                cohortRunId,
+                taxonomy = AcquisitionTaxonomy.Catalog(),
+                segments = new
+                {
+                    byCategory = rows
+                        .GroupBy(r => AcquisitionTaxonomy.NormalizeCategory(r.PrimaryNiche))
+                        .ToDictionary(g => g.Key, g => g.Count()),
+                    byLanguage = rows
+                        .GroupBy(r => AcquisitionTaxonomy.NormalizeLanguage(r.Language))
+                        .ToDictionary(g => g.Key, g => g.Count()),
+                    byMarket = rows
+                        .GroupBy(r => string.IsNullOrWhiteSpace(AcquisitionTaxonomy.NormalizeMarket(r.Market ?? r.Country))
+                            ? "unspecified"
+                            : AcquisitionTaxonomy.NormalizeMarket(r.Market ?? r.Country))
+                        .ToDictionary(g => g.Key, g => g.Count()),
+                    byTier = rows
+                        .GroupBy(r => AcquisitionTaxonomy.DeriveTier(r.SubscriberCount, r.Strategic))
+                        .ToDictionary(g => g.Key, g => g.Count()),
+                    byFormat = rows
+                        .GroupBy(r => string.IsNullOrWhiteSpace(r.ContentFormat) ? "unknown" : r.ContentFormat)
+                        .ToDictionary(g => g.Key, g => g.Count()),
+                    sentByCategory = rows.Where(r => r.LastContactedAt is not null)
+                        .GroupBy(r => AcquisitionTaxonomy.NormalizeCategory(r.PrimaryNiche))
+                        .ToDictionary(g => g.Key, g => g.Count()),
+                    clickedByLanguage = rows.Where(r => CreatorAcquisitionScoring.MapView(r) is "clicked" or "audit_started" or "audit_completed" or "customer")
+                        .GroupBy(r => AcquisitionTaxonomy.NormalizeLanguage(r.Language))
+                        .ToDictionary(g => g.Key, g => g.Count()),
+                    strategic = rows.Count(r => r.Strategic)
+                }
             });
         });
 
@@ -571,6 +599,10 @@ public static class CreatorAcquisitionEndpoints
             string? niche,
             string? campaign,
             string? language,
+            string? market,
+            string? tier,
+            string? format,
+            bool? strategic,
             string? q,
             ICreatorAcquisitionService acq,
             CancellationToken cancellationToken) =>
@@ -586,6 +618,19 @@ public static class CreatorAcquisitionEndpoints
                 query = query.Where(r => string.Equals(r.PrimaryNiche, niche, StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(language))
                 query = query.Where(r => string.Equals(r.Language, language, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(market))
+                query = query.Where(r =>
+                    string.Equals(AcquisitionTaxonomy.NormalizeMarket(r.Market ?? r.Country), AcquisitionTaxonomy.NormalizeMarket(market), StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(tier))
+                query = query.Where(r =>
+                    string.Equals(AcquisitionTaxonomy.DeriveTier(r.SubscriberCount, r.Strategic), tier, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(r.CreatorTier, tier, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(format))
+                query = query.Where(r => string.Equals(r.ContentFormat ?? "unknown", format, StringComparison.OrdinalIgnoreCase));
+            if (strategic == true)
+                query = query.Where(r => r.Strategic);
+            else if (strategic == false)
+                query = query.Where(r => !r.Strategic);
             var viewKey = string.Equals(view, "approval_queue", StringComparison.OrdinalIgnoreCase) ? "draft_ready" : view;
             if (!string.IsNullOrWhiteSpace(viewKey) && viewKey != "all")
                 query = query.Where(r => CreatorAcquisitionScoring.MapView(r) == viewKey);

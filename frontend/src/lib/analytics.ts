@@ -89,6 +89,18 @@ export function mapAiToolForGa4(action: AiGenerateAction): Ga4AiTool {
   }
 }
 
+/** Voluntary outbound clicks to the founder's YouTube presence. Never autoplay or force a view. */
+export function trackFounderYoutubeClick(
+  kind: 'founder_channel_click' | 'founder_video_click' | 'sample_video_click',
+  extra?: Record<string, unknown>
+) {
+  trackEvent(kind, {
+    destination: 'youtube',
+    channel: 'maxkantorcooking',
+    ...extra
+  });
+}
+
 /** GA4 custom events via gtag.js (index.html or env bootstrap). */
 export function trackEvent(eventName: string, params?: Record<string, unknown>) {
   const payload = params ?? {};

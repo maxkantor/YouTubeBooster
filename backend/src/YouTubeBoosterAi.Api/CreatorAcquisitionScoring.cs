@@ -426,7 +426,14 @@ public static class CreatorAcquisitionScoring
         ContactDiscoveryResult: p.ContactDiscoveryResult,
         ContactResearchLastAt: p.ContactResearchLastAt,
         ContactResearchNextAt: p.ContactResearchNextAt,
-        TicketId: p.TicketId
+        TicketId: p.TicketId,
+        Market: p.Market ?? AcquisitionTaxonomy.NormalizeMarket(p.Country),
+        CreatorTier: string.IsNullOrWhiteSpace(p.CreatorTier)
+            ? AcquisitionTaxonomy.DeriveTier(p.SubscriberCount, p.Strategic)
+            : p.CreatorTier,
+        ContentFormat: string.IsNullOrWhiteSpace(p.ContentFormat) ? "unknown" : p.ContentFormat,
+        Strategic: p.Strategic,
+        StrategicGoal: p.StrategicGoal
     );
 
     public static string ContactStatusLabel(AcqProspectRecord p)

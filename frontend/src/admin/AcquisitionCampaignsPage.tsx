@@ -37,6 +37,22 @@ export function AcquisitionCampaignsPage() {
 
       <section className="ops-panel">
         <header className="ops-section-head">
+          <h2>Acquisition configuration</h2>
+          <p className="ops-muted" style={{ margin: 0 }}>
+            Cooking is primary. Expansion categories/languages are selectable in Creators. No China campaign.
+            Spanish/Portuguese are configuration-ready, not auto-sending. Strategic creators never enter weekday
+            SES automatically.
+          </p>
+        </header>
+        <p className="ops-muted">
+          Phase 1 live: Cooking / English, Cooking / Russian. India English/Hindi and other categories are
+          filterable now — do not bulk-send them until you approve a campaign. Campaign IDs are not hard-coded
+          beyond keeping COOK-001 as the existing history.
+        </p>
+      </section>
+
+      <section className="ops-panel">
+        <header className="ops-section-head">
           <h2>COOK-001</h2>
         </header>
         {summary && (

@@ -251,7 +251,14 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             }
         }
 
-        var language = string.IsNullOrWhiteSpace(request.Language) ? GuessLanguage(demo.ChannelTitle, videos) : request.Language!;
+        var language = AcquisitionTaxonomy.NormalizeLanguage(
+            string.IsNullOrWhiteSpace(request.Language) ? GuessLanguage(demo.ChannelTitle, videos) : request.Language!);
+        var niche = AcquisitionTaxonomy.NormalizeCategory(request.PrimaryNiche);
+        var market = AcquisitionTaxonomy.NormalizeMarket(request.Market ?? dup?.Market ?? dup?.Country);
+        var format = AcquisitionTaxonomy.GuessContentFormat(
+            (demo.TopVideos ?? []).Select(v => v.Title).Concat(videos.Select(v => v.title)));
+        var strategic = request.Strategic || (dup?.Strategic == true);
+        var tier = AcquisitionTaxonomy.DeriveTier(demo.SubscriberCount, strategic);
         var independent = !IsNetworkName(demo.ChannelTitle);
         var children = IsChildren(demo.ChannelTitle, demo.Findings);
         var inactive = recent is null || (DateTimeOffset.UtcNow - recent.Value).TotalDays > 180;
@@ -308,9 +315,9 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             Handle: handle,
             ChannelUrl: url,
             ChannelId: null,
-            PrimaryNiche: request.PrimaryNiche,
+            PrimaryNiche: niche,
             Language: language,
-            Country: null,
+            Country: string.IsNullOrWhiteSpace(dup?.Country) ? null : dup.Country,
             SubscriberCount: demo.SubscriberCount,
             VideoCount: demo.VideoCount,
             RecentUploadAt: recent,
@@ -371,7 +378,12 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             ExampleVideoTitle: placeholder ? dup?.ExampleVideoTitle : (example ?? dup?.ExampleVideoTitle),
             ContactConfidence: contactStatus == "review_email" ? "medium" : (emailVerified ? "high" : dup?.ContactConfidence),
             ContactDiscoveryResult: contactStatus == "review_email" ? "review" : (emailVerified ? "found" : dup?.ContactDiscoveryResult),
-            ContactDiscoveryDetail: dup?.ContactDiscoveryDetail
+            ContactDiscoveryDetail: dup?.ContactDiscoveryDetail,
+            Market: string.IsNullOrWhiteSpace(market) ? dup?.Market : market,
+            CreatorTier: tier,
+            ContentFormat: format == "unknown" ? (dup?.ContentFormat ?? "unknown") : format,
+            Strategic: strategic,
+            StrategicGoal: string.IsNullOrWhiteSpace(request.StrategicGoal) ? dup?.StrategicGoal : request.StrategicGoal
         );
 
         if (dup is not null && (dup.LastContactedAt is not null || !string.Equals(dup.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)))
@@ -967,6 +979,17 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     Skip(p.ProspectId, "existing_customer");
                     continue;
                 }
+            }
+
+            if (p.Strategic)
+            {
+                Skip(p.ProspectId, "strategic_manual_only");
+                continue;
+            }
+            if (AcquisitionTaxonomy.IsChinaPriorityBlocked(p.Market ?? p.Country))
+            {
+                Skip(p.ProspectId, "china_not_a_priority");
+                continue;
             }
 
             var gate = CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, state, alreadyContacted: p.LastContactedAt is not null);
@@ -2362,6 +2385,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     private static string GuessLanguage(string title, IReadOnlyList<(DateTimeOffset publishedAt, string title, string description)> videos)
     {
         var blob = title + " " + string.Join(' ', videos.Select(v => v.title + " " + v.description));
+        if (blob.Any(c => c is >= '\u0900' and <= '\u097F'))
+            return "hi";
         if (blob.Any(c => c is >= '\u0400' and <= '\u04FF'))
             return blob.Contains('і') || blob.Contains('ї') || blob.Contains('є') ? "uk" : "ru";
         return "en";

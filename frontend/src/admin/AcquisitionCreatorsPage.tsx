@@ -27,6 +27,20 @@ import {
   parseBackoffUntil,
   summarizeDiscoveryJob
 } from './acqEmailDiscoveryStats';
+import {
+  ACQ_CATEGORIES,
+  ACQ_DEFAULT_CAMPAIGN,
+  ACQ_DEFAULT_CATEGORY,
+  ACQ_FORMATS,
+  ACQ_LANGUAGES,
+  ACQ_MARKETS,
+  ACQ_TIERS,
+  categoryLabel,
+  formatLabel,
+  languageLabel,
+  marketLabel,
+  tierLabel
+} from './acqTaxonomy';
 
 type ConfirmMode = 'missing' | 'filtered' | 'selected' | 'force_retry' | null;
 
@@ -44,7 +58,13 @@ export function AcquisitionCreatorsPage() {
   const [emailFilter, setEmailFilter] = useState<AcqEmailStatusFilter>(
     EMAIL_STATUS_FILTERS.some((f) => f.value === emailParam) ? emailParam : 'all'
   );
-  const [niche, setNiche] = useState('cooking');
+  const [niche, setNiche] = useState(searchParams.get('category') || ACQ_DEFAULT_CATEGORY);
+  const [language, setLanguage] = useState(searchParams.get('language') || '');
+  const [market, setMarket] = useState(searchParams.get('market') || '');
+  const [tier, setTier] = useState(searchParams.get('tier') || '');
+  const [format, setFormat] = useState(searchParams.get('format') || '');
+  const [campaign, setCampaign] = useState(searchParams.get('campaign') || ACQ_DEFAULT_CAMPAIGN);
+  const [strategicOnly, setStrategicOnly] = useState(searchParams.get('strategic') === '1');
   const [search, setSearch] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
   const [drawerId, setDrawerId] = useState<string | null>(null);
@@ -80,7 +100,12 @@ export function AcquisitionCreatorsPage() {
         adminApi.acqProspects({
           view: 'all',
           niche: niche || undefined,
-          campaign: 'COOK-001',
+          campaign: campaign || undefined,
+          language: language || undefined,
+          market: market || undefined,
+          tier: tier || undefined,
+          format: format || undefined,
+          strategic: strategicOnly ? true : undefined,
           q: searchApplied || undefined
         })
       ]);
@@ -89,7 +114,7 @@ export function AcquisitionCreatorsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load creators');
     }
-  }, [niche, searchApplied]);
+  }, [niche, campaign, language, market, tier, format, strategicOnly, searchApplied]);
 
   useEffect(() => {
     void load();
@@ -480,6 +505,31 @@ export function AcquisitionCreatorsPage() {
       {note && <p className="ops-muted">{note}</p>}
 
       <section className="ops-panel">
+        <div className="acq-scope-banner ops-muted" style={{ marginBottom: 12, fontSize: 13 }}>
+          <strong>CURRENT SCOPE</strong>
+          {' · '}
+          Category: {niche ? categoryLabel(niche) : 'All'}
+          {' · '}
+          Language: {language ? languageLabel(language) : 'All'}
+          {' · '}
+          Market: {market ? marketLabel(market) : 'All'}
+          {' · '}
+          Tier: {tier ? tierLabel(tier) : 'All'}
+          {' · '}
+          Format: {format ? formatLabel(format) : 'All'}
+          {' · '}
+          Campaign: {campaign || 'All'}
+          {strategicOnly ? ' · Strategic only' : ''}
+          <div style={{ marginTop: 4 }}>
+            Creators: <strong>{allItems.length}</strong>
+            {' · '}
+            Missing email: <strong>{discoveryCensus.missingEmail}</strong>
+            {' · '}
+            Eligible now: <strong>{discoveryCensus.eligibleNow}</strong>
+            {' · '}
+            Backoff: <strong>{discoveryCensus.inBackoff}</strong>
+          </div>
+        </div>
         <div className="acq-discovery-census ops-muted" style={{ marginBottom: 10, fontSize: 13 }}>
           Missing email <strong>{discoveryCensus.missingEmail}</strong>
           {' · '}
@@ -782,14 +832,67 @@ export function AcquisitionCreatorsPage() {
           <label>
             Category
             <select className="admin-crm-select" value={niche} onChange={(e) => setNiche(e.target.value)}>
-              <option value="">All</option>
-              <option value="cooking">Cooking</option>
-              <option value="fitness">Fitness</option>
-              <option value="travel">Travel</option>
-              <option value="diy">DIY / home</option>
-              <option value="education">Education</option>
-              <option value="other">Other</option>
+              <option value="">All categories</option>
+              {ACQ_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
             </select>
+          </label>
+          <label>
+            Language
+            <select className="admin-crm-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+              <option value="">All</option>
+              {ACQ_LANGUAGES.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Market
+            <select className="admin-crm-select" value={market} onChange={(e) => setMarket(e.target.value)}>
+              {ACQ_MARKETS.map((m) => (
+                <option key={m.id || 'all'} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Audience tier
+            <select className="admin-crm-select" value={tier} onChange={(e) => setTier(e.target.value)}>
+              <option value="">All</option>
+              {ACQ_TIERS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Format
+            <select className="admin-crm-select" value={format} onChange={(e) => setFormat(e.target.value)}>
+              <option value="">All</option>
+              {ACQ_FORMATS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Campaign
+            <select className="admin-crm-select" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
+              <option value={ACQ_DEFAULT_CAMPAIGN}>{ACQ_DEFAULT_CAMPAIGN}</option>
+              <option value="">All campaigns</option>
+            </select>
+          </label>
+          <label className="ops-muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={strategicOnly} onChange={(e) => setStrategicOnly(e.target.checked)} />
+            Strategic only
           </label>
           <label className="acq-search">
             Search
@@ -832,8 +935,10 @@ export function AcquisitionCreatorsPage() {
                   try {
                     await adminApi.acqInspect({
                       channelInput: inspectInput.trim(),
-                      primaryNiche: niche || 'cooking',
-                      campaign: 'COOK-001',
+                      primaryNiche: niche || ACQ_DEFAULT_CATEGORY,
+                      campaign: campaign || ACQ_DEFAULT_CAMPAIGN,
+                      language: language || undefined,
+                      market: market || undefined,
                       contactType: 'none'
                     });
                     setInspectInput('');
@@ -872,6 +977,7 @@ export function AcquisitionCreatorsPage() {
                   </th>
                   <th className="acq-col-creator">Creator</th>
                   <th>Audience</th>
+                  <th>Lang / market</th>
                   <th>Email</th>
                   <th>Status</th>
                   <th>Campaign</th>
@@ -906,7 +1012,18 @@ export function AcquisitionCreatorsPage() {
                           </a>
                         )}
                       </td>
-                      <td>{p.subscriberRange}</td>
+                      <td>
+                        {p.subscriberRange}
+                        <div className="ops-muted" style={{ fontSize: 12 }}>
+                          {tierLabel(p.creatorTier)}
+                          {p.contentFormat && p.contentFormat !== 'unknown' ? ` · ${formatLabel(p.contentFormat)}` : ''}
+                          {p.strategic ? ' · STRATEGIC' : ''}
+                        </div>
+                      </td>
+                      <td className="ops-muted">
+                        {languageLabel(p.language)}
+                        <div>{marketLabel(p.market || p.country)}</div>
+                      </td>
                       <td className="acq-col-email">
                         {wf.status === 'REVIEW_EMAIL' && row.publicBusinessEmail ? (
                           <div>
