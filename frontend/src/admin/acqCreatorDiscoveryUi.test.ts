@@ -34,8 +34,9 @@ describe('acqCreatorDiscoveryUi', () => {
   });
 
   it('labels running complete partial failed', () => {
-    assert.equal(creatorDiscoveryTitle('partial'), 'DISCOVERY PARTIALLY COMPLETED');
+    assert.equal(creatorDiscoveryTitle('partial'), '⚠ Discovery partially completed');
     assert.equal(creatorDiscoveryBadge('running'), 'RUNNING');
-    assert.equal(creatorDiscoveryTitle('complete'), 'DISCOVERY COMPLETE');
+    assert.equal(creatorDiscoveryTitle('complete'), '✓ Creator discovery complete');
+    assert.equal(creatorDiscoveryTitle('running'), 'DISCOVERING CREATORS');
   });
 });

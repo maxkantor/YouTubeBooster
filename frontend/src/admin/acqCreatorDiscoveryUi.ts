@@ -38,9 +38,9 @@ export function discoveryInterruptMessage(added: number, target: number, httpHin
 }
 
 export function creatorDiscoveryTitle(phase: CreatorDiscoveryPhase): string {
-  if (phase === 'complete') return 'DISCOVERY COMPLETE';
-  if (phase === 'partial') return 'DISCOVERY PARTIALLY COMPLETED';
-  if (phase === 'failed') return 'DISCOVERY FAILED';
+  if (phase === 'complete') return '✓ Creator discovery complete';
+  if (phase === 'partial') return '⚠ Discovery partially completed';
+  if (phase === 'failed') return '⚠ Creator discovery could not continue';
   return 'DISCOVERING CREATORS';
 }
 

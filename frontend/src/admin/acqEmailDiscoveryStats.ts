@@ -235,13 +235,13 @@ export function emailDiscoveryJobTitle(
   status: string | undefined,
   tally: Pick<DiscoveryJobTally, 'searched' | 'found' | 'review' | 'notFound' | 'failed'> | null
 ): string {
-  if ((status || '').toLowerCase() !== 'completed') return 'EMAIL DISCOVERY';
+  if ((status || '').toLowerCase() !== 'completed') return 'FINDING EMAILS';
   const failed = tally?.failed ?? 0;
-  if (failed <= 0) return 'EMAIL DISCOVERY COMPLETE';
+  if (failed <= 0) return 'EMAIL SEARCH COMPLETE';
   const attempted = tally?.searched ?? 0;
   const otherOk = (tally?.found ?? 0) + (tally?.review ?? 0) + (tally?.notFound ?? 0);
-  if (attempted > 0 && failed === attempted && otherOk === 0) return 'EMAIL DISCOVERY FAILED';
-  return 'EMAIL DISCOVERY COMPLETED WITH ERRORS';
+  if (attempted > 0 && failed === attempted && otherOk === 0) return 'EMAIL SEARCH FAILED';
+  return 'EMAIL SEARCH COMPLETED WITH ERRORS';
 }
 
 export function emailDiscoverySummaryLine(tally: DiscoveryJobTally): string {

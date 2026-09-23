@@ -45,6 +45,7 @@ import {
   marketLabel,
   tierLabel
 } from './acqTaxonomy';
+import { AdminConfirmDialog, scrollPanelIfNeeded } from './AdminConfirmDialog';
 import {
   creatorDiscoveryBadge,
   creatorDiscoveryPhase,
@@ -109,7 +110,18 @@ export function AcquisitionCreatorsPage() {
   const [creatorDiscoverInterrupted, setCreatorDiscoverInterrupted] = useState(false);
   const [creatorDiscoverErrorDetail, setCreatorDiscoverErrorDetail] = useState('');
   const [creatorDiscoverShowDetails, setCreatorDiscoverShowDetails] = useState(false);
+  const [creatorDiscoverStarting, setCreatorDiscoverStarting] = useState(false);
+  const [emailSearchStarting, setEmailSearchStarting] = useState(false);
+  const [emailActionOrigin, setEmailActionOrigin] = useState<ConfirmMode>(null);
   const creatorTickRef = useRef<number | null>(null);
+  const creatorProgressRef = useRef<HTMLDivElement | null>(null);
+  const emailProgressRef = useRef<HTMLDivElement | null>(null);
+  const discoverBtnRef = useRef<HTMLButtonElement | null>(null);
+  const findEmailBtnRef = useRef<HTMLButtonElement | null>(null);
+  const filteredEmailBtnRef = useRef<HTMLButtonElement | null>(null);
+  const selectedEmailBtnRef = useRef<HTMLButtonElement | null>(null);
+  const forceRetryBtnRef = useRef<HTMLButtonElement | null>(null);
+  const confirmReturnRef = useRef<HTMLButtonElement | null>(null);
   const creatorTarget = 25;
 
   const cooldownDays = summary?.cooldownDays ?? 14;
@@ -163,6 +175,18 @@ export function AcquisitionCreatorsPage() {
       if (creatorTickRef.current) window.clearTimeout(creatorTickRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (creatorDiscoverStarting) {
+      requestAnimationFrame(() => scrollPanelIfNeeded(creatorProgressRef.current));
+    }
+  }, [creatorDiscoverStarting]);
+
+  useEffect(() => {
+    if (emailSearchStarting) {
+      requestAnimationFrame(() => scrollPanelIfNeeded(emailProgressRef.current));
+    }
+  }, [emailSearchStarting]);
 
   const setFilter = (value: AcqWorkflowStatus | 'all') => {
     setWorkflowFilter(value);
@@ -273,11 +297,13 @@ export function AcquisitionCreatorsPage() {
   );
 
   const startDiscovery = async (mode: ConfirmMode) => {
-    if (!mode) return;
+    if (!mode || discoveryBusy) return;
+    setEmailActionOrigin(mode);
     setConfirmMode(null);
     setDiscoveryBusy(true);
+    setEmailSearchStarting(true);
     setError('');
-    setShowResults(false);
+    setShowResults(true);
     try {
       const body =
         mode === 'force_retry'
@@ -315,6 +341,7 @@ export function AcquisitionCreatorsPage() {
         ...body
       });
       setDiscoveryJob(job);
+      setEmailSearchStarting(false);
       if (job.status === 'running') {
         setShowResults(true);
         void pollDiscovery(job.jobId);
@@ -330,6 +357,7 @@ export function AcquisitionCreatorsPage() {
       }
     } catch (e) {
       setDiscoveryBusy(false);
+      setEmailSearchStarting(false);
       setError(e instanceof Error ? e.message : 'Failed to start email discovery');
     }
   };
@@ -415,6 +443,7 @@ export function AcquisitionCreatorsPage() {
     }
     setCreatorDiscoverConfirm(false);
     setCreatorDiscoverBusy(true);
+    setCreatorDiscoverStarting(true);
     setCreatorDiscoverInterrupted(false);
     setCreatorDiscoverErrorDetail('');
     setCreatorDiscoverShowDetails(false);
@@ -429,6 +458,7 @@ export function AcquisitionCreatorsPage() {
         campaign: ACQ_DEFAULT_CAMPAIGN
       });
       setCreatorDiscoverJob(job);
+      setCreatorDiscoverStarting(false);
       if (job.status === 'running') {
         void pollCreatorDiscovery(job.jobId);
       } else {
@@ -440,6 +470,7 @@ export function AcquisitionCreatorsPage() {
       }
     } catch (e) {
       setCreatorDiscoverBusy(false);
+      setCreatorDiscoverStarting(false);
       setCreatorDiscoverInterrupted(true);
       setCreatorDiscoverErrorDetail(e instanceof Error ? e.message : String(e));
       if (!isTransientDiscoveryError(e)) {
@@ -745,65 +776,110 @@ export function AcquisitionCreatorsPage() {
           )}
         </div>
         <div className="acq-bulk-bar acq-bulk-bar-sticky">
-          <div>
-            <button
-              type="button"
-              className="ops-btn ops-btn-primary"
-              disabled={discoveryBusy || creatorDiscoverBusy || !niche}
-              onClick={() => {
-                setError('');
-                if (!niche) {
-                  setError('Select a category before discovering creators.');
-                  return;
-                }
-                setCreatorDiscoverConfirm(true);
-              }}
-            >
-              {creatorDiscoverBusy ? 'Discovering...' : 'Discover Creators'}
-            </button>
-            <button
-              type="button"
-              className="ops-btn ops-btn-primary"
-              disabled={discoveryBusy || creatorDiscoverBusy || discoveryCensus.eligibleNow === 0}
-              onClick={() => setConfirmMode('missing')}
-              title={
-                discoveryCensus.eligibleNow === 0
-                  ? 'No creators are eligible for discovery now. Backoff is still active.'
-                  : `Search ${discoveryCensus.eligibleNow} creators eligible now`
-              }
-            >
-              Find Missing Emails ({discoveryCensus.missingEmail})
-            </button>
-            <div className="ops-muted" style={{ fontSize: 12, marginTop: 4 }}>
-              {discoveryCensus.eligibleNow === 0
-                ? `No creators eligible for discovery now · ${discoveryCensus.inBackoff} in backoff`
-                : `${discoveryCensus.eligibleNow} eligible now · ${discoveryCensus.inBackoff} in backoff`}
-              {nextRetryLabel ? ` · Next retry ${nextRetryLabel}` : ''}
-            </div>
-          </div>
           <button
+            ref={discoverBtnRef}
+            type="button"
+            className="ops-btn ops-btn-primary"
+            disabled={discoveryBusy || creatorDiscoverBusy || !niche}
+            onClick={() => {
+              setError('');
+              if (!niche) {
+                setError('Select a category before discovering creators.');
+                return;
+              }
+              confirmReturnRef.current = discoverBtnRef.current;
+              setCreatorDiscoverConfirm(true);
+            }}
+          >
+            {creatorDiscoverBusy ? (
+              <>
+                Discovering...
+                <span className="acq-inline-spinner" aria-hidden="true" />
+              </>
+            ) : (
+              'Discover Creators'
+            )}
+          </button>
+          <button
+            ref={findEmailBtnRef}
+            type="button"
+            className="ops-btn ops-btn-primary"
+            disabled={discoveryBusy || creatorDiscoverBusy || discoveryCensus.eligibleNow === 0}
+            onClick={() => {
+              confirmReturnRef.current = findEmailBtnRef.current;
+              setConfirmMode('missing');
+            }}
+            title={
+              discoveryCensus.eligibleNow === 0
+                ? 'No creators are eligible for email search now. Backoff is still active.'
+                : `Search ${discoveryCensus.eligibleNow} creators eligible now`
+            }
+          >
+            {discoveryBusy && emailActionOrigin === 'missing' ? (
+              <>
+                Finding Emails...
+                <span className="acq-inline-spinner" aria-hidden="true" />
+              </>
+            ) : (
+              `Find Missing Emails (${discoveryCensus.missingEmail})`
+            )}
+          </button>
+          <button
+            ref={filteredEmailBtnRef}
             type="button"
             className="ops-btn ops-btn-ghost"
             disabled={discoveryBusy || items.length === 0}
-            onClick={() => setConfirmMode('filtered')}
+            onClick={() => {
+              confirmReturnRef.current = filteredEmailBtnRef.current;
+              setConfirmMode('filtered');
+            }}
           >
-            Find Emails for Filtered
+            {discoveryBusy && emailActionOrigin === 'filtered' ? (
+              <>
+                Finding Emails...
+                <span className="acq-inline-spinner" aria-hidden="true" />
+              </>
+            ) : (
+              'Find Emails for Filtered'
+            )}
           </button>
           <button
+            ref={selectedEmailBtnRef}
             type="button"
             className="ops-btn ops-btn-ghost"
             disabled={discoveryBusy || busy || selected.size === 0}
-            onClick={() => setConfirmMode('selected')}
+            onClick={() => {
+              confirmReturnRef.current = selectedEmailBtnRef.current;
+              setConfirmMode('selected');
+            }}
           >
-            Find Emails for Selected ({selected.size})
+            {discoveryBusy && emailActionOrigin === 'selected' ? (
+              <>
+                Finding Emails...
+                <span className="acq-inline-spinner" aria-hidden="true" />
+              </>
+            ) : (
+              `Find Emails for Selected (${selected.size})`
+            )}
           </button>
           <button
+            ref={forceRetryBtnRef}
             type="button"
             className="ops-btn ops-btn-ghost"
             disabled={discoveryBusy || busy || selectedBackoffCount === 0}
-            onClick={() => setConfirmMode('force_retry')}
+            onClick={() => {
+              confirmReturnRef.current = forceRetryBtnRef.current;
+              setConfirmMode('force_retry');
+            }}
           >
-            Force Retry Selected ({selectedBackoffCount})
+            {discoveryBusy && emailActionOrigin === 'force_retry' ? (
+              <>
+                Finding Emails...
+                <span className="acq-inline-spinner" aria-hidden="true" />
+              </>
+            ) : (
+              `Force Retry Selected (${selectedBackoffCount})`
+            )}
           </button>
           <button
             type="button"
@@ -839,36 +915,69 @@ export function AcquisitionCreatorsPage() {
           >
             Prepare All Incomplete Drafts ({incompleteDraftRows.length})
           </button>
+          <div className="ops-muted acq-bulk-bar-note" style={{ fontSize: 12 }}>
+            {discoveryCensus.eligibleNow === 0
+              ? `No creators eligible for email search now · ${discoveryCensus.inBackoff} in backoff`
+              : `${discoveryCensus.eligibleNow} eligible now · ${discoveryCensus.inBackoff} in backoff`}
+            {nextRetryLabel ? ` · Next retry ${nextRetryLabel}` : ''}
+          </div>
         </div>
 
         {creatorDiscoverConfirm && (
-          <div className="acq-discovery-confirm" role="dialog" aria-modal="true">
-            <h3>DISCOVERY SCOPE</h3>
-            <p>
-              Category: {categoryLabel(niche)}
-              <br />
-              Language: {language ? languageLabel(language) : 'All'}
-              <br />
-              Market: {market ? marketLabel(market) : 'All'}
-              <br />
-              Target: {creatorTarget} new creators
-            </p>
-            <p className="ops-muted">
-              Searches YouTube for real channels in this scope. Does not send email. Duplicates are skipped.
-            </p>
-            <div className="acq-drawer-primary-actions">
-              <button type="button" className="ops-btn ops-btn-ghost" disabled={creatorDiscoverBusy} onClick={() => setCreatorDiscoverConfirm(false)}>
-                Cancel
-              </button>
-              <button type="button" className="ops-btn ops-btn-primary" disabled={creatorDiscoverBusy} onClick={() => void startCreatorDiscovery()}>
-                Start Discovery
-              </button>
+          <AdminConfirmDialog
+            title="Discover Creators"
+            confirmLabel="Start Creator Discovery"
+            confirmDisabled={creatorDiscoverBusy || !niche}
+            onCancel={() => setCreatorDiscoverConfirm(false)}
+            onConfirm={() => void startCreatorDiscovery()}
+            returnFocusRef={confirmReturnRef}
+          >
+            <div className="admin-confirm-scope">
+              <div>
+                <span>Category</span>
+                <strong>{niche ? categoryLabel(niche) : 'All categories'}</strong>
+              </div>
+              <div>
+                <span>Language</span>
+                <strong>{language ? languageLabel(language) : 'All'}</strong>
+              </div>
+              <div>
+                <span>Market</span>
+                <strong>{market ? marketLabel(market) : 'All / unspecified'}</strong>
+              </div>
+              {tier ? (
+                <div>
+                  <span>Audience tier</span>
+                  <strong>{tierLabel(tier)}</strong>
+                </div>
+              ) : null}
+              {format ? (
+                <div>
+                  <span>Format</span>
+                  <strong>{formatLabel(format)}</strong>
+                </div>
+              ) : null}
+              <div>
+                <span>Campaign</span>
+                <strong>{campaign || ACQ_DEFAULT_CAMPAIGN}</strong>
+              </div>
+              <div>
+                <span>Target</span>
+                <strong>{creatorTarget} new creators</strong>
+              </div>
             </div>
-          </div>
+            <p className="ops-muted">Nothing will be emailed automatically.</p>
+          </AdminConfirmDialog>
         )}
 
-        {(creatorDiscoverBusy || creatorDiscoverJob) && (
-          <div className="acq-discovery-progress" aria-live="polite">
+        {(creatorDiscoverBusy || creatorDiscoverStarting || creatorDiscoverJob) && (
+          <div ref={creatorProgressRef} className="acq-discovery-progress" aria-live="polite">
+            {creatorDiscoverStarting && (
+              <p>
+                Starting creator discovery...
+                <span className="acq-inline-spinner" aria-hidden="true" />
+              </p>
+            )}
             <div className="acq-discovery-progress-head">
               <strong>{creatorDiscoveryTitle(creatorPhase)}</strong>
               <span className={`acq-phase-badge acq-phase-${creatorPhase}`}>{creatorDiscoveryBadge(creatorPhase)}</span>
@@ -950,7 +1059,7 @@ export function AcquisitionCreatorsPage() {
                   disabled={creatorDiscoverBusy}
                   onClick={() => void resumeCreatorDiscovery()}
                 >
-                  Resume Discovery
+                  Resume
                 </button>
               </>
             )}
@@ -963,7 +1072,7 @@ export function AcquisitionCreatorsPage() {
                   disabled={creatorDiscoverBusy}
                   onClick={() => void resumeCreatorDiscovery()}
                 >
-                  Resume Discovery
+                  Retry
                 </button>
               </>
             )}
@@ -989,55 +1098,87 @@ export function AcquisitionCreatorsPage() {
         )}
 
         {confirmMode && (
-          <div className="acq-discovery-confirm" role="dialog" aria-modal="true">
+          <AdminConfirmDialog
+            title={
+              confirmMode === 'force_retry'
+                ? 'Force Retry Selected'
+                : confirmMode === 'filtered'
+                  ? 'Find Emails for Filtered'
+                  : confirmMode === 'selected'
+                    ? 'Find Emails for Selected'
+                    : 'Find Public Business Emails'
+            }
+            confirmLabel={confirmMode === 'force_retry' ? 'Force Retry' : 'Find Emails'}
+            confirmDisabled={discoveryBusy || confirmCount === 0}
+            onCancel={() => setConfirmMode(null)}
+            onConfirm={() => void startDiscovery(confirmMode)}
+            returnFocusRef={confirmReturnRef}
+          >
             {confirmMode === 'force_retry' ? (
+              <p>
+                Retrying may repeat external lookups. Force retry {selectedBackoffCount} selected creator
+                {selectedBackoffCount === 1 ? '' : 's'}?
+              </p>
+            ) : confirmMode === 'missing' ? (
               <>
-                <h3>These creators are currently in discovery backoff.</h3>
-                <p className="ops-muted">
-                  Retrying may repeat external lookups. Force retry {selectedBackoffCount} selected creator
-                  {selectedBackoffCount === 1 ? '' : 's'}?
+                <div className="admin-confirm-scope">
+                  <div>
+                    <span>Category</span>
+                    <strong>{niche ? categoryLabel(niche) : 'All categories'}</strong>
+                  </div>
+                  <div>
+                    <span>Language</span>
+                    <strong>{language ? languageLabel(language) : 'All'}</strong>
+                  </div>
+                  <div>
+                    <span>Market</span>
+                    <strong>{market ? marketLabel(market) : 'All / unspecified'}</strong>
+                  </div>
+                  <div>
+                    <span>Campaign</span>
+                    <strong>{campaign || ACQ_DEFAULT_CAMPAIGN}</strong>
+                  </div>
+                  <div>
+                    <span>Missing emails</span>
+                    <strong>{discoveryCensus.missingEmail}</strong>
+                  </div>
+                  <div>
+                    <span>Eligible now</span>
+                    <strong>{discoveryCensus.eligibleNow}</strong>
+                  </div>
+                  <div>
+                    <span>In backoff</span>
+                    <strong>{discoveryCensus.inBackoff}</strong>
+                  </div>
+                </div>
+                <p>
+                  Only the {discoveryCensus.eligibleNow} eligible creator
+                  {discoveryCensus.eligibleNow === 1 ? '' : 's'} will be searched now.
                 </p>
+                <p className="ops-muted">Nothing will be emailed.</p>
               </>
             ) : (
               <>
-                <h3>
-                  Find public business emails for {confirmCount} creator{confirmCount === 1 ? '' : 's'}?
-                </h3>
-                <p className="ops-muted">
-                  {confirmMode === 'missing' && (
-                    <>
-                      {discoveryCensus.missingEmail} missing emails · {discoveryCensus.eligibleNow} eligible now ·{' '}
-                      {discoveryCensus.inBackoff} in backoff. Only eligible-now records will be searched. Backoff is
-                      respected. Nothing is sent.
-                    </>
-                  )}
-                  {confirmMode !== 'missing' && (
-                    <>
-                      High-confidence public business emails are saved automatically. Medium-confidence hits go to
-                      REVIEW EMAIL. Records in backoff are skipped, not searched. Nothing is sent.
-                    </>
-                  )}
+                <p>
+                  Find public business emails for {confirmCount} creator{confirmCount === 1 ? '' : 's'} in the current
+                  filtered scope.
                 </p>
+                <p className="ops-muted">Nothing will be emailed. Records in backoff are skipped.</p>
               </>
             )}
-            <div className="acq-drawer-primary-actions">
-              <button type="button" className="ops-btn ops-btn-ghost" disabled={discoveryBusy} onClick={() => setConfirmMode(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="ops-btn ops-btn-primary"
-                disabled={discoveryBusy || confirmCount === 0}
-                onClick={() => void startDiscovery(confirmMode)}
-              >
-                {confirmMode === 'force_retry' ? 'Force Retry' : 'Start Discovery'}
-              </button>
-            </div>
-          </div>
+          </AdminConfirmDialog>
         )}
 
-        {discoveryJob && discoveryTally && (
-          <div className="acq-discovery-progress">
+        {(emailSearchStarting || (discoveryJob && discoveryTally)) && (
+          <div ref={emailProgressRef} className="acq-discovery-progress">
+            {emailSearchStarting && (
+              <p>
+                Starting email search...
+                <span className="acq-inline-spinner" aria-hidden="true" />
+              </p>
+            )}
+            {discoveryJob && discoveryTally && (
+              <>
             <div className="acq-discovery-progress-head">
               <strong>{emailDiscoveryJobTitle(discoveryJob.status, discoveryTally)}</strong>
               <span className="ops-muted">{emailDiscoverySummaryLine(discoveryTally)}</span>
@@ -1184,6 +1325,8 @@ export function AcquisitionCreatorsPage() {
                     </table>
                   </div>
                 )}
+              </>
+            )}
               </>
             )}
           </div>

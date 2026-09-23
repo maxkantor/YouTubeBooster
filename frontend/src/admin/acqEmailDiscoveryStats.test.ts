@@ -223,7 +223,7 @@ describe('acqEmailDiscoveryStats', () => {
     assert.equal(t?.searched, 1);
     assert.equal(t?.found, 0);
     assert.equal(t?.failed, 1);
-    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL DISCOVERY FAILED');
+    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL SEARCH FAILED');
     assert.equal(emailDiscoveryErrorReason('Duplicate of @marionskitchen'), 'Email already assigned to @marionskitchen');
   });
 
@@ -261,7 +261,7 @@ describe('acqEmailDiscoveryStats', () => {
     assert.equal(t?.skippedBackoff, 1);
     assert.equal(t?.skippedOther, 1);
     assert.equal(normalizeEmailDiscoveryOutcome('skipped_existing'), 'ALREADY_HAS_EMAIL');
-    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL DISCOVERY COMPLETE');
+    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL SEARCH COMPLETE');
     assert.match(emailDiscoverySummaryLine(t!), /3 attempted/);
   });
 
@@ -296,7 +296,8 @@ describe('acqEmailDiscoveryStats', () => {
     });
     assert.equal(t?.found, 1);
     assert.equal(t?.failed, 0);
-    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL DISCOVERY COMPLETE');
+    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL SEARCH COMPLETE');
+    assert.equal(emailDiscoveryJobTitle('running', t), 'FINDING EMAILS');
   });
 
   it('formats long backoff as days instead of raw hours', () => {
