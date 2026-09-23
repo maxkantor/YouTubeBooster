@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi } from '../lib/api';
-import type { AcqSummary } from '../types';
+import type { AcqCampaignConfig, AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import { AdminShell } from './AdminShell';
-import { rateOrNa } from './acqUiShared';
+import { deliveredDisplay, rateOrNa } from './acqUiShared';
+import { ACQ_CATEGORIES, ACQ_LANGUAGES, ACQ_MARKETS, ACQ_TIERS, categoryLabel, languageLabel, marketLabel } from './acqTaxonomy';
 import { explainWeekdaySendResult, type AcqWeekdaySendView } from './acqWeekdaySendResult';
 
 export function AcquisitionCampaignsPage() {
@@ -16,11 +17,23 @@ export function AcquisitionCampaignsPage() {
   const [confirmSend, setConfirmSend] = useState(false);
   const [runView, setRunView] = useState<AcqWeekdaySendView | null>(null);
   const [runAt, setRunAt] = useState('');
+  const [campaigns, setCampaigns] = useState<AcqCampaignConfig[]>([]);
+  const [newName, setNewName] = useState('');
+  const [newCategory, setNewCategory] = useState('technology');
+  const [newLanguage, setNewLanguage] = useState('ru');
+  const [newMarket, setNewMarket] = useState('');
+  const [newTier, setNewTier] = useState('');
+  const [newLimit, setNewLimit] = useState(5);
 
   const load = useCallback(async () => {
     setError('');
     try {
-      setSummary(await adminApi.acqSummary());
+      const [s, camps] = await Promise.all([
+        adminApi.acqSummary(),
+        adminApi.acqCampaigns().catch(() => ({ items: [] as AcqCampaignConfig[] }))
+      ]);
+      setSummary(s);
+      setCampaigns(camps.items || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load campaign');
     }
@@ -253,7 +266,9 @@ export function AcquisitionCampaignsPage() {
               </div>
               <div>
                 <span>Delivered</span>
-                <strong>{summary.delivered ?? 0}</strong>
+                <strong>
+                  {deliveredDisplay(sentLifetime, summary.delivered, summary.deliveryTelemetryAvailable)}
+                </strong>
               </div>
               <div>
                 <span>Clicked</span>
@@ -297,6 +312,121 @@ export function AcquisitionCampaignsPage() {
             </div>
           </>
         )}
+      </section>
+
+      <section className="ops-panel">
+        <header className="ops-section-head">
+          <h2>Additional campaigns</h2>
+        </header>
+        <p className="ops-muted">
+          Discovery does not require a campaign. COOK-001 stays the only automatic weekday sender. New campaigns start
+          with sending off.
+        </p>
+        {campaigns.filter((c) => c.campaignId !== 'COOK-001').length > 0 && (
+          <div className="acq-skip-list" style={{ marginBottom: 12 }}>
+            {campaigns
+              .filter((c) => c.campaignId !== 'COOK-001')
+              .map((c) => (
+                <div key={c.campaignId} className="acq-skip-row">
+                  <span>
+                    {c.campaignId} · {categoryLabel(c.category)} / {languageLabel(c.language)} / {marketLabel(c.market)} ·
+                    daily {c.dailyLimit}
+                  </span>
+                  <strong>{c.sendingEnabled ? 'Sending on' : 'Sending off'}</strong>
+                </div>
+              ))}
+          </div>
+        )}
+        <div className="acq-toolbar">
+          <label>
+            Name
+            <input className="admin-crm-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="RU-TECH-001" />
+          </label>
+          <label>
+            Category
+            <select className="admin-crm-select" value={newCategory} onChange={(e) => setNewCategory(e.target.value)}>
+              {ACQ_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Language
+            <select className="admin-crm-select" value={newLanguage} onChange={(e) => setNewLanguage(e.target.value)}>
+              {ACQ_LANGUAGES.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Market
+            <select className="admin-crm-select" value={newMarket} onChange={(e) => setNewMarket(e.target.value)}>
+              {ACQ_MARKETS.map((m) => (
+                <option key={m.id || 'all'} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Tier
+            <select className="admin-crm-select" value={newTier} onChange={(e) => setNewTier(e.target.value)}>
+              <option value="">All</option>
+              {ACQ_TIERS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Daily limit
+            <input
+              className="admin-crm-input"
+              type="number"
+              min={1}
+              max={30}
+              value={newLimit}
+              onChange={(e) => setNewLimit(Number(e.target.value) || 5)}
+            />
+          </label>
+        </div>
+        <div className="acq-blocker-actions" style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  const row = await adminApi.acqCreateCampaign({
+                    name: newName || undefined,
+                    category: newCategory,
+                    language: newLanguage,
+                    market: newMarket || undefined,
+                    tier: newTier || undefined,
+                    dailyLimit: newLimit,
+                    sendingEnabled: false
+                  });
+                  setNote(`Campaign ${row.campaignId} saved. Sending is off.`);
+                  await load();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Could not save campaign');
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            Save campaign (sending off)
+          </button>
+        </div>
       </section>
     </AdminShell>
   );

@@ -4,7 +4,7 @@ import { adminApi } from '../lib/api';
 import type { AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import { AdminShell } from './AdminShell';
-import { rateOrNa, skipLabel } from './acqUiShared';
+import { deliveredDisplay, rateOrNa, skipLabel } from './acqUiShared';
 import { categoryLabel, languageLabel, marketLabel, tierLabel } from './acqTaxonomy';
 
 export function AcquisitionAnalyticsPage() {
@@ -31,7 +31,10 @@ export function AcquisitionAnalyticsPage() {
     { label: 'Needs approval', value: summary?.needsApproval ?? 0 },
     { label: 'Approved', value: summary?.approvedWaiting ?? summary?.approved ?? 0 },
     { label: 'Sent', value: sent },
-    { label: 'Delivered', value: summary?.delivered ?? 0 },
+    {
+      label: 'Delivered',
+      value: deliveredDisplay(sent, summary?.delivered, summary?.deliveryTelemetryAvailable)
+    },
     { label: 'Clicked', value: summary?.clicked ?? 0 },
     { label: 'Audit started', value: summary?.auditStarted ?? 0 },
     { label: 'Paid', value: summary?.converted ?? 0 }

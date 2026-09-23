@@ -225,6 +225,7 @@ public static class CreatorAcquisitionEndpoints
 
             var delivered = rows.Count(r => StatusAtLeast(r.OutreachStatus,
                 "delivered", "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
+            var deliveryTelemetryAvailable = delivered > 0;
             // Clicked = CTA tracked; do not count SES delivery alone as a click.
             var clicked = rows.Count(r => StatusAtLeast(r.OutreachStatus,
                 "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
@@ -468,6 +469,7 @@ public static class CreatorAcquisitionEndpoints
                 sentLifetime = sent,
                 recentlySentWindowDays = 7,
                 delivered,
+                deliveryTelemetryAvailable,
                 clicked,
                 auditStarted,
                 auditCompleted,
@@ -925,6 +927,68 @@ public static class CreatorAcquisitionEndpoints
             return Results.Ok(result);
         });
 
+        admin.MapPost("/creator-discovery/start", async (
+            HttpContext http,
+            AcqCreatorDiscoveryStartRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var admin = ((AdminSessionRecord)http.Items["authenticatedAdmin"]!).Email;
+            var job = await acq.StartCreatorDiscoveryAsync(body ?? new AcqCreatorDiscoveryStartRequest(), admin, cancellationToken);
+            return Results.Ok(job);
+        });
+
+        admin.MapGet("/creator-discovery/{jobId}", async (
+            string jobId,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var job = await acq.GetCreatorDiscoveryJobAsync(jobId, cancellationToken);
+            return job is null ? Results.NotFound(new { error = "job_not_found" }) : Results.Ok(job);
+        });
+
+        admin.MapPost("/creator-discovery/{jobId}/tick", async (
+            string jobId,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            var job = await acq.TickCreatorDiscoveryAsync(jobId, cancellationToken);
+            return Results.Ok(job);
+        });
+
+        admin.MapGet("/campaigns", async (ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
+        {
+            var extra = await acq.ListCampaignConfigsAsync(cancellationToken);
+            var cookFlags = await acq.Store.GetCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
+            var cook = new AcqCampaignConfig(
+                CreatorAcquisitionCampaigns.Cook001,
+                "COOK-001",
+                AcquisitionTaxonomy.DefaultCategory,
+                AcquisitionTaxonomy.DefaultLanguage,
+                "",
+                null,
+                OutreachPolicy.DefaultDailyLimit,
+                cookFlags.SendingEnabled,
+                DateTimeOffset.UnixEpoch);
+            return Results.Ok(new { items = new[] { cook }.Concat(extra).ToArray() });
+        });
+
+        admin.MapPost("/campaigns", async (
+            AcqCampaignConfigRequest? body,
+            ICreatorAcquisitionService acq,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var row = await acq.UpsertCampaignConfigAsync(body ?? new AcqCampaignConfigRequest(), cancellationToken);
+                return Results.Ok(row);
+            }
+            catch (InvalidOperationException ex) when (ex.Message == "cook_001_is_not_replaceable")
+            {
+                return Results.BadRequest(new { error = "COOK-001 cannot be replaced. Use Pause sending on the existing campaign." });
+            }
+        });
+
         admin.MapPost("/email-discovery/start", async (
             HttpContext http,
             AcqEmailDiscoveryStartRequest? body,
@@ -1098,6 +1162,11 @@ public interface ICreatorAcquisitionService
     Task<AcqEmailDiscoveryJobState?> GetEmailDiscoveryJobAsync(string jobId, CancellationToken cancellationToken);
     Task<AcqEmailDiscoveryJobState> TickEmailDiscoveryAsync(string jobId, int batchSize, CancellationToken cancellationToken);
     Task<(AcqProspectRecord? Prospect, string? Error)> AcceptDiscoveredEmailAsync(string prospectId, bool accept, string adminEmail, string? reason, CancellationToken cancellationToken);
+    Task<AcqCreatorDiscoveryJobState> StartCreatorDiscoveryAsync(AcqCreatorDiscoveryStartRequest request, string adminEmail, CancellationToken cancellationToken);
+    Task<AcqCreatorDiscoveryJobState?> GetCreatorDiscoveryJobAsync(string jobId, CancellationToken cancellationToken);
+    Task<AcqCreatorDiscoveryJobState> TickCreatorDiscoveryAsync(string jobId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AcqCampaignConfig>> ListCampaignConfigsAsync(CancellationToken cancellationToken);
+    Task<AcqCampaignConfig> UpsertCampaignConfigAsync(AcqCampaignConfigRequest request, CancellationToken cancellationToken);
     string Site();
     string TrackedSite();
 }

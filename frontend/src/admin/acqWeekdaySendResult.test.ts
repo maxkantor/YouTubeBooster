@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { explainWeekdaySendResult, tallySkipReasons } from './acqWeekdaySendResult';
+import { deliveredDisplay } from './acqUiShared';
 
 describe('acqWeekdaySendResult', () => {
   it('explains 0 sent when the ready queue is empty', () => {
@@ -40,5 +41,13 @@ describe('acqWeekdaySendResult', () => {
       { code: 'NOT_APPROVED', count: 2 },
       { code: 'COOLDOWN', count: 1 }
     ]);
+  });
+});
+
+describe('deliveredDisplay', () => {
+  it('does not present untracked SES delivery as zero deliveries', () => {
+    assert.equal(deliveredDisplay(33, 0, false), 'Not tracked');
+    assert.equal(deliveredDisplay(33, 4, true), '4');
+    assert.equal(deliveredDisplay(0, 0, false), '0');
   });
 });

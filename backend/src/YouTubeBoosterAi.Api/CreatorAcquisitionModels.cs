@@ -304,6 +304,72 @@ public sealed record AcqEmailDiscoveryJobState(
 
 public sealed record AcqEmailDiscoveryAcceptRequest(bool Accept = true, string? Reason = null);
 
+public sealed record AcqCreatorDiscoveryStartRequest(
+    string? Category = null,
+    string? Language = null,
+    string? Market = null,
+    string? Tier = null,
+    int? Target = null,
+    string? Campaign = null
+);
+
+public sealed record AcqCreatorDiscoveryItem(
+    string? ChannelId,
+    string? Handle,
+    string? Title,
+    string Outcome,
+    string? Reason,
+    string? ProspectId
+);
+
+public sealed record AcqCreatorDiscoveryJobState(
+    string JobId,
+    string Category,
+    string Language,
+    string Market,
+    string? Tier,
+    string Campaign,
+    string AdminEmail,
+    int Target,
+    DateTimeOffset StartedAt,
+    DateTimeOffset UpdatedAt,
+    string Status,
+    IReadOnlyList<string> Queries,
+    int QueryIndex,
+    string? PageToken,
+    IReadOnlyList<AcqYoutubeSearchHit> Queue,
+    int QueueIndex,
+    int SourcesEvaluated,
+    int Qualified,
+    int DuplicatesSkipped,
+    int Added,
+    int Failed,
+    IReadOnlyList<AcqCreatorDiscoveryItem> Results
+);
+
+public sealed record AcqCampaignConfig(
+    string CampaignId,
+    string Name,
+    string Category,
+    string Language,
+    string Market,
+    string? Tier,
+    int DailyLimit,
+    bool SendingEnabled,
+    DateTimeOffset CreatedAt
+);
+
+public sealed record AcqCampaignConfigRequest(
+    string? Name = null,
+    string? Category = null,
+    string? Language = null,
+    string? Market = null,
+    string? Tier = null,
+    int? DailyLimit = null,
+    bool? SendingEnabled = null,
+    string? CampaignId = null
+);
+
 public sealed record AcqDraftPrepareResult(
     AcqProspectRecord? Prospect,
     bool DraftPrepared,

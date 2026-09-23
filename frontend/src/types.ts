@@ -605,6 +605,49 @@ export type AcqEmailDiscoveryItemResult = {
   draftPrepared?: boolean;
 };
 
+export type AcqCreatorDiscoveryItem = {
+  channelId?: string | null;
+  handle?: string | null;
+  title?: string | null;
+  outcome: string;
+  reason?: string | null;
+  prospectId?: string | null;
+};
+
+export type AcqCreatorDiscoveryJob = {
+  jobId: string;
+  category: string;
+  language: string;
+  market: string;
+  tier?: string | null;
+  campaign: string;
+  adminEmail: string;
+  target: number;
+  startedAt: string;
+  updatedAt: string;
+  status: string;
+  queries: string[];
+  queryIndex: number;
+  sourcesEvaluated: number;
+  qualified: number;
+  duplicatesSkipped: number;
+  added: number;
+  failed: number;
+  results: AcqCreatorDiscoveryItem[];
+};
+
+export type AcqCampaignConfig = {
+  campaignId: string;
+  name: string;
+  category: string;
+  language: string;
+  market: string;
+  tier?: string | null;
+  dailyLimit: number;
+  sendingEnabled: boolean;
+  createdAt?: string;
+};
+
 export type AcqEmailDiscoveryJob = {
   jobId: string;
   campaign: string;
@@ -658,6 +701,7 @@ export type AcqSummary = {
   recentlySentWindowDays?: number;
   sentLifetime?: number;
   delivered?: number;
+  deliveryTelemetryAvailable?: boolean;
   clicked?: number;
   auditStarted?: number;
   auditCompleted?: number;

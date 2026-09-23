@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { adminApi } from '../lib/api';
-import type { AcqAdminProspect, AcqEmailDiscoveryJob, AcqSummary } from '../types';
+import type { AcqAdminProspect, AcqCampaignConfig, AcqCreatorDiscoveryJob, AcqEmailDiscoveryJob, AcqSummary } from '../types';
 import { useAdminCrm } from './useAdminCrm';
 import { AdminShell } from './AdminShell';
 import { Badge } from './AdminCrmComponents';
@@ -88,6 +88,12 @@ export function AcquisitionCreatorsPage() {
   const [discoveryJob, setDiscoveryJob] = useState<AcqEmailDiscoveryJob | null>(null);
   const [showResults, setShowResults] = useState(false);
   const tickRef = useRef<number | null>(null);
+  const [campaigns, setCampaigns] = useState<AcqCampaignConfig[]>([]);
+  const [creatorDiscoverConfirm, setCreatorDiscoverConfirm] = useState(false);
+  const [creatorDiscoverBusy, setCreatorDiscoverBusy] = useState(false);
+  const [creatorDiscoverJob, setCreatorDiscoverJob] = useState<AcqCreatorDiscoveryJob | null>(null);
+  const creatorTickRef = useRef<number | null>(null);
+  const creatorTarget = 25;
 
   const cooldownDays = summary?.cooldownDays ?? 14;
   const sendingEnabled = summary?.marketingSendingEnabled ?? true;
@@ -95,7 +101,7 @@ export function AcquisitionCreatorsPage() {
   const load = useCallback(async () => {
     setError('');
     try {
-      const [s, list] = await Promise.all([
+      const [s, list, camps] = await Promise.all([
         adminApi.acqSummary(),
         adminApi.acqProspects({
           view: 'all',
@@ -107,10 +113,12 @@ export function AcquisitionCreatorsPage() {
           format: format || undefined,
           strategic: strategicOnly ? true : undefined,
           q: searchApplied || undefined
-        })
+        }),
+        adminApi.acqCampaigns().catch(() => ({ items: [] as AcqCampaignConfig[] }))
       ]);
       setSummary(s);
       setAllItems(list.items || []);
+      setCampaigns(camps.items || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load creators');
     }
@@ -135,6 +143,7 @@ export function AcquisitionCreatorsPage() {
   useEffect(() => {
     return () => {
       if (tickRef.current) window.clearTimeout(tickRef.current);
+      if (creatorTickRef.current) window.clearTimeout(creatorTickRef.current);
     };
   }, []);
 
@@ -303,6 +312,66 @@ export function AcquisitionCreatorsPage() {
     } catch (e) {
       setDiscoveryBusy(false);
       setError(e instanceof Error ? e.message : 'Failed to start email discovery');
+    }
+  };
+
+  const pollCreatorDiscovery = useCallback(
+    async (jobId: string) => {
+      try {
+        let job = await adminApi.acqCreatorDiscoveryJob(jobId);
+        while (job.status === 'running') {
+          setCreatorDiscoverJob(job);
+          job = await adminApi.acqCreatorDiscoveryTick(jobId);
+          setCreatorDiscoverJob(job);
+          await new Promise<void>((resolve) => {
+            creatorTickRef.current = window.setTimeout(() => resolve(), 400);
+          });
+        }
+        setCreatorDiscoverJob(job);
+        setNote(
+          `Creator discovery finished: ${job.added} added · ${job.duplicatesSkipped} duplicates · ${job.sourcesEvaluated} sources evaluated.`
+        );
+        await load();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Creator discovery failed');
+      } finally {
+        setCreatorDiscoverBusy(false);
+      }
+    },
+    [load]
+  );
+
+  const startCreatorDiscovery = async () => {
+    if (!niche) {
+      setError('Select a category before discovering creators.');
+      setCreatorDiscoverConfirm(false);
+      return;
+    }
+    setCreatorDiscoverConfirm(false);
+    setCreatorDiscoverBusy(true);
+    setError('');
+    try {
+      const job = await adminApi.acqCreatorDiscoveryStart({
+        category: niche,
+        language: language || undefined,
+        market: market || undefined,
+        tier: tier || undefined,
+        target: creatorTarget,
+        campaign: ACQ_DEFAULT_CAMPAIGN
+      });
+      setCreatorDiscoverJob(job);
+      if (job.status === 'running') {
+        void pollCreatorDiscovery(job.jobId);
+      } else {
+        setCreatorDiscoverBusy(false);
+        setNote(
+          `Creator discovery finished: ${job.added} added · ${job.duplicatesSkipped} duplicates · ${job.sourcesEvaluated} sources evaluated.`
+        );
+        await load();
+      }
+    } catch (e) {
+      setCreatorDiscoverBusy(false);
+      setError(e instanceof Error ? e.message : 'Failed to start creator discovery');
     }
   };
 
@@ -500,7 +569,7 @@ export function AcquisitionCreatorsPage() {
     : false;
 
   return (
-    <AdminShell title="Creators" subtitle="Master prospect database — all COOK-001 creators.">
+    <AdminShell title="Creators" subtitle="Master prospect database — discover and manage creators.">
       {error && <p className="admin-crm-error">{error}</p>}
       {note && <p className="ops-muted">{note}</p>}
 
@@ -555,7 +624,22 @@ export function AcquisitionCreatorsPage() {
             <button
               type="button"
               className="ops-btn ops-btn-primary"
-              disabled={discoveryBusy || discoveryCensus.eligibleNow === 0}
+              disabled={discoveryBusy || creatorDiscoverBusy || !niche}
+              onClick={() => {
+                setError('');
+                if (!niche) {
+                  setError('Select a category before discovering creators.');
+                  return;
+                }
+                setCreatorDiscoverConfirm(true);
+              }}
+            >
+              Discover Creators
+            </button>
+            <button
+              type="button"
+              className="ops-btn ops-btn-primary"
+              disabled={discoveryBusy || creatorDiscoverBusy || discoveryCensus.eligibleNow === 0}
               onClick={() => setConfirmMode('missing')}
               title={
                 discoveryCensus.eligibleNow === 0
@@ -631,6 +715,78 @@ export function AcquisitionCreatorsPage() {
             Prepare All Incomplete Drafts ({incompleteDraftRows.length})
           </button>
         </div>
+
+        {creatorDiscoverConfirm && (
+          <div className="acq-discovery-confirm" role="dialog" aria-modal="true">
+            <h3>DISCOVERY SCOPE</h3>
+            <p>
+              Category: {categoryLabel(niche)}
+              <br />
+              Language: {language ? languageLabel(language) : 'All'}
+              <br />
+              Market: {market ? marketLabel(market) : 'All'}
+              <br />
+              Target: {creatorTarget} new creators
+            </p>
+            <p className="ops-muted">
+              Searches YouTube for real channels in this scope. Does not send email. Duplicates are skipped.
+            </p>
+            <div className="acq-drawer-primary-actions">
+              <button type="button" className="ops-btn ops-btn-ghost" disabled={creatorDiscoverBusy} onClick={() => setCreatorDiscoverConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className="ops-btn ops-btn-primary" disabled={creatorDiscoverBusy} onClick={() => void startCreatorDiscovery()}>
+                Start Discovery
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(creatorDiscoverBusy || creatorDiscoverJob) && (
+          <div className="acq-discovery-progress" aria-live="polite">
+            <div className="acq-discovery-progress-head">
+              <strong>
+                {creatorDiscoverJob?.status === 'completed' ? 'CREATOR DISCOVERY COMPLETE' : 'DISCOVERING CREATORS'}
+              </strong>
+              <span className="ops-muted">{creatorDiscoverJob?.status || 'starting'}</span>
+            </div>
+            <p className="ops-muted">
+              Scope: {categoryLabel(creatorDiscoverJob?.category || niche)}
+              {' / '}
+              {creatorDiscoverJob?.language ? languageLabel(creatorDiscoverJob.language) : language ? languageLabel(language) : 'All'}
+              {' / '}
+              {creatorDiscoverJob?.market ? marketLabel(creatorDiscoverJob.market) : market ? marketLabel(market) : 'All Markets'}
+            </p>
+            <p>
+              Target: {creatorDiscoverJob?.target ?? creatorTarget}
+            </p>
+            {creatorDiscoverBusy && creatorDiscoverJob?.status !== 'completed' && (
+              <div className="acq-progress acq-discovery-progress-bar" role="progressbar" aria-label="Creator discovery in progress">
+                <div className="acq-progress-fill acq-progress-fill-active" style={{ width: '100%' }} />
+              </div>
+            )}
+            <ul className="acq-discovery-stats">
+              <li>
+                Sources evaluated <strong>{creatorDiscoverJob?.sourcesEvaluated ?? 0}</strong>
+              </li>
+              <li>
+                Qualified <strong>{creatorDiscoverJob?.qualified ?? 0}</strong>
+              </li>
+              <li>
+                Duplicates skipped <strong>{creatorDiscoverJob?.duplicatesSkipped ?? 0}</strong>
+              </li>
+              <li>
+                Added <strong>{creatorDiscoverJob?.added ?? 0}</strong>
+              </li>
+              <li>
+                Remaining target{' '}
+                <strong>
+                  {Math.max(0, (creatorDiscoverJob?.target ?? creatorTarget) - (creatorDiscoverJob?.added ?? 0))}
+                </strong>
+              </li>
+            </ul>
+          </div>
+        )}
 
         {confirmMode && (
           <div className="acq-discovery-confirm" role="dialog" aria-modal="true">
@@ -887,6 +1043,13 @@ export function AcquisitionCreatorsPage() {
             Campaign
             <select className="admin-crm-select" value={campaign} onChange={(e) => setCampaign(e.target.value)}>
               <option value={ACQ_DEFAULT_CAMPAIGN}>{ACQ_DEFAULT_CAMPAIGN}</option>
+              {campaigns
+                .filter((c) => c.campaignId !== ACQ_DEFAULT_CAMPAIGN)
+                .map((c) => (
+                  <option key={c.campaignId} value={c.campaignId}>
+                    {c.campaignId}
+                  </option>
+                ))}
               <option value="">All campaigns</option>
             </select>
           </label>

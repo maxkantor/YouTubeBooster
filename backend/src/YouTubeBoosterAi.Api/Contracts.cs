@@ -23,7 +23,8 @@ public sealed record DemoAnalysisResponse(
     long TotalViews = 0,
     int VideoCount = 0,
     double AvgEngagement = 0,
-    IReadOnlyList<DemoTopVideoDto>? TopVideos = null
+    IReadOnlyList<DemoTopVideoDto>? TopVideos = null,
+    string? ChannelId = null
 );
 
 public sealed record CreateCheckoutSessionRequest(

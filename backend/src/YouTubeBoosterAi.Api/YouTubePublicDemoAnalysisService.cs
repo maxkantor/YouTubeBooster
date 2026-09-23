@@ -87,7 +87,10 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
                     _logger.LogWarning("YouTube public demo: missing uploads playlist id for channel {ChannelId}", channel.ChannelId);
                 }
 
-                response = BuildResponseFromChannelData(resolvedInput, channel, videos);
+                response = BuildResponseFromChannelData(resolvedInput, channel, videos) with
+                {
+                    ChannelId = channel.ChannelId
+                };
             }
             catch (Exception ex)
             {

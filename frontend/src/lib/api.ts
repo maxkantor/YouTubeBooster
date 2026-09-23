@@ -16,6 +16,8 @@ import type {
   AdminUserDetailResponse,
   AdminUserRow,
   AcqAdminProspect,
+  AcqCampaignConfig,
+  AcqCreatorDiscoveryJob,
   AcqEmailDiscoveryJob,
   AcqSummary,
   CheckoutSession,
@@ -682,6 +684,45 @@ export const adminApi = {
         campaign: body.campaign || 'COOK-001',
         prospectIds: body.prospectIds
       })
+    });
+  },
+  async acqCreatorDiscoveryStart(body: {
+    category?: string;
+    language?: string;
+    market?: string;
+    tier?: string;
+    target?: number;
+    campaign?: string;
+  }): Promise<AcqCreatorDiscoveryJob> {
+    return fetchJson('/api/admin/crm/acquisition/creator-discovery/start', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  },
+  async acqCreatorDiscoveryJob(jobId: string): Promise<AcqCreatorDiscoveryJob> {
+    return fetchJson(`/api/admin/crm/acquisition/creator-discovery/${encodeURIComponent(jobId)}`);
+  },
+  async acqCreatorDiscoveryTick(jobId: string): Promise<AcqCreatorDiscoveryJob> {
+    return fetchJson(`/api/admin/crm/acquisition/creator-discovery/${encodeURIComponent(jobId)}/tick`, {
+      method: 'POST'
+    });
+  },
+  async acqCampaigns(): Promise<{ items: AcqCampaignConfig[] }> {
+    return fetchJson('/api/admin/crm/acquisition/campaigns');
+  },
+  async acqCreateCampaign(body: {
+    name?: string;
+    category?: string;
+    language?: string;
+    market?: string;
+    tier?: string;
+    dailyLimit?: number;
+    sendingEnabled?: boolean;
+    campaignId?: string;
+  }): Promise<AcqCampaignConfig> {
+    return fetchJson('/api/admin/crm/acquisition/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(body)
     });
   },
   async acqEmailDiscoveryStart(body: {

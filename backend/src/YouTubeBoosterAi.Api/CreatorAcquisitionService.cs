@@ -18,6 +18,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
     private readonly IConfiguration _configuration;
     private readonly IPublicDashboardService _dashboard;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IYouTubeChannelSearch? _channelSearch;
 
     public CreatorAcquisitionService(
         ICreatorAcquisitionStore store,
@@ -27,7 +28,8 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         ISecretValueProvider secrets,
         IConfiguration configuration,
         IPublicDashboardService dashboard,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IYouTubeChannelSearch? channelSearch = null)
     {
         _store = store;
         _appDataStore = appDataStore;
@@ -37,6 +39,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         _configuration = configuration;
         _dashboard = dashboard;
         _httpClientFactory = httpClientFactory;
+        _channelSearch = channelSearch;
     }
 
     public async Task<AcqCampaignState> LoadStateAsync(string campaign, CancellationToken cancellationToken)
@@ -153,8 +156,14 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         var inputUrl = !string.IsNullOrWhiteSpace(inputHandle) && !inputHandle.StartsWith("http", StringComparison.OrdinalIgnoreCase)
             ? "https://www.youtube.com/" + (inputHandle.StartsWith('@') ? inputHandle : "@" + inputHandle.TrimStart('@'))
             : (inputHandle.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? inputHandle : null);
-        var dup = await _store.FindDuplicateAsync(null, inputUrl ?? url, string.IsNullOrWhiteSpace(inputHandle) ? handle : inputHandle, null, cancellationToken)
-                  ?? await _store.FindDuplicateAsync(null, url, handle, email, cancellationToken);
+        var resolvedChannelId = demo.ChannelId;
+        if (string.IsNullOrWhiteSpace(resolvedChannelId))
+        {
+            var idMatch = System.Text.RegularExpressions.Regex.Match(request.ChannelInput ?? "", @"UC[a-zA-Z0-9_-]{20,}");
+            if (idMatch.Success) resolvedChannelId = idMatch.Value;
+        }
+        var dup = await _store.FindDuplicateAsync(resolvedChannelId, inputUrl ?? url, string.IsNullOrWhiteSpace(inputHandle) ? handle : inputHandle, null, cancellationToken)
+                  ?? await _store.FindDuplicateAsync(resolvedChannelId, url, handle, email, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var contactAttempts = dup?.ContactResearchAttempts ?? 0;
         var contactStatus = dup?.ContactResearchStatus;
@@ -314,7 +323,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             ChannelName: placeholder ? request.ChannelInput : demo.ChannelTitle,
             Handle: handle,
             ChannelUrl: url,
-            ChannelId: null,
+            ChannelId: resolvedChannelId ?? dup?.ChannelId,
             PrimaryNiche: niche,
             Language: language,
             Country: string.IsNullOrWhiteSpace(dup?.Country) ? null : dup.Country,
@@ -756,16 +765,17 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             ? CreatorAcquisitionCampaigns.Cook001
             : request.Campaign!.Trim();
         var all = await _store.ListProspectsAsync(cancellationToken);
-        IEnumerable<AcqProspectRecord> candidates = all.Where(p =>
-            string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+        IEnumerable<AcqProspectRecord> candidates = all;
 
         if (request.ProspectIds is { Count: > 0 })
         {
             var idSet = request.ProspectIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            candidates = candidates.Where(p => idSet.Contains(p.ProspectId));
+            candidates = all.Where(p => idSet.Contains(p.ProspectId));
         }
         else
         {
+            candidates = all.Where(p =>
+                string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
             candidates = candidates.Where(p =>
                 EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
                 && string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
@@ -1328,16 +1338,17 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             ? CreatorAcquisitionCampaigns.Cook001
             : request.Campaign!.Trim();
         var all = await _store.ListProspectsAsync(cancellationToken);
-        IEnumerable<AcqProspectRecord> candidates = all.Where(p =>
-            string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+        IEnumerable<AcqProspectRecord> candidates;
 
         if (request.ProspectIds is { Count: > 0 })
         {
             var idSet = request.ProspectIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            candidates = candidates.Where(p => idSet.Contains(p.ProspectId));
+            candidates = all.Where(p => idSet.Contains(p.ProspectId));
         }
         else
         {
+            candidates = all.Where(p =>
+                string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
             var filter = (request.Filter ?? "email_required").Trim().ToLowerInvariant();
             candidates = filter switch
             {
@@ -1555,6 +1566,265 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             || string.Equals(p.OutreachStatus, "contact_needed", StringComparison.OrdinalIgnoreCase)
             || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
             || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase));
+
+    public async Task<AcqCreatorDiscoveryJobState> StartCreatorDiscoveryAsync(
+        AcqCreatorDiscoveryStartRequest request,
+        string adminEmail,
+        CancellationToken cancellationToken)
+    {
+        if (_channelSearch is null)
+            throw new InvalidOperationException("youtube_search_unavailable");
+        var category = AcquisitionTaxonomy.NormalizeCategory(request.Category);
+        var language = string.IsNullOrWhiteSpace(request.Language) ? "" : AcquisitionTaxonomy.NormalizeLanguage(request.Language);
+        var market = AcquisitionTaxonomy.NormalizeMarket(request.Market);
+        var target = AcquisitionDiscoveryQueries.ClampTarget(request.Target);
+        var campaign = string.IsNullOrWhiteSpace(request.Campaign)
+            ? AcquisitionDiscoveryQueries.ResolveDiscoveryCampaign(category)
+            : request.Campaign.Trim();
+        var queries = AcquisitionDiscoveryQueries.QueriesFor(category, language, market);
+        var job = new AcqCreatorDiscoveryJobState(
+            JobId: "cd-" + Guid.NewGuid().ToString("N")[..12],
+            Category: category,
+            Language: language,
+            Market: market,
+            Tier: request.Tier,
+            Campaign: campaign,
+            AdminEmail: adminEmail,
+            Target: target,
+            StartedAt: DateTimeOffset.UtcNow,
+            UpdatedAt: DateTimeOffset.UtcNow,
+            Status: "running",
+            Queries: queries,
+            QueryIndex: 0,
+            PageToken: null,
+            Queue: [],
+            QueueIndex: 0,
+            SourcesEvaluated: 0,
+            Qualified: 0,
+            DuplicatesSkipped: 0,
+            Added: 0,
+            Failed: 0,
+            Results: []);
+        await SaveCreatorDiscoveryJobAsync(job, cancellationToken);
+        return await TickCreatorDiscoveryAsync(job.JobId, cancellationToken);
+    }
+
+    public async Task<AcqCreatorDiscoveryJobState?> GetCreatorDiscoveryJobAsync(string jobId, CancellationToken cancellationToken)
+    {
+        var json = await _store.GetCohortRunAsync(CreatorAcquisitionCampaigns.Cook001, "creator-discovery-" + jobId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<AcqCreatorDiscoveryJobState>(json, AcqJson.Options);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<AcqCreatorDiscoveryJobState> TickCreatorDiscoveryAsync(string jobId, CancellationToken cancellationToken)
+    {
+        var job = await GetCreatorDiscoveryJobAsync(jobId, cancellationToken)
+            ?? throw new InvalidOperationException("creator_discovery_job_not_found");
+        if (!string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
+            return job;
+        if (_channelSearch is null)
+            return job with { Status = "failed", UpdatedAt = DateTimeOffset.UtcNow };
+
+        var queue = job.Queue.ToList();
+        var queueIndex = job.QueueIndex;
+        var queryIndex = job.QueryIndex;
+        var pageToken = job.PageToken;
+        var evaluated = job.SourcesEvaluated;
+        var qualified = job.Qualified;
+        var duplicates = job.DuplicatesSkipped;
+        var added = job.Added;
+        var failed = job.Failed;
+        var results = job.Results.ToList();
+
+        if (queueIndex >= queue.Count)
+        {
+            if (queryIndex >= job.Queries.Count)
+            {
+                var doneEmpty = job with
+                {
+                    Status = "completed",
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                    Queue = queue,
+                    QueueIndex = queueIndex
+                };
+                await SaveCreatorDiscoveryJobAsync(doneEmpty, cancellationToken);
+                return doneEmpty;
+            }
+
+            var page = await _channelSearch.SearchAsync(
+                job.Queries[queryIndex],
+                AcquisitionDiscoveryQueries.RelevanceLanguage(job.Language),
+                AcquisitionDiscoveryQueries.RegionCode(job.Market),
+                15,
+                pageToken,
+                cancellationToken);
+            queue = page.Hits.ToList();
+            queueIndex = 0;
+            pageToken = page.NextPageToken;
+            if (page.Hits.Count == 0 || string.IsNullOrWhiteSpace(pageToken))
+                queryIndex++;
+        }
+
+        if (queueIndex < queue.Count)
+        {
+            var hit = queue[queueIndex++];
+            evaluated++;
+            try
+            {
+                var skip = AcquisitionDiscoveryQueries.Qualify(
+                    job.Category, job.Language, job.Market, hit.Title, hit.Description, hit.Country,
+                    hit.SubscriberCount, hit.VideoCount);
+                if (skip is not null)
+                {
+                    results.Add(new AcqCreatorDiscoveryItem(hit.ChannelId, hit.Handle, hit.Title, "skipped", skip, null));
+                }
+                else
+                {
+                    qualified++;
+                    var handle = string.IsNullOrWhiteSpace(hit.Handle) ? hit.ChannelId : hit.Handle;
+                    var url = "https://www.youtube.com/channel/" + hit.ChannelId;
+                    var existing = await _store.FindDuplicateAsync(hit.ChannelId, url, handle, null, cancellationToken);
+                    if (existing is not null)
+                    {
+                        duplicates++;
+                        results.Add(new AcqCreatorDiscoveryItem(hit.ChannelId, existing.Handle, hit.Title, "duplicate", existing.ProspectId, existing.ProspectId));
+                    }
+                    else
+                    {
+                        var market = AcquisitionDiscoveryQueries.ReliableMarket(job.Market, hit.Country);
+                        var created = await InspectAndUpsertAsync(new AcqUpsertProspectRequest(
+                            ChannelInput: hit.ChannelId,
+                            PrimaryNiche: job.Category,
+                            Campaign: job.Campaign,
+                            Language: string.IsNullOrWhiteSpace(job.Language)
+                                ? AcquisitionDiscoveryQueries.DetectScriptLanguage(hit.Title + " " + (hit.Description ?? ""))
+                                : job.Language,
+                            OfficialWebsite: null,
+                            PublicBusinessEmail: null,
+                            ContactSourceUrl: null,
+                            ContactType: "none",
+                            Notes: $"creator-discovery {job.Category}/{job.Language}/{job.Market} {DateTime.UtcNow:yyyy-MM-dd}",
+                            Market: string.IsNullOrWhiteSpace(market) ? null : market
+                        ), cancellationToken);
+                        added++;
+                        results.Add(new AcqCreatorDiscoveryItem(
+                            hit.ChannelId, created.Handle, created.ChannelName, "added", null, created.ProspectId));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                results.Add(new AcqCreatorDiscoveryItem(
+                    hit.ChannelId, hit.Handle, hit.Title, "failed",
+                    ex.Message[..Math.Min(ex.Message.Length, 180)], null));
+            }
+        }
+
+        var exhausted = queryIndex >= job.Queries.Count && queueIndex >= queue.Count;
+        var next = job with
+        {
+            QueryIndex = queryIndex,
+            PageToken = pageToken,
+            Queue = queue,
+            QueueIndex = queueIndex,
+            SourcesEvaluated = evaluated,
+            Qualified = qualified,
+            DuplicatesSkipped = duplicates,
+            Added = added,
+            Failed = failed,
+            Results = results,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Status = added >= job.Target || exhausted ? "completed" : "running"
+        };
+        await SaveCreatorDiscoveryJobAsync(next, cancellationToken);
+        return next;
+    }
+
+    public async Task<IReadOnlyList<AcqCampaignConfig>> ListCampaignConfigsAsync(CancellationToken cancellationToken)
+    {
+        var json = await _store.GetCohortRunAsync("SYSTEM", "campaign-registry", cancellationToken);
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<AcqCampaignConfig>>(json, AcqJson.Options) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public async Task<AcqCampaignConfig> UpsertCampaignConfigAsync(AcqCampaignConfigRequest request, CancellationToken cancellationToken)
+    {
+        var category = AcquisitionTaxonomy.NormalizeCategory(request.Category);
+        var language = AcquisitionTaxonomy.NormalizeLanguage(request.Language);
+        var market = AcquisitionTaxonomy.NormalizeMarket(request.Market);
+        var existing = (await ListCampaignConfigsAsync(cancellationToken)).ToList();
+        var id = string.IsNullOrWhiteSpace(request.CampaignId)
+            ? BuildCampaignId(request.Name, category, language, existing)
+            : request.CampaignId.Trim().ToUpperInvariant();
+        if (string.Equals(id, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("cook_001_is_not_replaceable");
+        var sending = request.SendingEnabled == true;
+        var row = new AcqCampaignConfig(
+            CampaignId: id,
+            Name: string.IsNullOrWhiteSpace(request.Name) ? id : request.Name.Trim(),
+            Category: category,
+            Language: language,
+            Market: market,
+            Tier: request.Tier,
+            DailyLimit: OutreachPolicy.ClampDailyLimit(request.DailyLimit ?? 5),
+            SendingEnabled: sending,
+            CreatedAt: existing.FirstOrDefault(c => c.CampaignId == id)?.CreatedAt ?? DateTimeOffset.UtcNow);
+        existing.RemoveAll(c => string.Equals(c.CampaignId, id, StringComparison.OrdinalIgnoreCase));
+        existing.Add(row);
+        await _store.SaveCohortRunAsync("SYSTEM", "campaign-registry",
+            System.Text.Json.JsonSerializer.Serialize(existing, AcqJson.Options), cancellationToken);
+        await _store.SaveCampaignFlagsAsync(id, sending, false, cancellationToken);
+        return row;
+    }
+
+    private static string BuildCampaignId(string? name, string category, string language, IReadOnlyList<AcqCampaignConfig> existing)
+    {
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var cleaned = new string(name.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+            if (cleaned.Length >= 4) return cleaned.Length <= 16 ? cleaned : cleaned[..16];
+        }
+        var prefix = category.ToUpperInvariant() switch
+        {
+            "TECHNOLOGY" => "TECH",
+            "FITNESS" => "FIT",
+            "BUSINESS" => "BIZ",
+            "EDUCATION" => "EDU",
+            "ENTERTAINMENT" => "ENT",
+            "COOKING" => "COOK",
+            _ => category.ToUpperInvariant()[..Math.Min(4, category.Length)]
+        };
+        var lang = string.IsNullOrWhiteSpace(language) ? "XX" : language.ToUpperInvariant();
+        var n = 1;
+        string id;
+        do
+        {
+            id = $"{prefix}-{lang}-{n:000}";
+            n++;
+        } while (existing.Any(c => string.Equals(c.CampaignId, id, StringComparison.OrdinalIgnoreCase)));
+        return id;
+    }
+
+    private async Task SaveCreatorDiscoveryJobAsync(AcqCreatorDiscoveryJobState job, CancellationToken cancellationToken)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(job, AcqJson.Options);
+        await _store.SaveCohortRunAsync(CreatorAcquisitionCampaigns.Cook001, "creator-discovery-" + job.JobId, json, cancellationToken);
+    }
 
     private async Task SaveDiscoveryJobAsync(AcqEmailDiscoveryJobState job, CancellationToken cancellationToken)
     {

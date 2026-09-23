@@ -75,6 +75,12 @@ export function workflowBadgeKind(status: AcqWorkflowStatus): 'ok' | 'warn' | 'b
   }
 }
 
+export function deliveredDisplay(sent: number, delivered: number | undefined, telemetryAvailable?: boolean): string {
+  if (telemetryAvailable) return String(delivered ?? 0);
+  if (sent > 0 && (delivered ?? 0) === 0) return 'Not tracked';
+  return String(delivered ?? 0);
+}
+
 export function rateOrNa(numerator: number, denominator: number): string {
   if (denominator < 20) return 'Not enough sends to calculate a reliable rate.';
   return `${((numerator / denominator) * 100).toFixed(1)}%`;
