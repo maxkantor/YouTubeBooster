@@ -279,7 +279,8 @@ public sealed record AcqEmailDiscoveryItemResult(
     string? SourceType,
     string? Confidence,
     string? Detail,
-    bool DraftPrepared = false
+    bool DraftPrepared = false,
+    string? Warning = null
 );
 
 public sealed record AcqEmailDiscoveryJobState(

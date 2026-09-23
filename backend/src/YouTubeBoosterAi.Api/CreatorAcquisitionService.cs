@@ -1971,6 +1971,23 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         await _store.SaveCohortRunAsync(CreatorAcquisitionCampaigns.Cook001, "email-discovery-" + job.JobId, json, cancellationToken);
     }
 
+    private async Task<string?> TryTrackEmailDiscoveryAsync(
+        string eventName,
+        string scope,
+        Dictionary<string, string?> metadata,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _appDataStore.TrackEventAsync(eventName, scope, metadata, cancellationToken);
+            return null;
+        }
+        catch (Exception)
+        {
+            return "Post-discovery telemetry failed";
+        }
+    }
+
     private async Task<(AcqEmailDiscoveryItemResult Result, int HttpFetches)> DiscoverEmailForProspectAsync(
         string prospectId,
         bool forceRetry,
@@ -2044,6 +2061,17 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             var dup = await _store.FindDuplicateAsync(null, null, null, research.Email, cancellationToken);
             if (dup is not null && !string.Equals(dup.ProspectId, p.ProspectId, StringComparison.OrdinalIgnoreCase))
             {
+                await TryTrackEmailDiscoveryAsync(
+                    "EMAIL_DISCOVERY_FAILED",
+                    p.ProspectId,
+                    new Dictionary<string, string?>
+                    {
+                        ["admin"] = adminEmail,
+                        ["reason"] = "duplicate_email",
+                        ["detail"] = $"Duplicate of {dup.Handle}",
+                        ["email"] = research.Email
+                    },
+                    cancellationToken);
                 return (new AcqEmailDiscoveryItemResult(
                     p.ProspectId, p.Handle, "failed", research.Email, research.SourceUrl, research.SourceType,
                     research.Confidence, $"Duplicate of {dup.Handle}"), fetches);
@@ -2056,6 +2084,17 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     string.Equals(outreach.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase)
                     || outreach.Status.Contains("bounce", StringComparison.OrdinalIgnoreCase)))
                 {
+                    await TryTrackEmailDiscoveryAsync(
+                        "EMAIL_DISCOVERY_FAILED",
+                        p.ProspectId,
+                        new Dictionary<string, string?>
+                        {
+                            ["admin"] = adminEmail,
+                            ["reason"] = "suppressed_outreach",
+                            ["detail"] = outreach.Status,
+                            ["email"] = research.Email
+                        },
+                        cancellationToken);
                     return (new AcqEmailDiscoveryItemResult(
                         p.ProspectId, p.Handle, "failed", research.Email, research.SourceUrl, research.SourceType,
                         research.Confidence, $"Suppressed outreach status: {outreach.Status}"), fetches);
@@ -2081,24 +2120,37 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     UpdatedAt = now
                 };
                 await _store.UpsertProspectAsync(next, cancellationToken);
-                await _appDataStore.TrackEventAsync("EMAIL_DISCOVERED", p.ProspectId, new Dictionary<string, string?>
-                {
-                    ["admin"] = adminEmail,
-                    ["confidence"] = research.Confidence,
-                    ["source"] = research.SourceUrl,
-                    ["dryRun"] = "false"
-                }, cancellationToken);
+                var warning = await TryTrackEmailDiscoveryAsync(
+                    "EMAIL_DISCOVERED",
+                    p.ProspectId,
+                    new Dictionary<string, string?>
+                    {
+                        ["admin"] = adminEmail,
+                        ["confidence"] = research.Confidence,
+                        ["source"] = research.SourceUrl,
+                        ["dryRun"] = "false"
+                    },
+                    cancellationToken);
 
                 var drafted = false;
                 if (ShouldAutoPrepareDraft(next))
                 {
-                    await PrepareDraftAsync(p.ProspectId, cancellationToken);
-                    drafted = true;
+                    try
+                    {
+                        await PrepareDraftAsync(p.ProspectId, cancellationToken);
+                        drafted = true;
+                    }
+                    catch (Exception)
+                    {
+                        warning = string.IsNullOrWhiteSpace(warning)
+                            ? "Draft preparation failed"
+                            : warning + "; draft preparation failed";
+                    }
                 }
 
                 return (new AcqEmailDiscoveryItemResult(
                     p.ProspectId, p.Handle, "found", research.Email, research.SourceUrl, research.SourceType,
-                    research.Confidence, research.Detail, drafted), fetches);
+                    research.Confidence, research.Detail, drafted, warning), fetches);
             }
 
             return (new AcqEmailDiscoveryItemResult(
@@ -2129,12 +2181,16 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                     UpdatedAt = now
                 };
                 await _store.UpsertProspectAsync(next, cancellationToken);
-                await _appDataStore.TrackEventAsync("EMAIL_DISCOVERY_REVIEW_REQUIRED", p.ProspectId, new Dictionary<string, string?>
-                {
-                    ["admin"] = adminEmail,
-                    ["source"] = research.SourceUrl,
-                    ["confidence"] = research.Confidence
-                }, cancellationToken);
+                await TryTrackEmailDiscoveryAsync(
+                    "EMAIL_DISCOVERY_REVIEW_REQUIRED",
+                    p.ProspectId,
+                    new Dictionary<string, string?>
+                    {
+                        ["admin"] = adminEmail,
+                        ["source"] = research.SourceUrl,
+                        ["confidence"] = research.Confidence
+                    },
+                    cancellationToken);
             }
 
             return (new AcqEmailDiscoveryItemResult(
@@ -2159,11 +2215,15 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
                 UpdatedAt = now
             };
             await _store.UpsertProspectAsync(next, cancellationToken);
-            await _appDataStore.TrackEventAsync("EMAIL_DISCOVERY_FAILED", p.ProspectId, new Dictionary<string, string?>
-            {
-                ["admin"] = adminEmail,
-                ["detail"] = research.Detail
-            }, cancellationToken);
+            await TryTrackEmailDiscoveryAsync(
+                "EMAIL_DISCOVERY_FAILED",
+                p.ProspectId,
+                new Dictionary<string, string?>
+                {
+                    ["admin"] = adminEmail,
+                    ["detail"] = research.Detail
+                },
+                cancellationToken);
         }
 
         return (new AcqEmailDiscoveryItemResult(

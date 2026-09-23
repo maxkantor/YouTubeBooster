@@ -603,6 +603,7 @@ export type AcqEmailDiscoveryItemResult = {
   confidence?: string | null;
   detail?: string | null;
   draftPrepared?: boolean;
+  warning?: string | null;
 };
 
 export type AcqCreatorDiscoveryItem = {

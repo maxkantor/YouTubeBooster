@@ -20,9 +20,13 @@ import { EMAIL_STATUS_FILTERS, WORKFLOW_FILTERS, formatDt, workflowBadgeKind } f
 import { draftPrepareErrorMessage, supportThreadPath } from './acqVisibleActions';
 import {
   censusDiscovery,
+  emailDiscoveryErrorReason,
+  emailDiscoveryJobTitle,
+  emailDiscoverySummaryLine,
+  formatBackoffHorizon,
   formatDiscoveryRetryEt,
-  hoursUntil,
   isDiscoveryBackoff,
+  normalizeEmailDiscoveryOutcome,
   outcomeLabel,
   parseBackoffUntil,
   summarizeDiscoveryJob
@@ -96,6 +100,7 @@ export function AcquisitionCreatorsPage() {
   const [confirmMode, setConfirmMode] = useState<ConfirmMode>(null);
   const [discoveryJob, setDiscoveryJob] = useState<AcqEmailDiscoveryJob | null>(null);
   const [showResults, setShowResults] = useState(false);
+  const [emailResultDetailKey, setEmailResultDetailKey] = useState<string | null>(null);
   const tickRef = useRef<number | null>(null);
   const [campaigns, setCampaigns] = useState<AcqCampaignConfig[]>([]);
   const [creatorDiscoverConfirm, setCreatorDiscoverConfirm] = useState(false);
@@ -213,7 +218,7 @@ export function AcquisitionCreatorsPage() {
     [allItems, cooldownDays, sendingEnabled]
   );
   const nextRetryLabel = formatDiscoveryRetryEt(discoveryCensus.earliestBackoffAt);
-  const backoffSpreadHours = hoursUntil(discoveryCensus.latestBackoffAt);
+  const backoffHorizon = formatBackoffHorizon(discoveryCensus.latestBackoffAt);
 
   const drawer = drawerId ? allItems.find((x) => x.public.prospectId === drawerId) || null : null;
 
@@ -250,8 +255,8 @@ export function AcquisitionCreatorsPage() {
           });
         }
         setDiscoveryJob(job);
-        setShowResults(true);
         const tally = summarizeDiscoveryJob(job);
+        setShowResults((tally?.failed ?? 0) > 0);
         setNote(
           job.dryRun
             ? `Dry-run complete: ${tally?.searched ?? 0} searched, ${job.found} found, ${job.review} review, ${job.notFound} not found, ${tally?.skippedBackoff ?? 0} skipped (backoff).`
@@ -311,9 +316,11 @@ export function AcquisitionCreatorsPage() {
       });
       setDiscoveryJob(job);
       if (job.status === 'running') {
+        setShowResults(true);
         void pollDiscovery(job.jobId);
       } else {
-        setShowResults(true);
+        const finishedTally = summarizeDiscoveryJob(job);
+        setShowResults((finishedTally?.failed ?? 0) > 0);
         setDiscoveryBusy(false);
         const tally = summarizeDiscoveryJob(job);
         setNote(
@@ -669,6 +676,7 @@ export function AcquisitionCreatorsPage() {
   const lastWasSearch = lastResult
     ? !String(lastResult.outcome || '').toLowerCase().startsWith('skipped')
     : false;
+  const emailDetailsOpen = discoveryJob?.status === 'running' || showResults;
 
   const creatorAdded = creatorDiscoverJob?.added ?? 0;
   const creatorJobTarget = creatorDiscoverJob?.target ?? creatorTarget;
@@ -1031,117 +1039,152 @@ export function AcquisitionCreatorsPage() {
         {discoveryJob && discoveryTally && (
           <div className="acq-discovery-progress">
             <div className="acq-discovery-progress-head">
-              <strong>
-                {discoveryJob.status === 'completed' ? 'EMAIL DISCOVERY COMPLETE' : 'EMAIL DISCOVERY'}
-              </strong>
-              <span className="ops-muted">
-                {discoveryJob.status === 'completed' ? 'Candidate evaluation complete' : discoveryJob.status} ·{' '}
-                {discoveryPct}%
-              </span>
+              <strong>{emailDiscoveryJobTitle(discoveryJob.status, discoveryTally)}</strong>
+              <span className="ops-muted">{emailDiscoverySummaryLine(discoveryTally)}</span>
             </div>
-            <p>
-              {discoveryJob.status === 'running'
-                ? `Evaluating creator ${discoveryTally.evaluated} / ${discoveryTally.candidates}`
-                : `${discoveryTally.evaluated} / ${discoveryTally.candidates} candidate records evaluated`}
-            </p>
-            {discoveryJob.status === 'running' && lastWasSearch && (
-              <p className="ops-muted">Searching public contact sources…</p>
-            )}
-            <div
-              className="acq-progress acq-discovery-progress-bar"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={discoveryPct}
-              aria-label="Candidate evaluation progress"
-            >
-              <div
-                className={`acq-progress-fill${discoveryJob.status === 'running' ? ' acq-progress-fill-active' : ''}`}
-                style={{ width: `${discoveryPct}%` }}
-              />
-            </div>
-            <p className="ops-muted" style={{ marginTop: 8 }}>
-              Actual discovery attempts: <strong>{discoveryTally.searched}</strong>
-              {discoveryJob.status === 'completed' && discoveryTally.searched === 0 && discoveryTally.evaluated > 0
-                ? ' — no public-source lookups ran; records were skipped.'
-                : ''}
-            </p>
-            <ul className="acq-discovery-stats">
-              <li>
-                Found <strong>{discoveryTally.found}</strong>
-              </li>
-              <li>
-                Needs review <strong>{discoveryTally.review}</strong>
-              </li>
-              <li>
-                Not found <strong>{discoveryTally.notFound}</strong>
-              </li>
-              <li>
-                Skipped — backoff <strong>{discoveryTally.skippedBackoff}</strong>
-              </li>
-              <li>
-                Skipped — other <strong>{discoveryTally.skippedOther}</strong>
-              </li>
-              <li>
-                Remaining <strong>{remaining}</strong>
-              </li>
-            </ul>
             {discoveryJob.status === 'completed' && (
-              <p className="ops-muted">
-                {discoveryTally.candidates} candidate records evaluated · {discoveryTally.searched} actual discovery
-                attempts · {discoveryTally.found} emails found · {discoveryTally.review} need review ·{' '}
-                {discoveryTally.notFound} confirmed not found · {discoveryTally.skippedBackoff} skipped due to backoff
-                {nextRetryLabel ? `. Next eligible retry: ${nextRetryLabel}` : '.'}
-                {discoveryCensus.inBackoff > 1 && backoffSpreadHours
-                  ? ` ${discoveryCensus.inBackoff} records become eligible over the next ${backoffSpreadHours} hours.`
-                  : ''}
-              </p>
+              <button
+                type="button"
+                className="ops-btn ops-btn-ghost ops-btn-sm"
+                onClick={() => setShowResults((v) => !v)}
+              >
+                {emailDetailsOpen ? 'Hide details' : 'View details'}
+              </button>
             )}
-            <button type="button" className="ops-btn ops-btn-ghost ops-btn-sm" onClick={() => setShowResults((v) => !v)}>
-              {showResults ? 'Hide results' : 'View results'}
-            </button>
-            {showResults && discoveryJob.results.length > 0 && (
-              <div className="acq-discovery-results">
-                <table className="admin-crm-table">
-                  <thead>
-                    <tr>
-                      <th>Handle</th>
-                      <th>Outcome</th>
-                      <th>Retry after</th>
-                      <th>Email</th>
-                      <th>Confidence</th>
-                      <th>Source</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {discoveryJob.results.map((r) => {
-                      const retry =
-                        parseBackoffUntil(r.detail) ||
-                        formatDiscoveryRetryEt(
-                          allItems.find((x) => x.public.prospectId === r.prospectId)?.public.contactResearchNextAt
-                        );
-                      return (
-                        <tr key={`${r.prospectId}-${r.outcome}-${r.email || ''}`}>
-                          <td>{r.handle}</td>
-                          <td>{outcomeLabel(r.outcome)}</td>
-                          <td>{r.outcome === 'skipped_backoff' ? retry || '—' : '—'}</td>
-                          <td>{r.email || '—'}</td>
-                          <td>{(r.confidence || '—').toUpperCase()}</td>
-                          <td>
-                            {r.sourceUrl ? (
-                              <a href={r.sourceUrl} target="_blank" rel="noreferrer">
-                                View source
-                              </a>
-                            ) : (
-                              r.detail && r.outcome !== 'skipped_backoff' ? r.detail : '—'
-                            )}
-                          </td>
+            {emailDetailsOpen && (
+              <>
+                <p>
+                  {discoveryJob.status === 'running'
+                    ? `Evaluating creator ${discoveryTally.evaluated} / ${discoveryTally.candidates}`
+                    : `${discoveryTally.evaluated} / ${discoveryTally.candidates} candidate records evaluated`}
+                </p>
+                {discoveryJob.status === 'running' && lastWasSearch && (
+                  <p className="ops-muted">Searching public contact sources…</p>
+                )}
+                {discoveryJob.status === 'running' && (
+                  <div
+                    className="acq-progress acq-discovery-progress-bar"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={discoveryPct}
+                    aria-label="Email discovery progress"
+                  >
+                    <div className="acq-progress-fill acq-progress-fill-active" style={{ width: `${discoveryPct}%` }} />
+                  </div>
+                )}
+                <p className="ops-muted" style={{ marginTop: 8 }}>
+                  Actual discovery attempts: <strong>{discoveryTally.searched}</strong>
+                  {discoveryJob.status === 'completed' && discoveryTally.searched === 0 && discoveryTally.evaluated > 0
+                    ? ' — no public-source lookups ran; records were skipped.'
+                    : ''}
+                </p>
+                <ul className="acq-discovery-stats">
+                  <li>
+                    Found <strong>{discoveryTally.found}</strong>
+                  </li>
+                  <li>
+                    Needs review <strong>{discoveryTally.review}</strong>
+                  </li>
+                  <li>
+                    Not found <strong>{discoveryTally.notFound}</strong>
+                  </li>
+                  {discoveryTally.failed > 0 && (
+                    <li>
+                      Errors <strong>{discoveryTally.failed}</strong>
+                    </li>
+                  )}
+                  <li>
+                    Skipped — backoff <strong>{discoveryTally.skippedBackoff}</strong>
+                  </li>
+                  <li>
+                    Skipped — other <strong>{discoveryTally.skippedOther}</strong>
+                  </li>
+                  <li>
+                    Remaining <strong>{remaining}</strong>
+                  </li>
+                </ul>
+                {discoveryJob.status === 'completed' && (
+                  <p className="ops-muted">
+                    {discoveryTally.candidates} candidate
+                    {discoveryTally.candidates === 1 ? '' : 's'} evaluated · {discoveryTally.searched} attempted ·{' '}
+                    {discoveryTally.found} found
+                    {discoveryTally.failed > 0 ? ` · ${discoveryTally.failed} error${discoveryTally.failed === 1 ? '' : 's'}` : ''}
+                    {discoveryTally.skippedBackoff > 0 ? ` · ${discoveryTally.skippedBackoff} skipped due to backoff` : ''}.
+                    {nextRetryLabel ? ` Next eligible retry: ${nextRetryLabel}.` : ''}
+                    {discoveryCensus.inBackoff > 0
+                      ? ` ${discoveryCensus.inBackoff} record${discoveryCensus.inBackoff === 1 ? '' : 's'} currently in backoff.`
+                      : ''}
+                    {discoveryCensus.inBackoff > 1 && backoffHorizon
+                      ? ` All currently backed-off records become eligible over ${backoffHorizon}.`
+                      : ''}
+                  </p>
+                )}
+                {discoveryJob.results.length > 0 && (
+                  <div className="acq-discovery-results">
+                    <table className="admin-crm-table">
+                      <thead>
+                        <tr>
+                          <th>Handle</th>
+                          <th>Outcome</th>
+                          <th>Retry after</th>
+                          <th>Email</th>
+                          <th>Confidence</th>
+                          <th>Source</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        {discoveryJob.results.map((r) => {
+                          const norm = normalizeEmailDiscoveryOutcome(r.outcome);
+                          const retry =
+                            parseBackoffUntil(r.detail) ||
+                            formatDiscoveryRetryEt(
+                              allItems.find((x) => x.public.prospectId === r.prospectId)?.public.contactResearchNextAt
+                            );
+                          const rowKey = `${r.prospectId}-${r.outcome}-${r.email || ''}`;
+                          const reason = norm === 'ERROR' ? emailDiscoveryErrorReason(r.detail) : null;
+                          return (
+                            <tr key={rowKey}>
+                              <td>{r.handle}</td>
+                              <td>
+                                {outcomeLabel(r.outcome)}
+                                {reason && <div className="ops-muted">{reason}</div>}
+                                {r.warning && <div className="ops-muted">Warning: {r.warning}</div>}
+                                {(norm === 'ERROR' || r.warning) && (
+                                  <button
+                                    type="button"
+                                    className="ops-btn ops-btn-ghost ops-btn-sm"
+                                    onClick={() => setEmailResultDetailKey((k) => (k === rowKey ? null : rowKey))}
+                                  >
+                                    {emailResultDetailKey === rowKey ? 'Hide details' : 'View details'}
+                                  </button>
+                                )}
+                                {emailResultDetailKey === rowKey && (
+                                  <pre className="admin-crm-meta-pre" style={{ marginTop: 6 }}>
+                                    {[r.detail, r.warning, r.sourceType].filter(Boolean).join('\n')}
+                                  </pre>
+                                )}
+                              </td>
+                              <td>{norm === 'SKIPPED_BACKOFF' ? retry || '—' : '—'}</td>
+                              <td>{r.email || '—'}</td>
+                              <td>{(r.confidence || '—').toUpperCase()}</td>
+                              <td>
+                                {r.sourceUrl ? (
+                                  <a href={r.sourceUrl} target="_blank" rel="noreferrer">
+                                    View source
+                                  </a>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

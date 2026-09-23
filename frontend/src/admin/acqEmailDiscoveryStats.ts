@@ -1,7 +1,26 @@
 import type { AcqAdminProspect, AcqEmailDiscoveryJob, AcqEmailDiscoveryItemResult } from '../types';
 import { isVerifiedPublicContact, resolveAcqWorkflow, type AcqWorkflowStatus } from './acqApprovalWorkflow';
 
-const SEARCHED_OUTCOMES = new Set(['found', 'review', 'not_found', 'failed']);
+export type EmailDiscoveryNormOutcome =
+  | 'FOUND'
+  | 'NEEDS_REVIEW'
+  | 'NOT_FOUND'
+  | 'ALREADY_HAS_EMAIL'
+  | 'SKIPPED_BACKOFF'
+  | 'SKIPPED_OTHER'
+  | 'ERROR';
+
+export function normalizeEmailDiscoveryOutcome(outcome: string | null | undefined): EmailDiscoveryNormOutcome {
+  const o = (outcome || '').toLowerCase();
+  if (o === 'found') return 'FOUND';
+  if (o === 'review') return 'NEEDS_REVIEW';
+  if (o === 'not_found') return 'NOT_FOUND';
+  if (o === 'skipped_existing') return 'ALREADY_HAS_EMAIL';
+  if (o === 'skipped_backoff') return 'SKIPPED_BACKOFF';
+  if (o.startsWith('skipped')) return 'SKIPPED_OTHER';
+  if (o === 'failed' || o === 'error' || o === 'duplicate_email') return 'ERROR';
+  return 'SKIPPED_OTHER';
+}
 
 /** Mirrors backend NeedsEmailDiscovery — wider than UI "missing email". */
 export function isBackendNeedsEmailDiscovery(row: AcqAdminProspect): boolean {
@@ -135,14 +154,14 @@ export function tallyDiscoveryResults(results: AcqEmailDiscoveryItemResult[] | u
   let skippedBackoff = 0;
   let skippedOther = 0;
   for (const r of results || []) {
-    const o = (r.outcome || '').toLowerCase();
-    if (o === 'skipped_backoff') skippedBackoff++;
-    else if (o.startsWith('skipped')) skippedOther++;
-    else if (SEARCHED_OUTCOMES.has(o)) {
+    const norm = normalizeEmailDiscoveryOutcome(r.outcome);
+    if (norm === 'SKIPPED_BACKOFF') skippedBackoff++;
+    else if (norm === 'ALREADY_HAS_EMAIL' || norm === 'SKIPPED_OTHER') skippedOther++;
+    else if (norm === 'FOUND' || norm === 'NEEDS_REVIEW' || norm === 'NOT_FOUND' || norm === 'ERROR') {
       searched++;
-      if (o === 'found') found++;
-      else if (o === 'review') review++;
-      else if (o === 'not_found') notFound++;
+      if (norm === 'FOUND') found++;
+      else if (norm === 'NEEDS_REVIEW') review++;
+      else if (norm === 'NOT_FOUND') notFound++;
       else failed++;
     } else {
       skippedOther++;
@@ -196,16 +215,54 @@ export function parseBackoffUntil(detail: string | null | undefined): string | n
 }
 
 export function outcomeLabel(outcome: string | null | undefined): string {
-  const o = (outcome || '').toLowerCase();
-  if (o === 'skipped_backoff') return 'BACKOFF';
-  if (o === 'skipped_existing') return 'SKIPPED — HAS EMAIL';
-  if (o === 'skipped_suppressed') return 'SKIPPED — SUPPRESSED';
-  if (o.startsWith('skipped')) return 'SKIPPED';
-  if (o === 'found') return 'FOUND';
-  if (o === 'review') return 'NEEDS REVIEW';
-  if (o === 'not_found') return 'NOT FOUND';
-  if (o === 'failed') return 'ERROR';
-  return (outcome || '—').toUpperCase();
+  return normalizeEmailDiscoveryOutcome(outcome);
+}
+
+export function emailDiscoveryErrorReason(detail: string | null | undefined): string {
+  const d = (detail || '').trim();
+  if (!d) return 'Discovery attempt failed';
+  const dup = d.match(/^Duplicate of\s+(.+)/i);
+  if (dup) return `Email already assigned to ${dup[1].trim()}`;
+  if (/suppressed outreach/i.test(d)) return 'Outreach list blocked this address';
+  if (/timeout|timed out/i.test(d)) return 'Discovery provider timeout';
+  if (/unavailable|503|502|504/i.test(d)) return 'Validation provider unavailable';
+  if (/persist|upsert|conditional/i.test(d)) return 'Persistence failed';
+  if (d === 'not_found') return 'Creator record not found';
+  return d.split('\n')[0].slice(0, 140);
+}
+
+export function emailDiscoveryJobTitle(
+  status: string | undefined,
+  tally: Pick<DiscoveryJobTally, 'searched' | 'found' | 'review' | 'notFound' | 'failed'> | null
+): string {
+  if ((status || '').toLowerCase() !== 'completed') return 'EMAIL DISCOVERY';
+  const failed = tally?.failed ?? 0;
+  if (failed <= 0) return 'EMAIL DISCOVERY COMPLETE';
+  const attempted = tally?.searched ?? 0;
+  const otherOk = (tally?.found ?? 0) + (tally?.review ?? 0) + (tally?.notFound ?? 0);
+  if (attempted > 0 && failed === attempted && otherOk === 0) return 'EMAIL DISCOVERY FAILED';
+  return 'EMAIL DISCOVERY COMPLETED WITH ERRORS';
+}
+
+export function emailDiscoverySummaryLine(tally: DiscoveryJobTally): string {
+  const bits = [`${tally.searched} attempted`];
+  if (tally.found) bits.push(`${tally.found} found`);
+  if (tally.review) bits.push(`${tally.review} need review`);
+  if (tally.notFound) bits.push(`${tally.notFound} not found`);
+  if (tally.failed) bits.push(`${tally.failed} error${tally.failed === 1 ? '' : 's'}`);
+  if (tally.skippedBackoff) bits.push(`${tally.skippedBackoff} backoff`);
+  return bits.join(' · ');
+}
+
+export function formatBackoffHorizon(iso: string | null | undefined, nowMs = Date.now()): string | null {
+  const hours = hoursUntil(iso, nowMs);
+  if (hours == null) return null;
+  if (hours >= 48) {
+    const days = Math.max(2, Math.round(hours / 24));
+    return `approximately ${days} days`;
+  }
+  if (hours <= 1) return 'about an hour';
+  return `approximately ${hours} hours`;
 }
 
 function looksLikeEmail(value: string | null | undefined): boolean {

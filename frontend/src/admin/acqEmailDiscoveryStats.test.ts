@@ -3,9 +3,14 @@ import { describe, it } from 'node:test';
 import type { AcqAdminProspect, AcqEmailDiscoveryJob } from '../types';
 import {
   censusDiscovery,
+  emailDiscoveryErrorReason,
+  emailDiscoveryJobTitle,
+  emailDiscoverySummaryLine,
+  formatBackoffHorizon,
   formatDiscoveryRetryEt,
   isBackendNeedsEmailDiscovery,
   isDiscoveryBackoff,
+  normalizeEmailDiscoveryOutcome,
   outcomeLabel,
   parseBackoffUntil,
   summarizeDiscoveryJob
@@ -180,8 +185,124 @@ describe('acqEmailDiscoveryStats', () => {
     assert.match(label || '', /Sep 24, 2026/);
     assert.match(label || '', /ET/);
     assert.doesNotMatch(label || '', /T16:43:48Z/);
-    assert.equal(outcomeLabel('skipped_backoff'), 'BACKOFF');
+    assert.equal(outcomeLabel('skipped_backoff'), 'SKIPPED_BACKOFF');
     assert.match(parseBackoffUntil('Backoff until 2026-09-24T16:43:48Z') || '', /Sep 24/);
+  });
+
+  it('normalizes mariongrasby duplicate as ERROR with assigned-email reason', () => {
+    const t = summarizeDiscoveryJob({
+      jobId: 'ed-marion',
+      campaign: 'COOK-001',
+      adminEmail: 'a',
+      dryRun: false,
+      forceRetry: false,
+      startedAt: '',
+      updatedAt: '',
+      status: 'completed',
+      prospectIds: ['COOK-001-d2640d32'],
+      cursor: 1,
+      processed: 1,
+      found: 0,
+      review: 0,
+      notFound: 0,
+      failed: 1,
+      skipped: 0,
+      results: [
+        {
+          prospectId: 'COOK-001-d2640d32',
+          handle: '@mariongrasby',
+          outcome: 'failed',
+          email: 'partnerships@marionskitchen.com',
+          confidence: 'high',
+          sourceUrl: 'https://www.marionskitchen.com/miso-corn-cheese-korokke',
+          detail: 'Duplicate of @marionskitchen'
+        }
+      ]
+    });
+    assert.equal(normalizeEmailDiscoveryOutcome('failed'), 'ERROR');
+    assert.equal(t?.searched, 1);
+    assert.equal(t?.found, 0);
+    assert.equal(t?.failed, 1);
+    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL DISCOVERY FAILED');
+    assert.equal(emailDiscoveryErrorReason('Duplicate of @marionskitchen'), 'Email already assigned to @marionskitchen');
+  });
+
+  it('counts found review not_found already-has and backoff distinctly', () => {
+    const t = summarizeDiscoveryJob({
+      jobId: 'ed-mix2',
+      campaign: 'COOK-001',
+      adminEmail: 'a',
+      dryRun: false,
+      forceRetry: false,
+      startedAt: '',
+      updatedAt: '',
+      status: 'completed',
+      prospectIds: ['1', '2', '3', '4', '5'],
+      cursor: 5,
+      processed: 5,
+      found: 1,
+      review: 1,
+      notFound: 1,
+      failed: 0,
+      skipped: 2,
+      results: [
+        { prospectId: '1', handle: '@a', outcome: 'found', email: 'a@x.com', confidence: 'high' },
+        { prospectId: '2', handle: '@b', outcome: 'review', email: 'b@x.com', confidence: 'medium' },
+        { prospectId: '3', handle: '@c', outcome: 'not_found' },
+        { prospectId: '4', handle: '@d', outcome: 'skipped_existing', email: 'd@x.com' },
+        { prospectId: '5', handle: '@e', outcome: 'skipped_backoff' }
+      ]
+    });
+    assert.equal(t?.searched, 3);
+    assert.equal(t?.found, 1);
+    assert.equal(t?.review, 1);
+    assert.equal(t?.notFound, 1);
+    assert.equal(t?.failed, 0);
+    assert.equal(t?.skippedBackoff, 1);
+    assert.equal(t?.skippedOther, 1);
+    assert.equal(normalizeEmailDiscoveryOutcome('skipped_existing'), 'ALREADY_HAS_EMAIL');
+    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL DISCOVERY COMPLETE');
+    assert.match(emailDiscoverySummaryLine(t!), /3 attempted/);
+  });
+
+  it('keeps FOUND when a later warning is recorded', () => {
+    const t = summarizeDiscoveryJob({
+      jobId: 'ed-warn',
+      campaign: 'COOK-001',
+      adminEmail: 'a',
+      dryRun: false,
+      forceRetry: false,
+      startedAt: '',
+      updatedAt: '',
+      status: 'completed',
+      prospectIds: ['1'],
+      cursor: 1,
+      processed: 1,
+      found: 1,
+      review: 0,
+      notFound: 0,
+      failed: 0,
+      skipped: 0,
+      results: [
+        {
+          prospectId: '1',
+          handle: '@ok',
+          outcome: 'found',
+          email: 'ok@x.com',
+          confidence: 'high',
+          warning: 'Post-discovery telemetry failed'
+        }
+      ]
+    });
+    assert.equal(t?.found, 1);
+    assert.equal(t?.failed, 0);
+    assert.equal(emailDiscoveryJobTitle('completed', t), 'EMAIL DISCOVERY COMPLETE');
+  });
+
+  it('formats long backoff as days instead of raw hours', () => {
+    const horizon = formatBackoffHorizon('2026-10-05T16:43:48Z', Date.parse('2026-09-23T15:00:00Z'));
+    assert.match(horizon || '', /days/);
+    assert.doesNotMatch(horizon || '', /292 hours/);
   });
 
   it('treats backoff as not eligible now', () => {
