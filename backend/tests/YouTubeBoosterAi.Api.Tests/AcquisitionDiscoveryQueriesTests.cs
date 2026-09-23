@@ -49,6 +49,8 @@ public class AcquisitionDiscoveryQueriesTests
             "technology", "en", null, "Best Chocolate Cake", "baking recipes", null, 12000, 40));
         Assert.Null(AcquisitionDiscoveryQueries.Qualify(
             "technology", "ru", null, "Технологии и ИИ", "программирование", null, 18000, 40));
+        Assert.Equal("children", AcquisitionDiscoveryQueries.Qualify(
+            "entertainment", "ru", null, "Развлечения для детей", "мультики", null, 18000, 40));
     }
 
     [Fact]

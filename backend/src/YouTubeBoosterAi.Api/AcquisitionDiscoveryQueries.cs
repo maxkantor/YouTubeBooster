@@ -142,6 +142,10 @@ public static class AcquisitionDiscoveryQueries
         long videoCount)
     {
         if (string.IsNullOrWhiteSpace(title)) return "missing_title";
+        var kids = ((title ?? "") + " " + (description ?? "")).ToLowerInvariant();
+        if (kids.Contains("для детей") || kids.Contains("for kids") || kids.Contains("nursery")
+            || kids.Contains("cocomelon") || kids.Contains("kids songs"))
+            return "children";
         if (videoCount <= 0) return "inactive";
         if (subscribers > 0 && subscribers < MinSubscribers) return "below_band";
         if (subscribers > MaxSubscribersHard) return "above_band";

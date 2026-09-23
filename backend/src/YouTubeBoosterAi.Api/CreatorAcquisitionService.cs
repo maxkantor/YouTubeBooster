@@ -261,9 +261,14 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
         }
 
         var language = AcquisitionTaxonomy.NormalizeLanguage(
-            string.IsNullOrWhiteSpace(request.Language) ? GuessLanguage(demo.ChannelTitle, videos) : request.Language!);
-        var niche = AcquisitionTaxonomy.NormalizeCategory(request.PrimaryNiche);
-        var market = AcquisitionTaxonomy.NormalizeMarket(request.Market ?? dup?.Market ?? dup?.Country);
+            !string.IsNullOrWhiteSpace(dup?.Language)
+                ? dup!.Language
+                : string.IsNullOrWhiteSpace(request.Language) ? GuessLanguage(demo.ChannelTitle, videos) : request.Language!);
+        var niche = dup is not null && !string.IsNullOrWhiteSpace(dup.PrimaryNiche)
+            ? AcquisitionTaxonomy.NormalizeCategory(dup.PrimaryNiche)
+            : AcquisitionTaxonomy.NormalizeCategory(request.PrimaryNiche);
+        var market = AcquisitionTaxonomy.NormalizeMarket(
+            !string.IsNullOrWhiteSpace(dup?.Market) ? dup.Market : (request.Market ?? dup?.Country));
         var format = AcquisitionTaxonomy.GuessContentFormat(
             (demo.TopVideos ?? []).Select(v => v.Title).Concat(videos.Select(v => v.title)));
         var strategic = request.Strategic || (dup?.Strategic == true);
@@ -345,7 +350,7 @@ public sealed class CreatorAcquisitionService : ICreatorAcquisitionService
             OutreachStatus: dup?.OutreachStatus ?? "discovered",
             LastContactedAt: dup?.LastContactedAt,
             SuppressionStatus: dup?.SuppressionStatus ?? "none",
-            Campaign: request.Campaign,
+            Campaign: string.IsNullOrWhiteSpace(dup?.Campaign) ? request.Campaign : dup.Campaign,
             TrackedPath: tracked,
             OpaqueToken: token,
             InspectedUrl: url,
