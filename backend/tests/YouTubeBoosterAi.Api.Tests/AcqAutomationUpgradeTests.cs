@@ -251,6 +251,26 @@ public class AcqAutomationUpgradeTests
     }
 
     [Fact]
+    public void RediscoveredAlreadyEmailedCreator_IsNotNeedsApproval()
+    {
+        var sent = ReadyToSend("old", "same@channel.test", "UCsame") with
+        {
+            LastContactedAt = DateTimeOffset.UtcNow.AddDays(-30),
+            OutreachStatus = "sent"
+        };
+        var rediscovered = Prospect("new", "same@channel.test", "UCsame");
+        var inherited = AcqSendGuard.InheritPriorContact(rediscovered, [sent, rediscovered]);
+        Assert.Equal(sent.LastContactedAt, inherited.LastContactedAt);
+        Assert.False(CreatorAcquisitionScoring.IsReadyForApproval(inherited));
+
+        var state = new AcqCampaignState(true, false, 100, null, 0, "addr", "from@x.com", "YouTubeBooster AI", "from@x.com", null, 100, false, 14, 10, true, null, true);
+        var now = DateTimeOffset.UtcNow;
+        Assert.Equal("sent", CreatorAcquisitionService.SendLaneFor(rediscovered, now, state, [sent, rediscovered]));
+        Assert.NotEqual("needs_approval", CreatorAcquisitionService.SendLaneFor(rediscovered, now, state, [sent, rediscovered]));
+        Assert.Equal("DUPLICATE_EMAIL", CreatorAcquisitionService.WhyNotSentCode(rediscovered, now, state, [sent, rediscovered]));
+    }
+
+    [Fact]
     public void SkipAndSesCounters_DistinguishAppBlockFromSes()
     {
         var counts = OutreachPolicy.AggregateSkipReasons([

@@ -116,6 +116,9 @@ export function approvalBlockReason(row: AcqAdminProspect, nowMs = Date.now()): 
 }
 
 export function isReadyForApproval(row: AcqAdminProspect, _nowMs = Date.now()): boolean {
+  if (row.lastContactedAt) return false;
+  const why = (row.whyNotSent || '').toUpperCase();
+  if (why === 'ALREADY_CONTACTED' || why === 'DUPLICATE_EMAIL' || why === 'DUPLICATE_CHANNEL') return false;
   return draftReviewBlockReason(row) === null && !isTerminalOutreach(row);
 }
 
@@ -292,7 +295,10 @@ export function resolveAcqWorkflow(
   }
 
   // Already contacted once — keep out of Needs Approval even if draft was regenerated.
-  if (row.lastContactedAt) {
+  const alreadyEmailed =
+    !!row.lastContactedAt ||
+    ['ALREADY_CONTACTED', 'DUPLICATE_EMAIL', 'DUPLICATE_CHANNEL'].includes((row.whyNotSent || '').toUpperCase());
+  if (alreadyEmailed) {
     return {
       ...base,
       status: 'SENT',

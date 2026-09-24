@@ -106,6 +106,9 @@ export function AcquisitionApprovalsPage() {
   const needsRows = useMemo(
     () =>
       allItems.filter((r) => {
+        if (r.lastContactedAt) return false;
+        const why = (r.whyNotSent || '').toUpperCase();
+        if (why === 'ALREADY_CONTACTED' || why === 'DUPLICATE_EMAIL' || why === 'DUPLICATE_CHANNEL') return false;
         if ((r.sendLane || '').toLowerCase() === 'needs_approval') return true;
         if (r.sendLane) return false;
         return filterByWorkflowStatus([r], 'READY_FOR_APPROVAL', cooldownDays, Date.now(), sendingEnabled).length > 0;

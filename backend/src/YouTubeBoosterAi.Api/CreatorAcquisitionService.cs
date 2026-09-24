@@ -430,6 +430,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         record = await ApplyGlobalSuppressionToProspectAsync(record, cancellationToken);
+        var known = await _store.ListProspectsAsync(cancellationToken);
+        record = AcqSendGuard.InheritPriorContact(record, known);
         await _store.UpsertProspectAsync(record, cancellationToken);
         return record;
     }
@@ -658,6 +660,9 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             observation!,
             draftProbe.SuggestedImprovement ?? improvement ?? "",
             tracked);
+
+        var known = await _store.ListProspectsAsync(cancellationToken);
+        p = AcqSendGuard.InheritPriorContact(p, known);
 
         // Keep already-contacted creators out of the first-touch approval queue.
         var nextStatus = p.LastContactedAt is not null

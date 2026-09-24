@@ -628,8 +628,18 @@ public sealed partial class CreatorAcquisitionService
         return null;
     }
 
-    public static string WhyNotSentCode(AcqProspectRecord p, DateTimeOffset now, AcqCampaignState state)
+    public static string WhyNotSentCode(
+        AcqProspectRecord p,
+        DateTimeOffset now,
+        AcqCampaignState state,
+        IReadOnlyList<AcqProspectRecord>? all = null)
     {
+        if (all is not null)
+        {
+            var history = AcqSendGuard.HistoryBlockReason(all, p, CreatorAcquisitionScoring.IsFollowUpDue(p, now));
+            if (history is not null)
+                return OutreachPolicy.NormalizeSkipReason(history);
+        }
         if (p.LastContactedAt is not null && !CreatorAcquisitionScoring.IsFollowUpDue(p, now))
             return "ALREADY_CONTACTED";
         if (AcqSendGuard.IsStoppedOutreachStatus(p.OutreachStatus, p.SuppressionStatus))
@@ -650,13 +660,18 @@ public sealed partial class CreatorAcquisitionService
         return OutreachPolicy.NormalizeSkipReason(gate.Reason);
     }
 
-    public static string SendLaneFor(AcqProspectRecord p, DateTimeOffset now, AcqCampaignState state)
+    public static string SendLaneFor(
+        AcqProspectRecord p,
+        DateTimeOffset now,
+        AcqCampaignState state,
+        IReadOnlyList<AcqProspectRecord>? all = null)
     {
-        var why = WhyNotSentCode(p, now, state);
+        var why = WhyNotSentCode(p, now, state, all);
         if (p.LastContactedAt is not null) return "sent";
+        if (why is "ALREADY_CONTACTED" or "DUPLICATE_EMAIL" or "DUPLICATE_CHANNEL") return "sent";
         if (why == "READY_TO_SEND") return "ready_to_send";
-        if (why is "MANUAL_APPROVAL_REQUIRED" || CreatorAcquisitionScoring.IsReadyForApproval(p))
-            return "needs_approval";
+        if (why is "MANUAL_APPROVAL_REQUIRED") return "needs_approval";
+        if (CreatorAcquisitionScoring.IsReadyForApproval(p)) return "needs_approval";
         return "other";
     }
 
@@ -687,8 +702,8 @@ public sealed partial class CreatorAcquisitionService
         var scoped = all.Where(p => string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase)).ToList();
         var sentToday = scoped.Count(p => p.LastContactedAt is not null && CreatorAcquisitionScoring.EasternDate(p.LastContactedAt.Value).Date == today);
         var remaining = Math.Max(0, state.DailyLimit - sentToday);
-        var ready = scoped.Count(p => SendLaneFor(p, now, state) == "ready_to_send");
-        var needs = scoped.Count(p => SendLaneFor(p, now, state) == "needs_approval");
+        var ready = scoped.Count(p => SendLaneFor(p, now, state, all) == "ready_to_send");
+        var needs = scoped.Count(p => SendLaneFor(p, now, state, all) == "needs_approval");
         var replies = scoped.Count(p => string.Equals(p.OutreachStatus, "replied", StringComparison.OrdinalIgnoreCase));
         var unsubs = scoped.Count(p => string.Equals(p.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase));
         string status;

@@ -449,8 +449,8 @@ public static class CreatorAcquisitionEndpoints
             var needsEmailCook = cookRows.Count(r => !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r));
             var cfg = await acq.ResolveCampaignConfigAsync(campaign, cancellationToken);
             var sesQuota = await acq.GetProviderQuotaAsync(cancellationToken);
-            var readyLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state) == "ready_to_send");
-            var needsLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state) == "needs_approval");
+            var readyLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state, rows) == "ready_to_send");
+            var needsLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state, rows) == "needs_approval");
             string? autoPauseReason = null;
             if (state.ComplaintPause || state.RampBlockReason is "bounce_rate" or "complaint_rate")
                 autoPauseReason = "DELIVERABILITY SAFETY PAUSE";
@@ -689,7 +689,7 @@ public static class CreatorAcquisitionEndpoints
                     || (r.ChannelUrl?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false));
             }
             var now = DateTimeOffset.UtcNow;
-            var items = query.Select(r => ToAdminDto(r, state, site, now)).ToArray();
+            var items = query.Select(r => ToAdminDto(r, state, site, now, rows)).ToArray();
             return Results.Ok(new { items, totalCount = items.Length });
         });
 
@@ -698,7 +698,8 @@ public static class CreatorAcquisitionEndpoints
             var row = await acq.Store.GetProspectAsync(id, cancellationToken);
             if (row is null) return Results.NotFound();
             var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
-            return Results.Ok(ToAdminDto(row, state, acq.TrackedSite()));
+            var all = await acq.Store.ListProspectsAsync(cancellationToken);
+            return Results.Ok(ToAdminDto(row, state, acq.TrackedSite(), DateTimeOffset.UtcNow, all));
         });
 
         admin.MapPost("/inspect", async (AcqUpsertProspectRequest request, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
@@ -707,7 +708,8 @@ public static class CreatorAcquisitionEndpoints
                 return Results.BadRequest(new { error = "channelInput required" });
             var row = await acq.InspectAndUpsertAsync(request, cancellationToken);
             var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
-            return Results.Ok(ToAdminDto(row, state, acq.TrackedSite()));
+            var all = await acq.Store.ListProspectsAsync(cancellationToken);
+            return Results.Ok(ToAdminDto(row, state, acq.TrackedSite(), DateTimeOffset.UtcNow, all));
         });
 
         admin.MapPost("/migrate-rescore", async (
@@ -732,7 +734,13 @@ public static class CreatorAcquisitionEndpoints
         {
             var result = await acq.PrepareDraftAsync(id, cancellationToken);
             if (result.Prospect is null) return Results.NotFound(new { error = result.Reason ?? "not_found" });
-            var dto = ToAdminDto(result.Prospect, await acq.LoadStateAsync(result.Prospect.Campaign, cancellationToken), acq.TrackedSite());
+            var all = await acq.Store.ListProspectsAsync(cancellationToken);
+            var dto = ToAdminDto(
+                result.Prospect,
+                await acq.LoadStateAsync(result.Prospect.Campaign, cancellationToken),
+                acq.TrackedSite(),
+                DateTimeOffset.UtcNow,
+                all);
             return Results.Ok(new
             {
                 prospect = dto,
@@ -1212,14 +1220,20 @@ public static class CreatorAcquisitionEndpoints
         CancellationToken cancellationToken)
     {
         var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
-        return ToAdminDto(row, state, acq.TrackedSite(), DateTimeOffset.UtcNow);
+        var all = await acq.Store.ListProspectsAsync(cancellationToken);
+        return ToAdminDto(row, state, acq.TrackedSite(), DateTimeOffset.UtcNow, all);
     }
 
-    private static AcqAdminProspectDto ToAdminDto(AcqProspectRecord row, AcqCampaignState state, string site, DateTimeOffset? nowUtc = null)
+    private static AcqAdminProspectDto ToAdminDto(
+        AcqProspectRecord row,
+        AcqCampaignState state,
+        string site,
+        DateTimeOffset? nowUtc = null,
+        IReadOnlyList<AcqProspectRecord>? all = null)
     {
         var now = nowUtc ?? DateTimeOffset.UtcNow;
         var preview = BuildExactPreview(row, state, site);
-        var why = CreatorAcquisitionService.WhyNotSentCode(row, now, state);
+        var why = CreatorAcquisitionService.WhyNotSentCode(row, now, state, all);
         return new AcqAdminProspectDto(
             CreatorAcquisitionScoring.Sanitize(row),
             row.PublicBusinessEmail,
@@ -1236,7 +1250,7 @@ public static class CreatorAcquisitionEndpoints
             CreatorAcquisitionScoring.FindingSourceSummary(row),
             why,
             why == "READY_TO_SEND" ? "Ready to send" : AcqSendGuard.HumanSkipReason(why),
-            CreatorAcquisitionService.SendLaneFor(row, now, state));
+            CreatorAcquisitionService.SendLaneFor(row, now, state, all));
     }
 
     private static (string From, string To, string Subject, string Html, string Text, string CtaDestination) BuildExactPreview(

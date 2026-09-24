@@ -136,6 +136,36 @@ public static class AcqSendGuard
         return null;
     }
 
+    public static AcqProspectRecord InheritPriorContact(AcqProspectRecord record, IReadOnlyList<AcqProspectRecord> all)
+    {
+        if (record.LastContactedAt is not null) return record;
+        var history = HistoryBlockReason(all, record, followUpDue: false);
+        if (history is null) return record;
+        var email = NormalizeEmail(record.PublicBusinessEmail);
+        var channel = (record.ChannelId ?? "").Trim();
+        var handle = (record.Handle ?? "").Trim();
+        var sibling = all.FirstOrDefault(o =>
+            !string.Equals(o.ProspectId, record.ProspectId, StringComparison.OrdinalIgnoreCase)
+            && o.LastContactedAt is not null
+            && (
+                (email.Length > 0 && string.Equals(NormalizeEmail(o.PublicBusinessEmail), email, StringComparison.OrdinalIgnoreCase))
+                || (channel.Length > 0 && string.Equals((o.ChannelId ?? "").Trim(), channel, StringComparison.OrdinalIgnoreCase))
+                || (handle.Length > 0 && string.Equals((o.Handle ?? "").Trim(), handle, StringComparison.OrdinalIgnoreCase))
+            ));
+        if (sibling is null)
+            return record with { OutreachStatus = "sent" };
+        return record with
+        {
+            LastContactedAt = sibling.LastContactedAt,
+            OutreachStatus = string.IsNullOrWhiteSpace(sibling.OutreachStatus) ? "sent" : sibling.OutreachStatus,
+            TicketId = string.IsNullOrWhiteSpace(record.TicketId) ? sibling.TicketId : record.TicketId,
+            LastSesMessageId = string.IsNullOrWhiteSpace(record.LastSesMessageId) ? sibling.LastSesMessageId : record.LastSesMessageId,
+            FollowUpStep = Math.Max(record.FollowUpStep, sibling.FollowUpStep),
+            NextFollowUpAt = record.NextFollowUpAt ?? sibling.NextFollowUpAt,
+            CohortRunId = record.CohortRunId ?? sibling.CohortRunId
+        };
+    }
+
     public static string SuppressionReasonCode(string? status)
     {
         var s = (status ?? "").Trim().ToLowerInvariant();

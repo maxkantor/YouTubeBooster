@@ -360,6 +360,7 @@ public static class CreatorAcquisitionScoring
 
     public static string MapView(AcqProspectRecord p)
     {
+        if (p.LastContactedAt is not null) return "sent";
         var s = (p.OutreachStatus ?? "").ToLowerInvariant();
         if (s is "unsubscribed" or "bounced" or "complained" or "suppressed" or "rejected"
             or "sent" or "delivered" or "clicked" or "replied" or "interested" or "scheduled" or "approved"
@@ -508,6 +509,7 @@ public static class CreatorAcquisitionScoring
     /// <summary>UI/admin queue: verified contact + complete draft, not yet approved or terminal.</summary>
     public static bool IsReadyForApproval(AcqProspectRecord p)
     {
+        if (p.LastContactedAt is not null) return false;
         if (p.PreviewPlaceholder) return false;
         var outreach = (p.OutreachStatus ?? "").ToLowerInvariant();
         if (outreach is "approved"
