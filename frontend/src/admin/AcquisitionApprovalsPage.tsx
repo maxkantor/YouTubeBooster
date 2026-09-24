@@ -44,9 +44,14 @@ export function AcquisitionApprovalsPage() {
 
   const cooldownDays = summary?.cooldownDays ?? 14;
   const sendingEnabled = summary?.marketingSendingEnabled ?? true;
-  const dailyLimit = summary?.dailyLimit ?? 10;
+  const dailyLimit = summary?.dailyLimit ?? 100;
   const sentToday = summary?.sentToday ?? 0;
   const dailyRemaining = summary?.dailyRemaining ?? Math.max(0, dailyLimit - sentToday);
+  const automaticSending = summary?.automaticSending === true;
+  const pauseReason = summary?.automaticPauseReason || '';
+  const sesRemaining = summary?.sesRemaining ?? null;
+  const needsCount = summary?.needsApproval ?? summary?.pipeline?.needsApproval;
+  const readyCount = summary?.pipeline?.readyToSend ?? summary?.approvedReadyToSend;
 
   const load = useCallback(async () => {
     setError('');
@@ -75,6 +80,22 @@ export function AcquisitionApprovalsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!bulkJob || bulkJob.status !== 'running') return;
+    const t = window.setInterval(() => {
+      void (async () => {
+        try {
+          const job = await adminApi.acqBulkSendTick(bulkJob.jobId);
+          setBulkJob(job);
+          if (job.status !== 'running') await load();
+        } catch {
+          /* keep last known job */
+        }
+      })();
+    }, 1500);
+    return () => window.clearInterval(t);
+  }, [bulkJob, load]);
+
   const setTab = (next: ApprovalsTab) => {
     const p = new URLSearchParams(searchParams);
     p.set('tab', next);
@@ -83,13 +104,21 @@ export function AcquisitionApprovalsPage() {
   };
 
   const needsRows = useMemo(
-    () => filterByWorkflowStatus(allItems, 'READY_FOR_APPROVAL', cooldownDays, Date.now(), sendingEnabled),
+    () =>
+      allItems.filter((r) => {
+        if ((r.sendLane || '').toLowerCase() === 'needs_approval') return true;
+        if (r.sendLane) return false;
+        return filterByWorkflowStatus([r], 'READY_FOR_APPROVAL', cooldownDays, Date.now(), sendingEnabled).length > 0;
+      }),
     [allItems, cooldownDays, sendingEnabled]
   );
-  // Ready to Send = outreachStatus approved only (ApprovalId can linger after send).
   const readyRows = useMemo(
     () =>
-      allItems.filter((r) => (r.public.outreachStatus || '').toLowerCase() === 'approved'),
+      allItems.filter((r) => {
+        if ((r.sendLane || '').toLowerCase() === 'ready_to_send') return true;
+        if (r.sendLane) return false;
+        return (r.public.outreachStatus || '').toLowerCase() === 'approved';
+      }),
     [allItems]
   );
   const sentRows = useMemo(() => {
@@ -154,7 +183,11 @@ export function AcquisitionApprovalsPage() {
       setError('');
       setNote('');
       try {
-        const preview = await adminApi.acqPreviewSend({ campaign: 'COOK-001', prospectIds: ids });
+        const preview = await adminApi.acqPreviewSend({
+          campaign: 'COOK-001',
+          prospectIds: ids,
+          approveFirst: true
+        });
         setSendPreview(preview);
         setPendingSendIds(ids);
         setApproveFirst(true);
@@ -226,7 +259,11 @@ export function AcquisitionApprovalsPage() {
     setError('');
     setNote('');
     try {
-      const preview = await adminApi.acqPreviewSend({ campaign: 'COOK-001', prospectIds: ids });
+      const preview = await adminApi.acqPreviewSend({
+        campaign: 'COOK-001',
+        prospectIds: ids,
+        approveFirst: false
+      });
       setSendPreview(preview);
       setPendingSendIds(ids);
       setApproveFirst(false);
@@ -238,14 +275,37 @@ export function AcquisitionApprovalsPage() {
   };
 
   return (
-    <AdminShell title="Approvals" subtitle="Review drafts, approve, and send. Nothing external sends without your action here.">
+    <AdminShell title="Approvals" subtitle="Manual review stays here. COOK-001 automatic sending does not wait for this screen.">
       {error && <p className="admin-crm-error">{error}</p>}
       {note && <p className="ops-muted">{note}</p>}
-      {bulkJob && bulkJob.status === 'running' && (
+      <section
+        className="ops-panel"
+        style={{
+          marginBottom: 16,
+          borderColor: automaticSending ? '#34d399' : '#f59e0b'
+        }}
+      >
+        <p style={{ margin: 0, fontWeight: 700, letterSpacing: 0.4 }}>
+          {automaticSending ? 'AUTOMATIC SENDING ACTIVE' : `AUTOMATIC SENDING PAUSED${pauseReason ? ` — ${pauseReason}` : ''}`}
+        </p>
+        <p className="ops-muted" style={{ margin: '8px 0 0' }}>
+          Campaign: COOK-001 · Daily limit {dailyLimit} · Sent today {sentToday} · Remaining {dailyRemaining}
+          {summary?.sesQuotaAvailable
+            ? ` · SES remaining ${sesRemaining ?? '—'}/${summary.sesMax24HourSend ?? '—'}`
+            : ' · SES quota unavailable'}
+          {' · '}Dry run: {summary?.dryRun ? 'ON' : 'OFF'}
+        </p>
+        <div style={{ marginTop: 10 }}>
+          <button type="button" className="ops-btn ops-btn-ghost" disabled={busy} onClick={() => void load()}>
+            Refresh status
+          </button>
+        </div>
+      </section>
+      {bulkJob && (bulkJob.status === 'running' || bulkJob.remaining > 0) && (
         <section className="ops-panel" style={{ marginBottom: 16 }}>
           <h2>Bulk send</h2>
           <p className="ops-muted">
-            Sent {bulkJob.sent} · Skipped {bulkJob.skipped} · Failed {bulkJob.failed} · Remaining {bulkJob.remaining}
+            Preparing {bulkJob.eligible}/{dailyLimit} · Sending {bulkJob.sent + bulkJob.skipped + bulkJob.failed}/{bulkJob.eligible} · Accepted {bulkJob.sent} · Skipped {bulkJob.skipped} · Remaining {bulkJob.remaining}
           </p>
           <progress
             max={Math.max(1, bulkJob.sent + bulkJob.skipped + bulkJob.failed + bulkJob.remaining)}
@@ -296,25 +356,34 @@ export function AcquisitionApprovalsPage() {
           className={`acq-count-chip${tab === 'needs' ? ' acq-count-chip-active' : ''}`}
           onClick={() => setTab('needs')}
         >
-          Needs Approval <strong>{needsRows.length}</strong>
+          Needs Approval <strong>{needsCount ?? needsRows.length}</strong>
         </button>
         <button
           type="button"
           className={`acq-count-chip${tab === 'ready' ? ' acq-count-chip-active' : ''}`}
           onClick={() => setTab('ready')}
         >
-          Ready to Send <strong>{readyRows.length}</strong>
+          Ready to Send <strong>{readyCount ?? readyRows.length}</strong>
         </button>
         <button
           type="button"
           className={`acq-count-chip${tab === 'sent' ? ' acq-count-chip-active' : ''}`}
           onClick={() => setTab('sent')}
         >
-          Recently Sent <strong>{sentRows.length}</strong>
+          Recently Sent <strong>{summary?.sentLast7Days ?? sentRows.length}</strong>
           <span className="ops-muted" style={{ fontSize: 12, marginLeft: 4 }}>
             (7d)
           </span>
         </button>
+        <span className="acq-count-chip">
+          Sent today <strong>{sentToday}</strong>
+        </span>
+        <span className="acq-count-chip">
+          Daily limit <strong>{dailyLimit}</strong>
+        </span>
+        <span className="acq-count-chip">
+          Remaining <strong>{dailyRemaining}</strong>
+        </span>
       </div>
 
       {tab === 'ready' && (
@@ -325,7 +394,7 @@ export function AcquisitionApprovalsPage() {
               Approved waiting {readyRows.length} · Manual-sendable {approvedEligibleNow}
               {approvedHardBlocked > 0 ? ` · Hard-blocked ${approvedHardBlocked}` : ''}
               {' · '}
-              Sent today {sentToday} / {dailyLimit} (automation)
+              Daily limit {dailyLimit} · Sent today {sentToday} · Remaining {dailyRemaining}
               {approvedAutomationEligible !== approvedEligibleNow
                 ? ` · Automation-eligible ${approvedAutomationEligible}`
                 : ''}
@@ -383,7 +452,7 @@ export function AcquisitionApprovalsPage() {
               <>
                 <strong>{selected.length}</strong> selected
                 {' · '}
-                Daily capacity remaining: <strong>{dailyRemaining}</strong>/{dailyLimit}
+                Daily remaining: <strong>{dailyRemaining}</strong> of {dailyLimit}
                 {' · '}
                 Will send now: <strong>{Math.min(selected.length, dailyRemaining)}</strong>
                 {selected.length > dailyRemaining
@@ -394,7 +463,7 @@ export function AcquisitionApprovalsPage() {
               <>
                 <strong>{eligibleVisible.length}</strong> ready for approval
                 {' · '}
-                Daily capacity: <strong>{dailyRemaining}</strong>/{dailyLimit}
+                Daily limit: <strong>{dailyLimit}</strong> · Sent today {sentToday} · Remaining <strong>{dailyRemaining}</strong>
               </>
             )}
           </span>
@@ -501,7 +570,7 @@ export function AcquisitionApprovalsPage() {
                             if (allSendableSelected) setSelected([]);
                             else
                               setSelected(
-                                selectAllSendable(readyRows, cooldownDays, Date.now(), sendingEnabled, 50)
+                                selectAllSendable(readyRows, cooldownDays, Date.now(), sendingEnabled, 500)
                               );
                           }}
                         />
@@ -511,6 +580,7 @@ export function AcquisitionApprovalsPage() {
                   <th className="acq-col-creator">Creator</th>
                   <th>Email preview</th>
                   <th>Status</th>
+                  <th>Why not sent?</th>
                   <th className="acq-col-action">Actions</th>
                 </tr>
               </thead>
@@ -534,7 +604,7 @@ export function AcquisitionApprovalsPage() {
                                     allItems,
                                     cur,
                                     p.prospectId,
-                                    30,
+                                    500,
                                     cooldownDays,
                                     Date.now(),
                                     sendingEnabled
@@ -566,7 +636,7 @@ export function AcquisitionApprovalsPage() {
                                     cooldownDays,
                                     Date.now(),
                                     sendingEnabled,
-                                    50
+                                    500
                                   )
                                 )
                               }
@@ -603,6 +673,24 @@ export function AcquisitionApprovalsPage() {
                         )}
                         {tab === 'sent' && (
                           <div className="ops-muted admin-crm-nowrap">{formatDt(row.lastContactedAt)}</div>
+                        )}
+                      </td>
+                      <td>
+                        {tab === 'sent' ? (
+                          <span className="ops-muted">Sent</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ops-btn ops-btn-ghost ops-btn-sm"
+                            title={row.whyNotSentHuman || row.whyNotSent || 'Server reason'}
+                            onClick={() =>
+                              window.alert(
+                                `Why not sent?\n\n${row.whyNotSent || 'UNKNOWN'}\n${row.whyNotSentHuman || ''}`
+                              )
+                            }
+                          >
+                            {row.whyNotSent || 'UNKNOWN'}
+                          </button>
                         )}
                       </td>
                       <td className="acq-col-action acq-actions">

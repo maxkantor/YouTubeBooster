@@ -35,14 +35,14 @@ function parseArgs(argv) {
     dryRun: false,
     force: false,
     skipEmail: false,
-    maxSends: 10
+    maxSends: 100
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--force') opts.force = true;
     else if (a === '--skip-email') opts.skipEmail = true;
-    else if (a === '--max') opts.maxSends = Math.max(1, Math.min(30, Number(argv[++i] || 10)));
+    else if (a === '--max') opts.maxSends = Math.max(1, Math.min(500, Number(argv[++i] || 100)));
   }
   return opts;
 }
@@ -231,7 +231,7 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
       verifiedCustomers: crmCustomers,
       verifiedRevenue: 0,
       sameCohortTracking: 'crm_prospect_status',
-      dailyLimit: send.dailyLimit ?? 10,
+      dailyLimit: send.dailyLimit ?? 100,
       nextRamp: 20,
       rampBlockReason: send.rampBlockReason || 'sample_too_small'
     },
@@ -239,7 +239,7 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
       bounceRate: 'N/A (sample < 30)',
       complaintRate: 'N/A',
       unsubscribeRate: 'N/A',
-      dailyLimit: send.dailyLimit ?? 10,
+      dailyLimit: send.dailyLimit ?? 100,
       nextRampDecision: send.rampBlockReason
         ? `hold; ${send.rampBlockReason}`
         : 'hold; sample_too_small'

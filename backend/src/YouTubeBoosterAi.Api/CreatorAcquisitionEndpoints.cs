@@ -65,7 +65,10 @@ public static class CreatorAcquisitionEndpoints
             var provided = http.Request.Headers["X-Outreach-Cron-Key"].ToString();
             if (string.IsNullOrWhiteSpace(expected) || !string.Equals(expected, provided, StringComparison.Ordinal))
                 return Results.Unauthorized();
-            var result = await acq.RunScheduledAcquisitionAsync(cancellationToken);
+            var dry = string.Equals(http.Request.Query["dryRun"].ToString(), "true", StringComparison.OrdinalIgnoreCase);
+            var result = dry
+                ? await acq.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken, true)
+                : await acq.RunScheduledAcquisitionAsync(cancellationToken);
             return Results.Ok(result);
         });
         publicApi.MapPost("/ses-events", async (
@@ -444,6 +447,28 @@ public static class CreatorAcquisitionEndpoints
 
             var contactVerifiedCook = cookRows.Count(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
             var needsEmailCook = cookRows.Count(r => !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r));
+            var cfg = await acq.ResolveCampaignConfigAsync(campaign, cancellationToken);
+            var sesQuota = await acq.GetProviderQuotaAsync(cancellationToken);
+            var readyLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state) == "ready_to_send");
+            var needsLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state) == "needs_approval");
+            string? autoPauseReason = null;
+            if (state.ComplaintPause || state.RampBlockReason is "bounce_rate" or "complaint_rate")
+                autoPauseReason = "DELIVERABILITY SAFETY PAUSE";
+            else if (!state.MarketingSendingEnabled)
+                autoPauseReason = "CAMPAIGN DISABLED";
+            else if (cfg.DryRun)
+                autoPauseReason = "DRY RUN ENABLED";
+            else if (dailyRemaining <= 0)
+                autoPauseReason = "DAILY LIMIT REACHED";
+            else if (sesQuota.Available && sesQuota.Remaining <= 0)
+                autoPauseReason = "SES PROVIDER QUOTA REACHED";
+            else if (sendEligible == 0 && readyLane == 0)
+                autoPauseReason = contactVerifiedCook == 0 ? "NO VALID EMAILS" : "NO QUALIFIED CONTACTS";
+            var automaticSending = string.Equals(cfg.SendingMode, "automatic", StringComparison.OrdinalIgnoreCase)
+                && cfg.AutoSend
+                && state.MarketingSendingEnabled
+                && !cfg.DryRun
+                && autoPauseReason is not "CAMPAIGN DISABLED" and not "DELIVERABILITY SAFETY PAUSE" and not "DRY RUN ENABLED";
 
             return Results.Ok(new
             {
@@ -453,6 +478,19 @@ public static class CreatorAcquisitionEndpoints
                 fromEmailConfigured = EmailAddressHelpers.LooksLikeEmail(state.FromEmail),
                 postalAddressConfigured = !string.IsNullOrWhiteSpace(state.PostalAddress),
                 campaign,
+                sendingMode = cfg.SendingMode,
+                dryRun = cfg.DryRun,
+                autoSend = cfg.AutoSend,
+                autoDiscover = cfg.AutoDiscover,
+                autoFindEmails = cfg.AutoFindEmails,
+                autoPrepareDrafts = cfg.AutoPrepareDrafts,
+                autoFollowUps = cfg.AutoFollowUps,
+                automaticSending,
+                automaticPauseReason = autoPauseReason,
+                sesMax24HourSend = sesQuota.Available ? sesQuota.Max24HourSend : (int?)null,
+                sesSentLast24Hours = sesQuota.Available ? sesQuota.SentLast24Hours : (int?)null,
+                sesRemaining = sesQuota.Available ? sesQuota.Remaining : (int?)null,
+                sesQuotaAvailable = sesQuota.Available,
                 dailyLimit = state.DailyLimit,
                 cooldownDays = state.CooldownDays,
                 rampStage = state.RampStage,
@@ -526,8 +564,8 @@ public static class CreatorAcquisitionEndpoints
                     drafted = draftsCook,
                     draftedNotApproved,
                     approved,
-                    needsApproval,
-                    readyToSend = approved,
+                    needsApproval = needsLane,
+                    readyToSend = readyLane,
                     recentlySent = sentLast7Days,
                     eligibleNow = sendEligible,
                     approvedEligibleNow = approvedEligible,
@@ -547,8 +585,8 @@ public static class CreatorAcquisitionEndpoints
                 {
                     totalProspects = cookRows.Count,
                     draftsGenerated = draftsCook,
-                    needsApproval,
-                    readyToSend = approved,
+                    needsApproval = needsLane,
+                    readyToSend = readyLane,
                     recentlySent = sentLast7Days,
                     recentlySentWindowDays = 7,
                     sentToday,
@@ -559,8 +597,8 @@ public static class CreatorAcquisitionEndpoints
                     notReviewableTotal,
                     approvalsUrl = "https://youtubeboosterai.com/admin/acquisition/approvals"
                 },
-                needsApproval,
-                approvedReadyToSend,
+                needsApproval = needsLane,
+                approvedReadyToSend = Math.Max(approvedReadyToSend, readyLane),
                 approvedWaiting,
                 blockedCooldown,
                 followUpsDue,
@@ -650,7 +688,8 @@ public static class CreatorAcquisitionEndpoints
                     || (r.ProspectId?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false)
                     || (r.ChannelUrl?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false));
             }
-            var items = query.Select(r => ToAdminDto(r, state, site)).ToArray();
+            var now = DateTimeOffset.UtcNow;
+            var items = query.Select(r => ToAdminDto(r, state, site, now)).ToArray();
             return Results.Ok(new { items, totalCount = items.Length });
         });
 
@@ -1173,12 +1212,14 @@ public static class CreatorAcquisitionEndpoints
         CancellationToken cancellationToken)
     {
         var state = await acq.LoadStateAsync(row.Campaign, cancellationToken);
-        return ToAdminDto(row, state, acq.TrackedSite());
+        return ToAdminDto(row, state, acq.TrackedSite(), DateTimeOffset.UtcNow);
     }
 
-    private static AcqAdminProspectDto ToAdminDto(AcqProspectRecord row, AcqCampaignState state, string site)
+    private static AcqAdminProspectDto ToAdminDto(AcqProspectRecord row, AcqCampaignState state, string site, DateTimeOffset? nowUtc = null)
     {
+        var now = nowUtc ?? DateTimeOffset.UtcNow;
         var preview = BuildExactPreview(row, state, site);
+        var why = CreatorAcquisitionService.WhyNotSentCode(row, now, state);
         return new AcqAdminProspectDto(
             CreatorAcquisitionScoring.Sanitize(row),
             row.PublicBusinessEmail,
@@ -1192,7 +1233,10 @@ public static class CreatorAcquisitionEndpoints
             preview.Html,
             preview.Text,
             preview.CtaDestination,
-            CreatorAcquisitionScoring.FindingSourceSummary(row));
+            CreatorAcquisitionScoring.FindingSourceSummary(row),
+            why,
+            why == "READY_TO_SEND" ? "Ready to send" : AcqSendGuard.HumanSkipReason(why),
+            CreatorAcquisitionService.SendLaneFor(row, now, state));
     }
 
     private static (string From, string To, string Subject, string Html, string Text, string CtaDestination) BuildExactPreview(
@@ -1286,6 +1330,9 @@ public interface ICreatorAcquisitionService
     Task<IReadOnlyList<AcqCampaignCard>> ListCampaignCardsAsync(CancellationToken cancellationToken);
     Task<AcqCampaignConfig> UpsertCampaignConfigAsync(AcqCampaignConfigRequest request, CancellationToken cancellationToken);
     Task<AcqCampaignConfig> UpdateCampaignSettingsAsync(string campaignId, AcqCampaignSettingsRequest request, CancellationToken cancellationToken);
+    Task<AcqCampaignConfig> EnsureCook001PersistedAsync(CancellationToken cancellationToken);
+    Task<AcqCampaignConfig> ResolveCampaignConfigAsync(string campaign, CancellationToken cancellationToken);
+    Task<AcqProviderQuota> GetProviderQuotaAsync(CancellationToken cancellationToken);
     Task<AcqSendPreviewResult> PreviewSendAsync(AcqSendPreviewRequest request, CancellationToken cancellationToken);
     Task<AcqBulkSendJobState> StartBulkSendAsync(AcqBulkSendStartRequest request, string adminEmail, CancellationToken cancellationToken);
     Task<AcqBulkSendJobState?> GetBulkSendJobAsync(string jobId, CancellationToken cancellationToken);

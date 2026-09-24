@@ -4,6 +4,73 @@ namespace YouTubeBoosterAi.Api;
 
 public sealed partial class CreatorAcquisitionService
 {
+    public const int Cook001ProductionDailyLimit = 100;
+
+    public async Task<AcqCampaignConfig> EnsureCook001PersistedAsync(CancellationToken cancellationToken)
+    {
+        var existing = (await ReadCampaignRegistryAsync(cancellationToken)).ToList();
+        var prior = existing.FirstOrDefault(c =>
+            string.Equals(c.CampaignId, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase));
+        var alreadyProduction = prior is not null
+            && prior.DailyLimit >= Cook001ProductionDailyLimit
+            && string.Equals(prior.SendingMode, "automatic", StringComparison.OrdinalIgnoreCase)
+            && prior.AutoSend
+            && !prior.DryRun
+            && prior.AutoDiscover
+            && prior.AutoFindEmails
+            && prior.AutoPrepareDrafts
+            && prior.AutoFollowUps;
+        if (alreadyProduction)
+        {
+            var flagsOk = await _store.GetCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
+            if (!flagsOk.SendingEnabled)
+                await _store.SaveCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, true, flagsOk.ComplaintPause, cancellationToken);
+            return prior!;
+        }
+
+        var flags = await _store.GetCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
+        var row = new AcqCampaignConfig(
+            CreatorAcquisitionCampaigns.Cook001,
+            prior?.Name ?? "COOK-001",
+            prior?.Category ?? AcquisitionTaxonomy.DefaultCategory,
+            prior?.Language ?? AcquisitionTaxonomy.DefaultLanguage,
+            prior?.Market ?? "",
+            prior?.Tier,
+            Cook001ProductionDailyLimit,
+            true,
+            prior?.CreatedAt is { } created && created > DateTimeOffset.UnixEpoch.AddDays(1)
+                ? created
+                : DateTimeOffset.UtcNow,
+            SendingMode: "automatic",
+            DryRun: false,
+            MaxFollowUps: OutreachPolicy.DefaultMaxFollowUps,
+            AutoDiscover: true,
+            AutoFindEmails: true,
+            AutoPrepareDrafts: true,
+            AutoSend: true,
+            AutoFollowUps: true);
+        existing.RemoveAll(c => string.Equals(c.CampaignId, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase));
+        existing.Add(row);
+        await _store.SaveCohortRunAsync("SYSTEM", "campaign-registry",
+            System.Text.Json.JsonSerializer.Serialize(existing, AcqJson.Options), cancellationToken);
+        await _store.SaveCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, true, flags.ComplaintPause, cancellationToken);
+        return row;
+    }
+
+    private async Task<IReadOnlyList<AcqCampaignConfig>> ReadCampaignRegistryAsync(CancellationToken cancellationToken)
+    {
+        var json = await _store.GetCohortRunAsync("SYSTEM", "campaign-registry", cancellationToken);
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<AcqCampaignConfig>>(json, AcqJson.Options) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
     public async Task<AcqCampaignConfig?> FindCampaignConfigAsync(string campaign, CancellationToken cancellationToken)
     {
         var id = (campaign ?? "").Trim();
@@ -26,14 +93,14 @@ public sealed partial class CreatorAcquisitionService
                 AcquisitionTaxonomy.DefaultLanguage,
                 "",
                 null,
-                OutreachPolicy.DefaultDailyLimit,
-                flags.SendingEnabled,
+                Cook001ProductionDailyLimit,
+                flags.SendingEnabled || true,
                 DateTimeOffset.UnixEpoch,
                 SendingMode: "automatic",
                 DryRun: false,
                 MaxFollowUps: OutreachPolicy.DefaultMaxFollowUps,
-                AutoDiscover: false,
-                AutoFindEmails: false,
+                AutoDiscover: true,
+                AutoFindEmails: true,
                 AutoPrepareDrafts: true,
                 AutoSend: true,
                 AutoFollowUps: true);
@@ -157,7 +224,7 @@ public sealed partial class CreatorAcquisitionService
         var reasonCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var p in selected)
         {
-            var reason = await EvaluateLiveEligibilityAsync(p, all, state, now, cancellationToken);
+            var reason = await EvaluateLiveEligibilityAsync(p, all, state, now, cancellationToken, request.ApproveFirst);
             if (reason is null)
             {
                 eligible++;
@@ -210,7 +277,7 @@ public sealed partial class CreatorAcquisitionService
             throw new InvalidOperationException("invalid_campaign");
 
         var preview = await PreviewSendAsync(new AcqSendPreviewRequest(
-            campaign, request.ProspectIds, request.SelectAllEligible, request.DryRun), cancellationToken);
+            campaign, request.ProspectIds, request.SelectAllEligible, request.DryRun, request.ApproveFirst), cancellationToken);
         var ids = preview.Items.Where(i => i.Eligible).Select(i => i.ProspectId).ToList();
         if (ids.Count > OutreachPolicy.ConfiguredMaxDailyLimit)
             ids = ids.Take(OutreachPolicy.ConfiguredMaxDailyLimit).ToList();
@@ -412,6 +479,8 @@ public sealed partial class CreatorAcquisitionService
                         cfg.CampaignId),
                     "scheduler",
                     cancellationToken);
+                if (string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
+                    job = await TickCreatorDiscoveryAsync(job.JobId, cancellationToken);
                 discovered = job.Added;
             }
             catch
@@ -534,7 +603,8 @@ public sealed partial class CreatorAcquisitionService
         IReadOnlyList<AcqProspectRecord> all,
         AcqCampaignState state,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool approveFirst = false)
     {
         if (AcqSendGuard.IsStoppedOutreachStatus(p.OutreachStatus, p.SuppressionStatus))
             return AcqSendGuard.SuppressionReasonCode(p.SuppressionStatus == "none" ? p.OutreachStatus : p.SuppressionStatus);
@@ -543,10 +613,69 @@ public sealed partial class CreatorAcquisitionService
         var followUpDue = CreatorAcquisitionScoring.IsFollowUpDue(p, now);
         var history = AcqSendGuard.HistoryBlockReason(all, p, followUpDue);
         if (history is not null) return history;
+        var mode = state.StandingCampaignApproval || approveFirst ? AcqSendMode.ManualAdmin : AcqSendMode.ManualAdmin;
         var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
             p, now, state, alreadyContacted: p.LastContactedAt is not null, AcqSendMode.ManualAdmin);
-        if (!gate.Ok) return gate.Reason;
+        if (!gate.Ok)
+        {
+            if (approveFirst && string.Equals(gate.Reason, "not_approved", StringComparison.OrdinalIgnoreCase))
+                return null;
+            if (state.StandingCampaignApproval && string.Equals(gate.Reason, "not_approved", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return gate.Reason;
+        }
+        _ = mode;
         return null;
+    }
+
+    public static string WhyNotSentCode(AcqProspectRecord p, DateTimeOffset now, AcqCampaignState state)
+    {
+        if (p.LastContactedAt is not null && !CreatorAcquisitionScoring.IsFollowUpDue(p, now))
+            return "ALREADY_CONTACTED";
+        if (AcqSendGuard.IsStoppedOutreachStatus(p.OutreachStatus, p.SuppressionStatus))
+            return OutreachPolicy.NormalizeSkipReason(
+                AcqSendGuard.SuppressionReasonCode(p.SuppressionStatus == "none" ? p.OutreachStatus : p.SuppressionStatus));
+        if (string.IsNullOrWhiteSpace(p.PublicBusinessEmail))
+            return "NO_PUBLIC_EMAIL_FOUND";
+        if (!CreatorAcquisitionScoring.IsVerifiedPublicEmail(p) || OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
+            return "INVALID_EMAIL";
+        if (state.ComplaintPause || state.RampBlockReason is "bounce_rate" or "complaint_rate")
+            return "SAFETY_PAUSED";
+        if (!state.MarketingSendingEnabled) return "CAMPAIGN_DISABLED";
+        var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
+            p, now, state, alreadyContacted: p.LastContactedAt is not null, AcqSendMode.Automated);
+        if (gate.Ok) return "READY_TO_SEND";
+        if (string.Equals(gate.Reason, "not_approved", StringComparison.OrdinalIgnoreCase))
+            return state.StandingCampaignApproval ? "READY_TO_SEND" : "MANUAL_APPROVAL_REQUIRED";
+        return OutreachPolicy.NormalizeSkipReason(gate.Reason);
+    }
+
+    public static string SendLaneFor(AcqProspectRecord p, DateTimeOffset now, AcqCampaignState state)
+    {
+        var why = WhyNotSentCode(p, now, state);
+        if (p.LastContactedAt is not null) return "sent";
+        if (why == "READY_TO_SEND") return "ready_to_send";
+        if (why is "MANUAL_APPROVAL_REQUIRED" || CreatorAcquisitionScoring.IsReadyForApproval(p))
+            return "needs_approval";
+        return "other";
+    }
+
+    public async Task<AcqProviderQuota> GetProviderQuotaAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var quota = await _ses.GetSendQuotaAsync(cancellationToken);
+            var remaining = (int)Math.Max(0, Math.Floor(quota.Max24HourSend - quota.SentLast24Hours));
+            return new AcqProviderQuota(
+                (int)Math.Floor(quota.Max24HourSend),
+                (int)Math.Floor(quota.SentLast24Hours),
+                remaining,
+                true);
+        }
+        catch
+        {
+            return new AcqProviderQuota(0, 0, 0, false);
+        }
     }
 
     private async Task<AcqCampaignCard> ToCampaignCardAsync(AcqCampaignConfig cfg, CancellationToken cancellationToken)
@@ -558,8 +687,8 @@ public sealed partial class CreatorAcquisitionService
         var scoped = all.Where(p => string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase)).ToList();
         var sentToday = scoped.Count(p => p.LastContactedAt is not null && CreatorAcquisitionScoring.EasternDate(p.LastContactedAt.Value).Date == today);
         var remaining = Math.Max(0, state.DailyLimit - sentToday);
-        var ready = scoped.Count(p => string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase));
-        var needs = scoped.Count(p => string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase));
+        var ready = scoped.Count(p => SendLaneFor(p, now, state) == "ready_to_send");
+        var needs = scoped.Count(p => SendLaneFor(p, now, state) == "needs_approval");
         var replies = scoped.Count(p => string.Equals(p.OutreachStatus, "replied", StringComparison.OrdinalIgnoreCase));
         var unsubs = scoped.Count(p => string.Equals(p.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase));
         string status;

@@ -66,6 +66,16 @@ public static class AcqSendGuard
             "INVALID_EMAIL" => "Invalid email",
             "NOT_APPROVED" => "Waiting for approval",
             "DAILY_LIMIT_REACHED" => "Daily limit reached",
+            "MANUAL_APPROVAL_REQUIRED" => "Waiting for approval",
+            "READY_TO_SEND" => "Ready to send",
+            "SAFETY_PAUSED" => "Automatic sending paused — bounce or complaint rate above threshold",
+            "CAMPAIGN_DISABLED" => "Sending is off",
+            "DRY_RUN" => "Dry run — no emails sent",
+            "NO_PUBLIC_EMAIL_FOUND" => "No public email found",
+            "DUPLICATE_EMAIL" => "Duplicate email",
+            "DUPLICATE_CHANNEL" => "Duplicate channel",
+            "SES_QUOTA_REACHED" => "SES provider quota reached",
+            "EXECUTION_BUDGET" => "Invocation time budget reached",
             "NOT_QUALIFIED" => "Not eligible",
             "MISSING_CONFIG" => "Sending not configured",
             "STRATEGIC_MANUAL" => "Strategic — manual only",
@@ -117,7 +127,7 @@ public static class AcqSendGuard
             if (!sameCampaign) continue;
 
             if (!followUpDue && (other.LastContactedAt is not null || otherStatus is "sent" or "delivered" or "clicked"))
-                return sameEmail ? ReasonDuplicateEmail : ReasonAlreadyContacted;
+                return sameEmail ? ReasonDuplicateEmail : "duplicate_channel";
         }
 
         if (!followUpDue && candidate.LastContactedAt is not null)
@@ -205,7 +215,8 @@ public sealed record AcqSendPreviewRequest(
     string? Campaign = null,
     IReadOnlyList<string>? ProspectIds = null,
     bool SelectAllEligible = false,
-    bool DryRun = false);
+    bool DryRun = false,
+    bool ApproveFirst = false);
 
 public sealed record AcqSendPreviewResult(
     string Campaign,
@@ -281,6 +292,8 @@ public sealed record AcqCampaignSettingsRequest(
     string? Language = null,
     string? Market = null,
     string? Tier = null);
+
+public sealed record AcqProviderQuota(int Max24HourSend, int SentLast24Hours, int Remaining, bool Available);
 
 public sealed record AcqCampaignCard(
     string CampaignId,

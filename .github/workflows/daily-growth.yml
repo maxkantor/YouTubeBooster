@@ -4,6 +4,8 @@ on:
   schedule:
     # 8:00 AM America/New_York weekdays (EDT UTC-4 -> 12:00 UTC Mon–Fri)
     - cron: '0 12 * * 1-5'
+    # Continuation: 12:00 PM ET weekdays — consume remaining COOK-001 daily capacity
+    - cron: '0 16 * * 1-5'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -17,7 +19,7 @@ on:
       max_sends:
         description: 'Maximum prospects to draft / send (approved only)'
         type: number
-        default: 10
+        default: 100
 
 jobs:
   daily-growth:

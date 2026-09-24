@@ -519,7 +519,7 @@ export function selectEligibleIds(
   rows: AcqAdminProspect[],
   currentlySelected: string[],
   id: string,
-  max = 30,
+  max = 500,
   cooldownDays = DEFAULT_COOLDOWN_DAYS,
   nowMs = Date.now(),
   sendingEnabled = true
@@ -554,7 +554,7 @@ export function selectSendableIds(
   cooldownDays = DEFAULT_COOLDOWN_DAYS,
   nowMs = Date.now(),
   sendingEnabled = true,
-  max = 50
+  max = 500
 ): string[] {
   const row = rows.find((r) => r.public.prospectId === id);
   if (!row || !resolveAcqWorkflow(row, cooldownDays, nowMs, sendingEnabled).canSendNow) {
@@ -570,7 +570,7 @@ export function selectAllSendable(
   cooldownDays = DEFAULT_COOLDOWN_DAYS,
   nowMs = Date.now(),
   sendingEnabled = true,
-  max = 50
+  max = 500
 ): string[] {
   return rows
     .filter((r) => resolveAcqWorkflow(r, cooldownDays, nowMs, sendingEnabled).canSendNow)

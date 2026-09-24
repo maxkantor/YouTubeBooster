@@ -750,6 +750,7 @@ export const adminApi = {
     prospectIds?: string[];
     selectAllEligible?: boolean;
     dryRun?: boolean;
+    approveFirst?: boolean;
   }): Promise<AcqSendPreview> {
     return fetchJson('/api/admin/crm/acquisition/preview-send', {
       method: 'POST',
@@ -757,7 +758,8 @@ export const adminApi = {
         campaign: body.campaign || 'COOK-001',
         prospectIds: body.prospectIds,
         selectAllEligible: body.selectAllEligible === true,
-        dryRun: body.dryRun === true
+        dryRun: body.dryRun === true,
+        approveFirst: body.approveFirst === true
       })
     });
   },

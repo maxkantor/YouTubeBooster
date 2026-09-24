@@ -95,8 +95,8 @@ export const ACQ_OVERVIEW_DEFAULTS = {
   blockedByCooldown: 4,
   blockedByQualification: 2,
   sentToday: 0,
-  dailyLimit: 10,
-  dailyRemaining: 10
+  dailyLimit: 100,
+  dailyRemaining: 100
 } as const;
 
 export function whySelected(p: {

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Conservative COOK-001 weekday path.
- * Inspects/drafts verified official-site mailto prospects into the Approvals queue.
- * Does NOT auto-approve. Weekday-send only sends previously human-approved recipients.
+ * COOK-001 weekday path.
+ * Discovers / drafts remaining inventory, then calls weekday-send in a continuation
+ * loop. Automatic COOK-001 sends qualified contacts without Admin Approvals clicks.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -13,7 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '../..');
 const API = process.env.YB_API_BASE || 'https://yri8sw6k1h.execute-api.us-east-1.amazonaws.com';
 const REGION = process.env.AWS_REGION || 'us-east-1';
-const MAX_DEFAULT = 10;
+const MAX_DEFAULT = 100;
 
 const SKIP_HANDLES = new Set(['@sohlaandham', '@kelvinskitchen']);
 
@@ -21,7 +21,7 @@ function parseArgs(argv) {
   const out = { max: MAX_DEFAULT, dryRun: false, autoApprove: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--max') out.max = Math.max(1, Math.min(30, Number(argv[++i] || MAX_DEFAULT)));
+    if (a === '--max') out.max = Math.max(1, Math.min(500, Number(argv[++i] || MAX_DEFAULT)));
     else if (a === '--dry-run') out.dryRun = true;
     else if (a === '--auto-approve') out.autoApprove = true; // escape hatch only; default OFF
   }
@@ -212,7 +212,6 @@ for (const row of candidates) {
 let approval = null;
 let send = null;
 if (!args.dryRun) {
-  // Enable sending infrastructure only — does not approve recipients.
   await adminJson(cookie, '/api/admin/crm/acquisition/campaign-flags', {
     method: 'POST',
     body: JSON.stringify({ campaign: 'COOK-001', sendingEnabled: true, complaintPause: false })
@@ -239,39 +238,65 @@ if (!args.dryRun) {
     approval = {
       ok: true,
       skipped: true,
-      awaitingHumanApproval: drafted.length,
-      note: 'Initial outreach requires Admin Approvals — no auto-approve'
+      awaitingHumanApproval: 0,
+      note: 'COOK-001 automatic mode sends qualified contacts without Approvals clicks'
     };
   }
+}
 
+{
   const cron = ssmGet('/youtubebooster/outreach/cron-key', true);
   if (!cron) {
     send = { status: 'BLOCKED', error: 'cron_key_missing' };
   } else {
-    // Sends only previously approved + eligible follow-ups. Never sends unapproved initials.
-    const weekday = await fetch(`${API}/api/public/acq/weekday-send`, {
-      method: 'POST',
-      headers: { 'X-Outreach-Cron-Key': cron, 'content-type': 'application/json' }
-    });
-    const text = await weekday.text();
-    let json;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = { raw: text.slice(0, 200) };
-    }
-    send = {
-      http: weekday.status,
-      marketingSendingEnabled: json.marketingSendingEnabled ?? json.MarketingSendingEnabled,
-      attempted: json.sesAttempted ?? json.SesAttempted ?? json.attempted ?? json.Attempted,
-      sesAttempted: json.sesAttempted ?? json.SesAttempted ?? json.attempted ?? json.Attempted,
-      evaluated: json.evaluated ?? json.Evaluated ?? 0,
-      sent: json.sent ?? json.Sent,
-      skipped: json.skipped ?? json.Skipped,
-      reasons: (json.reasons || json.Reasons || []).slice(0, 40),
-      dailyLimit: json.dailyLimit ?? json.DailyLimit,
-      cohortRunId: json.cohortRunId ?? json.CohortRunId
+    const combined = {
+      http: 0,
+      marketingSendingEnabled: true,
+      attempted: 0,
+      sesAttempted: 0,
+      evaluated: 0,
+      sent: 0,
+      skipped: 0,
+      wouldSend: 0,
+      reasons: [],
+      dailyLimit: 100,
+      cohortRunId: null,
+      moreWork: false,
+      invocations: 0
     };
+    const maxInvocations = 6;
+    for (let i = 0; i < maxInvocations; i++) {
+      const url = args.dryRun
+        ? `${API}/api/public/acq/weekday-send?dryRun=true`
+        : `${API}/api/public/acq/weekday-send`;
+      const weekday = await fetch(url, {
+        method: 'POST',
+        headers: { 'X-Outreach-Cron-Key': cron, 'content-type': 'application/json' }
+      });
+      const text = await weekday.text();
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { raw: text.slice(0, 200) };
+      }
+      combined.http = weekday.status;
+      combined.marketingSendingEnabled = json.marketingSendingEnabled ?? json.MarketingSendingEnabled;
+      combined.attempted += Number(json.sesAttempted ?? json.SesAttempted ?? json.attempted ?? json.Attempted ?? 0) || 0;
+      combined.sesAttempted = combined.attempted;
+      combined.evaluated += Number(json.evaluated ?? json.Evaluated ?? 0) || 0;
+      combined.sent += Number(json.sent ?? json.Sent ?? 0) || 0;
+      combined.skipped += Number(json.skipped ?? json.Skipped ?? 0) || 0;
+      combined.wouldSend += Number(json.wouldSend ?? json.WouldSend ?? 0) || 0;
+      combined.reasons = combined.reasons.concat(json.reasons || json.Reasons || []).slice(0, 80);
+      combined.dailyLimit = json.dailyLimit ?? json.DailyLimit ?? combined.dailyLimit;
+      combined.cohortRunId = json.cohortRunId ?? json.CohortRunId ?? combined.cohortRunId;
+      combined.moreWork = json.moreWork === true || json.MoreWork === true;
+      combined.invocations += 1;
+      const sentThis = Number(json.sent ?? json.Sent ?? 0) || 0;
+      if (!combined.moreWork && sentThis <= 0) break;
+    }
+    send = combined;
   }
 }
 

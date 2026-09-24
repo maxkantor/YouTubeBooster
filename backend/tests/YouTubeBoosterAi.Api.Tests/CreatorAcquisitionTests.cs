@@ -493,7 +493,7 @@ public class OutreachPolicyTests
     {
         Assert.Equal("COOLDOWN", OutreachPolicy.NormalizeSkipReason("cooldown"));
         Assert.Equal("INVALID_EMAIL", OutreachPolicy.NormalizeSkipReason("public_email_unverified"));
-        Assert.Equal("NOT_APPROVED", OutreachPolicy.NormalizeSkipReason("approval_expired"));
+        Assert.Equal("MANUAL_APPROVAL_REQUIRED", OutreachPolicy.NormalizeSkipReason("approval_expired"));
         Assert.Equal("SES_ERROR", OutreachPolicy.NormalizeSkipReason("ses:Timeout"));
         Assert.Equal("DAILY_LIMIT_REACHED", OutreachPolicy.NormalizeSkipReason("daily_limit_reached"));
         Assert.Equal("ALREADY_CONTACTED", OutreachPolicy.NormalizeSkipReason("idempotency"));

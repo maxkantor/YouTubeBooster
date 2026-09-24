@@ -23,8 +23,8 @@ export function AcquisitionCampaignsPage() {
   const [newLanguage, setNewLanguage] = useState('ru');
   const [newMarket, setNewMarket] = useState('');
   const [newTier, setNewTier] = useState('');
-  const [newLimit, setNewLimit] = useState(10);
-  const [cookLimit, setCookLimit] = useState(10);
+  const [newLimit, setNewLimit] = useState(100);
+  const [cookLimit, setCookLimit] = useState(100);
   const [cookMode, setCookMode] = useState('automatic');
   const [cookDry, setCookDry] = useState(false);
   const [cookAutoSend, setCookAutoSend] = useState(true);
@@ -55,7 +55,7 @@ export function AcquisitionCampaignsPage() {
         setCookFollow(cook.autoFollowUps !== false);
         setCookFollowMax(cook.maxFollowUps ?? 2);
       } else {
-        setCookLimit(s.dailyLimit ?? 10);
+        setCookLimit(s.dailyLimit ?? 100);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load campaign');
@@ -66,7 +66,7 @@ export function AcquisitionCampaignsPage() {
     void load();
   }, [load]);
 
-  const dailyLimit = summary?.dailyLimit ?? 10;
+  const dailyLimit = summary?.dailyLimit ?? 100;
   const sentToday = summary?.sentToday ?? 0;
   const cooldownDays = summary?.cooldownDays ?? 14;
   const sentLifetime = summary?.sentLifetime ?? summary?.sent ?? 0;
@@ -133,6 +133,12 @@ export function AcquisitionCampaignsPage() {
               <strong>{summary.marketingSendingEnabled ? 'Yes' : 'No'}</strong>
             </div>
             <div>
+              <span>Automatic sending</span>
+              <strong className={summary.automaticSending ? 'acq-ok' : 'acq-bad'}>
+                {summary.automaticSending ? 'ON' : `PAUSED${summary.automaticPauseReason ? ` — ${summary.automaticPauseReason}` : ''}`}
+              </strong>
+            </div>
+            <div>
               <span>Daily limit</span>
               <strong>{dailyLimit}</strong>
             </div>
@@ -165,6 +171,18 @@ export function AcquisitionCampaignsPage() {
               <strong className={summary.sesConfigured ? 'acq-ok' : 'acq-bad'}>
                 {summary.sesConfigured ? '✓' : '✗'}
               </strong>
+            </div>
+            <div>
+              <span>SES remaining</span>
+              <strong>
+                {summary.sesQuotaAvailable
+                  ? `${summary.sesRemaining ?? '—'} / ${summary.sesMax24HourSend ?? '—'}`
+                  : 'Unavailable'}
+              </strong>
+            </div>
+            <div>
+              <span>Dry run</span>
+              <strong>{summary.dryRun ? 'ON' : 'OFF'}</strong>
             </div>
             <div>
               <span>Next scheduled (ET)</span>

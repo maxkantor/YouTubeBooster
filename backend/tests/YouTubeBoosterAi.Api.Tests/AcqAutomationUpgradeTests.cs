@@ -146,7 +146,122 @@ public class AcqAutomationUpgradeTests
     {
         Assert.Equal("GLOBAL_SUPPRESSION_UNSUBSCRIBED", OutreachPolicy.NormalizeSkipReason("GLOBAL_SUPPRESSION_UNSUBSCRIBED"));
         Assert.Equal("ALREADY_CONTACTED", OutreachPolicy.NormalizeSkipReason("already_processing"));
-        Assert.Equal("ALREADY_CONTACTED", OutreachPolicy.NormalizeSkipReason("duplicate_email"));
+        Assert.Equal("DUPLICATE_EMAIL", OutreachPolicy.NormalizeSkipReason("duplicate_email"));
+    }
+
+    [Fact]
+    public async Task EnsureCook001_PersistsLimit100_AndAutomaticFlags()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, _) = CreateSendingService(store);
+        var cfg = await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        Assert.Equal(100, cfg.DailyLimit);
+        Assert.Equal("automatic", cfg.SendingMode);
+        Assert.True(cfg.AutoSend);
+        Assert.False(cfg.DryRun);
+        Assert.True(cfg.AutoDiscover);
+        Assert.True(cfg.AutoFindEmails);
+        Assert.True(cfg.AutoPrepareDrafts);
+        Assert.True(cfg.AutoFollowUps);
+        var again = await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        Assert.Equal(100, again.DailyLimit);
+        var state = await svc.LoadStateAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None);
+        Assert.Equal(100, state.DailyLimit);
+        Assert.True(state.StandingCampaignApproval);
+        Assert.True(state.MaxDailyLimit >= 100);
+    }
+
+    [Fact]
+    public async Task AutomaticProspect_BypassesApproval_InPreview()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var p = Prospect("auto-1", "auto@channel.test", "UCauto1");
+        await store.UpsertProspectAsync(p, CancellationToken.None);
+        var preview = await svc.PreviewSendAsync(
+            new AcqSendPreviewRequest(CreatorAcquisitionCampaigns.Cook001, [p.ProspectId]),
+            CancellationToken.None);
+        Assert.True(preview.Eligible >= 1, string.Join(",", preview.Items.Select(i => i.Reason)));
+        Assert.True(preview.WillSend >= 1);
+        Assert.Equal(0, ses.SendRawCalls);
+        var why = CreatorAcquisitionService.WhyNotSentCode(
+            p, DateTimeOffset.UtcNow,
+            await svc.LoadStateAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None));
+        Assert.Equal("READY_TO_SEND", why);
+    }
+
+    [Fact]
+    public async Task ManualCampaign_RequiresApproval()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, _) = CreateSendingService(store);
+        await svc.UpsertCampaignConfigAsync(new AcqCampaignConfigRequest(
+            Name: "RU-TECH-001",
+            Category: "technology",
+            Language: "ru",
+            DailyLimit: 50,
+            SendingEnabled: true,
+            CampaignId: "RU-TECH-001",
+            SendingMode: "manual",
+            DryRun: true,
+            AutoSend: false), CancellationToken.None);
+        var p = Prospect("man-1", "manual@channel.test", "UCman1") with
+        {
+            Campaign = "RU-TECH-001",
+            PrimaryNiche = "technology",
+            Language = "ru"
+        };
+        await store.UpsertProspectAsync(p, CancellationToken.None);
+        var preview = await svc.PreviewSendAsync(
+            new AcqSendPreviewRequest("RU-TECH-001", [p.ProspectId]),
+            CancellationToken.None);
+        Assert.Equal(0, preview.WillSend);
+        Assert.Contains(preview.Items, i =>
+            i.Reason == "not_approved"
+            || OutreachPolicy.NormalizeSkipReason(i.Reason) == "MANUAL_APPROVAL_REQUIRED");
+        var state = await svc.LoadStateAsync("RU-TECH-001", CancellationToken.None);
+        Assert.False(state.StandingCampaignApproval);
+        Assert.Equal("MANUAL_APPROVAL_REQUIRED", CreatorAcquisitionService.WhyNotSentCode(p, DateTimeOffset.UtcNow, state));
+    }
+
+    [Fact]
+    public async Task DryRun_SendsZero_AndCountsWouldSend()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var p = ReadyToSend("dry-1", "dry@channel.test", "UCdry1");
+        await store.UpsertProspectAsync(p, CancellationToken.None);
+        await store.SaveApprovalAsync(Approval(p), CancellationToken.None);
+        var result = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, true);
+        Assert.True(result.DryRun);
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(0, result.SesAttempted);
+        Assert.True(result.WouldSend >= 1);
+        Assert.Equal(0, ses.SendRawCalls);
+    }
+
+    [Fact]
+    public void WhyNotSent_InvalidEmail_IsPreSes()
+    {
+        var p = Prospect("inv", "not-an-email", "UCinv") with { PublicBusinessEmail = "not-an-email" };
+        var state = new AcqCampaignState(true, false, 100, null, 0, "addr", "from@x.com", "YouTubeBooster AI", "from@x.com", null, 100, false, 14, 10, true, null, true);
+        Assert.Equal("INVALID_EMAIL", CreatorAcquisitionService.WhyNotSentCode(p, DateTimeOffset.UtcNow, state));
+    }
+
+    [Fact]
+    public void SkipAndSesCounters_DistinguishAppBlockFromSes()
+    {
+        var counts = OutreachPolicy.AggregateSkipReasons([
+            "p1:invalid_or_spamtrap",
+            "p2:already_contacted",
+            "p3:ses:MessageRejected"
+        ]);
+        Assert.Equal(1, counts["INVALID_EMAIL"]);
+        Assert.Equal(1, counts["ALREADY_CONTACTED"]);
+        Assert.Equal(1, counts["SES_REJECTED"]);
+        Assert.DoesNotContain("SES_ERROR", counts.Keys.Where(k => counts[k] > 0 && k == "SES_BLOCKED"));
     }
 
     private static AcqProspectRecord Prospect(string id, string email, string channelId) =>

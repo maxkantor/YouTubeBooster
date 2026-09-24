@@ -16,57 +16,48 @@ test('pipelineMetric returns 0 when CRM ok and value missing', () => {
   assert.equal(pipelineMetric(null, null), 'Unavailable');
 });
 
-test('formatCrmAcquisitionText surfaces Needs Approval as ACTION REQUIRED', () => {
+test('formatCrmAcquisitionText does not ask to approve when automatic sending is healthy', () => {
   const lines = formatCrmAcquisitionText({
     crmSummaryOk: true,
-    needsApproval: 16,
-    crmActionRequired: true,
-    crmActionMessage: '16 outreach drafts waiting for approval.',
-    approvalsUrl: 'https://youtubeboosterai.com/admin/acquisition/approvals',
+    automaticSending: true,
+    sendingMode: 'automatic',
+    dailyLimit: 100,
+    sentToday: 18,
+    sesAcceptedThisRun: 18,
+    dailyRemaining: 82,
+    sesRemaining: 48800,
+    prospectsEvaluated: 350,
+    contactVerified: 119,
+    needsApproval: 1,
+    crmActionRequired: false,
+    crmActionMessage: 'Automation is operating normally.',
     crmBoard: {
-      totalProspects: 101,
-      draftsGenerated: 95,
-      needsApproval: 16,
-      readyToSend: 0,
-      recentlySent: 9,
-      recentlySentWindowDays: 7,
-      usableEmails: 80,
-      needsEmail: 21,
+      totalProspects: 350,
+      usableEmails: 119,
+      needsEmail: 179,
+      needsApproval: 1,
+      readyToSend: 17,
       notReviewable: {
-        invalidEmail: 21,
-        noUsableEmail: 10,
-        qualificationFailed: 40,
-        cooldown: 0,
-        suppressed: 0,
-        alreadyContacted: 8,
-        rejected: 0,
-        other: 0
-      },
-      notReviewableTotal: 79
+        invalidEmail: 8,
+        noUsableEmail: 179,
+        qualificationFailed: 31,
+        alreadyContacted: 20,
+        suppressed: 2
+      }
     },
-    pipeline: {
-      drafted: 95,
-      eligibleNow: 0,
-      approvedEligibleNow: 0,
-      blockedByEmailValidation: 0,
-      dailyRemaining: 10,
-      dailyLimit: 10
-    },
-    outreachFunnel: { drafted: 95, approved: 0, sent: 9, delivered: 0, clicked: 0, converted: 0 },
-    cohort: { auditCompletions: 0, signups: 0, verifiedCustomers: 0, verifiedRevenue: 0 }
+    pipeline: { eligibleNow: 17, dailyLimit: 100, dailyRemaining: 82 },
+    outreachFunnel: { drafted: 84, approved: 17, sent: 18, delivered: 0, clicked: 3, converted: 0 },
+    skipReasonCounts: { ALREADY_CONTACTED: 20, INVALID_EMAIL: 8, NO_PUBLIC_EMAIL_FOUND: 179, NOT_QUALIFIED: 31, SUPPRESSED: 2 },
+    cohort: { auditStarts: 2, signups: 1, verifiedCustomers: 0 }
   });
   const text = lines.join('\n');
-  assert.match(text, /MAX — ACTION REQUIRED/);
-  assert.match(text, /16 outreach drafts waiting/);
-  assert.match(text, /Needs approval: 16/);
-  assert.match(text, /Ready to send: 0/);
-  assert.match(text, /Recently sent \(last 7d\): 9/);
-  assert.match(text, /Drafts generated \(obs\+subject\): 95/);
-  assert.match(text, /ELIGIBLE NOW: 0/);
-  assert.match(text, /APPROVED ELIGIBLE NOW: 0/);
-  assert.match(text, /BLOCKED BY EMAIL VALIDATION \(approved only\): 0/);
-  assert.match(text, /invalid email: 21/);
-  assert.doesNotMatch(text, /ELIGIBLE NOW: Unknown/);
+  assert.match(text, /YOUTUBEBOOSTER OUTREACH/);
+  assert.match(text, /Daily limit: 100/);
+  assert.match(text, /Sent today: 18/);
+  assert.match(text, /Remaining campaign capacity: 82/);
+  assert.match(text, /Automation is operating normally/);
+  assert.doesNotMatch(text, /waiting for approval/);
+  assert.match(text, /Delivered: NOT TRACKED/);
 });
 
 test('composeGrowthReport merges CRM board into subject and body', () => {
@@ -96,6 +87,8 @@ test('composeGrowthReport merges CRM board into subject and body', () => {
       prospectsEvaluated: 101,
       crmSummaryOk: true,
       needsApproval: 16,
+      sendingMode: 'manual',
+      automaticSending: false,
       crmActionRequired: true,
       crmActionMessage: '16 outreach drafts waiting for approval.',
       approvalsUrl: 'https://youtubeboosterai.com/admin/acquisition/approvals',

@@ -1521,6 +1521,7 @@ export function AcquisitionCreatorsPage() {
                   <th>Lang / market</th>
                   <th>Email</th>
                   <th>Status</th>
+                  <th>Why not sent?</th>
                   <th>Campaign</th>
                   <th>Last contact</th>
                   <th className="acq-col-action">Action</th>
@@ -1606,6 +1607,24 @@ export function AcquisitionCreatorsPage() {
                         <div className="ops-muted" style={{ fontSize: 12, marginTop: 2 }}>
                           {(p.outreachStatus || '—').toLowerCase()}
                         </div>
+                      </td>
+                      <td>
+                        {row.lastContactedAt ? (
+                          <span className="ops-muted">Sent</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ops-btn ops-btn-ghost ops-btn-sm"
+                            title={row.whyNotSentHuman || row.whyNotSent || 'Server reason'}
+                            onClick={() =>
+                              window.alert(
+                                `Why not sent?\n\n${row.whyNotSent || 'UNKNOWN'}\n${row.whyNotSentHuman || ''}`
+                              )
+                            }
+                          >
+                            {row.whyNotSent || 'UNKNOWN'}
+                          </button>
+                        )}
                       </td>
                       <td className="ops-muted">{p.campaign || '—'}</td>
                       <td className="admin-crm-nowrap">{formatDt(row.lastContactedAt)}</td>

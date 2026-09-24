@@ -226,94 +226,74 @@ export function formatCrmAcquisitionText(dist) {
   const board = d.crmBoard || {};
   const pipe = d.pipeline || {};
   const funnel = d.outreachFunnel || emptyDistribution().outreachFunnel;
+  const skips = d.skipReasonCounts || {};
   const nr = board.notReviewable || pipe.notReviewable || {};
   const needsApproval = Number(board.needsApproval ?? d.needsApproval ?? 0) || 0;
   const readyToSend = Number(board.readyToSend ?? pipe.readyToSend ?? funnel.approved ?? 0) || 0;
-  const recentlySent = Number(board.recentlySent ?? pipe.recentlySent ?? 0) || 0;
-  const windowDays = board.recentlySentWindowDays ?? 7;
-  const draftsGenerated = Number(board.draftsGenerated ?? pipe.drafted ?? funnel.drafted ?? 0) || 0;
-  const totalProspects = Number(board.totalProspects ?? d.prospectsEvaluated ?? 0) || 0;
-  const crmOk = d.crmSummaryOk;
+  const sentToday = Number(d.sentToday ?? d.sesAcceptedThisRun ?? 0) || 0;
+  const dailyLimit = Number(pipe.dailyLimit ?? d.dailyLimit ?? d.deliverability?.dailyLimit ?? 100) || 100;
+  const remaining = Number(pipe.dailyRemaining ?? d.dailyRemaining ?? Math.max(0, dailyLimit - sentToday));
+  const sesRemaining = d.sesRemaining ?? d.sesQuota?.remaining ?? null;
+  const automatic = d.automaticSending === true || d.sendingMode === 'automatic';
+  const pause = d.automaticPauseReason || '';
+  const delivered = d.deliveryTelemetryAvailable
+    ? String(funnel.delivered ?? 0)
+    : 'NOT TRACKED';
   const lines = [];
 
-  lines.push('YOUTUBEBOOSTER — CUSTOMER ACQUISITION');
-  lines.push('====================================');
-  lines.push('TODAY');
-  lines.push('-----');
-  lines.push(`Prospects discovered: ${totalProspects || d.prospectsEvaluated || 0}`);
-  lines.push(`Contacts found (verified): ${board.usableEmails ?? '—'}`);
+  lines.push('YOUTUBEBOOSTER OUTREACH');
+  lines.push('=======================');
+  lines.push(`Campaign: ${d.campaign || 'COOK-001'}`);
+  lines.push(`Automatic: ${automatic ? 'ON' : 'OFF'}`);
+  lines.push(`Daily limit: ${dailyLimit}`);
+  lines.push(`Sent today: ${sentToday}`);
+  lines.push(`SES accepted: ${d.sesAcceptedThisRun ?? sentToday}`);
+  lines.push(`Remaining campaign capacity: ${remaining}`);
+  lines.push(`SES remaining capacity: ${sesRemaining ?? 'Unavailable'}`);
+  lines.push('');
+  lines.push('DISCOVERY');
+  lines.push('---------');
+  lines.push(`Creators evaluated: ${d.prospectsEvaluated ?? board.totalProspects ?? 0}`);
+  lines.push(`Public emails found: ${board.usableEmails ?? d.contactVerified ?? 0}`);
+  lines.push(`Valid emails: ${board.usableEmails ?? d.contactVerified ?? 0}`);
+  lines.push(`Qualified: ${pipe.eligibleNow ?? d.sendEligible ?? readyToSend}`);
   lines.push(`Needs approval: ${needsApproval}`);
   lines.push(`Ready to send: ${readyToSend}`);
-  lines.push(`Sent today: ${d.sentToday ?? d.sesAcceptedThisRun ?? 0}`);
-  lines.push(`Delivered: ${funnel.delivered ?? 0}`);
+  lines.push('');
+  lines.push('SKIPPED');
+  lines.push('-------');
+  lines.push(`Already contacted: ${skips.ALREADY_CONTACTED ?? nr.alreadyContacted ?? 0}`);
+  lines.push(`Duplicate: ${(skips.DUPLICATE_EMAIL ?? 0) + (skips.DUPLICATE_CHANNEL ?? 0)}`);
+  lines.push(`Invalid email: ${skips.INVALID_EMAIL ?? nr.invalidEmail ?? 0}`);
+  lines.push(`No public email: ${skips.NO_PUBLIC_EMAIL_FOUND ?? nr.noUsableEmail ?? 0}`);
+  lines.push(`Not qualified: ${skips.NOT_QUALIFIED ?? nr.qualificationFailed ?? 0}`);
+  lines.push(`Suppressed: ${skips.SUPPRESSED ?? nr.suppressed ?? 0}`);
+  lines.push('');
+  lines.push('RESULTS');
+  lines.push('-------');
+  lines.push(`Delivered: ${delivered}`);
   lines.push(`Clicks: ${funnel.clicked ?? 0}`);
-  lines.push(`Audits completed: ${d.cohort?.auditCompletions ?? 0}`);
+  lines.push(`Replies: ${d.replies ?? 0}`);
+  lines.push(`Audits started: ${d.cohort?.auditStarts ?? 0}`);
   lines.push(`Signups: ${d.cohort?.signups ?? 0}`);
   lines.push(`Customers: ${d.cohort?.verifiedCustomers ?? funnel.converted ?? 0}`);
   lines.push(`Revenue: ${d.verifiedRevenue ?? '$0.00'}`);
   lines.push('');
-
-  if (needsApproval > 0 || d.crmActionRequired) {
-    lines.push('MAX — ACTION REQUIRED');
-    lines.push('---------------------');
+  lines.push('NEXT ACTION');
+  lines.push('-----------');
+  if (pause) {
+    lines.push(`AUTOMATIC SENDING PAUSED — ${pause}`);
+  } else if (automatic) {
+    lines.push(d.crmActionMessage || 'Automation is operating normally.');
+  } else if (needsApproval > 0 || d.crmActionRequired) {
     lines.push(
       d.crmActionMessage ||
         `${needsApproval} outreach draft${needsApproval === 1 ? '' : 's'} waiting for approval.`
     );
     lines.push(`OPEN APPROVALS: ${d.approvalsUrl || board.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals'}`);
   } else {
-    lines.push('OWNER ACTION');
-    lines.push('------------');
     lines.push(d.crmActionMessage || 'No action required.');
   }
-  lines.push('');
-
-  lines.push('OUTREACH PIPELINE (Admin CRM)');
-  lines.push('-----------------------------');
-  lines.push(`Total creators: ${totalProspects}`);
-  lines.push(`Usable emails: ${board.usableEmails ?? '—'}`);
-  lines.push(`Needs email: ${board.needsEmail ?? '—'}`);
-  lines.push(`Drafts generated (obs+subject): ${draftsGenerated}`);
-  lines.push(`Needs approval: ${needsApproval}`);
-  lines.push(`Ready to send: ${readyToSend}`);
-  lines.push(`Recently sent (last ${windowDays}d): ${recentlySent}`);
-  lines.push(`Sent lifetime: ${board.sentLifetime ?? funnel.sent ?? 0}`);
-  lines.push(`Cooldown / suppressed / invalid (not reviewable):`);
-  lines.push(`  invalid email: ${nr.invalidEmail ?? 0}`);
-  lines.push(`  no usable email: ${nr.noUsableEmail ?? 0}`);
-  lines.push(`  qualification failed: ${nr.qualificationFailed ?? 0}`);
-  lines.push(`  cooldown: ${nr.cooldown ?? 0}`);
-  lines.push(`  suppressed: ${nr.suppressed ?? 0}`);
-  lines.push(`  already contacted: ${nr.alreadyContacted ?? 0}`);
-  lines.push(`  rejected: ${nr.rejected ?? 0}`);
-  lines.push(`  other: ${nr.other ?? 0}`);
-  const nrTotal = Number(board.notReviewableTotal ?? pipe.notReviewableTotal);
-  if (Number.isFinite(nrTotal)) {
-    lines.push(
-      `Reconciliation: drafts ${draftsGenerated} = needsApproval ${needsApproval} + notReviewable ${nrTotal} (+ ready ${readyToSend} if approved drafts counted separately).`
-    );
-  }
-  lines.push('');
-
-  lines.push('SEND GATES (same rules as weekday sender + Approvals)');
-  lines.push('----------------------------------------------------');
-  lines.push(`ELIGIBLE NOW: ${pipelineMetric(pipe.eligibleNow, crmOk)}`);
-  lines.push(`APPROVED ELIGIBLE NOW: ${pipelineMetric(pipe.approvedEligibleNow, crmOk)}`);
-  lines.push(
-    `BLOCKED BY EMAIL VALIDATION (approved only): ${pipelineMetric(pipe.blockedByEmailValidation, crmOk)}`
-  );
-  lines.push(`BLOCKED BY COOLDOWN (approved only): ${pipelineMetric(pipe.blockedByCooldown, crmOk)}`);
-  lines.push(
-    `BLOCKED BY QUALIFICATION (approved only): ${pipelineMetric(pipe.blockedByQualification, crmOk)}`
-  );
-  lines.push(
-    `BLOCKED BY SUPPRESSION (approved only): ${pipelineMetric(pipe.blockedBySuppression, crmOk)}`
-  );
-  lines.push(`DAILY REMAINING: ${pipelineMetric(pipe.dailyRemaining ?? d.dailyRemaining, crmOk)} / limit ${pipe.dailyLimit ?? d.dailyLimit ?? d.deliverability?.dailyLimit ?? 10}`);
-  lines.push(`EXPECTED TO ATTEMPT: ${pipelineMetric(pipe.expectedToAttempt, crmOk)}`);
-  lines.push(
-    'Note: SKIPPED REASONS / INVALID_EMAIL tallies below are all COOK-001 candidates. Approved-only email blocks are separate (0 when Ready to Send is empty).'
-  );
   lines.push('');
   return lines;
 }
@@ -336,7 +316,7 @@ export function emptyCohort() {
     verifiedCustomers: 0,
     verifiedRevenue: 0,
     sameCohortTracking: null,
-    dailyLimit: 10,
+    dailyLimit: 100,
     nextRamp: 20,
     rampBlockReason: 'sample_too_small',
     variants: { A: { sent: 0, clicks: 0 }, B: { sent: 0, clicks: 0 } }
@@ -348,8 +328,8 @@ export function emptyDeliverability() {
     bounceRate: 'N/A',
     complaintRate: 'N/A',
     unsubscribeRate: 'N/A',
-    dailyLimit: 10,
-    nextRampDecision: 'Hold at 10/day until 3 healthy sending days and ≥30 sends.'
+    dailyLimit: 100,
+    nextRampDecision: 'Hold at saved campaign daily limit until delivery health is acceptable.'
   };
 }
 
@@ -429,12 +409,25 @@ export function normalizeDistribution(input, ctx = {}) {
   d.pipeline = input?.pipeline ?? d.pipeline ?? null;
   d.crmBoard = input?.crmBoard ?? d.crmBoard ?? null;
   d.needsApproval = Number(input?.needsApproval ?? d.crmBoard?.needsApproval ?? d.needsApproval ?? 0) || 0;
-  d.crmActionRequired = input?.crmActionRequired === true || d.needsApproval > 0;
+  d.automaticSending = input?.automaticSending === true || d.automaticSending === true;
+  d.sendingMode = input?.sendingMode || d.sendingMode || null;
+  d.automaticPauseReason = input?.automaticPauseReason || d.automaticPauseReason || null;
+  d.sesRemaining = input?.sesRemaining ?? d.sesRemaining ?? null;
+  d.deliveryTelemetryAvailable = input?.deliveryTelemetryAvailable ?? d.deliveryTelemetryAvailable ?? false;
+  const autoOn = d.automaticSending === true || d.sendingMode === 'automatic';
+  d.crmActionRequired =
+    input?.crmActionRequired === true ||
+    (!!d.automaticPauseReason && !autoOn) ||
+    (!autoOn && d.needsApproval > 0);
   d.crmActionMessage =
     input?.crmActionMessage ||
-    (d.needsApproval > 0
-      ? `${d.needsApproval} outreach draft${d.needsApproval === 1 ? '' : 's'} waiting for approval.`
-      : 'No action required.');
+    (d.automaticPauseReason
+      ? `AUTOMATIC SENDING PAUSED — ${d.automaticPauseReason}`
+      : autoOn
+        ? 'Automation is operating normally.'
+        : d.needsApproval > 0
+          ? `${d.needsApproval} outreach draft${d.needsApproval === 1 ? '' : 's'} waiting for approval.`
+          : 'No action required.');
   d.approvalsUrl =
     input?.approvalsUrl ||
     d.crmBoard?.approvalsUrl ||
@@ -442,7 +435,7 @@ export function normalizeDistribution(input, ctx = {}) {
   d.crmSummaryOk = input?.crmSummaryOk ?? d.crmSummaryOk ?? null;
   d.sentToday = Number(input?.sentToday ?? d.sentToday ?? 0) || 0;
   d.sentLast7Days = Number(input?.sentLast7Days ?? d.crmBoard?.recentlySent ?? d.sentLast7Days ?? 0) || 0;
-  d.dailyLimit = Number(input?.dailyLimit ?? d.pipeline?.dailyLimit ?? d.dailyLimit ?? 10) || 10;
+  d.dailyLimit = Number(input?.dailyLimit ?? d.pipeline?.dailyLimit ?? d.dailyLimit ?? 100) || 100;
   d.dailyRemaining = Number(input?.dailyRemaining ?? d.pipeline?.dailyRemaining ?? d.dailyRemaining ?? 0) || 0;
   d.prospectsEvaluated = Number(input?.prospectsEvaluated ?? d.prospectsEvaluated ?? 0) || 0;
   d.sesAttemptedThisRun = Number(input?.sesAttemptedThisRun ?? input?.sendAttempts ?? d.sesAttemptedThisRun ?? 0) || 0;

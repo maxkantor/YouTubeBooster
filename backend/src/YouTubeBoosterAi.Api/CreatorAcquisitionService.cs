@@ -84,6 +84,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             true);
         var ramp = await _store.GetRampAsync(campaign, cancellationToken);
         var stage = OutreachPolicy.Stages.Contains(ramp.Stage) ? ramp.Stage : OutreachPolicy.Stages[0];
+        if (string.Equals(campaign, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase))
+            await EnsureCook001PersistedAsync(cancellationToken);
         var saved = await FindCampaignConfigAsync(campaign, cancellationToken);
         int daily;
         var standing = false;
@@ -1906,16 +1908,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
 
     public async Task<IReadOnlyList<AcqCampaignConfig>> ListCampaignConfigsAsync(CancellationToken cancellationToken)
     {
-        var json = await _store.GetCohortRunAsync("SYSTEM", "campaign-registry", cancellationToken);
-        if (string.IsNullOrWhiteSpace(json)) return [];
-        try
-        {
-            return System.Text.Json.JsonSerializer.Deserialize<List<AcqCampaignConfig>>(json, AcqJson.Options) ?? [];
-        }
-        catch
-        {
-            return [];
-        }
+        await EnsureCook001PersistedAsync(cancellationToken);
+        return await ReadCampaignRegistryAsync(cancellationToken);
     }
 
     public async Task<AcqCampaignConfig> UpsertCampaignConfigAsync(AcqCampaignConfigRequest request, CancellationToken cancellationToken)

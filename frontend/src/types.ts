@@ -591,6 +591,9 @@ export type AcqAdminProspect = {
   textPreview?: string | null;
   ctaDestination?: string | null;
   findingSource?: string | null;
+  whyNotSent?: string | null;
+  whyNotSentHuman?: string | null;
+  sendLane?: string | null;
 };
 
 export type AcqEmailDiscoveryItemResult = {
@@ -734,6 +737,19 @@ export type AcqSummary = {
   fromEmailConfigured: boolean;
   postalAddressConfigured: boolean;
   campaign?: string;
+  sendingMode?: string;
+  dryRun?: boolean;
+  autoSend?: boolean;
+  autoDiscover?: boolean;
+  autoFindEmails?: boolean;
+  autoPrepareDrafts?: boolean;
+  autoFollowUps?: boolean;
+  automaticSending?: boolean;
+  automaticPauseReason?: string | null;
+  sesMax24HourSend?: number | null;
+  sesSentLast24Hours?: number | null;
+  sesRemaining?: number | null;
+  sesQuotaAvailable?: boolean;
   dailyLimit?: number;
   cooldownDays?: number;
   rampStage?: number;

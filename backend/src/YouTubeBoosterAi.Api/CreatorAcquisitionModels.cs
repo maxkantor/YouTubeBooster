@@ -208,7 +208,10 @@ public sealed record AcqAdminProspectDto(
     string? HtmlPreview = null,
     string? TextPreview = null,
     string? CtaDestination = null,
-    string? FindingSource = null
+    string? FindingSource = null,
+    string? WhyNotSent = null,
+    string? WhyNotSentHuman = null,
+    string? SendLane = null
 );
 
 public sealed record AcqUpsertProspectRequest(
