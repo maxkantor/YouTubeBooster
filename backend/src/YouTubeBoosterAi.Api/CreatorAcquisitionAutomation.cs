@@ -25,6 +25,7 @@ public sealed partial class CreatorAcquisitionService
             var flagsOk = await _store.GetCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, cancellationToken);
             if (!flagsOk.SendingEnabled)
                 await _store.SaveCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, true, flagsOk.ComplaintPause, cancellationToken);
+            await ResetStaleDiscoveryBackoffOnceAsync(cancellationToken);
             return prior!;
         }
 
@@ -54,7 +55,35 @@ public sealed partial class CreatorAcquisitionService
         await _store.SaveCohortRunAsync("SYSTEM", "campaign-registry",
             System.Text.Json.JsonSerializer.Serialize(existing, AcqJson.Options), cancellationToken);
         await _store.SaveCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, true, flags.ComplaintPause, cancellationToken);
+        await ResetStaleDiscoveryBackoffOnceAsync(cancellationToken);
         return row;
+    }
+
+    /// <summary>
+    /// One-time: let the improved crawler retry COOK-001 rows previously stored as
+    /// not_found/contact_needed. Does not clear emails, suppression, or send history.
+    /// </summary>
+    private async Task ResetStaleDiscoveryBackoffOnceAsync(CancellationToken cancellationToken)
+    {
+        var flag = await _store.GetCohortRunAsync("SYSTEM", "cook-001-rediscover-v1", cancellationToken);
+        if (string.Equals(flag, "done", StringComparison.OrdinalIgnoreCase)) return;
+        var all = await _store.ListProspectsAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var p in all)
+        {
+            if (!string.Equals(p.Campaign, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)) continue;
+            if (p.LastContactedAt is not null) continue;
+            if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)) continue;
+            if (p.ContactResearchNextAt is null || p.ContactResearchNextAt <= now) continue;
+            await _store.UpsertProspectAsync(p with
+            {
+                ContactResearchNextAt = now,
+                UpdatedAt = now
+            }, cancellationToken);
+        }
+        await _store.SaveCohortRunAsync("SYSTEM", "cook-001-rediscover-v1", "done", cancellationToken);
     }
 
     private async Task<IReadOnlyList<AcqCampaignConfig>> ReadCampaignRegistryAsync(CancellationToken cancellationToken)
