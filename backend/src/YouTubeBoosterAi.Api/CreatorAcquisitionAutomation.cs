@@ -464,12 +464,12 @@ public sealed partial class CreatorAcquisitionService
         if (remaining <= 0) return (0, 0, 0);
 
         var all = await _store.ListProspectsAsync(cancellationToken);
+        var state = await LoadStateAsync(cfg.CampaignId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
         var ready = all.Count(p =>
             string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase)
             && MatchesCampaignAudience(p, cfg)
-            && (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
-                || (string.Equals(cfg.SendingMode, "automatic", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase))));
+            && SendLaneFor(p, now, state, all) == "ready_to_send");
 
         if (cfg.AutoPrepareDrafts && ready < remaining)
         {
