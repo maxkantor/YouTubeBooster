@@ -321,6 +321,21 @@ public class AcqAutomationUpgradeTests
     }
 
     [Fact]
+    public async Task AutomaticCook001_DoesNotPromoteOffAudienceDrafts()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, _) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var fitness = Prospect("fit-1", "fit@channel.test", "UCfit") with { PrimaryNiche = "fitness" };
+        await store.UpsertProspectAsync(fitness, CancellationToken.None);
+        var promoted = await svc.PromoteAutomaticReadyDraftsAsync(
+            CreatorAcquisitionCampaigns.Cook001, null, CancellationToken.None);
+        Assert.Equal(0, promoted);
+        var after = await store.GetProspectAsync(fitness.ProspectId, CancellationToken.None);
+        Assert.Equal("draft_ready", after!.OutreachStatus);
+    }
+
+    [Fact]
     public async Task AutomaticCook001_MixedEligibility_OnlyValidQualifiedReachesSes()
     {
         var store = new InMemoryCreatorAcquisitionStore();

@@ -255,8 +255,10 @@ public static class CreatorAcquisitionEndpoints
             // approval_queue is a UI alias for draft_ready (MapView never emits approval_queue)
             views["approval_queue"] = views.GetValueOrDefault("draft_ready");
 
+            var cfg = await acq.ResolveCampaignConfigAsync(campaign, cancellationToken);
             var cookRows = rows
                 .Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
+                .Where(r => CreatorAcquisitionService.MatchesCampaignAudience(r, cfg))
                 .ToList();
             // COOK-001-scoped approved (matches Admin Approvals Ready to Send).
             var approved = cookRows.Count(r => string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase));
@@ -461,7 +463,6 @@ public static class CreatorAcquisitionEndpoints
 
             var contactVerifiedCook = cookRows.Count(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
             var needsEmailCook = cookRows.Count(r => !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r));
-            var cfg = await acq.ResolveCampaignConfigAsync(campaign, cancellationToken);
             var sesQuota = await acq.GetProviderQuotaAsync(cancellationToken);
             var readyLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state, rows) == "ready_to_send");
             var needsLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state, rows) == "needs_approval");

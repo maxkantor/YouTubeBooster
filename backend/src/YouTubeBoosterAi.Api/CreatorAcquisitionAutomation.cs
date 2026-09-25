@@ -679,8 +679,6 @@ public sealed partial class CreatorAcquisitionService
         if (why == "READY_TO_SEND") return "ready_to_send";
         if (p.Strategic)
             return "needs_approval";
-        if (string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase))
-            return "needs_approval";
         if (why is "MANUAL_APPROVAL_REQUIRED")
             return state.StandingCampaignApproval ? "ready_to_send" : "needs_approval";
         if (state.StandingCampaignApproval)
@@ -705,6 +703,7 @@ public sealed partial class CreatorAcquisitionService
         if (!state.StandingCampaignApproval || !state.MarketingSendingEnabled) return p;
         if (!string.Equals(cfg.SendingMode, "automatic", StringComparison.OrdinalIgnoreCase) || !cfg.AutoSend)
             return p;
+        if (!MatchesCampaignAudience(p, cfg)) return p;
         if (AcqSendGuard.IsStoppedOutreachStatus(p.OutreachStatus, p.SuppressionStatus)) return p;
         var history = AcqSendGuard.HistoryBlockReason(all, p, followUpDue: false);
         if (history is not null) return p;
@@ -780,7 +779,9 @@ public sealed partial class CreatorAcquisitionService
         var all = await _store.ListProspectsAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var today = CreatorAcquisitionScoring.EasternDate(now).Date;
-        var scoped = all.Where(p => string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase)).ToList();
+        var scoped = all.Where(p =>
+            string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase)
+            && MatchesCampaignAudience(p, cfg)).ToList();
         var sentToday = scoped.Count(p => p.LastContactedAt is not null && CreatorAcquisitionScoring.EasternDate(p.LastContactedAt.Value).Date == today);
         var remaining = Math.Max(0, state.DailyLimit - sentToday);
         var ready = scoped.Count(p => SendLaneFor(p, now, state, all) == "ready_to_send");
