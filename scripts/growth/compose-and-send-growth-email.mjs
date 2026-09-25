@@ -170,6 +170,8 @@ if (invokedAsCli) {
       // Authoritative CRM pipeline — never leave ELIGIBLE NOW as Unknown when /summary works.
       pipeline: crmSummary.pipeline || base.pipeline || null,
       crmBoard: crmSummary.crmBoard || base.crmBoard || null,
+      inventory: crmSummary.inventory || base.inventory || null,
+      lastRun: crmSummary.lastRun || base.lastRun || null,
       needsApproval,
       sentToday: crmSummary.sentToday ?? base.sentToday,
       sentLast7Days: crmSummary.sentLast7Days ?? base.sentLast7Days,

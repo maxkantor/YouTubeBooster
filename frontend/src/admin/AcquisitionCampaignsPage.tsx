@@ -181,6 +181,35 @@ export function AcquisitionCampaignsPage() {
               </strong>
             </div>
             <div>
+              <span>Effective remaining</span>
+              <strong>
+                {Math.min(
+                  summary.dailyRemaining ?? Math.max(0, dailyLimit - sentToday),
+                  summary.sesQuotaAvailable ? (summary.sesRemaining ?? 0) : dailyLimit
+                )}
+              </strong>
+            </div>
+            <div>
+              <span>Send qualified automatically</span>
+              <strong>{summary.autoSend ? 'ON' : 'OFF'}</strong>
+            </div>
+            <div>
+              <span>Auto discover creators</span>
+              <strong>{summary.autoDiscover ? 'ON' : 'OFF'}</strong>
+            </div>
+            <div>
+              <span>Auto find emails</span>
+              <strong>{summary.autoFindEmails ? 'ON' : 'OFF'}</strong>
+            </div>
+            <div>
+              <span>Auto prepare drafts</span>
+              <strong>{summary.autoPrepareDrafts ? 'ON' : 'OFF'}</strong>
+            </div>
+            <div>
+              <span>Follow-ups</span>
+              <strong>{summary.autoFollowUps ? 'ON' : 'OFF'}</strong>
+            </div>
+            <div>
               <span>Dry run</span>
               <strong>{summary.dryRun ? 'ON' : 'OFF'}</strong>
             </div>

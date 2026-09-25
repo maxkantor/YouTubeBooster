@@ -191,44 +191,46 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             && !string.IsNullOrWhiteSpace(contactSourceUrl)
             && contactType is "business" or "partnership" or "media" or "general";
 
-        // Automated public contact research (never invents emails). Respect backoff.
-        if (!alreadyVerified && !placeholder && !request.SkipContactResearch)
+        // Parse already-fetched YouTube/demo text even when HTTP website crawl is skipped.
+        if (!alreadyVerified && !placeholder)
         {
-            var due = contactNextAt is null || contactNextAt <= now;
-            if (due && contactAttempts < 5)
+            var descTexts = videos
+                .SelectMany(v => new[] { v.title, v.description })
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Take(20)
+                .ToList();
+            descTexts.AddRange(demo.Findings.Take(5));
+            if (!string.IsNullOrWhiteSpace(demo.ChannelTitle))
+                descTexts.Add(demo.ChannelTitle);
+            if (!string.IsNullOrWhiteSpace(request.Notes))
+                descTexts.Add(request.Notes);
+
+            officialWebsite ??= CreatorAcquisitionContact.ExtractCandidateSiteUrls(
+                string.Join('\n', descTexts), officialWebsite).FirstOrDefault();
+
+            var fromDescriptions = ExtractEmailsFromPlainText(string.Join('\n', descTexts));
+            if (fromDescriptions.Count > 0 && string.IsNullOrWhiteSpace(email))
             {
-                // Prefer URLs/emails visible in public video descriptions before fetching sites.
-                var descTexts = videos
-                    .SelectMany(v => new[] { v.title, v.description })
-                    .Where(t => !string.IsNullOrWhiteSpace(t))
-                    .Take(20)
-                    .ToList();
-                descTexts.AddRange(demo.Findings.Take(5));
-                if (!string.IsNullOrWhiteSpace(demo.ChannelTitle))
-                    descTexts.Add(demo.ChannelTitle);
+                email = PreferBusinessEmailLocal(fromDescriptions);
+                contactSourceUrl ??= url;
+                contactType = "business";
+                contactStatus = "verified_public";
+                contactAttempts += 1;
+                contactLastAt = now;
+                contactNextAt = null;
+                alreadyVerified = true;
+            }
 
-                var fromDescriptions = ExtractEmailsFromPlainText(string.Join('\n', descTexts));
-                if (fromDescriptions.Count > 0 && string.IsNullOrWhiteSpace(email))
-                {
-                    email = PreferBusinessEmailLocal(fromDescriptions);
-                    contactSourceUrl ??= url;
-                    contactType = "business";
-                    contactStatus = "verified_public";
-                    contactAttempts += 1;
-                    contactLastAt = now;
-                    contactNextAt = null;
-                    alreadyVerified = true;
-                }
-
-                if (!alreadyVerified)
-                {
-                    using var http = _httpClientFactory.CreateClient();
-                    http.Timeout = TimeSpan.FromSeconds(12);
-                    var research = await CreatorAcquisitionContact.ResearchPublicContactAsync(
-                        http,
-                        officialWebsite,
-                        descTexts,
-                        cancellationToken);
+            var due = contactNextAt is null || contactNextAt <= now;
+            if (!alreadyVerified && !request.SkipContactResearch && due && contactAttempts < 5)
+            {
+                using var http = _httpClientFactory.CreateClient();
+                http.Timeout = TimeSpan.FromSeconds(12);
+                var research = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+                    http,
+                    officialWebsite,
+                    descTexts,
+                    cancellationToken);
 
                     contactAttempts += 1;
                     contactLastAt = now;
@@ -252,7 +254,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                         contactSourceUrl = research.SourceUrl;
                         contactType = research.ContactType;
                         contactStatus = "review_email";
-                        contactNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(contactAttempts));
+                        contactNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDaysForOutcome(research.Status, contactAttempts));
                     }
                     else
                     {
@@ -266,12 +268,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                             contactSourceUrl = research.SourceUrl;
                             contactType = string.IsNullOrWhiteSpace(research.ContactType) ? "source_recorded_unverified" : research.ContactType;
                         }
-                        contactStatus = research.Status is "not_found" ? "not_found" : contactStatus;
-                        contactNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(contactAttempts));
+                        contactStatus = research.Status;
+                        contactNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDaysForOutcome(research.Status, contactAttempts));
                     }
-                }
             }
-            else if (!due)
+            else if (!request.SkipContactResearch && !due)
             {
                 contactStatus ??= "contact_needed_backoff";
             }
@@ -993,15 +994,16 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         all = await _store.ListProspectsAsync(cancellationToken);
         var replenish = (Discovered: 0, EmailsFound: 0, DraftsPrepared: 0);
 
+        var nowSend = DateTimeOffset.UtcNow;
         var candidates = all
             .Where(p => string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
             .Where(p => MatchesCampaignAudience(p, cfg))
             .Where(p =>
-                string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(p.OutreachStatus, "sent", StringComparison.OrdinalIgnoreCase)
-                || (!string.IsNullOrWhiteSpace(p.Observation) && CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)))
-            .OrderByDescending(p => p.PriorityScore)
+                SendLaneFor(p, nowSend, state, all) == "ready_to_send"
+                || CreatorAcquisitionScoring.IsFollowUpDue(p, nowSend))
+            .OrderByDescending(p => SendLaneFor(p, nowSend, state, all) == "ready_to_send")
+            .ThenByDescending(p => CreatorAcquisitionScoring.IsFollowUpDue(p, nowSend))
+            .ThenByDescending(p => p.PriorityScore)
             .ToList();
 
         var sent = 0;
@@ -1170,45 +1172,61 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 if (!string.IsNullOrWhiteSpace(state.ConfigSet))
                     sendReq.ConfigurationSetName = state.ConfigSet;
                 var sesRes = await _ses.SendRawEmailAsync(sendReq, cancellationToken);
+                var sentAt = DateTimeOffset.UtcNow;
+                var followUpDueNow = CreatorAcquisitionScoring.IsFollowUpDue(p, sentAt);
+                string? ticketId = null;
+                try
+                {
+                    ticketId = await _appDataStore.SaveSupportTicketAsync(
+                        new SupportTicketRequest(
+                            Email: p.PublicBusinessEmail!,
+                            Name: p.ChannelName,
+                            Subject: p.Subject!,
+                            Message: p.Body ?? "",
+                            ProductArea: "creator_acquisition",
+                            ChannelUrl: p.ChannelUrl,
+                            OrderReference: p.ProspectId,
+                            AccountEmail: null,
+                            Source: "founder_outreach"),
+                        linkedUserId: null,
+                        cancellationToken);
+                    await _appDataStore.SaveSupportReplyAsync(ticketId, p.Subject!, p.Body ?? "", sesRes.MessageId, "queued", cancellationToken);
+                    await _appDataStore.MarkOutreachSentAsync(p.PublicBusinessEmail!, sentAt, cancellationToken);
+                }
+                catch
+                {
+                    // SES already accepted — persist the MessageId even if ticket write fails.
+                }
 
-                var ticketId = await _appDataStore.SaveSupportTicketAsync(
-                    new SupportTicketRequest(
-                        Email: p.PublicBusinessEmail!,
-                        Name: p.ChannelName,
-                        Subject: p.Subject!,
-                        Message: p.Body ?? "",
-                        ProductArea: "creator_acquisition",
-                        ChannelUrl: p.ChannelUrl,
-                        OrderReference: p.ProspectId,
-                        AccountEmail: null,
-                        Source: "founder_outreach"),
-                    linkedUserId: null,
-                    cancellationToken);
-                await _appDataStore.SaveSupportReplyAsync(ticketId, p.Subject!, p.Body ?? "", sesRes.MessageId, "queued", cancellationToken);
-                await _appDataStore.MarkOutreachSentAsync(p.PublicBusinessEmail!, DateTimeOffset.UtcNow, cancellationToken);
                 await _store.UpsertProspectAsync(prepared with
                 {
                     OutreachStatus = "sent",
-                    LastContactedAt = DateTimeOffset.UtcNow,
+                    LastContactedAt = sentAt,
                     TicketId = ticketId,
                     EmailVariant = variant,
                     CohortRunId = cohortRunId,
                     LastSesMessageId = sesRes.MessageId,
-                    FollowUpStep = CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow)
+                    FollowUpStep = followUpDueNow
                         ? Math.Min(2, p.FollowUpStep + 1)
                         : 0,
-                    NextFollowUpAt = CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow)
-                        ? (p.FollowUpStep + 1 >= 2 ? null : DateTimeOffset.UtcNow.AddDays(5))
-                        : DateTimeOffset.UtcNow.AddDays(4),
-                    UpdatedAt = DateTimeOffset.UtcNow
+                    NextFollowUpAt = followUpDueNow
+                        ? (p.FollowUpStep + 1 >= 2 ? null : sentAt.AddDays(5))
+                        : sentAt.AddDays(4),
+                    UpdatedAt = sentAt
                 }, cancellationToken);
-                await _appDataStore.TrackEventAsync("acq_email_sent", p.ProspectId, new Dictionary<string, string?>
+                try
                 {
-                    ["campaign"] = campaign,
-                    ["token"] = p.OpaqueToken,
-                    ["variant"] = variant,
-                    ["run"] = cohortRunId
-                }, cancellationToken);
+                    await _appDataStore.TrackEventAsync("acq_email_sent", p.ProspectId, new Dictionary<string, string?>
+                    {
+                        ["campaign"] = campaign,
+                        ["token"] = p.OpaqueToken,
+                        ["variant"] = variant,
+                        ["run"] = cohortRunId
+                    }, cancellationToken);
+                }
+                catch
+                {
+                }
                 sent++;
                 if (p.ApprovalId is not null)
                     sentThisRunByApproval[p.ApprovalId] = extraThisRun + 1;
@@ -1220,15 +1238,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             }
         }
 
-        // Replenish only after sending, and only if the tick still has time. Discovery
-        // before SES was consuming the 20s budget and stopping after one accepted email.
-        if (DateTime.UtcNow < deadline)
-        {
-            var used = dryRun ? wouldSend : sent;
-            var stillNeed = Math.Max(0, remaining - used);
-            if (stillNeed > 0)
-                replenish = await ReplenishCampaignInventoryAsync(cfg, stillNeed, cancellationToken);
-        }
+        // READY=0 still replenishes. Do not end the run because the send list was empty.
+        var usedAfterSend = dryRun ? wouldSend : sent;
+        var stillNeed = Math.Max(0, remaining - usedAfterSend);
+        if (stillNeed > 0)
+            replenish = await ReplenishCampaignInventoryAsync(cfg, stillNeed, cancellationToken);
 
         var ramp = await _store.GetRampAsync(campaign, cancellationToken);
         var healthAfter = OutreachPolicy.HealthFromCounts(sentAll + sent, bounced, complaints, unsubs);
@@ -1243,9 +1257,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 decision.Advance ? null : decision.Reason), cancellationToken);
         }
         var reasonCounts = OutreachPolicy.AggregateSkipReasons(reasons);
-        await _store.SaveCohortRunAsync(campaign, cohortRunId, System.Text.Json.JsonSerializer.Serialize(new
+        var persistKey = dryRun ? cohortRunId + "-dry" : cohortRunId;
+        await _store.SaveCohortRunAsync(campaign, persistKey, System.Text.Json.JsonSerializer.Serialize(new
         {
-            runId = cohortRunId,
+            runId = persistKey,
             sent,
             wouldSend,
             dryRun,
@@ -1258,6 +1273,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             discovered = replenish.Discovered,
             emailsFound = replenish.EmailsFound,
             draftsPrepared = replenish.DraftsPrepared,
+            executionBudgetHit = DateTime.UtcNow >= deadline && usedAfterSend < remaining,
             variantSplit = true
         }), cancellationToken);
 
@@ -1280,7 +1296,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             replenish.DraftsPrepared,
             cfg.SendingMode,
             campaign,
-            reasons.Any(r => r.Contains("tick_budget", StringComparison.Ordinal)));
+            usedAfterSend < remaining && (
+                DateTime.UtcNow >= deadline
+                || replenish.Discovered + replenish.EmailsFound + replenish.DraftsPrepared > 0
+                || usedAfterSend > 0));
     }
 
     public async Task UnsubscribeAsync(string email, CancellationToken cancellationToken)
@@ -1479,7 +1498,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 "not_found" => candidates.Where(p =>
                     string.Equals(p.ContactDiscoveryResult, "not_found", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(p.ContactResearchStatus, "not_found", StringComparison.OrdinalIgnoreCase)),
-                _ => candidates.Where(NeedsEmailDiscovery)
+                _ => candidates.Where(p =>
+                    NeedsEmailDiscovery(p)
+                    && (request.ForceRetry
+                        || p.ContactResearchNextAt is null
+                        || p.ContactResearchNextAt <= DateTimeOffset.UtcNow))
             };
         }
 
@@ -1574,7 +1597,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 {
                     case "found": found++; break;
                     case "review": review++; break;
-                    case "not_found": notFound++; break;
+                    case "not_found":
+                    case "no_website":
+                    case "form_only": notFound++; break;
+                    case "temporary_failure":
                     case "failed": failed++; break;
                     default: skipped++; break;
                 }
@@ -1866,6 +1892,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 else
                 {
                     var market = AcquisitionDiscoveryQueries.ReliableMarket(job.Market, hit.Country);
+                    var siteFromAbout = CreatorAcquisitionContact.ExtractCandidateSiteUrls(hit.Description, null)
+                        .FirstOrDefault();
                     var created = await InspectAndUpsertAsync(new AcqUpsertProspectRequest(
                         ChannelInput: hit.ChannelId,
                         PrimaryNiche: job.Category,
@@ -1873,11 +1901,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                         Language: string.IsNullOrWhiteSpace(job.Language)
                             ? AcquisitionDiscoveryQueries.DetectScriptLanguage(hit.Title + " " + (hit.Description ?? ""))
                             : job.Language,
-                        OfficialWebsite: null,
+                        OfficialWebsite: siteFromAbout,
                         PublicBusinessEmail: null,
                         ContactSourceUrl: null,
                         ContactType: "none",
-                        Notes: $"creator-discovery {job.Category}/{job.Language}/{job.Market} {DateTime.UtcNow:yyyy-MM-dd}",
+                        Notes: $"creator-discovery {job.Category}/{job.Language}/{job.Market} {DateTime.UtcNow:yyyy-MM-dd}\n{hit.Description}",
                         Market: string.IsNullOrWhiteSpace(market) ? null : market,
                         SkipContactResearch: true
                     ), cancellationToken);
@@ -2155,19 +2183,49 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             /* continue with website seed only */
         }
 
+        var seed = string.Join('\n', descTexts);
+        var website = p.OfficialWebsite
+                      ?? CreatorAcquisitionContact.ExtractCandidateSiteUrls(seed, p.OfficialWebsite).FirstOrDefault();
+        var channelSource = !string.IsNullOrWhiteSpace(p.ChannelUrl)
+            ? p.ChannelUrl
+            : (!string.IsNullOrWhiteSpace(p.Handle) ? "https://www.youtube.com/" + p.Handle.TrimStart('@').Insert(0, "@") : null);
+
         using var http = _httpClientFactory.CreateClient();
         http.Timeout = TimeSpan.FromSeconds(10);
         var research = await CreatorAcquisitionContact.ResearchPublicContactAsync(
-            http, p.OfficialWebsite, descTexts, cancellationToken);
+            http, website, descTexts, cancellationToken);
+        if (string.Equals(research.SourceType, "youtube_description", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(research.SourceUrl, "youtube-channel-metadata", StringComparison.OrdinalIgnoreCase))
+        {
+            research = research with
+            {
+                SourceUrl = channelSource ?? research.SourceUrl,
+                OfficialWebsite = website ?? research.OfficialWebsite,
+                SourceType = "youtube_description"
+            };
+        }
         var fetches = research.SourcesChecked?.Count ?? 0;
         var attempts = p.ContactResearchAttempts + 1;
+        var retryAfter = now.AddDays(CreatorAcquisitionContact.BackoffDaysForOutcome(research.Status, attempts));
         var detailJson = System.Text.Json.JsonSerializer.Serialize(new
         {
+            creatorId = p.ProspectId,
+            channelId = p.ChannelId,
+            handle = p.Handle,
+            attemptedAt = now,
             sourcesChecked = research.SourcesChecked,
+            officialWebsiteFound = !string.IsNullOrWhiteSpace(website ?? research.OfficialWebsite),
+            officialWebsiteUrl = website ?? research.OfficialWebsite,
+            pagesChecked = research.SourcesChecked?.Count ?? 0,
+            mailtoLinksFound = research.MailtoCount,
+            candidateEmailsFound = research.CandidateEmailCount,
+            validationResult = research.Status,
+            discoveryOutcome = research.Status,
+            discoveryReason = research.DiscoveryReason,
+            retryAfter,
             detail = research.Detail,
             confidence = research.Confidence,
-            sourceType = research.SourceType,
-            at = now
+            sourceType = research.SourceType
         });
 
         if (string.Equals(research.Status, "verified_public", StringComparison.OrdinalIgnoreCase)
@@ -2227,7 +2285,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                     ContactSourceUrl = research.SourceUrl,
                     ContactType = research.ContactType,
                     ContactVerifiedAt = now,
-                    OfficialWebsite = p.OfficialWebsite ?? research.OfficialWebsite,
+                    OfficialWebsite = p.OfficialWebsite ?? website ?? research.OfficialWebsite,
                     ContactResearchAttempts = attempts,
                     ContactResearchLastAt = now,
                     ContactResearchNextAt = null,
@@ -2288,10 +2346,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                     ContactSourceUrl = research.SourceUrl,
                     ContactType = research.ContactType,
                     ContactVerifiedAt = null,
-                    OfficialWebsite = p.OfficialWebsite ?? research.OfficialWebsite,
+                    OfficialWebsite = p.OfficialWebsite ?? website ?? research.OfficialWebsite,
                     ContactResearchAttempts = attempts,
                     ContactResearchLastAt = now,
-                    ContactResearchNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(attempts)),
+                    ContactResearchNextAt = retryAfter,
                     ContactResearchStatus = "review_email",
                     ContactConfidence = research.Confidence,
                     ContactDiscoveryDetail = detailJson,
@@ -2316,20 +2374,28 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 research.Confidence, (dryRun ? "[dry-run] " : "") + research.Detail), fetches);
         }
 
+        var missOutcome = research.Status switch
+        {
+            "contact_needed" => "no_website",
+            "temporary_fetch_failure" => "temporary_failure",
+            "form_only" => "form_only",
+            "low_confidence" => "not_found",
+            _ => "not_found"
+        };
         if (!dryRun)
         {
             var next = p with
             {
                 ContactResearchAttempts = attempts,
                 ContactResearchLastAt = now,
-                ContactResearchNextAt = now.AddDays(CreatorAcquisitionContact.BackoffDays(attempts)),
-                ContactResearchStatus = research.Status is "form_only" ? "form_only" : "not_found",
+                ContactResearchNextAt = retryAfter,
+                ContactResearchStatus = research.Status,
                 ContactType = research.ContactType is "form_only" ? "form_only" : p.ContactType,
-                ContactSourceUrl = research.SourceUrl ?? p.ContactSourceUrl,
-                OfficialWebsite = p.OfficialWebsite ?? research.OfficialWebsite,
+                ContactSourceUrl = research.SourceUrl is "youtube-channel-metadata" ? p.ContactSourceUrl : (research.SourceUrl ?? p.ContactSourceUrl),
+                OfficialWebsite = p.OfficialWebsite ?? website ?? research.OfficialWebsite,
                 ContactConfidence = null,
                 ContactDiscoveryDetail = detailJson,
-                ContactDiscoveryResult = research.ContactType is "form_only" ? "form_only" : "not_found",
+                ContactDiscoveryResult = missOutcome,
                 UpdatedAt = now
             };
             await _store.UpsertProspectAsync(next, cancellationToken);
@@ -2345,8 +2411,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         return (new AcqEmailDiscoveryItemResult(
-            p.ProspectId, p.Handle, "not_found", null, research.SourceUrl, research.SourceType, null,
-            (dryRun ? "[dry-run] " : "") + research.Detail), fetches);
+            p.ProspectId, p.Handle, missOutcome, null, research.SourceUrl, research.SourceType, null,
+            (dryRun ? "[dry-run] " : "") + (research.DiscoveryReason + " — " + research.Detail).Trim(' ', '—')), fetches);
     }
 
     private static IReadOnlyList<string> ExtractEmailsFromPlainText(string text)

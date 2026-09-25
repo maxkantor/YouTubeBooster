@@ -426,6 +426,7 @@ public static class CreatorAcquisitionScoring
         ExampleVideoTitle: p.ExampleVideoTitle,
         ContactConfidence: p.ContactConfidence,
         ContactDiscoveryResult: p.ContactDiscoveryResult,
+        ContactDiscoveryDetail: p.ContactDiscoveryDetail,
         ContactResearchLastAt: p.ContactResearchLastAt,
         ContactResearchNextAt: p.ContactResearchNextAt,
         TicketId: p.TicketId,

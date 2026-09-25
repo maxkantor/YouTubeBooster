@@ -567,6 +567,7 @@ export type AcqSanitizedProspect = {
   exampleVideoTitle?: string | null;
   contactConfidence?: string | null;
   contactDiscoveryResult?: string | null;
+  contactDiscoveryDetail?: string | null;
   contactResearchLastAt?: string | null;
   contactResearchNextAt?: string | null;
   ticketId?: string | null;
@@ -811,6 +812,20 @@ export type AcqSummary = {
     revenue: number;
     auditsStarted: number;
     accountsCreated: number;
+  };
+  inventory?: {
+    totalCreators?: number;
+    withPublicEmail?: number;
+    missingEmail?: number;
+    discoveryEligible?: number;
+    backoff?: number;
+    noPublicEmail?: number;
+    qualified?: number;
+    autoEligible?: number;
+    manualReview?: number;
+    readyToSend?: number;
+    sentToday?: number;
+    dailyLimit?: number;
   };
   pipeline?: {
     drafted?: number;

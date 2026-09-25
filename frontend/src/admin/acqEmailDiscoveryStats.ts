@@ -14,7 +14,8 @@ export function normalizeEmailDiscoveryOutcome(outcome: string | null | undefine
   const o = (outcome || '').toLowerCase();
   if (o === 'found') return 'FOUND';
   if (o === 'review') return 'NEEDS_REVIEW';
-  if (o === 'not_found') return 'NOT_FOUND';
+  if (o === 'not_found' || o === 'no_website' || o === 'form_only') return 'NOT_FOUND';
+  if (o === 'temporary_failure') return 'ERROR';
   if (o === 'skipped_existing') return 'ALREADY_HAS_EMAIL';
   if (o === 'skipped_backoff') return 'SKIPPED_BACKOFF';
   if (o.startsWith('skipped')) return 'SKIPPED_OTHER';
@@ -242,6 +243,12 @@ export function emailDiscoveryJobTitle(
   const otherOk = (tally?.found ?? 0) + (tally?.review ?? 0) + (tally?.notFound ?? 0);
   if (attempted > 0 && failed === attempted && otherOk === 0) return 'EMAIL SEARCH FAILED';
   return 'EMAIL SEARCH COMPLETED WITH ERRORS';
+}
+
+export function isContactDiscoveryUnderperforming(tally: Pick<DiscoveryJobTally, 'searched' | 'found'> | null): boolean {
+  const searched = tally?.searched ?? 0;
+  const found = tally?.found ?? 0;
+  return searched >= 10 && found === 0;
 }
 
 export function emailDiscoverySummaryLine(tally: DiscoveryJobTally): string {

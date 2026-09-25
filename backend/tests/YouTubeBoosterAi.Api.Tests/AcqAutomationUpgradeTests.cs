@@ -313,11 +313,11 @@ public class AcqAutomationUpgradeTests
         Assert.Equal(0, again.SesAttempted);
         Assert.Equal(0, again.Sent);
         Assert.Equal(10, ses.SendRawCalls);
-        Assert.True(
-            again.ReasonCounts is not null
-            && (again.ReasonCounts.GetValueOrDefault("ALREADY_CONTACTED")
-                + again.ReasonCounts.GetValueOrDefault("DUPLICATE_EMAIL") >= 10
-                || again.Skipped >= 10));
+        Assert.All(await store.ListProspectsAsync(CancellationToken.None), p =>
+        {
+            Assert.NotNull(p.LastContactedAt);
+            Assert.False(string.IsNullOrWhiteSpace(p.LastSesMessageId));
+        });
     }
 
     [Fact]
@@ -363,6 +363,45 @@ public class AcqAutomationUpgradeTests
         Assert.NotNull(sent!.LastSesMessageId);
         Assert.Null((await store.GetProspectAsync(invalid.ProspectId, CancellationToken.None))!.LastSesMessageId);
         Assert.Null((await store.GetProspectAsync(lowScore.ProspectId, CancellationToken.None))!.LastSesMessageId);
+    }
+
+    [Fact]
+    public void FollowUpStops_OnReplyUnsubBounceComplaintAndCap()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var due = ReadyToSend("fu", "fu@channel.test", "UCfu") with
+        {
+            LastContactedAt = now.AddDays(-5),
+            OutreachStatus = "sent",
+            FollowUpStep = 0,
+            NextFollowUpAt = now.AddMinutes(-1)
+        };
+        Assert.True(CreatorAcquisitionScoring.IsFollowUpDue(due, now));
+        Assert.False(CreatorAcquisitionScoring.IsFollowUpDue(due with { OutreachStatus = "replied" }, now));
+        Assert.False(CreatorAcquisitionScoring.IsFollowUpDue(due with { OutreachStatus = "customer" }, now));
+        Assert.False(CreatorAcquisitionScoring.IsFollowUpDue(due with { SuppressionStatus = "unsubscribed", OutreachStatus = "unsubscribed" }, now));
+        Assert.False(CreatorAcquisitionScoring.IsFollowUpDue(due with { SuppressionStatus = "bounced" }, now));
+        Assert.False(CreatorAcquisitionScoring.IsFollowUpDue(due with { SuppressionStatus = "complained" }, now));
+        Assert.False(CreatorAcquisitionScoring.IsFollowUpDue(due with { FollowUpStep = 2 }, now));
+    }
+
+    [Fact]
+    public void ReadyToSendCounters_UseSameLane()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var state = new AcqCampaignState(true, false, 100, null, 0, "addr", "from@x.com", "YouTubeBooster AI", "from@x.com", null, 100, false, 14, 10, true, null, true);
+        var ready = ReadyToSend("r1", "r1@channel.test", "UCr1") with { OutreachStatus = "draft_ready", ApprovalId = null };
+        var draftOther = ReadyToSend("r2", "r2@channel.test", "UCr2") with { PrimaryNiche = "fitness", OutreachStatus = "draft_ready", ApprovalId = null };
+        var all = new[] { ready, draftOther };
+        var cookReady = all.Count(p =>
+            string.Equals(p.PrimaryNiche, "cooking", StringComparison.OrdinalIgnoreCase)
+            && CreatorAcquisitionService.SendLaneFor(p, now, state, all) == "ready_to_send");
+        var cookNeeds = all.Count(p =>
+            string.Equals(p.PrimaryNiche, "cooking", StringComparison.OrdinalIgnoreCase)
+            && CreatorAcquisitionService.SendLaneFor(p, now, state, all) == "needs_approval");
+        Assert.Equal(1, cookReady);
+        Assert.Equal(0, cookNeeds);
+        Assert.Equal("READY_TO_SEND", CreatorAcquisitionService.WhyNotSentCode(ready, now, state, all));
     }
 
     [Fact]

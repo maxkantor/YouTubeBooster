@@ -12,7 +12,11 @@ public sealed record AcqContactResearchResult(
     string Detail,
     string Confidence = "none",
     string SourceType = "none",
-    IReadOnlyList<string>? SourcesChecked = null
+    IReadOnlyList<string>? SourcesChecked = null,
+    string DiscoveryReason = "NONE",
+    int FetchFailures = 0,
+    int MailtoCount = 0,
+    int CandidateEmailCount = 0
 );
 
 public static class CreatorAcquisitionContact
@@ -24,6 +28,16 @@ public static class CreatorAcquisitionContact
     private static readonly Regex HrefRegex = new(
         @"href\s*=\s*[""'](https?://[^""'#\s]+)[""']",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex NavHrefRegex = new(
+        @"<a\s[^>]*href\s*=\s*[""']([^""'#\s]+)[""'][^>]*>(.*?)</a>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+    private static readonly string[] NavLinkHints =
+    [
+        "contact", "about", "work with me", "work with", "collaborate", "collaboration",
+        "partnership", "partnerships", "business", "media kit", "press"
+    ];
 
     private static readonly string[] BlockedHosts =
     [
@@ -61,6 +75,15 @@ public static class CreatorAcquisitionContact
         2 => 7,
         3 => 14,
         _ => 30
+    };
+
+    /// <summary>Temporary fetch failures retry sooner than permanent-looking no-email results.</summary>
+    public static int BackoffDaysForOutcome(string? status, int attemptCount) => (status ?? "").Trim().ToLowerInvariant() switch
+    {
+        "temporary_fetch_failure" => 1,
+        "contact_needed" => attemptCount <= 1 ? 7 : BackoffDays(attemptCount),
+        "not_found" or "form_only" or "no_public_email" => Math.Max(14, BackoffDays(attemptCount)),
+        _ => BackoffDays(attemptCount)
     };
 
     public static bool IsGuessed(string? email, string? sourceUrl) =>
@@ -107,6 +130,48 @@ public static class CreatorAcquisitionContact
         }
 
         return found.ToArray();
+    }
+
+    /// <summary>Emails published in YouTube/channel text. Does not invent addresses.</summary>
+    public static IReadOnlyList<string> ExtractPublishedEmailsFromText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return [];
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match match in EmailRegex.Matches(text))
+        {
+            var email = WebUtility.HtmlDecode(match.Value).Trim().TrimEnd('.').ToLowerInvariant();
+            if (!EmailAddressHelpers.LooksLikeEmail(email)) continue;
+            if (email.EndsWith(".png", StringComparison.Ordinal) || email.EndsWith(".jpg", StringComparison.Ordinal))
+                continue;
+            if (IsRejectedLocalPart(email) || IsPlaceholderEmail(email))
+                continue;
+            found.Add(email);
+        }
+        return found.ToArray();
+    }
+
+    public static IReadOnlyList<string> ExtractSameDomainNavUrls(string html, string pageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(html) || !Uri.TryCreate(pageUrl, UriKind.Absolute, out var page))
+            return [];
+        var origin = page.GetLeftPart(UriPartial.Authority);
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match m in NavHrefRegex.Matches(html))
+        {
+            var href = WebUtility.HtmlDecode(m.Groups[1].Value).Trim();
+            var label = Regex.Replace(WebUtility.HtmlDecode(m.Groups[2].Value), "<.*?>", "").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(label) || !NavLinkHints.Any(h => label.Contains(h, StringComparison.Ordinal)))
+                continue;
+            string? abs = null;
+            if (href.StartsWith("http", StringComparison.OrdinalIgnoreCase)) abs = href;
+            else if (href.StartsWith('/')) abs = origin + href;
+            if (abs is null || !IsAllowedSource(abs)) continue;
+            if (!Uri.TryCreate(abs, UriKind.Absolute, out var uri)) continue;
+            if (!string.Equals(uri.GetLeftPart(UriPartial.Authority), origin, StringComparison.OrdinalIgnoreCase))
+                continue;
+            found.Add(NormalizeUrl(abs));
+        }
+        return found.Take(8).ToArray();
     }
 
     public static IReadOnlyList<string> ExtractCandidateSiteUrls(string? htmlOrText, string? seedWebsite)
@@ -217,28 +282,65 @@ public static class CreatorAcquisitionContact
         CancellationToken cancellationToken)
     {
         var seedText = string.Join('\n', (descriptionTexts ?? []).Where(t => !string.IsNullOrWhiteSpace(t)).Take(12));
+        var publishedInText = ExtractPublishedEmailsFromText(seedText);
         var siteRoots = ExtractCandidateSiteUrls(seedText, officialWebsite);
+        if (publishedInText.Count > 0)
+        {
+            var email = PreferBusinessEmail(publishedInText);
+            var source = siteRoots.Count > 0
+                ? siteRoots[0]
+                : (!string.IsNullOrWhiteSpace(officialWebsite) && IsAllowedSource(officialWebsite)
+                    ? officialWebsite
+                    : null);
+            var confidence = IsPreferredBusinessEmail(email) ? "high" : "medium";
+            return new AcqContactResearchResult(
+                email,
+                source ?? "youtube-channel-metadata",
+                "business",
+                confidence == "high" ? "verified_public" : "review_email",
+                siteRoots.Count > 0 ? siteRoots[0] : officialWebsite,
+                "Published email found in creator-supplied channel/video text.",
+                confidence,
+                source is null ? "youtube_description" : ClassifySourceType(source),
+                source is null ? new[] { "youtube-channel-metadata" } : new[] { source },
+                "EMAIL_FOUND",
+                0,
+                0,
+                publishedInText.Count);
+        }
+
         var checkedUrls = new List<string>();
         if (siteRoots.Count == 0)
         {
             return new AcqContactResearchResult(null, null, "none", "contact_needed", officialWebsite,
                 "No public website or allowed business URL found in channel/video metadata.",
-                "none", "none", checkedUrls);
+                "none", "none", checkedUrls, "NO_OFFICIAL_WEBSITE");
         }
 
-        var candidates = ExpandContactCandidateUrls(siteRoots);
+        var pending = new Queue<string>(ExpandContactCandidateUrls(siteRoots));
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? formOnlyUrl = null;
+        var fetchFailures = 0;
+        var htmlSuccess = 0;
+        var mailtoCount = 0;
+        var navExpanded = 0;
 
-        foreach (var url in candidates)
+        while (pending.Count > 0 && checkedUrls.Count < 32)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var url = pending.Dequeue();
+            if (!seen.Add(url)) continue;
             checkedUrls.Add(url);
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.TryAddWithoutValidation("User-Agent", "YouTubeBoosterAI-ContactResearch/1.0 (+https://youtubeboosterai.com)");
                 using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-                if (!resp.IsSuccessStatusCode) continue;
+                if (!resp.IsSuccessStatusCode)
+                {
+                    fetchFailures++;
+                    continue;
+                }
                 var media = resp.Content.Headers.ContentType?.MediaType ?? "";
                 if (media.Contains("image", StringComparison.OrdinalIgnoreCase) ||
                     media.Contains("video", StringComparison.OrdinalIgnoreCase))
@@ -246,6 +348,8 @@ public static class CreatorAcquisitionContact
 
                 var html = await resp.Content.ReadAsStringAsync(cancellationToken);
                 if (html.Length > 1_500_000) html = html[..1_500_000];
+                htmlSuccess++;
+                if (html.Contains("mailto:", StringComparison.OrdinalIgnoreCase)) mailtoCount++;
 
                 var emails = ExtractVisibleEmails(html, url);
                 if (emails.Count > 0)
@@ -268,15 +372,29 @@ public static class CreatorAcquisitionContact
                         $"Extracted visible email from public page ({confidence} confidence).",
                         confidence,
                         ClassifySourceType(url),
-                        checkedUrls);
+                        checkedUrls,
+                        status == "low_confidence" ? "EMAIL_FOUND_INVALID" : "EMAIL_FOUND",
+                        fetchFailures,
+                        mailtoCount,
+                        emails.Count);
                 }
 
                 if (LooksLikeContactFormOnly(html) && formOnlyUrl is null)
                     formOnlyUrl = url;
+
+                if (navExpanded < 2)
+                {
+                    navExpanded++;
+                    foreach (var nav in ExtractSameDomainNavUrls(html, url))
+                    {
+                        if (seen.Contains(nav)) continue;
+                        pending.Enqueue(nav);
+                    }
+                }
             }
             catch (Exception)
             {
-                // Continue candidates; never invent an address.
+                fetchFailures++;
             }
         }
 
@@ -284,12 +402,19 @@ public static class CreatorAcquisitionContact
         {
             return new AcqContactResearchResult(null, formOnlyUrl, "form_only", "form_only", siteRoots[0],
                 "Public contact form found; automated email unavailable.",
-                "none", "contact_form", checkedUrls);
+                "none", "contact_form", checkedUrls, "NO_PUBLIC_EMAIL", fetchFailures, mailtoCount, 0);
+        }
+
+        if (htmlSuccess == 0)
+        {
+            return new AcqContactResearchResult(null, siteRoots[0], "none", "temporary_fetch_failure", siteRoots[0],
+                "Official website was unreachable or returned no usable HTML.",
+                "none", "website", checkedUrls, "WEBSITE_UNREACHABLE", fetchFailures, mailtoCount, 0);
         }
 
         return new AcqContactResearchResult(null, siteRoots[0], "source_recorded_unverified", "not_found", siteRoots[0],
             "Website found but no visible public business email.",
-            "none", "website", checkedUrls);
+            "none", "website", checkedUrls, "NO_PUBLIC_EMAIL", fetchFailures, mailtoCount, 0);
     }
 
     public static string PreferBusinessEmail(IReadOnlyList<string> emails)

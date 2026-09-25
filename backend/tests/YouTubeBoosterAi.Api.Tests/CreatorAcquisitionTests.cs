@@ -646,6 +646,69 @@ public class CreatorAcquisitionContactTests
             http, "https://cooksite.test", Array.Empty<string>(), CancellationToken.None);
         Assert.Equal("not_found", result.Status);
         Assert.Null(result.Email);
+        Assert.Equal("NO_PUBLIC_EMAIL", result.DiscoveryReason);
+    }
+
+    [Fact]
+    public void Contact_ExtractPublishedEmailsFromText_DoesNotInvent()
+    {
+        var emails = CreatorAcquisitionContact.ExtractPublishedEmailsFromText(
+            "Collab: hello@brandcook.test — not noreply@brandcook.test or test@example.com");
+        Assert.Contains("hello@brandcook.test", emails);
+        Assert.DoesNotContain("noreply@brandcook.test", emails);
+        Assert.DoesNotContain("test@example.com", emails);
+    }
+
+    [Fact]
+    public async Task Contact_Research_FindsEmailInYoutubeDescription_WithoutWebsite()
+    {
+        using var http = new HttpClient(new ScriptedHttpHandler(new Dictionary<string, string>()));
+        var result = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+            http, null, ["Business: partnerships@channelcook.test"], CancellationToken.None);
+        Assert.Equal("verified_public", result.Status);
+        Assert.Equal("partnerships@channelcook.test", result.Email);
+        Assert.Equal("EMAIL_FOUND", result.DiscoveryReason);
+        Assert.Equal("youtube_description", result.SourceType);
+    }
+
+    [Fact]
+    public async Task Contact_Research_FollowsSameDomainNavLink()
+    {
+        var handler = new ScriptedHttpHandler(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://cooksite.test/"] =
+                "<html><body><a href=\"/lets-work-together\">Work With Me</a></body></html>",
+            ["https://cooksite.test/lets-work-together"] =
+                "<html><body>Email <a href=\"mailto:hello@cooksite.test\">hello@cooksite.test</a></body></html>"
+        });
+        using var http = new HttpClient(handler);
+        var result = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+            http, "https://cooksite.test", Array.Empty<string>(), CancellationToken.None);
+        Assert.Equal("hello@cooksite.test", result.Email);
+        Assert.Contains("lets-work-together", result.SourceUrl);
+        Assert.Equal("EMAIL_FOUND", result.DiscoveryReason);
+    }
+
+    [Fact]
+    public async Task Contact_Research_WebsiteUnreachable_IsTemporary()
+    {
+        using var http = new HttpClient(new ScriptedHttpHandler(new Dictionary<string, string>()));
+        var result = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+            http, "https://down.cooksite.test", Array.Empty<string>(), CancellationToken.None);
+        Assert.Equal("temporary_fetch_failure", result.Status);
+        Assert.Equal("WEBSITE_UNREACHABLE", result.DiscoveryReason);
+        Assert.Equal(1, CreatorAcquisitionContact.BackoffDaysForOutcome(result.Status, 1));
+    }
+
+    [Fact]
+    public async Task Contact_Research_NoWebsite_IsContactNeeded()
+    {
+        using var http = new HttpClient(new ScriptedHttpHandler(new Dictionary<string, string>()));
+        var result = await CreatorAcquisitionContact.ResearchPublicContactAsync(
+            http, null, ["No links here, just recipes"], CancellationToken.None);
+        Assert.Equal("contact_needed", result.Status);
+        Assert.Equal("NO_OFFICIAL_WEBSITE", result.DiscoveryReason);
+        Assert.Null(result.Email);
     }
 
     [Fact]

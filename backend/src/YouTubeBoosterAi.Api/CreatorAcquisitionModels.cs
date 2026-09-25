@@ -185,6 +185,7 @@ public sealed record AcqSanitizedProspectDto(
     string? ExampleVideoTitle = null,
     string? ContactConfidence = null,
     string? ContactDiscoveryResult = null,
+    string? ContactDiscoveryDetail = null,
     DateTimeOffset? ContactResearchLastAt = null,
     DateTimeOffset? ContactResearchNextAt = null,
     string? TicketId = null,

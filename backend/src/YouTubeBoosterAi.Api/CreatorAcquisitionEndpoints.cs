@@ -466,6 +466,25 @@ public static class CreatorAcquisitionEndpoints
             var sesQuota = await acq.GetProviderQuotaAsync(cancellationToken);
             var readyLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state, rows) == "ready_to_send");
             var needsLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state, rows) == "needs_approval");
+            var discoveryBackoff = cookRows.Count(r =>
+                !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r)
+                && r.ContactResearchNextAt is not null
+                && r.ContactResearchNextAt > now);
+            var discoveryEligible = cookRows.Count(r =>
+                !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r)
+                && !string.Equals(r.ContactType, "form_only", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(r.OutreachStatus, "rejected", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(r.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
+                && (r.ContactResearchNextAt is null || r.ContactResearchNextAt <= now));
+            var noPublicEmail = cookRows.Count(r =>
+                string.Equals(r.ContactResearchStatus, "not_found", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(r.ContactDiscoveryResult, "not_found", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(r.ContactDiscoveryResult, "no_website", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(r.ContactDiscoveryResult, "form_only", StringComparison.OrdinalIgnoreCase));
+            var qualifiedCook = cookRows.Count(r =>
+                r.PriorityScore >= 70
+                && string.Equals(r.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase));
+            var autoEligible = readyLane;
             if (state.StandingCampaignApproval)
             {
                 sendEligible = readyLane;
@@ -579,6 +598,21 @@ public static class CreatorAcquisitionEndpoints
                 skipReasonCountsAllCandidates = skipReasons
                     .OrderByDescending(kv => kv.Value)
                     .ToDictionary(kv => kv.Key, kv => kv.Value),
+                inventory = new
+                {
+                    totalCreators = cookRows.Count,
+                    withPublicEmail = contactVerifiedCook,
+                    missingEmail = needsEmailCook,
+                    discoveryEligible,
+                    backoff = discoveryBackoff,
+                    noPublicEmail,
+                    qualified = qualifiedCook,
+                    autoEligible,
+                    manualReview = needsLane,
+                    readyToSend = readyLane,
+                    sentToday,
+                    dailyLimit = state.DailyLimit
+                },
                 pipeline = new
                 {
                     drafted = draftsCook,
@@ -620,6 +654,11 @@ public static class CreatorAcquisitionEndpoints
                     sentLifetime = sent,
                     usableEmails = contactVerifiedCook,
                     needsEmail = needsEmailCook,
+                    discoveryEligible,
+                    backoff = discoveryBackoff,
+                    noPublicEmail,
+                    qualified = qualifiedCook,
+                    autoEligible,
                     notReviewable,
                     notReviewableTotal,
                     approvalsUrl = "https://youtubeboosterai.com/admin/acquisition/approvals"

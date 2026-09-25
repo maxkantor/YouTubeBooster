@@ -453,11 +453,8 @@ public sealed partial class CreatorAcquisitionService
         {
             try
             {
-                var job = await StartEmailDiscoveryAsync(
-                    new AcqEmailDiscoveryStartRequest(cfg.CampaignId, null, "email_required", false, false, 3),
-                    "scheduler",
-                    cancellationToken);
-                emailsFound = job.Found;
+                var resumed = await ResumeOrStartEmailDiscoveryAsync(cfg.CampaignId, 8, cancellationToken);
+                emailsFound = resumed.Found;
             }
             catch
             {
@@ -469,18 +466,7 @@ public sealed partial class CreatorAcquisitionService
         {
             try
             {
-                var job = await StartCreatorDiscoveryAsync(
-                    new AcqCreatorDiscoveryStartRequest(
-                        cfg.Category,
-                        cfg.Language,
-                        string.IsNullOrWhiteSpace(cfg.Market) ? null : cfg.Market,
-                        cfg.Tier,
-                        Math.Min(20, Math.Max(5, remaining - ready)),
-                        cfg.CampaignId),
-                    "scheduler",
-                    cancellationToken);
-                if (string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
-                    job = await TickCreatorDiscoveryAsync(job.JobId, cancellationToken);
+                var job = await ResumeOrStartCreatorDiscoveryAsync(cfg, remaining - ready, cancellationToken);
                 discovered = job.Added;
             }
             catch
@@ -489,6 +475,59 @@ public sealed partial class CreatorAcquisitionService
         }
 
         return (discovered, emailsFound, drafts);
+    }
+
+    private const string ActiveEmailDiscoveryPointer = "active-email-discovery";
+    private const string ActiveCreatorDiscoveryPointer = "active-creator-discovery";
+
+    private async Task<AcqEmailDiscoveryJobState> ResumeOrStartEmailDiscoveryAsync(
+        string campaign,
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        var pointer = await _store.GetCohortRunAsync(campaign, ActiveEmailDiscoveryPointer, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(pointer))
+        {
+            var existing = await GetEmailDiscoveryJobAsync(pointer.Trim(), cancellationToken);
+            if (existing is not null && string.Equals(existing.Status, "running", StringComparison.OrdinalIgnoreCase))
+                return await TickEmailDiscoveryAsync(existing.JobId, batchSize, cancellationToken);
+        }
+
+        var started = await StartEmailDiscoveryAsync(
+            new AcqEmailDiscoveryStartRequest(campaign, null, "email_required", false, false, batchSize),
+            "scheduler",
+            cancellationToken);
+        await _store.SaveCohortRunAsync(campaign, ActiveEmailDiscoveryPointer, started.JobId, cancellationToken);
+        return started;
+    }
+
+    private async Task<AcqCreatorDiscoveryJobState> ResumeOrStartCreatorDiscoveryAsync(
+        AcqCampaignConfig cfg,
+        int stillNeed,
+        CancellationToken cancellationToken)
+    {
+        var pointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveCreatorDiscoveryPointer, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(pointer))
+        {
+            var existing = await GetCreatorDiscoveryJobAsync(pointer.Trim(), cancellationToken);
+            if (existing is not null && string.Equals(existing.Status, "running", StringComparison.OrdinalIgnoreCase))
+                return await TickCreatorDiscoveryAsync(existing.JobId, cancellationToken);
+        }
+
+        var started = await StartCreatorDiscoveryAsync(
+            new AcqCreatorDiscoveryStartRequest(
+                cfg.Category,
+                cfg.Language,
+                string.IsNullOrWhiteSpace(cfg.Market) ? null : cfg.Market,
+                cfg.Tier,
+                Math.Min(20, Math.Max(5, stillNeed)),
+                cfg.CampaignId),
+            "scheduler",
+            cancellationToken);
+        await _store.SaveCohortRunAsync(cfg.CampaignId, ActiveCreatorDiscoveryPointer, started.JobId, cancellationToken);
+        if (string.Equals(started.Status, "running", StringComparison.OrdinalIgnoreCase))
+            started = await TickCreatorDiscoveryAsync(started.JobId, cancellationToken);
+        return started;
     }
 
     internal static bool MatchesCampaignAudience(AcqProspectRecord p, AcqCampaignConfig cfg)
@@ -645,7 +684,16 @@ public sealed partial class CreatorAcquisitionService
             return OutreachPolicy.NormalizeSkipReason(
                 AcqSendGuard.SuppressionReasonCode(p.SuppressionStatus == "none" ? p.OutreachStatus : p.SuppressionStatus));
         if (string.IsNullOrWhiteSpace(p.PublicBusinessEmail))
-            return "NO_PUBLIC_EMAIL_FOUND";
+        {
+            if (p.ContactResearchNextAt is not null && p.ContactResearchNextAt > now)
+                return "DISCOVERY_BACKOFF";
+            if (string.Equals(p.ContactResearchStatus, "not_found", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.ContactDiscoveryResult, "not_found", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.ContactDiscoveryResult, "no_website", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.ContactDiscoveryResult, "form_only", StringComparison.OrdinalIgnoreCase))
+                return "NO_PUBLIC_EMAIL_FOUND";
+            return "DISCOVERY_PENDING";
+        }
         if (!CreatorAcquisitionScoring.IsVerifiedPublicEmail(p) || OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
             return "INVALID_EMAIL";
         if (state.ComplaintPause || state.RampBlockReason is "bounce_rate" or "complaint_rate")

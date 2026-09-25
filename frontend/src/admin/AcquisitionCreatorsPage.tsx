@@ -29,7 +29,8 @@ import {
   normalizeEmailDiscoveryOutcome,
   outcomeLabel,
   parseBackoffUntil,
-  summarizeDiscoveryJob
+  summarizeDiscoveryJob,
+  isContactDiscoveryUnderperforming
 } from './acqEmailDiscoveryStats';
 import {
   ACQ_CATEGORIES,
@@ -746,13 +747,23 @@ export function AcquisitionCreatorsPage() {
           Campaign: {campaign || 'All'}
           {strategicOnly ? ' · Strategic only' : ''}
           <div style={{ marginTop: 4 }}>
-            Creators: <strong>{allItems.length}</strong>
+            Creators: <strong>{summary?.inventory?.totalCreators ?? allItems.length}</strong>
             {' · '}
-            Missing email: <strong>{discoveryCensus.missingEmail}</strong>
+            With public email: <strong>{summary?.inventory?.withPublicEmail ?? '—'}</strong>
             {' · '}
-            Eligible now: <strong>{discoveryCensus.eligibleNow}</strong>
+            Missing email: <strong>{summary?.inventory?.missingEmail ?? discoveryCensus.missingEmail}</strong>
             {' · '}
-            Backoff: <strong>{discoveryCensus.inBackoff}</strong>
+            Eligible now: <strong>{summary?.inventory?.discoveryEligible ?? discoveryCensus.eligibleNow}</strong>
+            {' · '}
+            Backoff: <strong>{summary?.inventory?.backoff ?? discoveryCensus.inBackoff}</strong>
+            {' · '}
+            Qualified: <strong>{summary?.inventory?.qualified ?? '—'}</strong>
+            {' · '}
+            Auto eligible: <strong>{summary?.inventory?.autoEligible ?? summary?.pipeline?.readyToSend ?? '—'}</strong>
+            {' · '}
+            Ready to send: <strong>{summary?.inventory?.readyToSend ?? summary?.pipeline?.readyToSend ?? 0}</strong>
+            {' · '}
+            Sent today: <strong>{summary?.sentToday ?? 0}/{summary?.dailyLimit ?? 100}</strong>
           </div>
         </div>
         <div className="acq-discovery-census ops-muted" style={{ marginBottom: 10, fontSize: 13 }}>
@@ -1220,6 +1231,12 @@ export function AcquisitionCreatorsPage() {
                     ? ' — no public-source lookups ran; records were skipped.'
                     : ''}
                 </p>
+                {isContactDiscoveryUnderperforming(discoveryTally) && (
+                  <p className="admin-crm-error" style={{ marginTop: 8 }}>
+                    CONTACT DISCOVERY UNDERPERFORMING — this is not an SES problem. Public pages are being checked
+                    and no published business emails were found in this sample.
+                  </p>
+                )}
                 <ul className="acq-discovery-stats">
                   <li>
                     Found <strong>{discoveryTally.found}</strong>

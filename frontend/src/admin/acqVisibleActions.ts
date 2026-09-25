@@ -54,9 +54,9 @@ export function visibleAcqActions(
   if (wf.primaryAction === 'review_email') {
     actions.push({ id: 'review_accept', label: 'Accept', kind: 'primary' });
     actions.push({ id: 'review_reject', label: 'Reject', kind: 'secondary' });
-    if (opts.hasContactSourceUrl) {
-      actions.push({ id: 'view_source', label: 'View source', kind: 'link' });
-    }
+  }
+  if (opts.hasContactSourceUrl) {
+    actions.push({ id: 'view_source', label: 'View source', kind: 'link' });
   }
   if (wf.primaryAction === 'verify_email') {
     actions.push({ id: 'verify_email', label: 'Verify Email', kind: 'primary' });

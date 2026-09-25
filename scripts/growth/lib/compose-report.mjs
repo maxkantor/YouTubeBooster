@@ -225,11 +225,15 @@ export function formatCrmAcquisitionText(dist) {
   const d = dist || emptyDistribution();
   const board = d.crmBoard || {};
   const pipe = d.pipeline || {};
+  const inv = d.inventory || {};
+  const lastRun = d.lastRun || {};
   const funnel = d.outreachFunnel || emptyDistribution().outreachFunnel;
   const skips = d.skipReasonCounts || {};
   const nr = board.notReviewable || pipe.notReviewable || {};
-  const needsApproval = Number(board.needsApproval ?? d.needsApproval ?? 0) || 0;
-  const readyToSend = Number(board.readyToSend ?? pipe.readyToSend ?? funnel.approved ?? 0) || 0;
+  const needsApproval = Number(board.needsApproval ?? pipe.needsApproval ?? d.needsApproval ?? 0) || 0;
+  const readyToSend = Number(
+    inv.readyToSend ?? board.readyToSend ?? pipe.readyToSend ?? d.sendEligible ?? funnel.approved ?? 0
+  ) || 0;
   const sentToday = Number(d.sentToday ?? d.sesAcceptedThisRun ?? 0) || 0;
   const dailyLimit = Number(pipe.dailyLimit ?? d.dailyLimit ?? d.deliverability?.dailyLimit ?? 100) || 100;
   const remaining = Number(pipe.dailyRemaining ?? d.dailyRemaining ?? Math.max(0, dailyLimit - sentToday));
@@ -245,20 +249,46 @@ export function formatCrmAcquisitionText(dist) {
   lines.push('=======================');
   lines.push(`Campaign: ${d.campaign || 'COOK-001'}`);
   lines.push(`Automatic: ${automatic ? 'ON' : 'OFF'}`);
+  lines.push(`Dry run: ${d.dryRun ? 'ON' : 'OFF'}`);
   lines.push(`Daily limit: ${dailyLimit}`);
   lines.push(`Sent today: ${sentToday}`);
   lines.push(`SES accepted: ${d.sesAcceptedThisRun ?? sentToday}`);
   lines.push(`Remaining campaign capacity: ${remaining}`);
   lines.push(`SES remaining capacity: ${sesRemaining ?? 'Unavailable'}`);
   lines.push('');
-  lines.push('DISCOVERY');
-  lines.push('---------');
-  lines.push(`Creators evaluated: ${d.prospectsEvaluated ?? board.totalProspects ?? 0}`);
-  lines.push(`Public emails found: ${board.usableEmails ?? d.contactVerified ?? 0}`);
-  lines.push(`Valid emails: ${board.usableEmails ?? d.contactVerified ?? 0}`);
-  lines.push(`Qualified: ${pipe.eligibleNow ?? d.sendEligible ?? readyToSend}`);
-  lines.push(`Auto-eligible: ${pipe.eligibleNow ?? d.sendEligible ?? readyToSend}`);
+  const totalCreators = inv.totalCreators ?? board.totalProspects ?? d.prospectsEvaluated ?? 0;
+  const withEmail = inv.withPublicEmail ?? board.usableEmails ?? d.contactVerified ?? 0;
+  const missingEmail = inv.missingEmail ?? board.needsEmail ?? Math.max(0, totalCreators - withEmail);
+  const discoveryEligible = inv.discoveryEligible ?? board.discoveryEligible ?? 0;
+  const backoff = inv.backoff ?? board.backoff ?? 0;
+  const noPublic = inv.noPublicEmail ?? board.noPublicEmail ?? nr.noUsableEmail ?? 0;
+  const autoEligible = inv.autoEligible ?? pipe.eligibleNow ?? d.sendEligible ?? readyToSend;
+  const discoveryAttempts = lastRun.emailsAttempted ?? lastRun.processed ?? 0;
+  const emailsFoundToday = lastRun.emailsFound ?? 0;
+  lines.push('CREATOR INVENTORY');
+  lines.push('-----------------');
+  lines.push(`Total creators: ${totalCreators}`);
+  lines.push(`With public email: ${withEmail}`);
+  lines.push(`Missing public email: ${missingEmail}`);
+  lines.push(`Discovery eligible: ${discoveryEligible}`);
+  lines.push(`In backoff: ${backoff}`);
+  lines.push(`No public email: ${noPublic}`);
+  lines.push('');
+  lines.push('CONTACT DISCOVERY');
+  lines.push('-----------------');
+  lines.push(`Attempts this run: ${discoveryAttempts}`);
+  lines.push(`Public emails found: ${emailsFoundToday}`);
+  lines.push(`Creators evaluated: ${d.prospectsEvaluated ?? totalCreators}`);
+  lines.push(`Valid emails: ${withEmail}`);
+  lines.push(`Qualified: ${inv.qualified ?? pipe.eligibleNow ?? d.sendEligible ?? readyToSend}`);
+  lines.push(`Auto-eligible: ${autoEligible}`);
   lines.push(`Needs approval: ${needsApproval}`);
+  lines.push(`Ready to send: ${readyToSend}`);
+  lines.push('');
+  lines.push('SENDABILITY');
+  lines.push('-----------');
+  lines.push(`Auto eligible: ${autoEligible}`);
+  lines.push(`Manual review: ${needsApproval}`);
   lines.push(`Ready to send: ${readyToSend}`);
   lines.push('');
   lines.push('APPLICATION GATES (before SES)');
@@ -1008,7 +1038,7 @@ export function composeGrowthReport(opts) {
   const crmOk = dist.crmSummaryOk;
   t.push(`  DRAFTS GENERATED (obs+subject, COOK-001): ${funnel.drafted}`);
   t.push(`  NEEDS APPROVAL (Admin queue): ${dist.needsApproval ?? dist.crmBoard?.needsApproval ?? 0}`);
-  t.push(`  READY TO SEND: ${dist.crmBoard?.readyToSend ?? pipe.readyToSend ?? funnel.approved}`);
+  t.push(`  READY TO SEND: ${dist.inventory?.readyToSend ?? dist.crmBoard?.readyToSend ?? pipe.readyToSend ?? funnel.approved}`);
   t.push(`  RECENTLY SENT (last ${dist.crmBoard?.recentlySentWindowDays ?? 7}d): ${dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0}`);
   t.push(`  ELIGIBLE NOW (send gates): ${pipelineMetric(pipe.eligibleNow, crmOk)}`);
   t.push(`  APPROVED ELIGIBLE NOW: ${pipelineMetric(pipe.approvedEligibleNow, crmOk)}`);
@@ -1159,7 +1189,7 @@ export function composeGrowthReport(opts) {
     ['COOK-001 SES ATTEMPTS', String(dist.sesAttemptedThisRun ?? dist.sendAttempts ?? 0)],
     ['COOK-001 DRAFTS GENERATED', String(dist.outreachFunnel?.drafted ?? 0)],
     ['COOK-001 NEEDS APPROVAL', String(dist.needsApproval ?? dist.crmBoard?.needsApproval ?? 0)],
-    ['COOK-001 READY TO SEND', String(dist.crmBoard?.readyToSend ?? dist.pipeline?.readyToSend ?? dist.outreachFunnel?.approved ?? 0)],
+    ['COOK-001 READY TO SEND', String(dist.inventory?.readyToSend ?? dist.crmBoard?.readyToSend ?? dist.pipeline?.readyToSend ?? dist.outreachFunnel?.approved ?? 0)],
     [
       `COOK-001 RECENTLY SENT (${dist.crmBoard?.recentlySentWindowDays ?? 7}d)`,
       String(dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0)
