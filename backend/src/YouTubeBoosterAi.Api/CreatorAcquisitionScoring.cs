@@ -139,7 +139,8 @@ public static class CreatorAcquisitionScoring
         if (!manual && (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60))
             return new AcqSendGateResult(false, "stale_upload");
         var standing = state.StandingCampaignApproval;
-        // Initial send always requires recipient approval. Follow-ups reuse that approval.
+        // Manual campaigns require a recipient ApprovalId. Automatic campaigns (standing
+        // approval) do not — qualified drafts are sendable without Admin Approvals.
         if (!standing && !followUpDue && (string.IsNullOrWhiteSpace(p.ApprovalId) || string.IsNullOrWhiteSpace(p.ContentHash)))
             return new AcqSendGateResult(false, "not_approved");
         if (string.IsNullOrWhiteSpace(p.Observation))

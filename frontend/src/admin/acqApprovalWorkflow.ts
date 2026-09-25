@@ -119,6 +119,9 @@ export function isReadyForApproval(row: AcqAdminProspect, _nowMs = Date.now()): 
   if (row.lastContactedAt) return false;
   const why = (row.whyNotSent || '').toUpperCase();
   if (why === 'ALREADY_CONTACTED' || why === 'DUPLICATE_EMAIL' || why === 'DUPLICATE_CHANNEL') return false;
+  if (why === 'READY_TO_SEND') return false;
+  const lane = (row.sendLane || '').toLowerCase();
+  if (lane === 'ready_to_send' || lane === 'sent') return false;
   return draftReviewBlockReason(row) === null && !isTerminalOutreach(row);
 }
 
@@ -289,6 +292,29 @@ export function resolveAcqWorkflow(
       whatICanDo: canManual
         ? 'Send Now (bypasses automation cooldown), unapprove, or reject.'
         : hard || 'Unapprove, edit message, or reject.',
+      primaryAction: canManual ? 'send' : 'view',
+      primaryActionLabel: canManual ? 'Send Now' : 'View'
+    };
+  }
+
+  const autoReady =
+    (row.sendLane || '').toLowerCase() === 'ready_to_send' ||
+    (row.whyNotSent || '').toUpperCase() === 'READY_TO_SEND';
+  if (autoReady) {
+    const hard = manualSendHardBlockReason(row);
+    const canManual = sendingEnabled && !hard;
+    return {
+      ...base,
+      status: 'APPROVED',
+      label: 'READY TO SEND',
+      canSendNow: canManual,
+      canApprove: false,
+      canUnapprove: true,
+      checkboxDisabledReason: 'Automatic campaign — already sendable.',
+      whyHere: 'This automatic COOK-001 draft is sendable without Admin Approvals.',
+      currentStatusAnswer: canManual ? 'READY TO SEND' : hard || 'READY TO SEND — sending disabled',
+      nextStep: 'Weekday automation will send this. Send Now is optional.',
+      whatICanDo: canManual ? 'Send Now, unapprove, or reject.' : hard || 'Unapprove, edit message, or reject.',
       primaryAction: canManual ? 'send' : 'view',
       primaryActionLabel: canManual ? 'Send Now' : 'View'
     };

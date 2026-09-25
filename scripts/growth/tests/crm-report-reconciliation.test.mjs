@@ -55,8 +55,10 @@ test('formatCrmAcquisitionText does not ask to approve when automatic sending is
   assert.match(text, /Daily limit: 100/);
   assert.match(text, /Sent today: 18/);
   assert.match(text, /Remaining campaign capacity: 82/);
-  assert.match(text, /Automation is operating normally/);
+  assert.match(text, /AUTOMATIC ACQUISITION: RUNNING/);
+  assert.match(text, /Owner action required: NONE/);
   assert.doesNotMatch(text, /waiting for approval/);
+  assert.doesNotMatch(text, /MAX — ACTION REQUIRED/);
   assert.match(text, /Delivered: NOT TRACKED/);
 });
 
@@ -136,4 +138,47 @@ test('normalizeDistribution preserves pipeline when CRM summary ok', () => {
   assert.equal(d.crmActionRequired, true);
   assert.equal(d.pipeline.eligibleNow, 0);
   assert.equal(pipelineMetric(d.pipeline.eligibleNow, d.crmSummaryOk), '0');
+});
+
+test('automatic COOK-001 report does not ask Max to open Approvals', () => {
+  const report = composeGrowthReport({
+    snapshot: { sources: { ga4: 'ok', stripe: 'ok', crm: 'ok' }, windows: {} },
+    health: { ok: true, checks: [{ name: 'api', ok: true }] },
+    experiments: [],
+    generatedAt: '2026-09-25T16:00:00.000Z',
+    distribution: {
+      executed: true,
+      distributionAttempted: true,
+      blockingApproval: false,
+      requiredOwnerApproval: 'none',
+      channel: 'COOK-001 weekday SES',
+      audience: 'cooking',
+      attributedVisits: '0',
+      activations: '0',
+      checkoutStarts: '0',
+      newCustomersThisRun: 0,
+      existingCustomers: 0,
+      customersObservedInWindow: 0,
+      experimentAttributedCustomers: '0',
+      verifiedRevenue: '$0.00',
+      sesAcceptedThisRun: 1,
+      sesAttemptedThisRun: 1,
+      prospectsEvaluated: 160,
+      crmSummaryOk: true,
+      needsApproval: 5,
+      sendingMode: 'automatic',
+      automaticSending: true,
+      crmActionRequired: false,
+      crmActionMessage: 'AUTOMATIC ACQUISITION: RUNNING',
+      crmBoard: { needsApproval: 5, readyToSend: 5, recentlySent: 1, recentlySentWindowDays: 7 },
+      pipeline: { eligibleNow: 5, approvedEligibleNow: 5, readyToSend: 5, dailyLimit: 100, dailyRemaining: 99 },
+      outreachFunnel: { drafted: 10, approved: 0, sent: 12, delivered: 0, clicked: 0, converted: 0 }
+    }
+  });
+  assert.doesNotMatch(report.subject, /ACTION REQUIRED/);
+  assert.match(report.text, /AUTOMATIC ACQUISITION: RUNNING/);
+  assert.match(report.text, /Owner action required: NONE/);
+  assert.match(report.text, /READY TO SEND: 5/);
+  assert.doesNotMatch(report.text, /MAX — ACTION REQUIRED/);
+  assert.doesNotMatch(report.html, /OPEN APPROVALS/);
 });

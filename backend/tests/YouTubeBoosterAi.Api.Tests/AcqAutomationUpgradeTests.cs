@@ -271,6 +271,86 @@ public class AcqAutomationUpgradeTests
     }
 
     [Fact]
+    public async Task AutomaticCook001_TenQualifiedDrafts_SendWithoutApprove()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var now = DateTimeOffset.UtcNow;
+        var rows = new List<AcqProspectRecord>();
+        for (var i = 1; i <= 10; i++)
+        {
+            var p = Prospect($"auto-{i}", $"auto{i}@channel.test", $"UCauto{i}");
+            rows.Add(p);
+            await store.UpsertProspectAsync(p, CancellationToken.None);
+        }
+
+        var promoted = await svc.PromoteAutomaticReadyDraftsAsync(
+            CreatorAcquisitionCampaigns.Cook001, null, CancellationToken.None);
+        Assert.Equal(10, promoted);
+
+        var state = await svc.LoadStateAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None);
+        Assert.True(state.StandingCampaignApproval);
+        Assert.False(state.RampEnabled);
+        var all = (await store.ListProspectsAsync(CancellationToken.None)).ToList();
+        var needs = all.Count(p => CreatorAcquisitionService.SendLaneFor(p, now, state, all) == "needs_approval");
+        var ready = all.Count(p => CreatorAcquisitionService.SendLaneFor(p, now, state, all) == "ready_to_send");
+        Assert.Equal(0, needs);
+        Assert.Equal(10, ready);
+        Assert.All(all, p => Assert.False(CreatorAcquisitionScoring.IsReadyForApproval(p)));
+
+        var first = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, false);
+        Assert.Equal(10, first.SesAttempted);
+        Assert.Equal(10, first.Sent);
+        Assert.Equal(10, ses.SendRawCalls);
+        Assert.All(await store.ListProspectsAsync(CancellationToken.None), p =>
+        {
+            Assert.NotNull(p.LastContactedAt);
+            Assert.False(string.IsNullOrWhiteSpace(p.LastSesMessageId));
+        });
+
+        var again = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, false);
+        Assert.Equal(0, again.SesAttempted);
+        Assert.Equal(0, again.Sent);
+        Assert.Equal(10, ses.SendRawCalls);
+        Assert.True(
+            again.ReasonCounts is not null
+            && (again.ReasonCounts.GetValueOrDefault("ALREADY_CONTACTED")
+                + again.ReasonCounts.GetValueOrDefault("DUPLICATE_EMAIL") >= 10
+                || again.Skipped >= 10));
+    }
+
+    [Fact]
+    public async Task AutomaticCook001_MixedEligibility_OnlyValidQualifiedReachesSes()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var valid = Prospect("mix-ok", "ok@channel.test", "UCok");
+        var invalid = Prospect("mix-inv", "not-an-email", "UCinv") with { PublicBusinessEmail = "not-an-email" };
+        var suppressed = Prospect("mix-sup", "sup@channel.test", "UCsup") with { SuppressionStatus = "unsubscribed", OutreachStatus = "unsubscribed" };
+        var already = Prospect("mix-old", "old@channel.test", "UCold") with
+        {
+            LastContactedAt = DateTimeOffset.UtcNow.AddDays(-20),
+            OutreachStatus = "sent"
+        };
+        var duplicate = Prospect("mix-dup", "old@channel.test", "UCdup");
+        var lowScore = Prospect("mix-low", "low@channel.test", "UClow") with { PriorityScore = 40 };
+        foreach (var p in new[] { valid, invalid, suppressed, already, duplicate, lowScore })
+            await store.UpsertProspectAsync(p, CancellationToken.None);
+
+        await svc.PromoteAutomaticReadyDraftsAsync(CreatorAcquisitionCampaigns.Cook001, null, CancellationToken.None);
+        var result = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, false);
+        Assert.Equal(1, ses.SendRawCalls);
+        Assert.Equal(1, result.SesAttempted);
+        Assert.Equal(1, result.Sent);
+        var sent = await store.GetProspectAsync(valid.ProspectId, CancellationToken.None);
+        Assert.NotNull(sent!.LastSesMessageId);
+        Assert.Null((await store.GetProspectAsync(invalid.ProspectId, CancellationToken.None))!.LastSesMessageId);
+        Assert.Null((await store.GetProspectAsync(lowScore.ProspectId, CancellationToken.None))!.LastSesMessageId);
+    }
+
+    [Fact]
     public void SkipAndSesCounters_DistinguishAppBlockFromSes()
     {
         var counts = OutreachPolicy.AggregateSkipReasons([

@@ -135,7 +135,7 @@ function experimentCopy(ex, snapshot) {
     return {
       stage: 'Founder outreach',
       eligible: collecting
-        ? '/share + /sample-report; COOK-001 weekday SES (verified public emails, ramp 10→20→30/day)'
+        ? '/share + /sample-report; COOK-001 weekday SES (verified public emails, saved DailyLimit 100 max)'
         : '/share and /sample-report (distribution asset; not send approval)',
       primary: collecting
         ? 'Collecting named-recipient + COOK-001 weekday outreach (drafts are not distribution)'
@@ -154,7 +154,7 @@ function experimentCopy(ex, snapshot) {
 function exp004OverlapNote(classified) {
   const collecting = classified.some((e) => e.id === 'EXP-004' && e.collecting);
   return collecting
-    ? 'EXP-004 is ACTIVE/COLLECTING. COOK-001 weekday sending ramps 10→20→30/day when delivery health is acceptable (bounce <3%, complaint <0.1%, unsub <2%; ≥30 sends before rates).'
+    ? 'EXP-004 is ACTIVE/COLLECTING. COOK-001 weekday sending uses the persisted DailyLimit of 100 (a maximum, not a required send count). Delivery health gates remain (bounce <3%, complaint <0.1%, unsub <2%).'
     : 'EXP-004 is awaiting owner approval and is not collecting outreach data.';
 }
 
@@ -257,8 +257,26 @@ export function formatCrmAcquisitionText(dist) {
   lines.push(`Public emails found: ${board.usableEmails ?? d.contactVerified ?? 0}`);
   lines.push(`Valid emails: ${board.usableEmails ?? d.contactVerified ?? 0}`);
   lines.push(`Qualified: ${pipe.eligibleNow ?? d.sendEligible ?? readyToSend}`);
+  lines.push(`Auto-eligible: ${pipe.eligibleNow ?? d.sendEligible ?? readyToSend}`);
   lines.push(`Needs approval: ${needsApproval}`);
   lines.push(`Ready to send: ${readyToSend}`);
+  lines.push('');
+  lines.push('APPLICATION GATES (before SES)');
+  lines.push('------------------------------');
+  lines.push(`APP BLOCKED BEFORE SES: ${pipe.appBlockedBeforeSes ?? Object.values(skips).reduce((n, v) => n + Number(v || 0), 0)}`);
+  lines.push('');
+  lines.push('SES');
+  lines.push('---');
+  lines.push(`SES ATTEMPTED: ${d.sesAttemptedThisRun ?? pipe.sesAttempted ?? 0}`);
+  lines.push(`SES ACCEPTED: ${d.sesAcceptedThisRun ?? pipe.sesAccepted ?? sentToday}`);
+  lines.push(`SES REJECTED: ${pipe.sesRejected ?? d.sesRejected ?? 0}`);
+  lines.push(`SES THROTTLED: ${skips.SES_QUOTA_REACHED ?? 0}`);
+  if ((d.sesAttemptedThisRun ?? pipe.sesAttempted ?? 0) === 0) {
+    lines.push('SES did not block sending — no SES attempt was made.');
+  }
+  if (pipe.executionBudgetHit) {
+    lines.push('APP GATE: EXECUTION_BUDGET — tick ended; continuation cron can consume remaining capacity.');
+  }
   lines.push('');
   lines.push('SKIPPED');
   lines.push('-------');
@@ -284,7 +302,8 @@ export function formatCrmAcquisitionText(dist) {
   if (pause) {
     lines.push(`AUTOMATIC SENDING PAUSED — ${pause}`);
   } else if (automatic) {
-    lines.push(d.crmActionMessage || 'Automation is operating normally.');
+    lines.push('AUTOMATIC ACQUISITION: RUNNING');
+    lines.push('Owner action required: NONE');
   } else if (needsApproval > 0 || d.crmActionRequired) {
     lines.push(
       d.crmActionMessage ||
@@ -317,8 +336,8 @@ export function emptyCohort() {
     verifiedRevenue: 0,
     sameCohortTracking: null,
     dailyLimit: 100,
-    nextRamp: 20,
-    rampBlockReason: 'sample_too_small',
+    nextRamp: 'n/a — persisted COOK-001 uses saved DailyLimit',
+    rampBlockReason: null,
     variants: { A: { sent: 0, clicks: 0 }, B: { sent: 0, clicks: 0 } }
   };
 }
@@ -329,7 +348,7 @@ export function emptyDeliverability() {
     complaintRate: 'N/A',
     unsubscribeRate: 'N/A',
     dailyLimit: 100,
-    nextRampDecision: 'Hold at saved campaign daily limit until delivery health is acceptable.'
+    nextRampDecision: 'Legacy 10→20→30 ramp is off for persisted COOK-001. DailyLimit 100 is a maximum.'
   };
 }
 
@@ -417,14 +436,14 @@ export function normalizeDistribution(input, ctx = {}) {
   const autoOn = d.automaticSending === true || d.sendingMode === 'automatic';
   d.crmActionRequired =
     input?.crmActionRequired === true ||
-    (!!d.automaticPauseReason && !autoOn) ||
     (!autoOn && d.needsApproval > 0);
+  if (autoOn && !d.automaticPauseReason) d.crmActionRequired = false;
   d.crmActionMessage =
     input?.crmActionMessage ||
     (d.automaticPauseReason
       ? `AUTOMATIC SENDING PAUSED — ${d.automaticPauseReason}`
       : autoOn
-        ? 'Automation is operating normally.'
+        ? 'AUTOMATIC ACQUISITION: RUNNING'
         : d.needsApproval > 0
           ? `${d.needsApproval} outreach draft${d.needsApproval === 1 ? '' : 's'} waiting for approval.`
           : 'No action required.');
@@ -640,8 +659,9 @@ export function buildSubject({ prefix, et, dist }) {
   const newCust = d.newCustomersThisRun ?? 0;
   const ses = Number(d.sesAcceptedThisRun ?? d.cohort?.emailsSent ?? 0) || 0;
   const needs = Number(d.needsApproval ?? d.crmBoard?.needsApproval ?? 0) || 0;
+  const autoOn = d.automaticSending === true || d.sendingMode === 'automatic';
   const lead =
-    needs > 0
+    !autoOn && needs > 0
       ? `MAX — ACTION REQUIRED (${needs} need approval)`
       : ses > 0 || d.executed
         ? 'Distribution executed'
@@ -705,8 +725,11 @@ function nextActions({ classified, nextFuture, reportYmd, dist }) {
   const d = dist || emptyDistribution();
   const dueMissed = classified.filter((e) => e.dueUnevaluated);
   const needs = Number(d.needsApproval ?? d.crmBoard?.needsApproval ?? 0) || 0;
+  const autoOn = d.automaticSending === true || d.sendingMode === 'automatic';
 
-  if (needs > 0) {
+  if (autoOn && !d.automaticPauseReason) {
+    items.push('AUTOMATIC ACQUISITION: RUNNING. Owner action required: NONE.');
+  } else if (!autoOn && needs > 0) {
     items.push(
       `MAX — ACTION REQUIRED: ${needs} draft${needs === 1 ? '' : 's'} in Admin Approvals. Open ${d.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals'}`
     );
@@ -729,7 +752,7 @@ function nextActions({ classified, nextFuture, reportYmd, dist }) {
   );
   const exp004 = classified.find((e) => e.id === 'EXP-004');
   const exp004Action = exp004?.collecting
-    ? 'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 COOK-001 weekday sending is enabled; keep batches small and skip form-only contacts.'
+    ? 'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 COOK-001 weekday sending is automatic (DailyLimit 100 max); skip form-only contacts.'
     : 'Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 outreach stays awaiting named-recipient approval.';
   items.push(exp004Action);
   items.push('Do not launch another experiment merely to have a ship.');
@@ -952,7 +975,13 @@ export function composeGrowthReport(opts) {
     `Channel owner approval (new distribution channel): ${dist.blockingApproval ? 'BLOCKING - ' : ''}${dist.requiredOwnerApproval}`
   );
   t.push(
-    `CRM Approvals queue: ${Number(dist.needsApproval ?? 0) > 0 ? `ACTION REQUIRED — ${dist.needsApproval} need approval` : 'No drafts waiting'}`
+    `CRM Approvals queue: ${
+      dist.automaticSending === true || dist.sendingMode === 'automatic'
+        ? 'AUTOMATIC ACQUISITION: RUNNING — owner action NONE'
+        : Number(dist.needsApproval ?? 0) > 0
+          ? `ACTION REQUIRED — ${dist.needsApproval} need approval`
+          : 'No drafts waiting'
+    }`
   );
   t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
   const funnel = dist.outreachFunnel || emptyDistribution().outreachFunnel;
@@ -975,12 +1004,12 @@ export function composeGrowthReport(opts) {
   if (dist.eligibleProspects != null) {
     t.push(`  ELIGIBLE PROSPECTS (run probe): ${dist.eligibleProspects}`);
   }
-  t.push(`  DRAFTS GENERATED (obs+subject, COOK-001): ${funnel.drafted}`);
-  t.push(`  NEEDS APPROVAL (Admin queue): ${dist.needsApproval ?? dist.crmBoard?.needsApproval ?? 0}`);
-  t.push(`  READY TO SEND (approved): ${funnel.approved}`);
-  t.push(`  RECENTLY SENT (last ${dist.crmBoard?.recentlySentWindowDays ?? 7}d): ${dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0}`);
   const pipe = dist.pipeline || {};
   const crmOk = dist.crmSummaryOk;
+  t.push(`  DRAFTS GENERATED (obs+subject, COOK-001): ${funnel.drafted}`);
+  t.push(`  NEEDS APPROVAL (Admin queue): ${dist.needsApproval ?? dist.crmBoard?.needsApproval ?? 0}`);
+  t.push(`  READY TO SEND: ${dist.crmBoard?.readyToSend ?? pipe.readyToSend ?? funnel.approved}`);
+  t.push(`  RECENTLY SENT (last ${dist.crmBoard?.recentlySentWindowDays ?? 7}d): ${dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0}`);
   t.push(`  ELIGIBLE NOW (send gates): ${pipelineMetric(pipe.eligibleNow, crmOk)}`);
   t.push(`  APPROVED ELIGIBLE NOW: ${pipelineMetric(pipe.approvedEligibleNow, crmOk)}`);
   t.push(`  BLOCKED BY COOLDOWN (approved): ${pipelineMetric(pipe.blockedByCooldown, crmOk)}`);
@@ -988,7 +1017,7 @@ export function composeGrowthReport(opts) {
   t.push(`  BLOCKED BY QUALIFICATION (approved): ${pipelineMetric(pipe.blockedByQualification, crmOk)}`);
   t.push(`  BLOCKED BY SUPPRESSION (approved): ${pipelineMetric(pipe.blockedBySuppression, crmOk)}`);
   t.push(`  BLOCKED BY OTHER (approved): ${pipelineMetric(pipe.blockedByOther, crmOk)}`);
-  t.push(`  DAILY REMAINING: ${pipelineMetric(pipe.dailyRemaining ?? dist.dailyRemaining, crmOk)} / limit ${pipe.dailyLimit ?? dist.deliverability?.dailyLimit ?? 10}`);
+  t.push(`  DAILY REMAINING: ${pipelineMetric(pipe.dailyRemaining ?? dist.dailyRemaining, crmOk)} / limit ${pipe.dailyLimit ?? dist.deliverability?.dailyLimit ?? 100}`);
   t.push(`  EXPECTED TO ATTEMPT: ${pipelineMetric(pipe.expectedToAttempt, crmOk)}`);
   t.push(`  SENT LIFETIME (CRM): ${dist.lifetimeCrmSent ?? funnel.sent}`);
   t.push(`  DELIVERED: ${funnel.delivered}`);
@@ -1076,7 +1105,8 @@ export function composeGrowthReport(opts) {
     )
     .join('');
 
-  const distLeadBg = Number(dist.needsApproval ?? 0) > 0
+  const autoOnHtml = dist.automaticSending === true || dist.sendingMode === 'automatic';
+  const distLeadBg = !autoOnHtml && Number(dist.needsApproval ?? 0) > 0
     ? '#fef3c7'
     : dist.blockingApproval
       ? '#fef3c7'
@@ -1085,7 +1115,7 @@ export function composeGrowthReport(opts) {
         : dist.distributionAttempted
           ? '#fee2e2'
           : '#f1f5f9';
-  const distLeadBorder = Number(dist.needsApproval ?? 0) > 0
+  const distLeadBorder = !autoOnHtml && Number(dist.needsApproval ?? 0) > 0
     ? '#f59e0b'
     : dist.blockingApproval
       ? '#f59e0b'
@@ -1097,11 +1127,15 @@ export function composeGrowthReport(opts) {
   const distRows = [
     [
       'CRM Approvals queue',
-      Number(dist.needsApproval ?? 0) > 0
-        ? `ACTION REQUIRED — ${dist.needsApproval} need approval`
-        : 'No drafts waiting'
+      autoOnHtml
+        ? 'AUTOMATIC ACQUISITION: RUNNING — owner action NONE'
+        : Number(dist.needsApproval ?? 0) > 0
+          ? `ACTION REQUIRED — ${dist.needsApproval} need approval`
+          : 'No drafts waiting'
     ],
-    ['OPEN APPROVALS', String(dist.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals')],
+    ...(autoOnHtml
+      ? []
+      : [['OPEN APPROVALS', String(dist.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals')]]),
     ['Distribution executed', dist.executed && (dist.sesAcceptedThisRun || 0) > 0 ? 'yes' : 'no'],
     ['Distribution attempted', dist.distributionAttempted ? 'yes' : 'no'],
     ['Audience/channel', `${dist.audience} / ${dist.channel}`],
@@ -1125,7 +1159,7 @@ export function composeGrowthReport(opts) {
     ['COOK-001 SES ATTEMPTS', String(dist.sesAttemptedThisRun ?? dist.sendAttempts ?? 0)],
     ['COOK-001 DRAFTS GENERATED', String(dist.outreachFunnel?.drafted ?? 0)],
     ['COOK-001 NEEDS APPROVAL', String(dist.needsApproval ?? dist.crmBoard?.needsApproval ?? 0)],
-    ['COOK-001 READY TO SEND', String(dist.outreachFunnel?.approved ?? 0)],
+    ['COOK-001 READY TO SEND', String(dist.crmBoard?.readyToSend ?? dist.pipeline?.readyToSend ?? dist.outreachFunnel?.approved ?? 0)],
     [
       `COOK-001 RECENTLY SENT (${dist.crmBoard?.recentlySentWindowDays ?? 7}d)`,
       String(dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0)
@@ -1160,21 +1194,27 @@ export function composeGrowthReport(opts) {
 
   const crmBoardHtml = (() => {
     const needs = Number(dist.needsApproval ?? 0) || 0;
-    const bg = needs > 0 ? '#fef3c7' : '#ecfdf5';
-    const border = needs > 0 ? '#f59e0b' : '#6ee7b7';
-    const title = needs > 0 ? 'MAX — ACTION REQUIRED' : 'OWNER ACTION';
-    const msg =
-      dist.crmActionMessage ||
-      (needs > 0
-        ? `${needs} outreach drafts waiting for approval.`
-        : 'No action required.');
+    const autoOn = dist.automaticSending === true || dist.sendingMode === 'automatic';
+    const bg = !autoOn && needs > 0 ? '#fef3c7' : '#ecfdf5';
+    const border = !autoOn && needs > 0 ? '#f59e0b' : '#6ee7b7';
+    const title = autoOn
+      ? 'AUTOMATIC ACQUISITION: RUNNING'
+      : needs > 0
+        ? 'MAX — ACTION REQUIRED'
+        : 'OWNER ACTION';
+    const msg = autoOn
+      ? 'Owner action required: NONE'
+      : dist.crmActionMessage ||
+        (needs > 0
+          ? `${needs} outreach drafts waiting for approval.`
+          : 'No action required.');
     const url = dist.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals';
     return `<div style="margin:0 0 20px;padding:16px 18px;background:${bg};border:1px solid ${border};border-radius:8px;">
       <div style="font-size:17px;font-weight:700;">${escapeHtml(title)}</div>
       <div style="margin-top:8px;font-size:15px;">${escapeHtml(msg)}</div>
-      ${needs > 0 ? `<div style="margin-top:12px;"><a href="${escapeHtml(url)}" style="color:#1d4ed8;font-weight:700;">OPEN APPROVALS</a></div>` : ''}
+      ${!autoOn && needs > 0 ? `<div style="margin-top:12px;"><a href="${escapeHtml(url)}" style="color:#1d4ed8;font-weight:700;">OPEN APPROVALS</a></div>` : ''}
       <div style="margin-top:12px;font-size:14px;color:#334155;">
-        Needs approval <b>${needs}</b> · Ready to send <b>${escapeHtml(String(dist.crmBoard?.readyToSend ?? dist.outreachFunnel?.approved ?? 0))}</b> · Recently sent (${escapeHtml(String(dist.crmBoard?.recentlySentWindowDays ?? 7))}d) <b>${escapeHtml(String(dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0))}</b> · Drafts generated <b>${escapeHtml(String(dist.outreachFunnel?.drafted ?? 0))}</b>
+        Needs approval <b>${needs}</b> · Ready to send <b>${escapeHtml(String(dist.crmBoard?.readyToSend ?? dist.pipeline?.readyToSend ?? dist.outreachFunnel?.approved ?? 0))}</b> · Recently sent (${escapeHtml(String(dist.crmBoard?.recentlySentWindowDays ?? 7))}d) <b>${escapeHtml(String(dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0))}</b> · Drafts generated <b>${escapeHtml(String(dist.outreachFunnel?.drafted ?? 0))}</b>
       </div>
     </div>`;
   })();

@@ -89,9 +89,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var saved = await FindCampaignConfigAsync(campaign, cancellationToken);
         int daily;
         var standing = false;
-        if (saved is not null)
+        var useSavedLimit = saved is not null;
+        if (useSavedLimit)
         {
-            daily = OutreachPolicy.ClampConfiguredDailyLimit(saved.DailyLimit);
+            daily = OutreachPolicy.ClampConfiguredDailyLimit(saved!.DailyLimit);
             maxLimit = Math.Max(maxLimit, daily);
             standing = string.Equals(saved.SendingMode, "automatic", StringComparison.OrdinalIgnoreCase);
         }
@@ -120,7 +121,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 ? null
                 : _configuration["CreatorAcquisition:ConfigSet"]!.Trim(),
             MaxDailyLimit: maxLimit,
-            RampEnabled: rampEnabled,
+            RampEnabled: useSavedLimit && standing ? false : rampEnabled,
             CooldownDays: cooldown,
             RampStage: stage,
             StandingCampaignApproval: standing,
@@ -451,13 +452,14 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         if (!EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
             return new AcqDraftPrepareResult(p, false, "missing_email");
 
-        // Idempotent: already has a complete draft that can go to approval.
+        // Idempotent: already has a complete draft (queued or auto-approved).
         if (!p.PreviewPlaceholder
             && !string.IsNullOrWhiteSpace(p.Subject)
             && !string.IsNullOrWhiteSpace(p.Body)
             && !string.IsNullOrWhiteSpace(p.Observation)
             && CreatorAcquisitionScoring.HasStrongPersonalization(p)
-            && string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase))
+            && (string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)))
         {
             return new AcqDraftPrepareResult(p, true, "already_complete");
         }
@@ -702,6 +704,9 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             UpdatedAt = DateTimeOffset.UtcNow
         };
         next = next with { ContentHash = CreatorAcquisitionScoring.ContentHash(next) };
+        var state = await LoadStateAsync(next.Campaign, cancellationToken);
+        var cfg = await ResolveCampaignConfigAsync(next.Campaign, cancellationToken);
+        next = StampAutomaticApprovalIfEligible(next, state, cfg, known);
         await _store.UpsertProspectAsync(next, cancellationToken);
         return new AcqDraftPrepareResult(next, true, null);
     }
@@ -984,8 +989,9 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         remaining = await CapRemainingByProviderAsync(remaining, cancellationToken);
-        var replenish = await ReplenishCampaignInventoryAsync(cfg, remaining, cancellationToken);
+        await PromoteAutomaticReadyDraftsAsync(campaign, state, cancellationToken);
         all = await _store.ListProspectsAsync(cancellationToken);
+        var replenish = (Discovered: 0, EmailsFound: 0, DraftsPrepared: 0);
 
         var candidates = all
             .Where(p => string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
@@ -1212,6 +1218,16 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             {
                 Skip(p.ProspectId, $"ses:{ex.Message}");
             }
+        }
+
+        // Replenish only after sending, and only if the tick still has time. Discovery
+        // before SES was consuming the 20s budget and stopping after one accepted email.
+        if (DateTime.UtcNow < deadline)
+        {
+            var used = dryRun ? wouldSend : sent;
+            var stillNeed = Math.Max(0, remaining - used);
+            if (stillNeed > 0)
+                replenish = await ReplenishCampaignInventoryAsync(cfg, stillNeed, cancellationToken);
         }
 
         var ramp = await _store.GetRampAsync(campaign, cancellationToken);

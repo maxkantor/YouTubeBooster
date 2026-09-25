@@ -29,7 +29,7 @@ export function AcquisitionOverviewPage() {
   const approvedWaiting =
     summary?.approvedWaiting ?? summary?.currentlyApprovedWaitingToSend ?? d.currentlyApprovedWaitingToSend;
   const approvedEligible =
-    summary?.approvedReadyToSend ?? summary?.pipeline?.approvedEligibleNow ?? d.approvedEligibleNow;
+    summary?.pipeline?.readyToSend ?? summary?.approvedReadyToSend ?? summary?.pipeline?.approvedEligibleNow ?? d.approvedEligibleNow;
   const blockedCooldown = summary?.blockedCooldown ?? summary?.pipeline?.blockedByCooldown ?? d.blockedByCooldown;
   const blockedQual = summary?.pipeline?.blockedByQualification ?? d.blockedByQualification;
   const sentToday = summary?.sentToday ?? d.sentToday;

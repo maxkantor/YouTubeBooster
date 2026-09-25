@@ -613,9 +613,9 @@ public sealed partial class CreatorAcquisitionService
         var followUpDue = CreatorAcquisitionScoring.IsFollowUpDue(p, now);
         var history = AcqSendGuard.HistoryBlockReason(all, p, followUpDue);
         if (history is not null) return history;
-        var mode = state.StandingCampaignApproval || approveFirst ? AcqSendMode.ManualAdmin : AcqSendMode.ManualAdmin;
+        var mode = approveFirst ? AcqSendMode.ManualAdmin : AcqSendMode.Automated;
         var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
-            p, now, state, alreadyContacted: p.LastContactedAt is not null, AcqSendMode.ManualAdmin);
+            p, now, state, alreadyContacted: p.LastContactedAt is not null, mode);
         if (!gate.Ok)
         {
             if (approveFirst && string.Equals(gate.Reason, "not_approved", StringComparison.OrdinalIgnoreCase))
@@ -624,7 +624,6 @@ public sealed partial class CreatorAcquisitionService
                 return null;
             return gate.Reason;
         }
-        _ = mode;
         return null;
     }
 
@@ -660,6 +659,13 @@ public sealed partial class CreatorAcquisitionService
         return OutreachPolicy.NormalizeSkipReason(gate.Reason);
     }
 
+    public static string StandingApprovalId(string campaign) =>
+        "STANDING-" + (string.IsNullOrWhiteSpace(campaign) ? CreatorAcquisitionCampaigns.Cook001 : campaign.Trim().ToUpperInvariant());
+
+    /// <summary>
+    /// Authoritative lane for Admin + report counters. Automatic campaigns never put
+    /// ordinary qualified drafts in needs_approval — that lane is manual/review only.
+    /// </summary>
     public static string SendLaneFor(
         AcqProspectRecord p,
         DateTimeOffset now,
@@ -667,12 +673,87 @@ public sealed partial class CreatorAcquisitionService
         IReadOnlyList<AcqProspectRecord>? all = null)
     {
         var why = WhyNotSentCode(p, now, state, all);
-        if (p.LastContactedAt is not null) return "sent";
+        var followUpDue = CreatorAcquisitionScoring.IsFollowUpDue(p, now);
+        if (p.LastContactedAt is not null && !followUpDue) return "sent";
         if (why is "ALREADY_CONTACTED" or "DUPLICATE_EMAIL" or "DUPLICATE_CHANNEL") return "sent";
         if (why == "READY_TO_SEND") return "ready_to_send";
-        if (why is "MANUAL_APPROVAL_REQUIRED") return "needs_approval";
+        if (p.Strategic)
+            return "needs_approval";
+        if (string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase))
+            return "needs_approval";
+        if (why is "MANUAL_APPROVAL_REQUIRED")
+            return state.StandingCampaignApproval ? "ready_to_send" : "needs_approval";
+        if (state.StandingCampaignApproval)
+            return "other";
         if (CreatorAcquisitionScoring.IsReadyForApproval(p)) return "needs_approval";
         return "other";
+    }
+
+    internal static AcqProspectRecord StampAutomaticApprovalIfEligible(
+        AcqProspectRecord p,
+        AcqCampaignState state,
+        AcqCampaignConfig cfg,
+        IReadOnlyList<AcqProspectRecord> all)
+    {
+        if (p.LastContactedAt is not null) return p;
+        if (p.Strategic) return p;
+        if (string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase)) return p;
+        if (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(p.ApprovalId)
+            && !string.IsNullOrWhiteSpace(p.ContentHash))
+            return p;
+        if (!state.StandingCampaignApproval || !state.MarketingSendingEnabled) return p;
+        if (!string.Equals(cfg.SendingMode, "automatic", StringComparison.OrdinalIgnoreCase) || !cfg.AutoSend)
+            return p;
+        if (AcqSendGuard.IsStoppedOutreachStatus(p.OutreachStatus, p.SuppressionStatus)) return p;
+        var history = AcqSendGuard.HistoryBlockReason(all, p, followUpDue: false);
+        if (history is not null) return p;
+        var hashed = string.IsNullOrWhiteSpace(p.ContentHash)
+            ? p with { ContentHash = CreatorAcquisitionScoring.ContentHash(p) }
+            : p;
+        var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
+            hashed, DateTimeOffset.UtcNow, state, alreadyContacted: false, AcqSendMode.Automated);
+        if (!gate.Ok) return p;
+        var approvalId = StandingApprovalId(p.Campaign);
+        return hashed with
+        {
+            OutreachStatus = "approved",
+            ApprovalId = approvalId,
+            ApprovedBy = "automatic",
+            ApprovedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    public async Task<int> PromoteAutomaticReadyDraftsAsync(
+        string campaign,
+        AcqCampaignState? state,
+        CancellationToken cancellationToken)
+    {
+        state ??= await LoadStateAsync(campaign, cancellationToken);
+        var cfg = await ResolveCampaignConfigAsync(campaign, cancellationToken);
+        if (!state.StandingCampaignApproval || !cfg.AutoSend) return 0;
+        var all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
+        var promoted = 0;
+        for (var i = 0; i < all.Count; i++)
+        {
+            var p = all[i];
+            if (!string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)) continue;
+            if (p.LastContactedAt is not null) continue;
+            if (!string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                && !(string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                     && string.IsNullOrWhiteSpace(p.ApprovalId)))
+                continue;
+            var stamped = StampAutomaticApprovalIfEligible(p, state, cfg, all);
+            if (!string.Equals(stamped.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(p.ApprovalId, stamped.ApprovalId, StringComparison.Ordinal))
+                continue;
+            await _store.UpsertProspectAsync(stamped, cancellationToken);
+            all[i] = stamped;
+            promoted++;
+        }
+        return promoted;
     }
 
     public async Task<AcqProviderQuota> GetProviderQuotaAsync(CancellationToken cancellationToken)

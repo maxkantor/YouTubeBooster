@@ -143,6 +143,17 @@ describe('acqApprovalWorkflow', () => {
     assert.equal(w.canApprove, false);
   });
 
+  it('automatic ready-to-send drafts are not Needs Approval', () => {
+    const r = row({});
+    r.sendLane = 'ready_to_send';
+    r.whyNotSent = 'READY_TO_SEND';
+    assert.equal(isReadyForApproval(r), false);
+    const w = resolveAcqWorkflow(r);
+    assert.equal(w.status, 'APPROVED');
+    assert.equal(w.canSelectForApproval, false);
+    assert.equal(w.canSendNow, true);
+  });
+
   it('rediscovered sibling of an already-emailed creator is not selectable', () => {
     const rediscovered = row({ outreachStatus: 'draft_ready', lastContactedAt: null });
     rediscovered.whyNotSent = 'DUPLICATE_EMAIL';

@@ -160,6 +160,7 @@ if (invokedAsCli) {
     const needsApproval = Number(crmSummary.needsApproval ?? crmSummary.crmBoard?.needsApproval ?? 0) || 0;
     const approvalsUrl =
       crmSummary.crmBoard?.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals';
+    const automaticSending = crmSummary.automaticSending === true;
     distribution = {
       ...base,
       outreachFunnel: {
@@ -175,10 +176,17 @@ if (invokedAsCli) {
       dailyLimit: crmSummary.dailyLimit ?? base.dailyLimit,
       dailyRemaining: crmSummary.dailyRemaining ?? base.dailyRemaining,
       crmSummaryOk: true,
-      // Owner action = Approvals queue (not channel gate). Prefer CRM truth over hardcoded none.
-      crmActionRequired: needsApproval > 0,
-      crmActionMessage:
-        needsApproval > 0
+      automaticSending,
+      sendingMode: crmSummary.sendingMode || base.sendingMode,
+      dryRun: crmSummary.dryRun === true,
+      automaticPauseReason: crmSummary.automaticPauseReason || base.automaticPauseReason || null,
+      sesRemaining: crmSummary.sesRemaining ?? base.sesRemaining,
+      crmActionRequired: automaticSending ? false : needsApproval > 0,
+      crmActionMessage: automaticSending
+        ? crmSummary.automaticPauseReason
+          ? `AUTOMATIC SENDING PAUSED — ${crmSummary.automaticPauseReason}`
+          : 'AUTOMATIC ACQUISITION: RUNNING'
+        : needsApproval > 0
           ? `${needsApproval} outreach draft${needsApproval === 1 ? '' : 's'} waiting for approval.`
           : 'No action required.',
       approvalsUrl,

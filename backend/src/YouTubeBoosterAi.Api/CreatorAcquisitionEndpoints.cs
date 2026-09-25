@@ -207,9 +207,10 @@ public static class CreatorAcquisitionEndpoints
 
         admin.MapGet("/summary", async (ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
         {
-            var rows = await acq.Store.ListProspectsAsync(cancellationToken);
             var campaign = CreatorAcquisitionCampaigns.Cook001;
             var state = await acq.LoadStateAsync(campaign, cancellationToken);
+            await acq.PromoteAutomaticReadyDraftsAsync(campaign, state, cancellationToken);
+            var rows = await acq.Store.ListProspectsAsync(cancellationToken);
             var now = DateTimeOffset.UtcNow;
             var todayEt = CreatorAcquisitionScoring.EasternDate(now).Date;
             var runYmd = todayEt.ToString("yyyy-MM-dd");
@@ -277,7 +278,8 @@ public static class CreatorAcquisitionEndpoints
                 if (autoGate.Ok)
                 {
                     sendEligible++;
-                    if (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                        || state.StandingCampaignApproval)
                         approvedEligible++;
                 }
                 if (manualGate.Ok
@@ -314,6 +316,9 @@ public static class CreatorAcquisitionEndpoints
 
             object? lastRun = null;
             int? lastRunSesAttempted = null;
+            int lastRunSesAccepted = 0;
+            int lastRunSesRejected = 0;
+            var lastRunExecutionBudget = false;
             var lastRunJson = await acq.Store.GetCohortRunAsync(campaign, cohortRunId, cancellationToken);
             if (!string.IsNullOrWhiteSpace(lastRunJson))
             {
@@ -325,6 +330,15 @@ public static class CreatorAcquisitionEndpoints
                         lastRunSesAttempted = sesVal;
                     else if (doc.RootElement.TryGetProperty("attempted", out var attEl) && attEl.TryGetInt32(out var attVal))
                         lastRunSesAttempted = attVal;
+                    if (doc.RootElement.TryGetProperty("sent", out var sentEl) && sentEl.TryGetInt32(out var sentVal))
+                        lastRunSesAccepted = sentVal;
+                    if (doc.RootElement.TryGetProperty("reasonCounts", out var rcEl) && rcEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    {
+                        if (rcEl.TryGetProperty("SES_REJECTED", out var rej) && rej.TryGetInt32(out var rejVal))
+                            lastRunSesRejected = rejVal;
+                        if (rcEl.TryGetProperty("EXECUTION_BUDGET", out var bud) && bud.TryGetInt32(out var budVal))
+                            lastRunExecutionBudget = budVal > 0;
+                    }
                 }
                 catch
                 {
@@ -451,6 +465,11 @@ public static class CreatorAcquisitionEndpoints
             var sesQuota = await acq.GetProviderQuotaAsync(cancellationToken);
             var readyLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state, rows) == "ready_to_send");
             var needsLane = cookRows.Count(r => CreatorAcquisitionService.SendLaneFor(r, now, state, rows) == "needs_approval");
+            if (state.StandingCampaignApproval)
+            {
+                sendEligible = readyLane;
+                approvedEligible = readyLane;
+            }
             string? autoPauseReason = null;
             if (state.ComplaintPause || state.RampBlockReason is "bounce_rate" or "complaint_rate")
                 autoPauseReason = "DELIVERABILITY SAFETY PAUSE";
@@ -577,9 +596,16 @@ public static class CreatorAcquisitionEndpoints
                     blockedByOther = approvedBlockedOther,
                     dailyLimit = state.DailyLimit,
                     dailyRemaining,
-                    expectedToAttempt = Math.Min(approvedEligible, dailyRemaining),
+                    expectedToAttempt = Math.Min(readyLane, dailyRemaining),
                     notReviewable,
-                    notReviewableTotal
+                    notReviewableTotal,
+                    appBlockedBeforeSes = skipReasons
+                        .Where(kv => !kv.Key.StartsWith("SES_", StringComparison.Ordinal))
+                        .Sum(kv => kv.Value),
+                    sesAttempted = lastRunSesAttempted ?? 0,
+                    sesAccepted = lastRunSesAccepted,
+                    sesRejected = lastRunSesRejected,
+                    executionBudgetHit = lastRunExecutionBudget
                 },
                 crmBoard = new
                 {
@@ -606,6 +632,8 @@ public static class CreatorAcquisitionEndpoints
                 dailyRemaining,
                 nextScheduledSendEt,
                 lastRun,
+                lastRunSesAccepted,
+                lastRunExecutionBudget,
                 cohortRunId,
                 taxonomy = AcquisitionTaxonomy.Catalog(),
                 segments = new
@@ -1345,6 +1373,7 @@ public interface ICreatorAcquisitionService
     Task<AcqCampaignConfig> UpsertCampaignConfigAsync(AcqCampaignConfigRequest request, CancellationToken cancellationToken);
     Task<AcqCampaignConfig> UpdateCampaignSettingsAsync(string campaignId, AcqCampaignSettingsRequest request, CancellationToken cancellationToken);
     Task<AcqCampaignConfig> EnsureCook001PersistedAsync(CancellationToken cancellationToken);
+    Task<int> PromoteAutomaticReadyDraftsAsync(string campaign, AcqCampaignState? state, CancellationToken cancellationToken);
     Task<AcqCampaignConfig> ResolveCampaignConfigAsync(string campaign, CancellationToken cancellationToken);
     Task<AcqProviderQuota> GetProviderQuotaAsync(CancellationToken cancellationToken);
     Task<AcqSendPreviewResult> PreviewSendAsync(AcqSendPreviewRequest request, CancellationToken cancellationToken);
