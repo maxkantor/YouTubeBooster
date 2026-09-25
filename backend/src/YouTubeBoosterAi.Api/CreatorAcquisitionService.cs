@@ -1435,42 +1435,118 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             sesRejected = 0;
         }
         var persistKey = dryRun ? cohortRunId + "-dry" : cohortRunId;
+        var priorJson = await _store.GetCohortRunAsync(campaign, persistKey, cancellationToken);
+        var priorSent = 0;
+        var priorWould = 0;
+        var priorEval = 0;
+        var priorSes = 0;
+        var priorSkipped = 0;
+        var priorDiscovered = 0;
+        var priorContact = 0;
+        var priorEmails = 0;
+        var priorInvalid = 0;
+        var priorNoPublic = 0;
+        var priorDrafts = 0;
+        var priorQualified = 0;
+        var priorNotQualified = 0;
+        var priorSuppressed = 0;
+        var priorDuplicates = 0;
+        var priorCooldown = 0;
+        var priorInitialAttempted = 0;
+        var priorInitialAccepted = 0;
+        var priorFollowAttempted = 0;
+        var priorFollowAccepted = 0;
+        var priorSesRejected = 0;
+        var priorReasonCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(priorJson))
+        {
+            try
+            {
+                using var priorDoc = System.Text.Json.JsonDocument.Parse(priorJson);
+                var root = priorDoc.RootElement;
+                static int IntProp(System.Text.Json.JsonElement el, string name) =>
+                    el.TryGetProperty(name, out var p) && p.TryGetInt32(out var v) ? v : 0;
+                priorSent = IntProp(root, "sent");
+                priorWould = IntProp(root, "wouldSend");
+                priorEval = IntProp(root, "evaluated");
+                priorSes = IntProp(root, "sesAttempted");
+                priorSkipped = IntProp(root, "skipped");
+                priorDiscovered = IntProp(root, "creatorsDiscovered");
+                if (priorDiscovered == 0) priorDiscovered = IntProp(root, "discovered");
+                priorContact = IntProp(root, "contactDiscoveryAttempted");
+                priorEmails = IntProp(root, "publicEmailsFound");
+                if (priorEmails == 0) priorEmails = IntProp(root, "emailsFound");
+                priorInvalid = IntProp(root, "invalidEmails");
+                priorNoPublic = IntProp(root, "noPublicEmail");
+                priorDrafts = IntProp(root, "draftsPrepared");
+                priorQualified = IntProp(root, "qualified");
+                priorNotQualified = IntProp(root, "notQualified");
+                priorSuppressed = IntProp(root, "suppressed");
+                priorDuplicates = IntProp(root, "duplicates");
+                priorCooldown = IntProp(root, "cooldown");
+                priorInitialAttempted = IntProp(root, "initialSesAttempted");
+                priorInitialAccepted = IntProp(root, "initialSesAccepted");
+                priorFollowAttempted = IntProp(root, "followupSesAttempted");
+                priorFollowAccepted = IntProp(root, "followupSesAccepted");
+                priorSesRejected = IntProp(root, "sesRejected");
+                if (root.TryGetProperty("reasonCounts", out var rc) && rc.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    foreach (var prop in rc.EnumerateObject())
+                    {
+                        if (prop.Value.TryGetInt32(out var n) && n > 0)
+                            priorReasonCounts[prop.Name] = n;
+                    }
+                }
+            }
+            catch
+            {
+                // Fresh counters if prior blob is corrupt.
+            }
+        }
+        foreach (var kv in reasonCounts)
+            priorReasonCounts[kv.Key] = priorReasonCounts.GetValueOrDefault(kv.Key) + kv.Value;
+        var mergedSent = priorSent + sent;
+        var mergedSes = priorSes + sesAttempted;
+        var mergedContact = priorContact + replenish.ContactDiscoveryAttempted;
+        var mergedEmails = priorEmails + replenish.EmailsFound;
         await _store.SaveCohortRunAsync(campaign, persistKey, System.Text.Json.JsonSerializer.Serialize(new
         {
             runId = persistKey,
-            sent,
-            wouldSend,
+            sent = mergedSent,
+            wouldSend = priorWould + wouldSend,
             dryRun,
-            evaluated,
-            sesAttempted,
-            attempted = sesAttempted,
-            skipped,
+            evaluated = priorEval + evaluated,
+            sesAttempted = mergedSes,
+            attempted = mergedSes,
+            skipped = priorSkipped + skipped,
             dailyLimit = state.DailyLimit,
-            reasonCounts,
-            creatorsDiscovered = replenish.Discovered,
-            discovered = replenish.Discovered,
-            contactDiscoveryAttempted = replenish.ContactDiscoveryAttempted,
-            emailsAttempted = replenish.ContactDiscoveryAttempted,
-            processed = replenish.ContactDiscoveryAttempted,
-            publicEmailsFound = replenish.EmailsFound,
-            emailsFound = replenish.EmailsFound,
-            invalidEmails = replenish.InvalidEmails,
-            noPublicEmail = replenish.NoPublicEmail,
-            draftsPrepared = replenish.DraftsPrepared,
-            qualified = qualifiedCount,
-            notQualified = notQualifiedCount,
-            suppressed = suppressedCount,
-            duplicates = duplicatesCount,
-            cooldown = cooldownCount,
+            reasonCounts = priorReasonCounts,
+            creatorsDiscovered = priorDiscovered + replenish.Discovered,
+            discovered = priorDiscovered + replenish.Discovered,
+            contactDiscoveryAttempted = mergedContact,
+            emailsAttempted = mergedContact,
+            processed = mergedContact,
+            publicEmailsFound = mergedEmails,
+            emailsFound = mergedEmails,
+            invalidEmails = priorInvalid + replenish.InvalidEmails,
+            noPublicEmail = priorNoPublic + replenish.NoPublicEmail,
+            draftsPrepared = priorDrafts + replenish.DraftsPrepared,
+            qualified = priorQualified + qualifiedCount,
+            notQualified = priorNotQualified + notQualifiedCount,
+            suppressed = priorSuppressed + suppressedCount,
+            duplicates = priorDuplicates + duplicatesCount,
+            cooldown = priorCooldown + cooldownCount,
             ready = replenish.ReadyAfter,
-            initialSesAttempted,
-            initialSesAccepted,
-            followupSesAttempted,
-            followupSesAccepted,
-            sesRejected,
+            initialSesAttempted = priorInitialAttempted + initialSesAttempted,
+            initialSesAccepted = priorInitialAccepted + initialSesAccepted,
+            followupSesAttempted = priorFollowAttempted + followupSesAttempted,
+            followupSesAccepted = priorFollowAccepted + followupSesAccepted,
+            sesRejected = priorSesRejected + sesRejected,
             executionBudgetHit = budgetHit,
             moreWork,
-            variantSplit = true
+            variantSplit = true,
+            lastInvocationSent = sent,
+            lastInvocationContactDiscoveryAttempted = replenish.ContactDiscoveryAttempted
         }), cancellationToken);
 
         return new AcqWeekdaySendResult(

@@ -498,8 +498,7 @@ public static class CreatorAcquisitionEndpoints
                 autoPauseReason = "DAILY LIMIT REACHED";
             else if (sesQuota.Available && sesQuota.Remaining <= 0)
                 autoPauseReason = "SES PROVIDER QUOTA REACHED";
-            else if (sendEligible == 0 && readyLane == 0)
-                autoPauseReason = contactVerifiedCook == 0 ? "NO VALID EMAILS" : "NO QUALIFIED CONTACTS";
+            // Empty ready queue with remaining capacity is inventory/discovery — not a pause.
             var automaticSending = string.Equals(cfg.SendingMode, "automatic", StringComparison.OrdinalIgnoreCase)
                 && cfg.AutoSend
                 && state.MarketingSendingEnabled
