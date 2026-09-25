@@ -453,58 +453,150 @@ public sealed partial class CreatorAcquisitionService
         return first;
     }
 
-    internal async Task<(int Discovered, int EmailsFound, int DraftsPrepared)> ReplenishCampaignInventoryAsync(
+    internal sealed record AcqReplenishStats(
+        int Discovered,
+        int EmailsFound,
+        int DraftsPrepared,
+        int ContactDiscoveryAttempted = 0,
+        int InvalidEmails = 0,
+        int NoPublicEmail = 0,
+        int ReadyAfter = 0);
+
+    internal async Task<AcqReplenishStats> ReplenishCampaignInventoryAsync(
         AcqCampaignConfig cfg,
         int remaining,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTime? hardDeadlineUtc = null)
     {
+        if (remaining <= 0) return new AcqReplenishStats(0, 0, 0);
+
+        var state = await LoadStateAsync(cfg.CampaignId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
+        var ready = CountReadyToSend(all, cfg, state, now);
         var discovered = 0;
         var emailsFound = 0;
         var drafts = 0;
-        if (remaining <= 0) return (0, 0, 0);
+        var contactAttempted = 0;
+        var noPublic = 0;
+        var invalid = 0;
 
-        var all = await _store.ListProspectsAsync(cancellationToken);
-        var state = await LoadStateAsync(cfg.CampaignId, cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var ready = all.Count(p =>
+        bool WithinBudget() => hardDeadlineUtc is null || DateTime.UtcNow < hardDeadlineUtc.Value.AddSeconds(-2);
+
+        // 1) Contact discovery first — sendable inventory is driven by public emails, not draft count.
+        if (cfg.AutoFindEmails && ready < remaining && WithinBudget())
+        {
+            try
+            {
+                for (var tick = 0; tick < 4 && ready < remaining && WithinBudget(); tick++)
+                {
+                    var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveEmailDiscoveryPointer, cancellationToken);
+                    var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
+                        ? null
+                        : await GetEmailDiscoveryJobAsync(beforePointer.Trim(), cancellationToken);
+                    var foundBefore = beforeJob?.Found ?? 0;
+                    var processedBefore = beforeJob?.Processed ?? 0;
+                    var notFoundBefore = beforeJob?.NotFound ?? 0;
+                    var failedBefore = beforeJob?.Failed ?? 0;
+
+                    var job = await ResumeOrStartEmailDiscoveryAsync(cfg.CampaignId, 8, cancellationToken);
+                    emailsFound += Math.Max(0, job.Found - foundBefore);
+                    contactAttempted += Math.Max(0, job.Processed - processedBefore);
+                    noPublic += Math.Max(0, job.NotFound - notFoundBefore);
+                    invalid += Math.Max(0, job.Failed - failedBefore);
+
+                    if (string.Equals(job.Status, "completed", StringComparison.OrdinalIgnoreCase)
+                        && job.Processed >= job.ProspectIds.Count)
+                        break;
+                    if (job.Processed <= processedBefore && job.Found <= foundBefore)
+                        break;
+                }
+            }
+            catch
+            {
+                // Discovery is best-effort inside the send tick.
+            }
+        }
+
+        // 2) Prepare drafts from verified emails, then recount authoritative ready lane.
+        if (cfg.AutoPrepareDrafts && ready < remaining && WithinBudget())
+        {
+            var batch = await PrepareDraftBatchAsync(
+                new AcqDraftPrepareBatchRequest(cfg.CampaignId, null, "email_found", false),
+                cancellationToken);
+            drafts = batch.Prepared;
+            await PromoteAutomaticReadyDraftsAsync(cfg.CampaignId, state, cancellationToken);
+            all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
+            ready = CountReadyToSend(all, cfg, state, DateTimeOffset.UtcNow);
+        }
+
+        // 3) Discover more creators when sendable inventory is still low.
+        if (cfg.AutoDiscover && ready < remaining && WithinBudget())
+        {
+            try
+            {
+                for (var tick = 0; tick < 3 && ready < remaining && WithinBudget(); tick++)
+                {
+                    var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveCreatorDiscoveryPointer, cancellationToken);
+                    var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
+                        ? null
+                        : await GetCreatorDiscoveryJobAsync(beforePointer.Trim(), cancellationToken);
+                    var addedBefore = beforeJob?.Added ?? 0;
+                    var job = await ResumeOrStartCreatorDiscoveryAsync(cfg, remaining - ready, cancellationToken);
+                    discovered += Math.Max(0, job.Added - addedBefore);
+                    if (!string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
+                        break;
+                    if (job.Added <= addedBefore)
+                        break;
+                }
+            }
+            catch
+            {
+            }
+
+            // 4) One more email-discovery tick for newly added creators (SkipContactResearch on add).
+            if (cfg.AutoFindEmails && ready < remaining && WithinBudget())
+            {
+                try
+                {
+                    var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveEmailDiscoveryPointer, cancellationToken);
+                    var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
+                        ? null
+                        : await GetEmailDiscoveryJobAsync(beforePointer.Trim(), cancellationToken);
+                    var foundBefore = beforeJob?.Found ?? 0;
+                    var processedBefore = beforeJob?.Processed ?? 0;
+                    var job = await ResumeOrStartEmailDiscoveryAsync(cfg.CampaignId, 8, cancellationToken);
+                    emailsFound += Math.Max(0, job.Found - foundBefore);
+                    contactAttempted += Math.Max(0, job.Processed - processedBefore);
+                    if (cfg.AutoPrepareDrafts && emailsFound > 0)
+                    {
+                        var batch = await PrepareDraftBatchAsync(
+                            new AcqDraftPrepareBatchRequest(cfg.CampaignId, null, "email_found", false),
+                            cancellationToken);
+                        drafts += batch.Prepared;
+                        await PromoteAutomaticReadyDraftsAsync(cfg.CampaignId, state, cancellationToken);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
+        ready = CountReadyToSend(all, cfg, state, DateTimeOffset.UtcNow);
+        return new AcqReplenishStats(discovered, emailsFound, drafts, contactAttempted, invalid, noPublic, ready);
+    }
+
+    internal static int CountReadyToSend(
+        IReadOnlyList<AcqProspectRecord> all,
+        AcqCampaignConfig cfg,
+        AcqCampaignState state,
+        DateTimeOffset now) =>
+        all.Count(p =>
             string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase)
             && MatchesCampaignAudience(p, cfg)
             && SendLaneFor(p, now, state, all) == "ready_to_send");
-
-        if (cfg.AutoPrepareDrafts && ready < remaining)
-        {
-            var batch = await PrepareDraftBatchAsync(new AcqDraftPrepareBatchRequest(cfg.CampaignId, null, "email_found", false), cancellationToken);
-            drafts = batch.Prepared;
-            ready += batch.Prepared;
-        }
-
-        if (cfg.AutoFindEmails && ready < remaining)
-        {
-            try
-            {
-                var resumed = await ResumeOrStartEmailDiscoveryAsync(cfg.CampaignId, 8, cancellationToken);
-                emailsFound = resumed.Found;
-            }
-            catch
-            {
-                // Discovery start is best-effort inside the send tick.
-            }
-        }
-
-        if (cfg.AutoDiscover && ready < remaining)
-        {
-            try
-            {
-                var job = await ResumeOrStartCreatorDiscoveryAsync(cfg, remaining - ready, cancellationToken);
-                discovered = job.Added;
-            }
-            catch
-            {
-            }
-        }
-
-        return (discovered, emailsFound, drafts);
-    }
 
     private const string ActiveEmailDiscoveryPointer = "active-email-discovery";
     private const string ActiveCreatorDiscoveryPointer = "active-creator-discovery";
@@ -853,6 +945,9 @@ public sealed partial class CreatorAcquisitionService
     private async Task<AcqCampaignCard> ToCampaignCardAsync(AcqCampaignConfig cfg, CancellationToken cancellationToken)
     {
         var state = await LoadStateAsync(cfg.CampaignId, cancellationToken);
+        if (string.Equals(cfg.CampaignId, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase)
+            && state.StandingCampaignApproval)
+            await PromoteAutomaticReadyDraftsAsync(cfg.CampaignId, state, cancellationToken);
         var all = await _store.ListProspectsAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var today = CreatorAcquisitionScoring.EasternDate(now).Date;
@@ -861,7 +956,7 @@ public sealed partial class CreatorAcquisitionService
             && MatchesCampaignAudience(p, cfg)).ToList();
         var sentToday = scoped.Count(p => p.LastContactedAt is not null && CreatorAcquisitionScoring.EasternDate(p.LastContactedAt.Value).Date == today);
         var remaining = Math.Max(0, state.DailyLimit - sentToday);
-        var ready = scoped.Count(p => SendLaneFor(p, now, state, all) == "ready_to_send");
+        var ready = CountReadyToSend(all, cfg, state, now);
         var needs = scoped.Count(p => SendLaneFor(p, now, state, all) == "needs_approval");
         var replies = scoped.Count(p => string.Equals(p.OutreachStatus, "replied", StringComparison.OrdinalIgnoreCase));
         var unsubs = scoped.Count(p => string.Equals(p.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase));

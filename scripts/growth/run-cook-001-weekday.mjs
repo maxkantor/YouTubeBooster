@@ -262,9 +262,12 @@ if (!args.dryRun) {
       dailyLimit: 100,
       cohortRunId: null,
       moreWork: false,
-      invocations: 0
+      invocations: 0,
+      discovered: 0,
+      emailsFound: 0,
+      draftsPrepared: 0
     };
-    const maxInvocations = 6;
+    const maxInvocations = 12;
     for (let i = 0; i < maxInvocations; i++) {
       const url = args.dryRun
         ? `${API}/api/public/acq/weekday-send?dryRun=true`
@@ -288,6 +291,9 @@ if (!args.dryRun) {
       combined.sent += Number(json.sent ?? json.Sent ?? 0) || 0;
       combined.skipped += Number(json.skipped ?? json.Skipped ?? 0) || 0;
       combined.wouldSend += Number(json.wouldSend ?? json.WouldSend ?? 0) || 0;
+      combined.discovered = (combined.discovered || 0) + (Number(json.discovered ?? json.Discovered ?? 0) || 0);
+      combined.emailsFound = (combined.emailsFound || 0) + (Number(json.emailsFound ?? json.EmailsFound ?? 0) || 0);
+      combined.draftsPrepared = (combined.draftsPrepared || 0) + (Number(json.draftsPrepared ?? json.DraftsPrepared ?? 0) || 0);
       combined.reasons = combined.reasons.concat(json.reasons || json.Reasons || []).slice(0, 80);
       combined.dailyLimit = json.dailyLimit ?? json.DailyLimit ?? combined.dailyLimit;
       combined.cohortRunId = json.cohortRunId ?? json.CohortRunId ?? combined.cohortRunId;

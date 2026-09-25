@@ -25,18 +25,26 @@ export function AcquisitionOverviewPage() {
   }, [load]);
 
   const d = ACQ_OVERVIEW_DEFAULTS;
-  const needsApproval = summary?.needsApproval ?? 0;
+  const status = summary?.acquisitionStatus;
+  const readyNow =
+    status?.readyNow ??
+    summary?.inventory?.readyToSend ??
+    summary?.pipeline?.readyToSend ??
+    summary?.approvedReadyToSend ??
+    0;
+  const needsApproval = status?.needsApproval ?? summary?.needsApproval ?? 0;
   const approvedWaiting =
     summary?.approvedWaiting ?? summary?.currentlyApprovedWaitingToSend ?? d.currentlyApprovedWaitingToSend;
-  const approvedEligible =
-    summary?.pipeline?.readyToSend ?? summary?.approvedReadyToSend ?? summary?.pipeline?.approvedEligibleNow ?? d.approvedEligibleNow;
   const blockedCooldown = summary?.blockedCooldown ?? summary?.pipeline?.blockedByCooldown ?? d.blockedByCooldown;
   const blockedQual = summary?.pipeline?.blockedByQualification ?? d.blockedByQualification;
-  const sentToday = summary?.sentToday ?? d.sentToday;
-  const dailyLimit = summary?.dailyLimit ?? d.dailyLimit;
-  const dailyRemaining = summary?.dailyRemaining ?? summary?.pipeline?.dailyRemaining ?? d.dailyRemaining;
-  const followUpsDue = summary?.followUpsDue ?? 0;
+  const sentToday = status?.sentToday ?? summary?.sentToday ?? d.sentToday;
+  const dailyLimit = status?.dailyLimit ?? summary?.dailyLimit ?? d.dailyLimit;
+  const dailyRemaining = status?.remaining ?? summary?.dailyRemaining ?? summary?.pipeline?.dailyRemaining ?? d.dailyRemaining;
+  const followUpsDue = status?.followUpsDue ?? summary?.followUpsDue ?? 0;
   const replies = summary?.repliesNeedingAction ?? 0;
+  const discoveryEligible = status?.missingEmailEligible ?? summary?.inventory?.discoveryEligible ?? 0;
+  const bottleneck = status?.bottleneck || 'Loading…';
+  const automatic = status?.automaticSending ?? summary?.automaticSending === true;
 
   const northStar = [
     {
@@ -62,16 +70,20 @@ export function AcquisitionOverviewPage() {
   ];
 
   const funnel = [
-    { label: 'Discovered', value: summary?.cohortFunnel?.discovered ?? summary?.discovered ?? 0, to: '/admin/acquisition/creators' },
+    {
+      label: 'COOK-001 discovered',
+      value: summary?.scope?.cook001CookingAndFood ?? summary?.cohortFunnel?.discovered ?? summary?.inventory?.totalCreators ?? 0,
+      to: '/admin/acquisition/creators'
+    },
     {
       label: 'Contactable',
-      value: summary?.cohortFunnel?.contactable ?? summary?.contactVerified ?? 0,
+      value: status?.publicEmails ?? summary?.cohortFunnel?.contactable ?? summary?.contactVerified ?? 0,
       to: '/admin/acquisition/creators?status=EMAIL_REQUIRED'
     },
     { label: 'Needs Approval', value: needsApproval, to: '/admin/acquisition/approvals?tab=needs' },
     {
-      label: 'Approved',
-      value: summary?.cohortFunnel?.approved ?? approvedWaiting,
+      label: 'Ready to send',
+      value: readyNow,
       to: '/admin/acquisition/approvals?tab=ready'
     },
     {
@@ -92,17 +104,33 @@ export function AcquisitionOverviewPage() {
     }
   ];
 
-  const actions = [
-    { label: 'Needs approval', count: needsApproval, to: '/admin/acquisition/approvals?tab=needs' },
-    { label: 'Ready to send', count: approvedEligible, to: '/admin/acquisition/approvals?tab=ready' },
-    { label: 'In cooldown', count: blockedCooldown, to: '/admin/acquisition/creators?status=COOLDOWN' },
-    { label: 'Blocked by qualification', count: blockedQual, to: '/admin/acquisition/creators?status=OTHER' },
-    { label: 'Follow-ups due', count: followUpsDue, to: '/admin/acquisition/campaigns' },
-    { label: 'Replies', count: replies, to: '/admin/acquisition/inbox' }
+  const healthCells = [
+    { label: 'Daily limit', value: dailyLimit },
+    { label: 'Sent today', value: sentToday },
+    { label: 'Remaining', value: dailyRemaining },
+    {
+      label: 'SES remaining',
+      value: status?.sesRemaining ?? summary?.sesRemaining ?? (summary?.sesQuotaAvailable ? '—' : 'Unavailable')
+    },
+    { label: 'Discovered', value: status?.discovered ?? summary?.inventory?.totalCreators ?? 0 },
+    { label: 'Public emails', value: status?.publicEmails ?? summary?.inventory?.withPublicEmail ?? 0 },
+    { label: 'Qualified unsent', value: status?.qualifiedUnsent ?? 0 },
+    { label: 'Ready now', value: readyNow },
+    { label: 'Missing email eligible', value: discoveryEligible },
+    { label: 'Discovery backoff', value: status?.discoveryBackoff ?? summary?.inventory?.backoff ?? 0 },
+    { label: 'Follow-ups due', value: followUpsDue },
+    {
+      label: 'Next scheduled run',
+      value: status?.nextScheduledRunEt
+        ? new Date(status.nextScheduledRunEt).toLocaleString()
+        : summary?.nextScheduledSendEt
+          ? new Date(summary.nextScheduledSendEt).toLocaleString()
+          : '—'
+    }
   ];
 
   return (
-    <AdminShell title="Acquisition" subtitle="North star first. Open Approvals to review and send.">
+    <AdminShell title="Acquisition" subtitle="Automation health first. Manual send lives on Approvals.">
       {error && <p className="admin-crm-error">{error}</p>}
 
       <div className="ops-page-head acq-campaign-head">
@@ -110,6 +138,10 @@ export function AcquisitionOverviewPage() {
           <span className="acq-pill">
             Campaign
             <strong className="acq-dot acq-dot-ok"> COOK-001</strong>
+          </span>
+          <span className="acq-pill">
+            Automatic
+            <strong className={automatic ? 'acq-ok' : 'acq-bad'}> {automatic ? 'ON' : 'OFF'}</strong>
           </span>
           <span className="acq-pill">
             Sent today
@@ -122,30 +154,36 @@ export function AcquisitionOverviewPage() {
             Remaining
             <strong> {dailyRemaining}</strong>
           </span>
-          {summary?.nextScheduledSendEt && (
-            <span className="acq-pill">
-              Next scheduled
-              <strong> {new Date(summary.nextScheduledSendEt).toLocaleString()}</strong>
-            </span>
-          )}
         </div>
       </div>
 
-      {approvedEligible > 0 && (
-        <section className="ops-panel acq-blocker acq-blocker-hot">
-          <header className="ops-section-head">
-            <h2>Send approved now</h2>
-            <p className="ops-muted" style={{ margin: 0 }}>
-              {approvedEligible} approved creator{approvedEligible === 1 ? '' : 's'} ready for manual send
-              {blockedCooldown > 0 ? ` (${blockedCooldown} in automation cooldown — manual still allowed)` : ''}.
-              Automation daily remaining: {dailyRemaining}.
-            </p>
-          </header>
-          <Link className="ops-btn ops-btn-primary" to="/admin/acquisition/approvals?tab=ready">
-            SEND APPROVED NOW ({approvedEligible})
-          </Link>
-        </section>
-      )}
+      <section className="ops-panel">
+        <header className="ops-section-head">
+          <h2>Inventory / Automation Health</h2>
+          <p className="ops-muted" style={{ margin: 0 }}>
+            One backend acquisitionStatus for COOK-001. All Admin screens use the same Ready now count.
+          </p>
+        </header>
+        <div className="acq-health-grid">
+          {healthCells.map((c) => (
+            <div key={c.label}>
+              <span>{c.label}</span>
+              <strong>{c.value}</strong>
+            </div>
+          ))}
+        </div>
+        <p
+          className={readyNow > 0 && dailyRemaining > 0 ? 'ops-muted' : 'admin-crm-error'}
+          style={{ marginTop: 16, fontWeight: 600 }}
+        >
+          BOTTLENECK: {bottleneck}
+        </p>
+        <p className="ops-muted" style={{ marginTop: 8 }}>
+          Manual send (if needed):{' '}
+          <Link to="/admin/acquisition/approvals?tab=ready">Approvals → Ready to Send</Link>
+          {needsApproval > 0 ? ` · ${needsApproval} need human review` : ''}
+        </p>
+      </section>
 
       <section className="ops-panel">
         <header className="ops-section-head">
@@ -163,9 +201,10 @@ export function AcquisitionOverviewPage() {
 
       <section className="ops-panel">
         <header className="ops-section-head">
-          <h2>Conversion funnel</h2>
+          <h2>Conversion funnel (COOK-001)</h2>
           <p className="ops-muted" style={{ margin: 0 }}>
-            Includes Needs Approval — drafts waiting for human review before send.
+            All acquisition prospects: {summary?.scope?.allAcquisitionProspects ?? summary?.discovered ?? '—'} ·{' '}
+            COOK-001 / Cooking &amp; Food: {summary?.scope?.cook001CookingAndFood ?? summary?.inventory?.totalCreators ?? '—'}
           </p>
         </header>
         <div className="acq-pipeline">
@@ -183,19 +222,37 @@ export function AcquisitionOverviewPage() {
 
       <section className="ops-panel">
         <header className="ops-section-head">
-          <h2>Today&apos;s actions</h2>
+          <h2>Today&apos;s monitoring</h2>
         </header>
         <div className="acq-pipeline">
-          {actions.map((a) => (
-            <Link key={a.label} className="acq-pipeline-card" to={a.to}>
-              <span>{a.label}</span>
-              <strong>{a.count}</strong>
-            </Link>
-          ))}
+          <Link className="acq-pipeline-card" to="/admin/acquisition/approvals?tab=needs">
+            <span>Needs approval</span>
+            <strong>{needsApproval}</strong>
+          </Link>
+          <Link className="acq-pipeline-card" to="/admin/acquisition/approvals?tab=ready">
+            <span>Ready to send</span>
+            <strong>{readyNow}</strong>
+          </Link>
+          <Link className="acq-pipeline-card" to="/admin/acquisition/creators?status=COOLDOWN">
+            <span>In cooldown</span>
+            <strong>{blockedCooldown}</strong>
+          </Link>
+          <Link className="acq-pipeline-card" to="/admin/acquisition/creators?status=OTHER">
+            <span>Blocked by qualification</span>
+            <strong>{blockedQual}</strong>
+          </Link>
+          <Link className="acq-pipeline-card" to="/admin/acquisition/campaigns">
+            <span>Follow-ups due</span>
+            <strong>{followUpsDue}</strong>
+          </Link>
+          <Link className="acq-pipeline-card" to="/admin/acquisition/inbox">
+            <span>Replies</span>
+            <strong>{replies}</strong>
+          </Link>
         </div>
         <p className="ops-muted" style={{ marginTop: 12 }}>
-          Approved waiting to send: <strong>{approvedWaiting}</strong> · Eligible now:{' '}
-          <strong>{approvedEligible}</strong> · Cooldown: <strong>{blockedCooldown}</strong>
+          Approved waiting (status): <strong>{approvedWaiting}</strong> · Ready now (authoritative):{' '}
+          <strong>{readyNow}</strong>
         </p>
       </section>
     </AdminShell>

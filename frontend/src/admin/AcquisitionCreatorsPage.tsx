@@ -761,7 +761,7 @@ export function AcquisitionCreatorsPage() {
             {' · '}
             Auto eligible: <strong>{summary?.inventory?.autoEligible ?? summary?.pipeline?.readyToSend ?? '—'}</strong>
             {' · '}
-            Ready to send: <strong>{summary?.inventory?.readyToSend ?? summary?.pipeline?.readyToSend ?? 0}</strong>
+            Ready to send: <strong>{summary?.acquisitionStatus?.readyNow ?? summary?.inventory?.readyToSend ?? summary?.pipeline?.readyToSend ?? 0}</strong>
             {' · '}
             Sent today: <strong>{summary?.sentToday ?? 0}/{summary?.dailyLimit ?? 100}</strong>
           </div>

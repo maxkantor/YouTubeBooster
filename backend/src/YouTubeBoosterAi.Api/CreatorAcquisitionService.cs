@@ -809,6 +809,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         {
             candidates = all.Where(p =>
                 string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+            var filter = (request.Filter ?? "email_found").Trim().ToLowerInvariant();
             candidates = candidates.Where(p =>
                 EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
                 && string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
@@ -820,6 +821,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                     || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
                        && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body))));
+            if (filter is "email_found" or "verified")
+            {
+                candidates = candidates.Where(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
+            }
         }
 
         var list = candidates
@@ -992,7 +997,19 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         remaining = await CapRemainingByProviderAsync(remaining, cancellationToken);
         await PromoteAutomaticReadyDraftsAsync(campaign, state, cancellationToken);
         all = await _store.ListProspectsAsync(cancellationToken);
-        var replenish = (Discovered: 0, EmailsFound: 0, DraftsPrepared: 0);
+        var replenish = new AcqReplenishStats(0, 0, 0);
+        var deadline = DateTime.UtcNow.AddSeconds(DispatchTickBudgetSeconds);
+
+        // Capacity-first: replenish inventory before the send pass whenever daily capacity remains.
+        // Chunked discovery/contact/draft work continues across cron invocations via moreWork.
+        // Dry-run still replenishes (no SES); only the send loop is simulated.
+        if (remaining > 0)
+        {
+            var readyBefore = CountReadyToSend(all.ToList(), cfg, state, DateTimeOffset.UtcNow);
+            if (readyBefore < remaining)
+                replenish = await ReplenishCampaignInventoryAsync(cfg, remaining, cancellationToken, deadline);
+            all = await _store.ListProspectsAsync(cancellationToken);
+        }
 
         var nowSend = DateTimeOffset.UtcNow;
         var candidates = all
@@ -1010,8 +1027,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var skipped = 0;
         var evaluated = 0;
         var sesAttempted = 0;
+        var initialSesAttempted = 0;
+        var initialSesAccepted = 0;
+        var followupSesAttempted = 0;
+        var followupSesAccepted = 0;
         var wouldSend = 0;
-        var deadline = DateTime.UtcNow.AddSeconds(DispatchTickBudgetSeconds);
         var sentThisRunByApproval = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         void Skip(string prospectId, string reason)
         {
@@ -1160,6 +1180,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
 
             // Only SES API calls count as send attempts — gate evaluations do not.
             sesAttempted++;
+            if (followUpDue) followupSesAttempted++;
+            else initialSesAttempted++;
             try
             {
                 var sendReq = new SendRawEmailRequest
@@ -1228,6 +1250,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 {
                 }
                 sent++;
+                if (followUpDueNow) followupSesAccepted++;
+                else initialSesAccepted++;
                 if (p.ApprovalId is not null)
                     sentThisRunByApproval[p.ApprovalId] = extraThisRun + 1;
                 await Task.Delay(120, cancellationToken);
@@ -1241,8 +1265,129 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         // READY=0 still replenishes. Do not end the run because the send list was empty.
         var usedAfterSend = dryRun ? wouldSend : sent;
         var stillNeed = Math.Max(0, remaining - usedAfterSend);
-        if (stillNeed > 0)
-            replenish = await ReplenishCampaignInventoryAsync(cfg, stillNeed, cancellationToken);
+        if (stillNeed > 0 && DateTime.UtcNow < deadline)
+        {
+            var post = await ReplenishCampaignInventoryAsync(cfg, stillNeed, cancellationToken, deadline);
+            replenish = new AcqReplenishStats(
+                replenish.Discovered + post.Discovered,
+                replenish.EmailsFound + post.EmailsFound,
+                replenish.DraftsPrepared + post.DraftsPrepared,
+                replenish.ContactDiscoveryAttempted + post.ContactDiscoveryAttempted,
+                replenish.InvalidEmails + post.InvalidEmails,
+                replenish.NoPublicEmail + post.NoPublicEmail,
+                post.ReadyAfter);
+        }
+
+        // Second send pass if replenishment produced ready inventory and tick budget remains.
+        if (!dryRun && DateTime.UtcNow < deadline && sent < remaining && replenish.ReadyAfter > 0)
+        {
+            await PromoteAutomaticReadyDraftsAsync(campaign, state, cancellationToken);
+            all = await _store.ListProspectsAsync(cancellationToken);
+            var secondPass = all
+                .Where(p => string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
+                .Where(p => MatchesCampaignAudience(p, cfg))
+                .Where(p => SendLaneFor(p, DateTimeOffset.UtcNow, state, all) == "ready_to_send")
+                .OrderByDescending(p => p.PriorityScore)
+                .ToList();
+            foreach (var candidate in secondPass)
+            {
+                if (sent >= remaining || DateTime.UtcNow >= deadline) break;
+                evaluated++;
+                var p = candidate;
+                if (AcqSendGuard.HistoryBlockReason(all, p, followUpDue: false) is { } hist)
+                {
+                    Skip(p.ProspectId, hist);
+                    continue;
+                }
+                var ledgerBlock = await GlobalSuppressionBlockAsync(p.PublicBusinessEmail, cancellationToken);
+                if (ledgerBlock is not null)
+                {
+                    Skip(p.ProspectId, ledgerBlock);
+                    continue;
+                }
+                var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
+                    p, DateTimeOffset.UtcNow, state, alreadyContacted: p.LastContactedAt is not null);
+                if (!gate.Ok)
+                {
+                    Skip(p.ProspectId, gate.Reason);
+                    continue;
+                }
+                if (!await ClaimOutreachIdentityAsync(p, followUpDue: false, cancellationToken))
+                {
+                    Skip(p.ProspectId, AcqSendGuard.ReasonAlreadyContacted);
+                    continue;
+                }
+                var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
+                var unsub = UnsubscribeUrl(p.PublicBusinessEmail!, hmac);
+                var site = TrackedSite();
+                var tracked = OutreachPolicy.BuildTrackedUrl(site, p.OpaqueToken, p.ProspectId, variant, runYmd, p.PrimaryNiche ?? "cooking");
+                var prepared = p with { EmailVariant = variant, CohortRunId = cohortRunId };
+                var mime = CreatorAcquisitionMail.Build(prepared, state, Site(), unsub, tracked);
+                if (CreatorAcquisitionMail.TagsContainPii(mime.SesTags))
+                {
+                    Skip(p.ProspectId, "pii_in_tags");
+                    continue;
+                }
+                sesAttempted++;
+                initialSesAttempted++;
+                try
+                {
+                    var sendReq = new SendRawEmailRequest
+                    {
+                        Source = mime.FromHeader,
+                        Destinations = [p.PublicBusinessEmail!],
+                        RawMessage = new RawMessage { Data = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(mime.RawRfc822)) },
+                        Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList()
+                    };
+                    if (!string.IsNullOrWhiteSpace(state.ConfigSet))
+                        sendReq.ConfigurationSetName = state.ConfigSet;
+                    var sesRes = await _ses.SendRawEmailAsync(sendReq, cancellationToken);
+                    var sentAt = DateTimeOffset.UtcNow;
+                    string? ticketId = null;
+                    try
+                    {
+                        ticketId = await _appDataStore.SaveSupportTicketAsync(
+                            new SupportTicketRequest(
+                                Email: p.PublicBusinessEmail!,
+                                Name: p.ChannelName,
+                                Subject: p.Subject!,
+                                Message: p.Body ?? "",
+                                ProductArea: "creator_acquisition",
+                                ChannelUrl: p.ChannelUrl,
+                                OrderReference: p.ProspectId,
+                                AccountEmail: null,
+                                Source: "founder_outreach"),
+                            linkedUserId: null,
+                            cancellationToken);
+                        await _appDataStore.SaveSupportReplyAsync(ticketId, p.Subject!, p.Body ?? "", sesRes.MessageId, "queued", cancellationToken);
+                        await _appDataStore.MarkOutreachSentAsync(p.PublicBusinessEmail!, sentAt, cancellationToken);
+                    }
+                    catch { /* SES accepted — persist MessageId anyway */ }
+                    await _store.UpsertProspectAsync(prepared with
+                    {
+                        OutreachStatus = "sent",
+                        LastContactedAt = sentAt,
+                        TicketId = ticketId,
+                        EmailVariant = variant,
+                        CohortRunId = cohortRunId,
+                        LastSesMessageId = sesRes.MessageId,
+                        FollowUpStep = 0,
+                        NextFollowUpAt = sentAt.AddDays(4),
+                        UpdatedAt = sentAt
+                    }, cancellationToken);
+                    sent++;
+                    initialSesAccepted++;
+                    await Task.Delay(120, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    Skip(p.ProspectId, $"ses:{ex.Message}");
+                }
+            }
+        }
+
+        usedAfterSend = dryRun ? wouldSend : sent;
+        stillNeed = Math.Max(0, remaining - usedAfterSend);
 
         var ramp = await _store.GetRampAsync(campaign, cancellationToken);
         var healthAfter = OutreachPolicy.HealthFromCounts(sentAll + sent, bounced, complaints, unsubs);
@@ -1257,6 +1402,38 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 decision.Advance ? null : decision.Reason), cancellationToken);
         }
         var reasonCounts = OutreachPolicy.AggregateSkipReasons(reasons);
+        var allAfter = await _store.ListProspectsAsync(cancellationToken);
+        var actionableDiscovery = allAfter.Count(p =>
+            string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
+            && MatchesCampaignAudience(p, cfg)
+            && IsActionableEmailDiscovery(p, DateTimeOffset.UtcNow));
+        var budgetHit = DateTime.UtcNow >= deadline && usedAfterSend < remaining;
+        if (budgetHit)
+            reasonCounts["EXECUTION_BUDGET"] = reasonCounts.GetValueOrDefault("EXECUTION_BUDGET") + 1;
+        var moreWork = usedAfterSend < remaining && (
+            budgetHit
+            || replenish.Discovered + replenish.EmailsFound + replenish.DraftsPrepared + replenish.ContactDiscoveryAttempted > 0
+            || usedAfterSend > 0
+            || replenish.ReadyAfter > 0
+            || actionableDiscovery > 0);
+        static int CountKeys(Dictionary<string, int> counts, params string[] keys) =>
+            keys.Sum(k => counts.GetValueOrDefault(k));
+        var suppressedCount = CountKeys(reasonCounts,
+            "SUPPRESSED", "GLOBAL_SUPPRESSION_UNSUBSCRIBED", "GLOBAL_SUPPRESSION_BOUNCED",
+            "GLOBAL_SUPPRESSION_COMPLAINT", "GLOBAL_SUPPRESSION_MANUAL_SUPPRESSION", "GLOBAL_SUPPRESSION_INVALID_ADDRESS");
+        var duplicatesCount = CountKeys(reasonCounts, "ALREADY_CONTACTED", "DUPLICATE_CHANNEL", "DUPLICATE_EMAIL");
+        var cooldownCount = CountKeys(reasonCounts, "COOLDOWN");
+        var notQualifiedCount = CountKeys(reasonCounts, "NOT_QUALIFIED");
+        var qualifiedCount = initialSesAccepted + followupSesAccepted + replenish.DraftsPrepared;
+        var sesRejected = CountKeys(reasonCounts, "SES_REJECTED", "SES_ERROR");
+        // Never imply SES was blocked when SES was never called.
+        if (sesAttempted == 0)
+        {
+            reasonCounts.Remove("SES_QUOTA_REACHED");
+            reasonCounts.Remove("SES_REJECTED");
+            reasonCounts.Remove("SES_ERROR");
+            sesRejected = 0;
+        }
         var persistKey = dryRun ? cohortRunId + "-dry" : cohortRunId;
         await _store.SaveCohortRunAsync(campaign, persistKey, System.Text.Json.JsonSerializer.Serialize(new
         {
@@ -1270,10 +1447,29 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             skipped,
             dailyLimit = state.DailyLimit,
             reasonCounts,
+            creatorsDiscovered = replenish.Discovered,
             discovered = replenish.Discovered,
+            contactDiscoveryAttempted = replenish.ContactDiscoveryAttempted,
+            emailsAttempted = replenish.ContactDiscoveryAttempted,
+            processed = replenish.ContactDiscoveryAttempted,
+            publicEmailsFound = replenish.EmailsFound,
             emailsFound = replenish.EmailsFound,
+            invalidEmails = replenish.InvalidEmails,
+            noPublicEmail = replenish.NoPublicEmail,
             draftsPrepared = replenish.DraftsPrepared,
-            executionBudgetHit = DateTime.UtcNow >= deadline && usedAfterSend < remaining,
+            qualified = qualifiedCount,
+            notQualified = notQualifiedCount,
+            suppressed = suppressedCount,
+            duplicates = duplicatesCount,
+            cooldown = cooldownCount,
+            ready = replenish.ReadyAfter,
+            initialSesAttempted,
+            initialSesAccepted,
+            followupSesAttempted,
+            followupSesAccepted,
+            sesRejected,
+            executionBudgetHit = budgetHit,
+            moreWork,
             variantSplit = true
         }), cancellationToken);
 
@@ -1296,15 +1492,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             replenish.DraftsPrepared,
             cfg.SendingMode,
             campaign,
-            usedAfterSend < remaining && (
-                DateTime.UtcNow >= deadline
-                || replenish.Discovered + replenish.EmailsFound + replenish.DraftsPrepared > 0
-                || usedAfterSend > 0
-                || (await _store.ListProspectsAsync(cancellationToken)).Any(p =>
-                    string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
-                    && !CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)
-                    && string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
-                    && (p.ContactResearchNextAt is null || p.ContactResearchNextAt <= DateTimeOffset.UtcNow))));
+            moreWork);
     }
 
     public async Task UnsubscribeAsync(string email, CancellationToken cancellationToken)
@@ -1704,10 +1892,19 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
     {
         if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)) return false;
         if (string.Equals(p.ContactType, "form_only", StringComparison.OrdinalIgnoreCase)) return false;
+        // Medium-confidence candidates wait for human Accept/Reject — do not auto-research again.
+        if (string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (string.Equals(p.OutreachStatus, "rejected", StringComparison.OrdinalIgnoreCase)) return false;
         if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)) return false;
         return true;
     }
+
+    /// <summary>Eligible for an automatic contact-discovery attempt right now (respects backoff).</summary>
+    internal static bool IsActionableEmailDiscovery(AcqProspectRecord p, DateTimeOffset now) =>
+        NeedsEmailDiscovery(p)
+        && (p.ContactResearchNextAt is null || p.ContactResearchNextAt <= now);
 
     private static bool ShouldAutoPrepareDraft(AcqProspectRecord p) =>
         CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)

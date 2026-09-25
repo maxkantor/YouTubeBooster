@@ -71,7 +71,12 @@ export function AcquisitionCampaignsPage() {
   const cooldownDays = summary?.cooldownDays ?? 14;
   const sentLifetime = summary?.sentLifetime ?? summary?.sent ?? 0;
   const approvedWaiting = summary?.approvedWaiting ?? summary?.currentlyApprovedWaitingToSend ?? summary?.approved ?? 0;
-  const eligibleNow = summary?.pipeline?.readyToSend ?? summary?.approvedReadyToSend ?? summary?.pipeline?.approvedEligibleNow ?? 0;
+  const eligibleNow =
+    summary?.acquisitionStatus?.readyNow ??
+    summary?.pipeline?.readyToSend ??
+    summary?.inventory?.readyToSend ??
+    summary?.approvedReadyToSend ??
+    0;
   const needsApproval = summary?.needsApproval ?? 0;
 
   const runScheduledSend = async () => {
@@ -472,7 +477,7 @@ export function AcquisitionCampaignsPage() {
               </div>
               <div>
                 <span>Eligible now</span>
-                <strong>{summary.approvedReadyToSend ?? summary.pipeline?.approvedEligibleNow ?? 0}</strong>
+                <strong>{summary.acquisitionStatus?.readyNow ?? summary.pipeline?.readyToSend ?? summary.approvedReadyToSend ?? 0}</strong>
               </div>
               <div>
                 <span>Needs approval</span>

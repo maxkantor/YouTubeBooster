@@ -367,8 +367,6 @@ public static class CreatorAcquisitionEndpoints
 
             var needsApproval = cookRows.Count(CreatorAcquisitionScoring.IsReadyForApproval);
             var approvedWaiting = approved;
-            // Admin Ready-to-Send button uses manual eligibility (cooldown may be bypassed).
-            var approvedReadyToSend = approvedManualEligible;
             var blockedCooldown = approvedBlockedCooldown;
             var followUpsDue = cookRows.Count(r => CreatorAcquisitionScoring.IsFollowUpDue(r, now));
             var repliesNeedingAction = cookRows.Count(r =>
@@ -471,11 +469,7 @@ public static class CreatorAcquisitionEndpoints
                 && r.ContactResearchNextAt is not null
                 && r.ContactResearchNextAt > now);
             var discoveryEligible = cookRows.Count(r =>
-                !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r)
-                && !string.Equals(r.ContactType, "form_only", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(r.OutreachStatus, "rejected", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(r.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
-                && (r.ContactResearchNextAt is null || r.ContactResearchNextAt <= now));
+                CreatorAcquisitionService.IsActionableEmailDiscovery(r, now));
             var noPublicEmail = cookRows.Count(r =>
                 string.Equals(r.ContactResearchStatus, "not_found", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(r.ContactDiscoveryResult, "not_found", StringComparison.OrdinalIgnoreCase)
@@ -484,6 +478,9 @@ public static class CreatorAcquisitionEndpoints
             var qualifiedCook = cookRows.Count(r =>
                 r.PriorityScore >= 70
                 && string.Equals(r.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase));
+            // Authoritative Ready-to-Send for ALL Admin screens = automation SendLaneFor.
+            // Manual cooldown-bypass eligibility stays on pipeline.approvedManualEligibleNow only.
+            var approvedReadyToSend = readyLane;
             var autoEligible = readyLane;
             if (state.StandingCampaignApproval)
             {
@@ -664,7 +661,7 @@ public static class CreatorAcquisitionEndpoints
                     approvalsUrl = "https://youtubeboosterai.com/admin/acquisition/approvals"
                 },
                 needsApproval = needsLane,
-                approvedReadyToSend = Math.Max(approvedReadyToSend, readyLane),
+                approvedReadyToSend = readyLane,
                 approvedWaiting,
                 blockedCooldown,
                 followUpsDue,
@@ -675,6 +672,45 @@ public static class CreatorAcquisitionEndpoints
                 lastRunSesAccepted,
                 lastRunExecutionBudget,
                 cohortRunId,
+                scope = new
+                {
+                    allAcquisitionProspects = rows.Count,
+                    cook001CookingAndFood = cookRows.Count,
+                    cook001Label = "COOK-001 / Cooking & Food",
+                    allLabel = "All acquisition prospects"
+                },
+                acquisitionStatus = new
+                {
+                    campaign = "COOK-001",
+                    dailyLimit = state.DailyLimit,
+                    sentToday,
+                    remaining = dailyRemaining,
+                    sesRemaining = sesQuota.Available ? sesQuota.Remaining : (int?)null,
+                    discovered = cookRows.Count,
+                    publicEmails = contactVerifiedCook,
+                    qualifiedUnsent = cookRows.Count(r =>
+                        r.PriorityScore >= 70
+                        && string.Equals(r.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase)
+                        && r.LastContactedAt is null
+                        && CreatorAcquisitionScoring.IsVerifiedPublicEmail(r)),
+                    readyNow = readyLane,
+                    missingEmailEligible = discoveryEligible,
+                    discoveryBackoff,
+                    followUpsDue,
+                    nextScheduledRunEt = nextScheduledSendEt,
+                    needsApproval = needsLane,
+                    automaticSending,
+                    bottleneck = ComputeAcquisitionBottleneck(
+                        automaticSending,
+                        autoPauseReason,
+                        dailyRemaining,
+                        sesQuota.Available ? sesQuota.Remaining : null,
+                        readyLane,
+                        discoveryEligible,
+                        cookRows.Count,
+                        contactVerifiedCook,
+                        followUpsDue)
+                },
                 taxonomy = AcquisitionTaxonomy.Catalog(),
                 segments = new
                 {
@@ -1362,6 +1398,38 @@ public static class CreatorAcquisitionEndpoints
                 row.ChannelName, unsub, state.PostalAddress ?? "");
             return (from, to, row.Subject!, html, text, tracked);
         }
+    }
+
+    private static string ComputeAcquisitionBottleneck(
+        bool automaticSending,
+        string? autoPauseReason,
+        int dailyRemaining,
+        int? sesRemaining,
+        int readyNow,
+        int missingEmailEligible,
+        int totalCreators,
+        int publicEmails,
+        int followUpsDue)
+    {
+        if (!string.IsNullOrWhiteSpace(autoPauseReason))
+            return $"PAUSED — {autoPauseReason}";
+        if (!automaticSending)
+            return "MANUAL MODE — automatic sending is off";
+        if (dailyRemaining <= 0)
+            return "DAILY LIMIT REACHED";
+        if (sesRemaining is <= 0)
+            return "SES PROVIDER QUOTA REACHED";
+        if (readyNow > 0)
+            return $"NONE — {readyNow} ready to send (capacity remaining {dailyRemaining})";
+        if (followUpsDue > 0)
+            return $"FOLLOW-UPS DUE — {followUpsDue} follow-up(s) pending; initial ready queue empty";
+        if (missingEmailEligible > 0)
+            return $"CONTACT DISCOVERY — {missingEmailEligible} creators eligible for email discovery, only {readyNow} ready to send";
+        if (publicEmails == 0 && totalCreators > 0)
+            return $"CONTACT DISCOVERY — {totalCreators} creators, 0 public emails";
+        if (totalCreators < 40)
+            return $"CREATOR DISCOVERY — inventory low ({totalCreators} cooking creators)";
+        return "NO QUALIFIED SENDABLE INVENTORY — discovery/qualification gates blocked remaining capacity";
     }
 }
 

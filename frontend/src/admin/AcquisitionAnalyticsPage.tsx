@@ -26,11 +26,21 @@ export function AcquisitionAnalyticsPage() {
   }, [load]);
 
   const sent = summary?.sentLifetime ?? summary?.sent ?? 0;
+  const cookDiscovered = summary?.scope?.cook001CookingAndFood ?? summary?.inventory?.totalCreators ?? summary?.prospectsEvaluated;
+  const allDiscovered = summary?.scope?.allAcquisitionProspects ?? summary?.discovered ?? 0;
   const funnel = [
-    { label: 'Discovered', value: summary?.discovered ?? 0 },
-    { label: 'Needs approval', value: summary?.needsApproval ?? 0 },
-    { label: 'Approved', value: summary?.approvedWaiting ?? summary?.approved ?? 0 },
-    { label: 'Sent', value: sent },
+    {
+      label: 'COOK-001 / Cooking & Food',
+      value: cookDiscovered ?? 0
+    },
+    {
+      label: 'All acquisition prospects',
+      value: allDiscovered
+    },
+    { label: 'Ready to send', value: summary?.acquisitionStatus?.readyNow ?? summary?.pipeline?.readyToSend ?? 0 },
+    { label: 'Needs approval', value: summary?.acquisitionStatus?.needsApproval ?? summary?.needsApproval ?? 0 },
+    { label: 'Approved waiting', value: summary?.approvedWaiting ?? summary?.approved ?? 0 },
+    { label: 'Sent (lifetime)', value: sent },
     {
       label: 'Delivered',
       value: deliveredDisplay(sent, summary?.delivered, summary?.deliveryTelemetryAvailable)
@@ -51,6 +61,10 @@ export function AcquisitionAnalyticsPage() {
       <section className="ops-panel">
         <header className="ops-section-head">
           <h2>Funnel</h2>
+          <p className="ops-muted" style={{ margin: 0 }}>
+            Discovered counts are scoped: All acquisition prospects vs COOK-001 / Cooking &amp; Food. Ready to send uses
+            the same authoritative backend lane as Overview / Creators / Campaigns.
+          </p>
         </header>
         <div className="acq-pipeline">
           {funnel.map((p) => (

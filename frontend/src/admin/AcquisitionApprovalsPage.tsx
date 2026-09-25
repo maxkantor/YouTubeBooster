@@ -51,14 +51,18 @@ export function AcquisitionApprovalsPage() {
   const pauseReason = summary?.automaticPauseReason || '';
   const sesRemaining = summary?.sesRemaining ?? null;
   const needsCount = summary?.needsApproval ?? summary?.pipeline?.needsApproval;
-  const readyCount = summary?.pipeline?.readyToSend ?? summary?.approvedReadyToSend;
+  const readyCount =
+    summary?.acquisitionStatus?.readyNow ??
+    summary?.pipeline?.readyToSend ??
+    summary?.inventory?.readyToSend ??
+    summary?.approvedReadyToSend;
 
   const load = useCallback(async () => {
     setError('');
     try {
       const [s, list] = await Promise.all([
         adminApi.acqSummary(),
-        adminApi.acqProspects({ view: 'all', campaign: 'COOK-001', niche: 'cooking' })
+        adminApi.acqProspects({ view: 'all', campaign: 'COOK-001' })
       ]);
       setSummary(s);
       setAllItems(list.items || []);

@@ -827,6 +827,30 @@ export type AcqSummary = {
     sentToday?: number;
     dailyLimit?: number;
   };
+  scope?: {
+    allAcquisitionProspects?: number;
+    cook001CookingAndFood?: number;
+    cook001Label?: string;
+    allLabel?: string;
+  };
+  acquisitionStatus?: {
+    campaign?: string;
+    dailyLimit?: number;
+    sentToday?: number;
+    remaining?: number;
+    sesRemaining?: number | null;
+    discovered?: number;
+    publicEmails?: number;
+    qualifiedUnsent?: number;
+    readyNow?: number;
+    missingEmailEligible?: number;
+    discoveryBackoff?: number;
+    followUpsDue?: number;
+    nextScheduledRunEt?: string | null;
+    needsApproval?: number;
+    automaticSending?: boolean;
+    bottleneck?: string;
+  };
   pipeline?: {
     drafted?: number;
     draftedNotApproved?: number;
