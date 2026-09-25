@@ -483,7 +483,32 @@ public sealed partial class CreatorAcquisitionService
 
         bool WithinBudget() => hardDeadlineUtc is null || DateTime.UtcNow < hardDeadlineUtc.Value.AddSeconds(-2);
 
-        // 1) Contact discovery first — sendable inventory is driven by public emails, not draft count.
+        // 1) Discover more creators when sendable inventory is low (capacity-first replenishment).
+        if (cfg.AutoDiscover && ready < remaining && WithinBudget())
+        {
+            try
+            {
+                for (var tick = 0; tick < 3 && ready < remaining && WithinBudget(); tick++)
+                {
+                    var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveCreatorDiscoveryPointer, cancellationToken);
+                    var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
+                        ? null
+                        : await GetCreatorDiscoveryJobAsync(beforePointer.Trim(), cancellationToken);
+                    var addedBefore = beforeJob?.Added ?? 0;
+                    var job = await ResumeOrStartCreatorDiscoveryAsync(cfg, remaining - ready, cancellationToken);
+                    discovered += Math.Max(0, job.Added - addedBefore);
+                    if (!string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
+                        break;
+                    if (job.Added <= addedBefore)
+                        break;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        // 2) Contact discovery — sendable inventory is driven by public emails.
         if (cfg.AutoFindEmails && ready < remaining && WithinBudget())
         {
             try
@@ -518,7 +543,7 @@ public sealed partial class CreatorAcquisitionService
             }
         }
 
-        // 2) Prepare drafts from verified emails, then recount authoritative ready lane.
+        // 3) Prepare drafts from verified emails, then recount authoritative ready lane.
         if (cfg.AutoPrepareDrafts && ready < remaining && WithinBudget())
         {
             var batch = await PrepareDraftBatchAsync(
@@ -528,59 +553,6 @@ public sealed partial class CreatorAcquisitionService
             await PromoteAutomaticReadyDraftsAsync(cfg.CampaignId, state, cancellationToken);
             all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
             ready = CountReadyToSend(all, cfg, state, DateTimeOffset.UtcNow);
-        }
-
-        // 3) Discover more creators when sendable inventory is still low.
-        if (cfg.AutoDiscover && ready < remaining && WithinBudget())
-        {
-            try
-            {
-                for (var tick = 0; tick < 3 && ready < remaining && WithinBudget(); tick++)
-                {
-                    var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveCreatorDiscoveryPointer, cancellationToken);
-                    var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
-                        ? null
-                        : await GetCreatorDiscoveryJobAsync(beforePointer.Trim(), cancellationToken);
-                    var addedBefore = beforeJob?.Added ?? 0;
-                    var job = await ResumeOrStartCreatorDiscoveryAsync(cfg, remaining - ready, cancellationToken);
-                    discovered += Math.Max(0, job.Added - addedBefore);
-                    if (!string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
-                        break;
-                    if (job.Added <= addedBefore)
-                        break;
-                }
-            }
-            catch
-            {
-            }
-
-            // 4) One more email-discovery tick for newly added creators (SkipContactResearch on add).
-            if (cfg.AutoFindEmails && ready < remaining && WithinBudget())
-            {
-                try
-                {
-                    var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveEmailDiscoveryPointer, cancellationToken);
-                    var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
-                        ? null
-                        : await GetEmailDiscoveryJobAsync(beforePointer.Trim(), cancellationToken);
-                    var foundBefore = beforeJob?.Found ?? 0;
-                    var processedBefore = beforeJob?.Processed ?? 0;
-                    var job = await ResumeOrStartEmailDiscoveryAsync(cfg.CampaignId, 8, cancellationToken);
-                    emailsFound += Math.Max(0, job.Found - foundBefore);
-                    contactAttempted += Math.Max(0, job.Processed - processedBefore);
-                    if (cfg.AutoPrepareDrafts && emailsFound > 0)
-                    {
-                        var batch = await PrepareDraftBatchAsync(
-                            new AcqDraftPrepareBatchRequest(cfg.CampaignId, null, "email_found", false),
-                            cancellationToken);
-                        drafts += batch.Prepared;
-                        await PromoteAutomaticReadyDraftsAsync(cfg.CampaignId, state, cancellationToken);
-                    }
-                }
-                catch
-                {
-                }
-            }
         }
 
         all = (await _store.ListProspectsAsync(cancellationToken)).ToList();

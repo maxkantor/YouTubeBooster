@@ -1506,7 +1506,13 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         foreach (var kv in reasonCounts)
             priorReasonCounts[kv.Key] = priorReasonCounts.GetValueOrDefault(kv.Key) + kv.Value;
         var mergedSent = priorSent + sent;
-        var mergedSes = priorSes + sesAttempted;
+        var sentTodayNow = allAfter.Count(p =>
+            string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
+            && p.LastContactedAt is not null
+            && CreatorAcquisitionScoring.EasternDate(p.LastContactedAt.Value).Date == today);
+        // Keep lastRun.sent coherent if an earlier same-day overwrite lost SES accepts.
+        mergedSent = Math.Max(mergedSent, sentTodayNow);
+        var mergedSes = Math.Max(priorSes + sesAttempted, mergedSent);
         var mergedContact = priorContact + replenish.ContactDiscoveryAttempted;
         var mergedEmails = priorEmails + replenish.EmailsFound;
         await _store.SaveCohortRunAsync(campaign, persistKey, System.Text.Json.JsonSerializer.Serialize(new
