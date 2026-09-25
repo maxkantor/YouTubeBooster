@@ -1299,7 +1299,12 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             usedAfterSend < remaining && (
                 DateTime.UtcNow >= deadline
                 || replenish.Discovered + replenish.EmailsFound + replenish.DraftsPrepared > 0
-                || usedAfterSend > 0));
+                || usedAfterSend > 0
+                || (await _store.ListProspectsAsync(cancellationToken)).Any(p =>
+                    string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
+                    && !CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)
+                    && string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
+                    && (p.ContactResearchNextAt is null || p.ContactResearchNextAt <= DateTimeOffset.UtcNow))));
     }
 
     public async Task UnsubscribeAsync(string email, CancellationToken cancellationToken)
