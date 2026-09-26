@@ -445,7 +445,11 @@ public sealed record AcqWeekdaySendResult(
     int DraftsPrepared = 0,
     string? SendingMode = null,
     string? Campaign = null,
-    bool MoreWork = false
+    bool MoreWork = false,
+    string? StopReason = null,
+    int ContactDiscoveryAttempted = 0,
+    int InvalidEmails = 0,
+    int NoPublicEmail = 0
 );
 
 public static class AcqJson

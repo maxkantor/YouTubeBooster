@@ -265,7 +265,12 @@ if (!args.dryRun) {
       invocations: 0,
       discovered: 0,
       emailsFound: 0,
-      draftsPrepared: 0
+      draftsPrepared: 0,
+      contactDiscoveryAttempted: 0,
+      invalidEmails: 0,
+      noPublicEmail: 0,
+      stopReason: null,
+      finalStopReason: null
     };
     const maxInvocations = 12;
     for (let i = 0; i < maxInvocations; i++) {
@@ -294,13 +299,30 @@ if (!args.dryRun) {
       combined.discovered = (combined.discovered || 0) + (Number(json.discovered ?? json.Discovered ?? 0) || 0);
       combined.emailsFound = (combined.emailsFound || 0) + (Number(json.emailsFound ?? json.EmailsFound ?? 0) || 0);
       combined.draftsPrepared = (combined.draftsPrepared || 0) + (Number(json.draftsPrepared ?? json.DraftsPrepared ?? 0) || 0);
+      combined.contactDiscoveryAttempted =
+        (combined.contactDiscoveryAttempted || 0) +
+        (Number(json.contactDiscoveryAttempted ?? json.ContactDiscoveryAttempted ?? 0) || 0);
+      combined.invalidEmails =
+        (combined.invalidEmails || 0) + (Number(json.invalidEmails ?? json.InvalidEmails ?? 0) || 0);
+      combined.noPublicEmail =
+        (combined.noPublicEmail || 0) + (Number(json.noPublicEmail ?? json.NoPublicEmail ?? 0) || 0);
       combined.reasons = combined.reasons.concat(json.reasons || json.Reasons || []).slice(0, 80);
       combined.dailyLimit = json.dailyLimit ?? json.DailyLimit ?? combined.dailyLimit;
       combined.cohortRunId = json.cohortRunId ?? json.CohortRunId ?? combined.cohortRunId;
       combined.moreWork = json.moreWork === true || json.MoreWork === true;
+      combined.stopReason = json.stopReason ?? json.StopReason ?? combined.stopReason;
       combined.invocations += 1;
       const sentThis = Number(json.sent ?? json.Sent ?? 0) || 0;
-      if (!combined.moreWork && sentThis <= 0) break;
+      if (!combined.moreWork) {
+        combined.finalStopReason = combined.stopReason || (sentThis > 0 ? 'COMPLETE' : 'NO_MORE_WORK');
+        break;
+      }
+      if (i === maxInvocations - 1) {
+        combined.finalStopReason = 'CONTINUATION_INVOCATION_CAP';
+      }
+    }
+    if (!combined.finalStopReason) {
+      combined.finalStopReason = combined.moreWork ? 'CONTINUATION_INVOCATION_CAP' : combined.stopReason || 'COMPLETE';
     }
     send = combined;
   }

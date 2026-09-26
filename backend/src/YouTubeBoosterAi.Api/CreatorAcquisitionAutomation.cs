@@ -483,7 +483,20 @@ public sealed partial class CreatorAcquisitionService
 
         bool WithinBudget() => hardDeadlineUtc is null || DateTime.UtcNow < hardDeadlineUtc.Value.AddSeconds(-2);
 
-        // 1) Discover more creators when sendable inventory is low (capacity-first replenishment).
+        // 0) Convert already-verified emails into drafts BEFORE spending the tick on more discovery.
+        // Sep 26 starved draft prep after creator/email work burned the 20s budget → Ready stayed 0.
+        if (cfg.AutoPrepareDrafts && ready < remaining && WithinBudget())
+        {
+            var batch = await PrepareDraftBatchAsync(
+                new AcqDraftPrepareBatchRequest(cfg.CampaignId, null, "email_found", false),
+                cancellationToken);
+            drafts = batch.Prepared;
+            await PromoteAutomaticReadyDraftsAsync(cfg.CampaignId, state, cancellationToken);
+            all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
+            ready = CountReadyToSend(all, cfg, state, DateTimeOffset.UtcNow);
+        }
+
+        // 1) Discover more creators when sendable inventory is still low.
         if (cfg.AutoDiscover && ready < remaining && WithinBudget())
         {
             try
@@ -543,13 +556,13 @@ public sealed partial class CreatorAcquisitionService
             }
         }
 
-        // 3) Prepare drafts from verified emails, then recount authoritative ready lane.
+        // 3) Prepare drafts again for newly found emails, then recount ready lane.
         if (cfg.AutoPrepareDrafts && ready < remaining && WithinBudget())
         {
             var batch = await PrepareDraftBatchAsync(
                 new AcqDraftPrepareBatchRequest(cfg.CampaignId, null, "email_found", false),
                 cancellationToken);
-            drafts = batch.Prepared;
+            drafts += batch.Prepared;
             await PromoteAutomaticReadyDraftsAsync(cfg.CampaignId, state, cancellationToken);
             all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
             ready = CountReadyToSend(all, cfg, state, DateTimeOffset.UtcNow);

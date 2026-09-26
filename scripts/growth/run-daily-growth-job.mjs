@@ -173,13 +173,18 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const crmSignups = Number(cf.pricingViewed ?? 0) || 0;
   const crmCheckout = Number(cf.checkoutStarts ?? 0) || 0;
   const crmCustomers = Number(cf.verifiedCustomers ?? funnel.converted ?? 0) || 0;
+  const creatorsDiscovered = Number(send.discovered ?? 0) || 0;
+  const contactAttempted = Number(send.contactDiscoveryAttempted ?? 0) || 0;
+  const publicEmailsFound = Number(send.emailsFound ?? 0) || 0;
+  const draftsPrepared = Number(send.draftsPrepared ?? 0) || 0;
+  const finalStopReason = send.finalStopReason || send.stopReason || null;
 
-  let exactAction = `COOK-001 daily SES outreach (${sesAccepted} accepted / ${sesAttempted} SES attempts; ${evaluated} prospects evaluated)`;
+  let exactAction = `COOK-001 daily SES outreach (${sesAccepted} accepted / ${sesAttempted} SES attempts; ${evaluated} prospects evaluated; stop=${finalStopReason || 'n/a'}; discovered=${creatorsDiscovered}; contactAttempts=${contactAttempted}; publicEmails=${publicEmailsFound}; drafts=${draftsPrepared}; invocations=${send.invocations ?? 0})`;
   if (opts.dryRun) {
     exactAction = `[DRY-RUN] COOK-001 daily probe (${(sendData.verifiedProspectIds || []).length} verified candidates)`;
   } else if (sesAccepted === 0) {
     const dominant = dominantSkipReason(reasonCounts);
-    exactAction = `DISTRIBUTION FAILED / BLOCKED — SES accepted 0. Dominant skip: ${dominant}. Evaluated ${evaluated}, SES attempts ${sesAttempted}.`;
+    exactAction = `DISTRIBUTION FAILED / BLOCKED — SES accepted 0. Dominant skip: ${dominant}. Evaluated ${evaluated}, SES attempts ${sesAttempted}. Stop: ${finalStopReason || 'n/a'}.`;
   }
 
   return {
@@ -207,6 +212,15 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     prospectsEvaluated: evaluated,
     sendAttempts: sesAttempted,
     eligibleProspects: Number(sendData.sendEligible ?? send.evaluated ?? 0) || 0,
+    creatorsDiscovered: creatorsDiscovered,
+    contactDiscoveryAttempted: contactAttempted,
+    publicEmailsFound: publicEmailsFound,
+    draftsPrepared: draftsPrepared,
+    invalidEmails: Number(send.invalidEmails ?? 0) || 0,
+    noPublicEmail: Number(send.noPublicEmail ?? 0) || 0,
+    invocations: Number(send.invocations ?? 0) || 0,
+    finalStopReason: finalStopReason,
+    moreWork: send.moreWork === true,
     skippedByReason: (send.reasons || []).slice(0, 40),
     skipReasonCounts: reasonCounts,
     pipeline: sendData.pipeline || null,
@@ -407,6 +421,8 @@ async function main() {
     const notes = [
       `Automated daily growth run (${weekday}, ${todayYmd}).`,
       `COOK-001: SES accepted ${sentToday}; SES attempts ${attemptedToday}; prospects evaluated ${evaluatedToday}.`,
+      `Upstream: discovered=${dist.creatorsDiscovered || 0}; contactAttempts=${dist.contactDiscoveryAttempted || 0}; publicEmails=${dist.publicEmailsFound || 0}; drafts=${dist.draftsPrepared || 0}; invocations=${dist.invocations || 0}.`,
+      `Final stop reason: ${dist.finalStopReason || 'n/a'}.`,
       sentToday === 0
         ? `DISTRIBUTION FAILED / BLOCKED. Dominant skip: ${dominantSkipReason(dist.skipReasonCounts || {})}.`
         : `Distribution executed: SES accepted ${sentToday}.`,

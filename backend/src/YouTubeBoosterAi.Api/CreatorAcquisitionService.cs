@@ -969,6 +969,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var complaints = all.Count(p => string.Equals(p.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase));
         var unsubs = all.Count(p => string.Equals(p.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase));
         var health = OutreachPolicy.HealthFromCounts(sentAll, bounced, complaints, unsubs);
+        // Full daily capacity drives replenishment/continuation. Soft health reduce only caps SES
+        // volume when ramp is enabled — automatic COOK-001 with saved DailyLimit 100 must not be
+        // silently reduced to RampStage/2 while the UI shows Remaining = DailyLimit - sentToday.
+        var dailyCapacityRemaining = remaining;
         if (health.Unhealthy)
         {
             await _store.SaveRampAsync(campaign, new AcqRampPersist(state.RampStage, 0, runYmd, health.Reason), cancellationToken);
@@ -977,8 +981,15 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 await _store.SaveCampaignFlagsAsync(campaign, state.MarketingSendingEnabled, true, cancellationToken);
                 return new AcqWeekdaySendResult(true, 0, 0, 0, [$"health_stop:{health.Reason}"], 0, cohortRunId, health.Reason);
             }
-            remaining = Math.Min(remaining, Math.Max(1, state.RampStage / 2));
-            reasons.Add($"health_reduce:{health.Reason}");
+            if (state.RampEnabled)
+            {
+                remaining = Math.Min(remaining, Math.Max(1, state.RampStage / 2));
+                reasons.Add($"health_reduce:{health.Reason}");
+            }
+            else
+            {
+                reasons.Add($"health_advisory:{health.Reason}");
+            }
         }
 
         var cfg = await ResolveCampaignConfigAsync(campaign, cancellationToken);
@@ -995,19 +1006,19 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         remaining = await CapRemainingByProviderAsync(remaining, cancellationToken);
+        dailyCapacityRemaining = await CapRemainingByProviderAsync(dailyCapacityRemaining, cancellationToken);
         await PromoteAutomaticReadyDraftsAsync(campaign, state, cancellationToken);
         all = await _store.ListProspectsAsync(cancellationToken);
         var replenish = new AcqReplenishStats(0, 0, 0);
         var deadline = DateTime.UtcNow.AddSeconds(DispatchTickBudgetSeconds);
 
-        // Capacity-first: replenish inventory before the send pass whenever daily capacity remains.
-        // Chunked discovery/contact/draft work continues across cron invocations via moreWork.
+        // Capacity-first: replenish against full daily capacity (not the soft health send cap).
         // Dry-run still replenishes (no SES); only the send loop is simulated.
-        if (remaining > 0)
+        if (dailyCapacityRemaining > 0)
         {
             var readyBefore = CountReadyToSend(all.ToList(), cfg, state, DateTimeOffset.UtcNow);
-            if (readyBefore < remaining)
-                replenish = await ReplenishCampaignInventoryAsync(cfg, remaining, cancellationToken, deadline);
+            if (readyBefore < dailyCapacityRemaining)
+                replenish = await ReplenishCampaignInventoryAsync(cfg, dailyCapacityRemaining, cancellationToken, deadline);
             all = await _store.ListProspectsAsync(cancellationToken);
         }
 
@@ -1264,7 +1275,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
 
         // READY=0 still replenishes. Do not end the run because the send list was empty.
         var usedAfterSend = dryRun ? wouldSend : sent;
-        var stillNeed = Math.Max(0, remaining - usedAfterSend);
+        var stillNeed = Math.Max(0, dailyCapacityRemaining - usedAfterSend);
         if (stillNeed > 0 && DateTime.UtcNow < deadline)
         {
             var post = await ReplenishCampaignInventoryAsync(cfg, stillNeed, cancellationToken, deadline);
@@ -1279,6 +1290,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         // Second send pass if replenishment produced ready inventory and tick budget remains.
+        // SES volume still respects health-capped `remaining`.
         if (!dryRun && DateTime.UtcNow < deadline && sent < remaining && replenish.ReadyAfter > 0)
         {
             await PromoteAutomaticReadyDraftsAsync(campaign, state, cancellationToken);
@@ -1387,7 +1399,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         usedAfterSend = dryRun ? wouldSend : sent;
-        stillNeed = Math.Max(0, remaining - usedAfterSend);
+        stillNeed = Math.Max(0, dailyCapacityRemaining - usedAfterSend);
 
         var ramp = await _store.GetRampAsync(campaign, cancellationToken);
         var healthAfter = OutreachPolicy.HealthFromCounts(sentAll + sent, bounced, complaints, unsubs);
@@ -1407,15 +1419,35 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
             && MatchesCampaignAudience(p, cfg)
             && IsActionableEmailDiscovery(p, DateTimeOffset.UtcNow));
-        var budgetHit = DateTime.UtcNow >= deadline && usedAfterSend < remaining;
+        var upstreamProgress = replenish.Discovered + replenish.EmailsFound + replenish.DraftsPrepared
+            + replenish.ContactDiscoveryAttempted;
+        var capacityLeft = Math.Max(0, dailyCapacityRemaining - usedAfterSend);
+        var budgetHit = DateTime.UtcNow >= deadline && capacityLeft > 0;
         if (budgetHit)
             reasonCounts["EXECUTION_BUDGET"] = reasonCounts.GetValueOrDefault("EXECUTION_BUDGET") + 1;
-        var moreWork = usedAfterSend < remaining && (
+        // Continue while daily capacity remains and this tick made progress, hit the runtime
+        // budget, produced ready inventory, or sent and still has capacity. Do not spin forever
+        // solely because actionableDiscovery > 0 when this tick made no upstream progress.
+        var moreWork = capacityLeft > 0 && (
             budgetHit
-            || replenish.Discovered + replenish.EmailsFound + replenish.DraftsPrepared + replenish.ContactDiscoveryAttempted > 0
-            || usedAfterSend > 0
+            || upstreamProgress > 0
             || replenish.ReadyAfter > 0
-            || actionableDiscovery > 0);
+            || (usedAfterSend > 0 && capacityLeft > 0));
+        string stopReason;
+        if (capacityLeft <= 0)
+            stopReason = "DAILY_CAPACITY_REACHED";
+        else if (remaining <= usedAfterSend && usedAfterSend > 0 && remaining < dailyCapacityRemaining)
+            stopReason = "HEALTH_SEND_CAP";
+        else if (budgetHit)
+            stopReason = "EXECUTION_BUDGET";
+        else if (moreWork)
+            stopReason = "CONTINUE";
+        else if (actionableDiscovery > 0 && upstreamProgress == 0)
+            stopReason = "CONTACT_DISCOVERY_NO_PROGRESS";
+        else if (replenish.ReadyAfter == 0 && usedAfterSend == 0)
+            stopReason = "NO_READY_INVENTORY";
+        else
+            stopReason = "COMPLETE";
         static int CountKeys(Dictionary<string, int> counts, params string[] keys) =>
             keys.Sum(k => counts.GetValueOrDefault(k));
         var suppressedCount = CountKeys(reasonCounts,
@@ -1550,6 +1582,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             sesRejected = priorSesRejected + sesRejected,
             executionBudgetHit = budgetHit,
             moreWork,
+            stopReason,
+            dailyCapacityRemaining,
+            sendCapacityRemaining = Math.Max(0, remaining - usedAfterSend),
+            actionableDiscoveryRemaining = actionableDiscovery,
             variantSplit = true,
             lastInvocationSent = sent,
             lastInvocationContactDiscoveryAttempted = replenish.ContactDiscoveryAttempted
@@ -1574,7 +1610,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             replenish.DraftsPrepared,
             cfg.SendingMode,
             campaign,
-            moreWork);
+            moreWork,
+            stopReason,
+            replenish.ContactDiscoveryAttempted,
+            replenish.InvalidEmails,
+            replenish.NoPublicEmail);
     }
 
     public async Task UnsubscribeAsync(string email, CancellationToken cancellationToken)
