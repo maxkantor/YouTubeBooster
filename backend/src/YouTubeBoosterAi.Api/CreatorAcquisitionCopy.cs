@@ -17,25 +17,24 @@ public static class CreatorAcquisitionCopy
     {
         var blob = $"{subject}\n{body}";
         if (string.IsNullOrWhiteSpace(blob)) return false;
+        // Block founder-personal voice; allow brand first-person audit copy.
         if (Regex.IsMatch(blob, @"\bI'm Max\b", RegexOptions.IgnoreCase)) return true;
         if (Regex.IsMatch(blob, @"\bI am Max\b", RegexOptions.IgnoreCase)) return true;
         if (blob.Contains("Founder, YouTubeBooster", StringComparison.OrdinalIgnoreCase)) return true;
         if (blob.Contains("Max from YouTubeBooster", StringComparison.OrdinalIgnoreCase)) return true;
-        if (Regex.IsMatch(blob, @"\bI ran .+ through YouTubeBooster", RegexOptions.IgnoreCase)) return true;
-        if (Regex.IsMatch(blob, @"\bI reviewed your channel\b", RegexOptions.IgnoreCase)) return true;
         if (Regex.IsMatch(blob, @"^\s*Max\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase)) return true;
         return false;
     }
 
     public static string SubjectFor(string variant, string channelName)
     {
-        var channel = string.IsNullOrWhiteSpace(channelName) ? "your" : channelName.Trim();
+        var channel = string.IsNullOrWhiteSpace(channelName) ? "your channel" : channelName.Trim();
         return (variant ?? "A").Trim().ToUpperInvariant() switch
         {
-            "B" => $"A YouTube idea for {channel}",
-            "C" => $"We found something on {channel}",
-            "D" => $"A quick YouTube opportunity for {channel}",
-            _ => $"One idea for {channel}'s YouTube channel"
+            "B" => $"Found something on your YouTube channel",
+            "C" => $"One thing I noticed on {channel}",
+            "D" => $"Quick YouTube audit for {channel}",
+            _ => $"Quick idea for {channel}"
         };
     }
 
@@ -59,27 +58,32 @@ public static class CreatorAcquisitionCopy
         var name = string.IsNullOrWhiteSpace(creatorName) ? channelName : creatorName.Trim();
         var channel = string.IsNullOrWhiteSpace(channelName) ? name : channelName.Trim();
         var obs = (observation ?? "").Trim();
-        var fix = (improvement ?? "").Trim();
         if (string.IsNullOrWhiteSpace(obs))
             obs = "Recent public titles and descriptions are inconsistent, which makes the channel harder to scan in search.";
-        if (string.IsNullOrWhiteSpace(fix))
-            fix = "On the next upload, we'd test clearer packaging in the title and a short search-focused description.";
 
         var subject = SubjectFor(SubjectVariantCode(variant), channel);
         var ctaBlock = string.IsNullOrWhiteSpace(trackedUrl)
             ? CtaMarker
-            : $"{CtaPlainLeadIn}\n{trackedUrl.Trim()}";
+            : $"View your free audit:\n{trackedUrl.Trim()}";
 
         var body = JoinParagraphs(
-            $"Hi {name},",
-            "We analyzed your YouTube channel with YouTubeBooster AI and noticed something worth testing:",
-            obs,
-            fix,
-            "We put the rest of the findings into a free audit:",
+            "Hi,",
+            $"I was looking at {channel} and noticed {LowerFirst(obs)}",
+            "I ran your channel through YouTubeBoosterAI and found a few other opportunities worth checking.",
+            "I put the results here:",
             ctaBlock,
+            "No signup required.",
             BrandSignature
         );
         return (subject, body);
+    }
+
+    private static string LowerFirst(string text)
+    {
+        var t = (text ?? "").Trim();
+        if (t.Length == 0) return t;
+        if (t.Length == 1) return t.ToLowerInvariant();
+        return char.ToLowerInvariant(t[0]) + t[1..];
     }
 
     public static (string Subject, string Body) BuildFollowUp(

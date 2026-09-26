@@ -281,9 +281,46 @@ export function formatCrmAcquisitionText(dist) {
   lines.push(`Creators evaluated: ${d.prospectsEvaluated ?? totalCreators}`);
   lines.push(`Valid emails: ${withEmail}`);
   lines.push(`Qualified: ${inv.qualified ?? pipe.eligibleNow ?? d.sendEligible ?? readyToSend}`);
+  lines.push(`Analyzed: ${inv.analyzed ?? d.personalizationFunnel?.analyzed ?? 0}`);
+  lines.push(`Insufficient personalization: ${inv.insufficientPersonalization ?? d.personalizationFunnel?.insufficientPersonalization ?? skips.INSUFFICIENT_PERSONALIZATION ?? 0}`);
+  lines.push(`Audits generated: ${inv.auditsGenerated ?? d.personalizationFunnel?.auditsGenerated ?? 0}`);
   lines.push(`Auto-eligible: ${autoEligible}`);
   lines.push(`Needs approval: ${needsApproval}`);
   lines.push(`Ready to send: ${readyToSend}`);
+  lines.push('');
+  const pf = d.personalizationFunnel || {};
+  lines.push('PERSONALIZED AUDIT FUNNEL (CRM)');
+  lines.push('--------------------------------');
+  lines.push(`Discovered: ${pf.discovered ?? totalCreators}`);
+  lines.push(`Contact verified: ${pf.contactVerified ?? withEmail}`);
+  lines.push(`Analyzed: ${pf.analyzed ?? inv.analyzed ?? 0}`);
+  lines.push(`Qualified: ${pf.qualified ?? inv.qualified ?? 0}`);
+  lines.push(`Insufficient personalization: ${pf.insufficientPersonalization ?? inv.insufficientPersonalization ?? 0}`);
+  lines.push(`Audits generated: ${pf.auditsGenerated ?? inv.auditsGenerated ?? 0}`);
+  lines.push(`Emails sent: ${pf.emailsSent ?? sentToday}`);
+  lines.push(`Clicks: ${pf.clicked ?? funnel.clicked ?? 0}`);
+  lines.push(`Audit views: ${pf.auditViews ?? 0}`);
+  lines.push(`Audit engaged: ${pf.auditEngaged ?? 0}`);
+  lines.push(`Signups: ${pf.signups ?? d.cohort?.signups ?? 0}`);
+  lines.push(`Checkout starts: ${pf.checkoutStarts ?? d.cohort?.checkoutStarts ?? 0}`);
+  lines.push(`Paid: ${pf.paid ?? d.cohort?.verifiedCustomers ?? 0}`);
+  lines.push('');
+  const topOpp = Array.isArray(d.topOpportunities) ? d.topOpportunities : [];
+  if (topOpp.length) {
+    lines.push('TOP DETECTED OPPORTUNITIES');
+    lines.push('-------------------------');
+    for (const row of topOpp.slice(0, 8)) {
+      lines.push(`  ${row.type || row.Type}: ${row.count ?? row.Count ?? 0}`);
+    }
+    lines.push('');
+  }
+  const stopReason =
+    d.lastRun?.stopReason ||
+    d.lastRun?.StopReason ||
+    d.automaticPauseReason ||
+    (remaining <= 0 ? 'DAILY_LIMIT_REACHED' : null) ||
+    'n/a';
+  lines.push(`AUTOMATION STOP REASON: ${stopReason}`);
   lines.push('');
   lines.push('SENDABILITY');
   lines.push('-----------');

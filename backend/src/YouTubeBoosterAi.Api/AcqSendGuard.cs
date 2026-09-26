@@ -77,6 +77,8 @@ public static class AcqSendGuard
             "SES_QUOTA_REACHED" => "SES provider quota reached",
             "EXECUTION_BUDGET" => "Invocation time budget reached",
             "NOT_QUALIFIED" => "Not eligible",
+            "INSUFFICIENT_PERSONALIZATION" => "Insufficient personalization",
+            "UNSUPPORTED_CLAIM" => "Unsupported private analytics claim",
             "MISSING_CONFIG" => "Sending not configured",
             "STRATEGIC_MANUAL" => "Strategic — manual only",
             _ => string.IsNullOrWhiteSpace(raw) ? "Skipped" : raw.Trim()

@@ -576,6 +576,15 @@ export type AcqSanitizedProspect = {
   contentFormat?: string | null;
   strategic?: boolean;
   strategicGoal?: string | null;
+  opportunityEvidenceJson?: string | null;
+  primaryOpportunity?: string | null;
+  personalizationConfidence?: number | null;
+  analyzedVideoId?: string | null;
+  analyzedVideoTitle?: string | null;
+  analyzedVideoUrl?: string | null;
+  analysisTimestamp?: string | null;
+  analysisVersion?: string | null;
+  auditGeneratedAt?: string | null;
 };
 
 export type AcqAdminProspect = {
@@ -595,6 +604,7 @@ export type AcqAdminProspect = {
   whyNotSent?: string | null;
   whyNotSentHuman?: string | null;
   sendLane?: string | null;
+  auditPublicUrl?: string | null;
 };
 
 export type AcqEmailDiscoveryItemResult = {

@@ -424,20 +424,24 @@ public class AcqAutomationUpgradeTests
     private static AcqProspectRecord ReadyToSend(string id, string email, string channelId)
     {
         var now = DateTimeOffset.UtcNow;
+        var token = ("tok" + id).PadRight(32, 'a')[..32];
+        var observation = "12 of your last 20 public videos have very short descriptions for search.";
+        var improvement = "For example, on \"Chicken stew,\" we'd test putting the dish and main benefit earlier.";
+        var copy = CreatorAcquisitionCopy.Build(
+            "A", "Example Cook", "Example Cook", observation, improvement,
+            $"https://youtubeboosterai.com/api/public/acq/go/{token}");
         var p = new AcqProspectRecord(
             id, "Example Cook", "@examplecook", "https://www.youtube.com/@examplecook", channelId,
             "cooking", "en", "US", 12000, 100, now.AddDays(-7), 5, "8k-20k", "https://example-creator.test",
             email, "https://example-creator.test/contact", now, "business",
             25, 25, 20, 85, "completed", "approved", null, "none",
-            CreatorAcquisitionCampaigns.Cook001, "/api/public/acq/go/tok", "tok" + id,
-            "https://www.youtube.com/@examplecook", now, "12 of your last 20 public videos have very short descriptions for search.",
-            "For example, on \"Chicken stew,\" we'd test putting the dish and main benefit earlier.",
+            CreatorAcquisitionCampaigns.Cook001, $"/api/public/acq/go/{token}", token,
+            "https://www.youtube.com/@examplecook", now, observation, improvement,
             "thin descriptions",
-            "One idea for Example Cook's YouTube channel", "body", null, "APR-1", null, null,
+            copy.Subject, copy.Body, null, "APR-1", null, null,
             now, now, false);
-        return p with
+        var stamped = p with
         {
-            ContentHash = CreatorAcquisitionScoring.ContentHash(p with { ContentHash = null }),
             SampleSize = 20,
             WeakDescriptionCount = 12,
             TitleIssueCount = 2,
@@ -445,13 +449,27 @@ public class AcqAutomationUpgradeTests
             FindingType = "DESCRIPTION_DEPTH",
             TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
             SubjectVariant = "A",
-            MessageVariant = "brand_audit_v1",
-            Body = CreatorAcquisitionCopy.Build(
-                "A", "Example Cook", "Example Cook",
-                "12 of your last 20 public videos have very short descriptions for search.",
-                "For example, on \"Chicken stew,\" we'd test putting the dish and main benefit earlier.",
-                "https://youtubeboosterai.com/api/public/acq/go/tok").Body
+            MessageVariant = "personalized_audit_v1",
+            AuditGeneratedAt = now,
+            AnalysisTimestamp = now,
+            AnalysisVersion = CreatorAcquisitionOpportunity.AnalysisVersion,
+            AnalyzedVideoTitle = "Chicken stew"
         };
+        var baseScore = CreatorAcquisitionScoring.Score(new AcqScoreInput(
+            stamped.SubscriberCount, stamped.RecentUploadAt, now,
+            stamped.WeakDescriptionCount, stamped.TitleIssueCount, stamped.SampleSize,
+            true, true, "en", true, false, false, false, false));
+        var opp = CreatorAcquisitionOpportunity.Build(
+            baseScore, stamped.WeakDescriptionCount, stamped.TitleIssueCount, stamped.SampleSize,
+            stamped.ExampleVideoTitle, stamped.FindingType, "en");
+        stamped = stamped with
+        {
+            OpportunityEvidenceJson = CreatorAcquisitionOpportunity.ToJson(opp),
+            PersonalizationConfidence = opp.PersonalizationConfidence,
+            PrimaryOpportunity = opp.PrimaryOpportunity,
+            PriorityScore = Math.Max(85, opp.Score)
+        };
+        return stamped with { ContentHash = CreatorAcquisitionScoring.ContentHash(stamped with { ContentHash = null }) };
     }
 
     private static AcqApprovalRecord Approval(params AcqProspectRecord[] rows) =>

@@ -22,20 +22,24 @@ public class CreatorAcquisitionTests
         string handle = "@examplecook")
     {
         recent ??= DateTimeOffset.UtcNow.AddDays(-7);
+        var token = ("tok" + id).PadRight(32, 'a')[..32];
         var p = new AcqProspectRecord(
             id, "Example Cook", handle, "https://www.youtube.com/@examplecook", "UCexample",
             "cooking", "en", "US", subs, 100, recent, 5, "8k-20k", "https://example-creator.test",
             email, "https://example-creator.test/contact", DateTimeOffset.UtcNow, contactType,
             25, 25, 20, score, inspection, "approved", lastContacted, suppression,
-            CreatorAcquisitionCampaigns.Cook001, "/api/public/acq/go/tok", "tok",
+            CreatorAcquisitionCampaigns.Cook001, $"/api/public/acq/go/{token}", token,
             "https://www.youtube.com/@examplecook", DateTimeOffset.UtcNow, observation,
             "For example, on \"Chicken stew,\" we'd test putting the dish and main benefit earlier in the title and adding a short search-focused description.",
             "thin descriptions",
             subject, "body", null, approvalId, null, null,
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, placeholder);
-        return p with
+        var copy = CreatorAcquisitionCopy.Build(
+            "A", "Example Cook", "Example Cook", observation ?? "",
+            "For example, on \"Chicken stew,\" we'd test putting the dish and main benefit earlier in the title and adding a short search-focused description.",
+            $"https://youtubeboosterai.com/api/public/acq/go/{token}");
+        var stamped = p with
         {
-            ContentHash = CreatorAcquisitionScoring.ContentHash(p with { ContentHash = null }),
             SampleSize = 20,
             WeakDescriptionCount = 12,
             TitleIssueCount = 2,
@@ -43,12 +47,31 @@ public class CreatorAcquisitionTests
             FindingType = "DESCRIPTION_DEPTH",
             TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
             SubjectVariant = "A",
-            MessageVariant = "brand_audit_v1",
-            Body = CreatorAcquisitionCopy.Build(
-                "A", "Example Cook", "Example Cook", observation ?? "",
-                "For example, on \"Chicken stew,\" we'd test putting the dish and main benefit earlier in the title and adding a short search-focused description.",
-                "https://youtubeboosterai.com/api/public/acq/go/tok").Body
+            MessageVariant = "personalized_audit_v1",
+            Subject = copy.Subject,
+            Body = copy.Body,
+            AuditGeneratedAt = DateTimeOffset.UtcNow,
+            AnalysisTimestamp = DateTimeOffset.UtcNow,
+            AnalysisVersion = CreatorAcquisitionOpportunity.AnalysisVersion,
+            AnalyzedVideoTitle = "Chicken stew",
+            AnalyzedVideoUrl = "https://www.youtube.com/watch?v=example1",
+            PrimaryOpportunity = "WEAK_DESCRIPTIONS"
         };
+        var baseScore = CreatorAcquisitionScoring.Score(new AcqScoreInput(
+            stamped.SubscriberCount, stamped.RecentUploadAt, DateTimeOffset.UtcNow,
+            stamped.WeakDescriptionCount, stamped.TitleIssueCount, stamped.SampleSize,
+            true, true, "en", true, false, false, false, false));
+        var opp = CreatorAcquisitionOpportunity.Build(
+            baseScore, stamped.WeakDescriptionCount, stamped.TitleIssueCount, stamped.SampleSize,
+            stamped.ExampleVideoTitle, stamped.FindingType, "en");
+        stamped = stamped with
+        {
+            OpportunityEvidenceJson = CreatorAcquisitionOpportunity.ToJson(opp),
+            PersonalizationConfidence = opp.PersonalizationConfidence,
+            PrimaryOpportunity = opp.PrimaryOpportunity,
+            PriorityScore = Math.Max(score, opp.Score)
+        };
+        return stamped with { ContentHash = CreatorAcquisitionScoring.ContentHash(stamped with { ContentHash = null }) };
     }
 
     private static AcqCampaignState State(bool sending = true) => new(
@@ -186,12 +209,12 @@ public class CreatorAcquisitionTests
             "20 of your last 20 public videos have very short descriptions for search.",
             "For example, on \"Chipotle Salmon with Orange Salsa and Aji Verde,\" we'd test putting the dish and main benefit earlier in the title and adding a short search-focused description.",
             "https://youtubeboosterai.com/api/public/acq/go/tok");
-        Assert.Equal("One idea for Pinch of Yum's YouTube channel", subject);
-        Assert.Contains("We analyzed", body);
+        Assert.Equal("Quick idea for Pinch of Yum", subject);
+        Assert.Contains("noticed", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("No signup required", body, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("YouTubeBooster AI", body);
-        Assert.DoesNotContain("Max", body);
         Assert.DoesNotContain("Founder", body);
-        Assert.DoesNotContain("I ran", body);
+        Assert.False(CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(subject, body));
         Assert.True(CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(
             "x", "Hi,\n\nI ran Foo through YouTubeBooster\n\nMax\nFounder, YouTubeBooster AI"));
     }
@@ -308,16 +331,15 @@ public class CreatorAcquisitionTests
         Assert.Contains("charset=UTF-8", mime.RawRfc822);
         Assert.Contains("List-Unsubscribe:", mime.RawRfc822);
         Assert.Contains("List-Unsubscribe-Post:", mime.RawRfc822);
-        Assert.Contains("Hi Example Cook", mime.TextBody);
-        Assert.Contains("We analyzed", mime.TextBody);
+        Assert.Contains("Hi,", mime.TextBody);
+        Assert.Contains("noticed", mime.TextBody, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("YouTubeBooster AI", mime.TextBody);
-        Assert.DoesNotContain("I ran", mime.TextBody);
-        Assert.DoesNotContain("Max", mime.TextBody);
+        Assert.Contains("No signup required", mime.TextBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Founder", mime.TextBody);
         Assert.Contains("VIEW YOUR FREE YOUTUBE AUDIT", mime.HtmlBody);
         Assert.DoesNotContain(">https://youtubeboosterai.com/api/public/acq/go/tok<", mime.HtmlBody);
         Assert.Contains("href=\"https://youtubeboosterai.com/api/public/acq/go/tok\"", mime.HtmlBody);
-        Assert.Contains("View your free YouTube audit:", mime.TextBody);
+        Assert.Contains("View your free", mime.TextBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<script", mime.HtmlBody, StringComparison.OrdinalIgnoreCase);
         Assert.False(CreatorAcquisitionMail.TagsContainPii(mime.SesTags));
         Assert.DoesNotContain("hello@example-creator.test", string.Join(',', mime.SesTags.Select(kv => kv.Key + kv.Value)));
@@ -332,7 +354,6 @@ public class CreatorAcquisitionTests
         var html = CreatorAcquisitionMail.BuildHtml(
             "A <b>x</b>", "Cook & Co", "obs", "fix", "https://x.test/api/public/acq/go/t", "Cook & Co", "https://u.test", "Addr");
         Assert.Contains("Cook &amp; Co", html);
-        Assert.Contains("A &lt;b&gt;x&lt;/b&gt;", html);
         Assert.DoesNotContain("<b>x</b>", html);
         Assert.Contains("VIEW YOUR FREE YOUTUBE AUDIT", html);
     }

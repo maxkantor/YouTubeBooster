@@ -87,8 +87,10 @@ function AuditTopicsRedirect() {
 const AuditHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.AuditHubPage })));
 const SolutionsHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.SolutionsHubPage })));
 const GuidesHubPage = React.lazy(() => import('./pages/seo/SeoHubs').then((m) => ({ default: m.GuidesHubPage })));
-const AuditArticleRoute = React.lazy(() =>
-  import('./pages/seo/SeoProgrammaticRoutes').then((m) => ({ default: m.AuditArticleRoute }))
+const AuditSlugOrPersonalizedRoute = React.lazy(() =>
+  import('./pages/marketing/AuditSlugOrPersonalizedRoute').then((m) => ({
+    default: m.AuditSlugOrPersonalizedRoute
+  }))
 );
 const SolutionArticleRoute = React.lazy(() =>
   import('./pages/seo/SeoProgrammaticRoutes').then((m) => ({ default: m.SolutionArticleRoute }))
@@ -915,7 +917,7 @@ function AppInner() {
         <Route path="/best-youtube-audit-tool" element={<GrowthGuideRoutePage />} />
         <Route path="/platform" element={<PlatformPage />} />
         <Route path="/audit" element={<AuditHubPage />} />
-        <Route path="/audit/:slug" element={<AuditArticleRoute />} />
+        <Route path="/audit/:slug" element={<AuditSlugOrPersonalizedRoute />} />
         <Route path="/audit-topics" element={<Navigate to="/audit" replace />} />
         <Route path="/audit-topics/:slug" element={<AuditTopicsRedirect />} />
         <Route path="/solutions" element={<SolutionsHubPage />} />

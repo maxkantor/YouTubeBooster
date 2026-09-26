@@ -96,7 +96,17 @@ public sealed record AcqProspectRecord(
     string? CreatorTier = null,
     string? ContentFormat = null,
     bool Strategic = false,
-    string? StrategicGoal = null
+    string? StrategicGoal = null,
+    string? OpportunityEvidenceJson = null,
+    string? PrimaryOpportunity = null,
+    double? PersonalizationConfidence = null,
+    string? AnalyzedVideoId = null,
+    string? AnalyzedVideoTitle = null,
+    string? AnalyzedVideoUrl = null,
+    string? AnalyzedThumbnailUrl = null,
+    DateTimeOffset? AnalysisTimestamp = null,
+    string? AnalysisVersion = null,
+    DateTimeOffset? AuditGeneratedAt = null
 );
 
 public sealed record AcqApprovalRecord(
@@ -193,7 +203,16 @@ public sealed record AcqSanitizedProspectDto(
     string? CreatorTier = null,
     string? ContentFormat = null,
     bool Strategic = false,
-    string? StrategicGoal = null
+    string? StrategicGoal = null,
+    string? OpportunityEvidenceJson = null,
+    string? PrimaryOpportunity = null,
+    double? PersonalizationConfidence = null,
+    string? AnalyzedVideoId = null,
+    string? AnalyzedVideoTitle = null,
+    string? AnalyzedVideoUrl = null,
+    DateTimeOffset? AnalysisTimestamp = null,
+    string? AnalysisVersion = null,
+    DateTimeOffset? AuditGeneratedAt = null
 );
 
 public sealed record AcqAdminProspectDto(
@@ -212,7 +231,8 @@ public sealed record AcqAdminProspectDto(
     string? FindingSource = null,
     string? WhyNotSent = null,
     string? WhyNotSentHuman = null,
-    string? SendLane = null
+    string? SendLane = null,
+    string? AuditPublicUrl = null
 );
 
 public sealed record AcqUpsertProspectRequest(

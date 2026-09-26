@@ -44,17 +44,27 @@ public static class CreatorAcquisitionEndpoints
             var p = await acq.Store.GetByTokenAsync(token, cancellationToken);
             if (p is null) return Results.NotFound();
             await acq.RecordFunnelAsync(token, "acq_click", cancellationToken);
-            var handle = p.Handle.StartsWith('@') ? p.Handle : "@" + p.Handle.TrimStart('@');
             var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
             var runYmd = p.CohortRunId is { Length: >= 10 } ? p.CohortRunId[^10..] : CreatorAcquisitionScoring.EasternDate(DateTimeOffset.UtcNow).ToString("yyyy-MM-dd");
-            var dest = $"https://youtubeboosterai.com/share?channel={Uri.EscapeDataString(handle)}"
-                + $"&utm_source=outreach&utm_medium=email&utm_campaign={Uri.EscapeDataString(p.Campaign)}"
+            // Personalized free audit (opaque token) — no email/internal ids in the URL.
+            var dest = $"https://youtubeboosterai.com/audit/{Uri.EscapeDataString(token)}"
+                + $"?utm_source=outreach&utm_medium=email&utm_campaign={Uri.EscapeDataString(p.Campaign)}"
                 + $"&utm_content={Uri.EscapeDataString(variant)}"
                 + $"&utm_id={Uri.EscapeDataString(runYmd)}"
                 + $"&yb_oid={Uri.EscapeDataString(token)}"
                 + $"&exp=004&seg={Uri.EscapeDataString(string.IsNullOrWhiteSpace(p.PrimaryNiche) ? "cooking" : p.PrimaryNiche)}";
             return Results.Redirect(dest);
         });
+        publicApi.MapGet("/audit/{token}", async (string token, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
+        {
+            var payload = await acq.GetPersonalizedAuditAsync(token, cancellationToken);
+            return payload is null ? Results.NotFound(new { error = "audit_not_found" }) : Results.Ok(payload);
+        }).RequireRateLimiting("acq-public");
+        publicApi.MapPost("/audit/{token}/engage", async (string token, ICreatorAcquisitionService acq, CancellationToken cancellationToken) =>
+        {
+            await acq.RecordFunnelAsync(token, "audit_engaged", cancellationToken);
+            return Results.Ok(new { ok = true });
+        }).RequireRateLimiting("acq-public");
         publicApi.MapPost("/weekday-send", async (
             HttpContext http,
             ICreatorAcquisitionService acq,
@@ -478,6 +488,20 @@ public static class CreatorAcquisitionEndpoints
             var qualifiedCook = cookRows.Count(r =>
                 r.PriorityScore >= 70
                 && string.Equals(r.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase));
+            var analyzedCook = cookRows.Count(r =>
+                r.AnalysisTimestamp is not null
+                || !string.IsNullOrWhiteSpace(r.OpportunityEvidenceJson)
+                || !string.IsNullOrWhiteSpace(r.AnalyzedVideoTitle));
+            var auditsGeneratedCook = cookRows.Count(r => r.AuditGeneratedAt is not null);
+            var insufficientFromSkips = skipReasons.GetValueOrDefault("INSUFFICIENT_PERSONALIZATION");
+            var insufficientPersonalizationCook = insufficientFromSkips > 0
+                ? insufficientFromSkips
+                : cookRows.Count(r =>
+                    r.LastContactedAt is null
+                    && CreatorAcquisitionScoring.IsVerifiedPublicEmail(r)
+                    && !string.IsNullOrWhiteSpace(r.Observation)
+                    && (!CreatorAcquisitionScoring.HasStrongPersonalization(r)
+                        || !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(r)));
             // Authoritative Ready-to-Send for ALL Admin screens = automation SendLaneFor.
             // Manual cooldown-bypass eligibility stays on pipeline.approvedManualEligibleNow only.
             var approvedReadyToSend = readyLane;
@@ -603,12 +627,41 @@ public static class CreatorAcquisitionEndpoints
                     backoff = discoveryBackoff,
                     noPublicEmail,
                     qualified = qualifiedCook,
+                    analyzed = analyzedCook,
+                    auditsGenerated = auditsGeneratedCook,
+                    insufficientPersonalization = insufficientPersonalizationCook,
                     autoEligible,
                     manualReview = needsLane,
                     readyToSend = readyLane,
                     sentToday,
                     dailyLimit = state.DailyLimit
                 },
+                personalizationFunnel = new
+                {
+                    discovered = cookRows.Count,
+                    contactVerified = contactVerifiedCook,
+                    analyzed = analyzedCook,
+                    qualified = qualifiedCook,
+                    insufficientPersonalization = insufficientPersonalizationCook,
+                    auditsGenerated = auditsGeneratedCook,
+                    readyToSend = readyLane,
+                    emailsSent = sent,
+                    clicked,
+                    auditViews = cookRows.Count(r =>
+                        string.Equals(r.OutreachStatus, "clicked", StringComparison.OrdinalIgnoreCase)
+                        || StatusAtLeast(r.OutreachStatus, "audit_started")),
+                    auditEngaged = auditStarted,
+                    signups = pricingViewed,
+                    checkoutStarts = checkoutStartedCrm,
+                    paid = converted
+                },
+                topOpportunities = cookRows
+                    .Where(r => !string.IsNullOrWhiteSpace(r.PrimaryOpportunity))
+                    .GroupBy(r => r.PrimaryOpportunity!, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(g => g.Count())
+                    .Take(8)
+                    .Select(g => new { type = g.Key, count = g.Count() })
+                    .ToArray(),
                 pipeline = new
                 {
                     drafted = draftsCook,
@@ -1353,7 +1406,10 @@ public static class CreatorAcquisitionEndpoints
             CreatorAcquisitionScoring.FindingSourceSummary(row),
             why,
             why == "READY_TO_SEND" ? "Ready to send" : AcqSendGuard.HumanSkipReason(why),
-            CreatorAcquisitionService.SendLaneFor(row, now, state, all));
+            CreatorAcquisitionService.SendLaneFor(row, now, state, all),
+            string.IsNullOrWhiteSpace(row.OpaqueToken)
+                ? null
+                : $"https://youtubeboosterai.com/audit/{Uri.EscapeDataString(row.OpaqueToken)}");
     }
 
     private static (string From, string To, string Subject, string Html, string Text, string CtaDestination) BuildExactPreview(
@@ -1456,6 +1512,7 @@ public interface ICreatorAcquisitionService
     Task<AcqProspectRecord?> RecordInboundAsync(string email, string subject, string preview, string? messageId, string? inReplyTo, CancellationToken cancellationToken);
     Task ApplySesEventAsync(string prospectId, string eventType, CancellationToken cancellationToken);
     Task RecordFunnelAsync(string token, string eventName, CancellationToken cancellationToken);
+    Task<object?> GetPersonalizedAuditAsync(string token, CancellationToken cancellationToken);
     Task<object> MigrateRescoreAsync(int limit, CancellationToken cancellationToken);
     Task<object> MigrateBrandCopyAsync(CancellationToken cancellationToken, bool includeAlreadyContacted = false);
     Task<(AcqProspectRecord? Prospect, string? Error)> RejectAsync(string prospectId, string adminEmail, string? reason, CancellationToken cancellationToken);

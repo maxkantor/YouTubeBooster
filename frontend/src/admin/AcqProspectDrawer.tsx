@@ -491,6 +491,68 @@ export function AcqProspectDrawer({
               </dd>
             </div>
             <div>
+              <dt>Email</dt>
+              <dd>{row.publicBusinessEmail || 'CONTACT NEEDED'}</dd>
+            </div>
+            <div>
+              <dt>Niche / Language</dt>
+              <dd>
+                {row.public.primaryNiche || '—'} · {row.public.language || '—'}
+              </dd>
+            </div>
+            <div>
+              <dt>Opportunity score</dt>
+              <dd>
+                {row.public.priorityScore}
+                {row.public.personalizationConfidence != null
+                  ? ` (confidence ${(row.public.personalizationConfidence * 100).toFixed(0)}%)`
+                  : ''}
+              </dd>
+            </div>
+            <div>
+              <dt>Primary opportunity</dt>
+              <dd>{row.public.primaryOpportunity || row.public.opportunityCategory || '—'}</dd>
+            </div>
+            <div>
+              <dt>Evidence</dt>
+              <dd>{row.public.observation || '—'}</dd>
+            </div>
+            <div>
+              <dt>Video analyzed</dt>
+              <dd>
+                {row.public.analyzedVideoUrl ? (
+                  <a href={row.public.analyzedVideoUrl} target="_blank" rel="noreferrer">
+                    {row.public.analyzedVideoTitle || row.public.exampleVideoTitle || 'View video'}
+                  </a>
+                ) : (
+                  row.public.analyzedVideoTitle || row.public.exampleVideoTitle || '—'
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Personalized audit</dt>
+              <dd>
+                {row.auditPublicUrl ? (
+                  <a href={row.auditPublicUrl} target="_blank" rel="noreferrer">
+                    View audit
+                  </a>
+                ) : row.public.auditGeneratedAt ? (
+                  'Generated'
+                ) : (
+                  'Not generated'
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Email status / Why not sent</dt>
+              <dd>
+                {row.sendLane || row.public.outreachStatus || '—'}
+                {row.whyNotSentHuman || row.whyNotSent
+                  ? ` — ${row.whyNotSentHuman || row.whyNotSent}`
+                  : ''}
+              </dd>
+            </div>
+            <div>
               <dt>Audience</dt>
               <dd>{row.public.subscriberRange}</dd>
             </div>
@@ -499,12 +561,11 @@ export function AcqProspectDrawer({
               <dd>{whySelected(row.public)}</dd>
             </div>
             <div>
-              <dt>Contact</dt>
-              <dd>{row.publicBusinessEmail || 'CONTACT NEEDED'}</dd>
-            </div>
-            <div>
               <dt>Last contacted</dt>
-              <dd>{formatDt(row.lastContactedAt)}</dd>
+              <dd>
+                {formatDt(row.lastContactedAt)}
+                {row.public.followUpStep != null ? ` · follow-ups: ${row.public.followUpStep}` : ''}
+              </dd>
             </div>
           </dl>
         </div>

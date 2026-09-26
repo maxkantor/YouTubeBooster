@@ -319,9 +319,22 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var prospectId = dup?.ProspectId ?? $"{request.Campaign}-{Guid.NewGuid().ToString("N")[..8]}";
         var token = dup?.OpaqueToken ?? AcqIds.NewOpaqueToken();
         var example = demo.TopVideos?.FirstOrDefault()?.Title;
+        var exampleVideo = demo.TopVideos?.FirstOrDefault();
         var observation = placeholder ? null : CreatorAcquisitionScoring.BuildObservation(titles, descriptions, sampleSize, example);
         var improvement = placeholder ? null : CreatorAcquisitionScoring.BuildImprovement(titles, descriptions, example);
         var findingType = placeholder ? null : CreatorAcquisitionScoring.ResolveFindingType(titles, descriptions, sampleSize, example);
+        var opportunity = placeholder
+            ? null
+            : CreatorAcquisitionOpportunity.Build(
+                score,
+                descriptions,
+                titles,
+                sampleSize,
+                example,
+                findingType,
+                language,
+                (demo.TopVideos ?? []).Select(v => v.Title),
+                videos.Select(v => v.description ?? ""));
         var tracked = $"/api/public/acq/go/{token}";
         if (string.IsNullOrWhiteSpace(email) && !string.IsNullOrWhiteSpace(contactSourceUrl) && contactType != "form_only"
             && contactType is not "business" and not "partnership" and not "media" and not "general")
@@ -415,7 +428,25 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             CreatorTier: tier,
             ContentFormat: format == "unknown" ? (dup?.ContentFormat ?? "unknown") : format,
             Strategic: strategic,
-            StrategicGoal: string.IsNullOrWhiteSpace(request.StrategicGoal) ? dup?.StrategicGoal : request.StrategicGoal
+            StrategicGoal: string.IsNullOrWhiteSpace(request.StrategicGoal) ? dup?.StrategicGoal : request.StrategicGoal,
+            OpportunityEvidenceJson: opportunity is null ? dup?.OpportunityEvidenceJson : CreatorAcquisitionOpportunity.ToJson(opportunity),
+            PrimaryOpportunity: opportunity?.PrimaryOpportunity ?? dup?.PrimaryOpportunity,
+            PersonalizationConfidence: opportunity?.PersonalizationConfidence ?? dup?.PersonalizationConfidence,
+            AnalyzedVideoId: placeholder ? dup?.AnalyzedVideoId : (exampleVideo?.VideoId ?? dup?.AnalyzedVideoId),
+            AnalyzedVideoTitle: placeholder ? dup?.AnalyzedVideoTitle : (example ?? dup?.AnalyzedVideoTitle),
+            AnalyzedVideoUrl: placeholder
+                ? dup?.AnalyzedVideoUrl
+                : (exampleVideo is null || string.IsNullOrWhiteSpace(exampleVideo.VideoId)
+                    ? dup?.AnalyzedVideoUrl
+                    : $"https://www.youtube.com/watch?v={exampleVideo.VideoId}"),
+            AnalyzedThumbnailUrl: placeholder
+                ? dup?.AnalyzedThumbnailUrl
+                : (exampleVideo is null || string.IsNullOrWhiteSpace(exampleVideo.VideoId)
+                    ? dup?.AnalyzedThumbnailUrl
+                    : $"https://i.ytimg.com/vi/{exampleVideo.VideoId}/hqdefault.jpg"),
+            AnalysisTimestamp: placeholder ? dup?.AnalysisTimestamp : now,
+            AnalysisVersion: opportunity?.AnalysisVersion ?? dup?.AnalysisVersion,
+            AuditGeneratedAt: dup?.AuditGeneratedAt
         );
 
         if (dup is not null && (dup.LastContactedAt is not null || !string.Equals(dup.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)))
@@ -644,7 +675,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 UpdatedAt = DateTimeOffset.UtcNow
             };
             await _store.UpsertProspectAsync(weak, cancellationToken);
-            return new AcqDraftPrepareResult(weak, false, "weak_personalization");
+            return new AcqDraftPrepareResult(weak, false, "insufficient_personalization");
         }
 
         var site = TrackedSite();
@@ -691,7 +722,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             Body = body,
             EmailVariant = variant,
             SubjectVariant = subjectVariant,
-            MessageVariant = "brand_audit_v1",
+            MessageVariant = "personalized_audit_v1",
             TemplateVersion = CreatorAcquisitionCopy.TemplateVersion,
             OutreachStatus = nextStatus,
             PreviewPlaceholder = false,
@@ -702,8 +733,46 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             ContentHash = null,
             ApprovedBy = null,
             ApprovedAt = null,
+            AnalyzedVideoTitle = exampleTitle ?? p.AnalyzedVideoTitle,
+            AuditGeneratedAt = DateTimeOffset.UtcNow,
+            AnalysisTimestamp = p.AnalysisTimestamp ?? DateTimeOffset.UtcNow,
+            AnalysisVersion = p.AnalysisVersion ?? CreatorAcquisitionOpportunity.AnalysisVersion,
             UpdatedAt = DateTimeOffset.UtcNow
         };
+        if (string.IsNullOrWhiteSpace(next.OpportunityEvidenceJson)
+            || next.PersonalizationConfidence is null)
+        {
+            var baseScore = CreatorAcquisitionScoring.Score(new AcqScoreInput(
+                next.SubscriberCount,
+                next.RecentUploadAt,
+                DateTimeOffset.UtcNow,
+                next.WeakDescriptionCount,
+                next.TitleIssueCount,
+                next.SampleSize,
+                CreatorAcquisitionScoring.IsVerifiedPublicEmail(next),
+                true,
+                next.Language ?? "en",
+                true,
+                false,
+                false,
+                false,
+                false));
+            var opp = CreatorAcquisitionOpportunity.Build(
+                baseScore,
+                next.WeakDescriptionCount,
+                next.TitleIssueCount,
+                next.SampleSize,
+                next.ExampleVideoTitle,
+                next.FindingType,
+                next.Language ?? "en");
+            next = next with
+            {
+                OpportunityEvidenceJson = CreatorAcquisitionOpportunity.ToJson(opp),
+                PrimaryOpportunity = opp.PrimaryOpportunity,
+                PersonalizationConfidence = opp.PersonalizationConfidence,
+                PriorityScore = Math.Max(next.PriorityScore, opp.Score)
+            };
+        }
         next = next with { ContentHash = CreatorAcquisitionScoring.ContentHash(next) };
         var state = await LoadStateAsync(next.Campaign, cancellationToken);
         var cfg = await ResolveCampaignConfigAsync(next.Campaign, cancellationToken);
@@ -1704,6 +1773,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var mapped = eventName.ToLowerInvariant() switch
         {
             "acq_click" => "clicked",
+            "audit_viewed" => "clicked",
+            "audit_engaged" => "audit_started",
             "audit_started" or "demo_started" => "audit_started",
             "audit_completed" or "demo_completed" => "audit_completed",
             "pricing_viewed" or "signup_completed" => "pricing_viewed",
@@ -1720,6 +1791,120 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             ["token"] = token,
             ["yb_oid"] = token
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Public personalized audit payload for /audit/{opaque-token}.
+    /// Never includes email, Dynamo keys, or internal prospect IDs.
+    /// </summary>
+    public async Task<object?> GetPersonalizedAuditAsync(string token, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length < 16 || token.Length > 80)
+            return null;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(token, @"^[A-Za-z0-9_-]+$"))
+            return null;
+        var p = await _store.GetByTokenAsync(token.Trim(), cancellationToken);
+        if (p is null) return null;
+        if (string.IsNullOrWhiteSpace(p.Observation) && string.IsNullOrWhiteSpace(p.SuggestedImprovement))
+            return null;
+
+        await RecordFunnelAsync(token, "audit_viewed", cancellationToken);
+
+        var evidence = CreatorAcquisitionOpportunity.TryParse(p.OpportunityEvidenceJson);
+        var primary = p.PrimaryOpportunity
+                      ?? evidence?.PrimaryOpportunity
+                      ?? p.FindingType
+                      ?? "CONTENT_POSITIONING";
+        var videoTitle = p.AnalyzedVideoTitle ?? p.ExampleVideoTitle;
+        var observation = p.Observation ?? "";
+        var improvement = p.SuggestedImprovement ?? "";
+        var topActions = new List<string>();
+        if (!string.IsNullOrWhiteSpace(improvement)) topActions.Add(improvement.Trim());
+        if (evidence is not null)
+        {
+            foreach (var c in evidence.Components.OrderByDescending(x => x.Points).Take(3))
+            {
+                if (!topActions.Any(a => a.Contains(c.Evidence, StringComparison.OrdinalIgnoreCase)))
+                    topActions.Add(c.Evidence);
+            }
+        }
+        while (topActions.Count < 3)
+        {
+            if (topActions.Count == 0)
+                topActions.Add("Clarify the payoff earlier in the next title.");
+            else if (topActions.Count == 1)
+                topActions.Add("Add a short search-focused description: dish + ingredients + who it is for.");
+            else
+                topActions.Add("Keep packaging consistent across the next 5 uploads before changing niches.");
+        }
+
+        var demoHref = $"/demo?channel={Uri.EscapeDataString(p.Handle.StartsWith('@') ? p.Handle : "@" + p.Handle)}"
+                       + $"&utm_source=outreach_audit&utm_medium=audit_page&utm_campaign={Uri.EscapeDataString(p.Campaign)}"
+                       + $"&yb_oid={Uri.EscapeDataString(token)}&exp=004";
+
+        return new
+        {
+            token,
+            channelName = p.ChannelName,
+            handle = p.Handle.StartsWith('@') ? p.Handle : "@" + p.Handle.TrimStart('@'),
+            campaign = p.Campaign,
+            niche = p.PrimaryNiche,
+            language = p.Language,
+            analyzedVideoTitle = videoTitle,
+            analyzedVideoUrl = p.AnalyzedVideoUrl,
+            analyzedThumbnailUrl = p.AnalyzedThumbnailUrl,
+            primaryOpportunity = primary,
+            opportunityScore = evidence?.Score ?? p.PriorityScore,
+            personalizationConfidence = evidence?.PersonalizationConfidence ?? p.PersonalizationConfidence,
+            observation,
+            suggestedImprovement = improvement,
+            findingType = p.FindingType,
+            components = evidence?.Components ?? Array.Empty<AcqOpportunityComponent>(),
+            sections = new
+            {
+                channelSnapshot = new
+                {
+                    subscriberRange = AcqIds.SubscriberRange(p.SubscriberCount),
+                    recentUploadAt = p.RecentUploadAt,
+                    contentFormat = p.ContentFormat,
+                    language = p.Language
+                },
+                discovery = new
+                {
+                    summary = observation,
+                    languageLocalization = evidence?.Components.Any(c => c.Type == "MIXED_LANGUAGE_METADATA") == true
+                        ? evidence.Components.First(c => c.Type == "MIXED_LANGUAGE_METADATA").Evidence
+                        : null
+                },
+                click = new
+                {
+                    titleOpportunity = evidence?.Components.FirstOrDefault(c => c.Type is "WEAK_TITLE_PACKAGING")?.Evidence
+                                       ?? (p.FindingType?.Contains("TITLE", StringComparison.OrdinalIgnoreCase) == true ? observation : null)
+                },
+                watch = new
+                {
+                    note = "Recommendations below use public packaging signals only — not private retention or CTR analytics."
+                },
+                convert = new
+                {
+                    descriptionOpportunity = evidence?.Components.FirstOrDefault(c => c.Type is "WEAK_DESCRIPTIONS")?.Evidence
+                                             ?? (observation.Contains("description", StringComparison.OrdinalIgnoreCase) ? observation : null),
+                    ctaHint = "Add a clear next-step in the description (recipe card, related video, or email list) when it fits the video."
+                }
+            },
+            topActions = topActions.Take(3).ToArray(),
+            numberOneFix = topActions[0],
+            offer = new
+            {
+                priceLabel = "$9.99 one-time",
+                headline = "Get the full YouTubeBooster AI audit",
+                body = "Unpack titles, descriptions, and packaging opportunities across more of your public videos — same product creators already use for a one-time growth audit.",
+                demoHref
+            },
+            analysisVersion = p.AnalysisVersion ?? CreatorAcquisitionOpportunity.AnalysisVersion,
+            requiresAuth = false,
+            requiresPayment = false
+        };
     }
 
     private static int StatusRank(string? status) => status?.ToLowerInvariant() switch

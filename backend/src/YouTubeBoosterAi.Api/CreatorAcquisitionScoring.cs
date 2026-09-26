@@ -146,7 +146,17 @@ public static class CreatorAcquisitionScoring
         if (string.IsNullOrWhiteSpace(p.Observation))
             return new AcqSendGateResult(false, "draft_incomplete");
         if (!HasStrongPersonalization(p))
-            return new AcqSendGateResult(false, "weak_personalization");
+            return new AcqSendGateResult(false, "insufficient_personalization");
+        if (CreatorAcquisitionOpportunity.LooksLikeUnsupportedPrivateClaim(p.Observation)
+            || CreatorAcquisitionOpportunity.LooksLikeUnsupportedPrivateClaim(p.SuggestedImprovement)
+            || CreatorAcquisitionOpportunity.LooksLikeUnsupportedPrivateClaim(p.Body))
+            return new AcqSendGateResult(false, "unsupported_private_claim");
+        if (!manual && !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(p))
+            return new AcqSendGateResult(false, "insufficient_personalization");
+        if (!manual && p.AuditGeneratedAt is null)
+            return new AcqSendGateResult(false, "insufficient_personalization");
+        if (string.IsNullOrWhiteSpace(p.OpaqueToken) || p.OpaqueToken.Length < 16)
+            return new AcqSendGateResult(false, "audit_token_missing");
         if (CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body))
             return new AcqSendGateResult(false, "legacy_personal_template");
         if (!followUpDue && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body)))
@@ -436,7 +446,16 @@ public static class CreatorAcquisitionScoring
             : p.CreatorTier,
         ContentFormat: string.IsNullOrWhiteSpace(p.ContentFormat) ? "unknown" : p.ContentFormat,
         Strategic: p.Strategic,
-        StrategicGoal: p.StrategicGoal
+        StrategicGoal: p.StrategicGoal,
+        OpportunityEvidenceJson: p.OpportunityEvidenceJson,
+        PrimaryOpportunity: p.PrimaryOpportunity,
+        PersonalizationConfidence: p.PersonalizationConfidence,
+        AnalyzedVideoId: p.AnalyzedVideoId,
+        AnalyzedVideoTitle: p.AnalyzedVideoTitle ?? p.ExampleVideoTitle,
+        AnalyzedVideoUrl: p.AnalyzedVideoUrl,
+        AnalysisTimestamp: p.AnalysisTimestamp,
+        AnalysisVersion: p.AnalysisVersion,
+        AuditGeneratedAt: p.AuditGeneratedAt
     );
 
     public static string ContactStatusLabel(AcqProspectRecord p)
