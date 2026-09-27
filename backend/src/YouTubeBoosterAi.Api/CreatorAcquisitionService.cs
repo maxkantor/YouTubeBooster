@@ -883,13 +883,18 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
                 && string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
                 && p.PriorityScore >= 0
+                && p.LastContactedAt is null
                 && (p.PreviewPlaceholder
                     || string.IsNullOrWhiteSpace(p.Subject)
                     || string.IsNullOrWhiteSpace(p.Body)
                     || string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
-                       && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body))));
+                       && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body))
+                    // Re-stamp drafts prepared before personalized-audit fields existed.
+                    || p.AuditGeneratedAt is null
+                    || string.IsNullOrWhiteSpace(p.OpportunityEvidenceJson)
+                    || !CreatorAcquisitionScoring.HasStrongPersonalization(p)));
             if (filter is "email_found" or "verified")
             {
                 candidates = candidates.Where(CreatorAcquisitionScoring.IsVerifiedPublicEmail);

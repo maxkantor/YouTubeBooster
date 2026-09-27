@@ -852,14 +852,18 @@ export type AcqSummary = {
     discovered?: number;
     publicEmails?: number;
     qualifiedUnsent?: number;
+    qualifiedUnsentBlockers?: Record<string, number>;
     readyNow?: number;
     missingEmailEligible?: number;
     discoveryBackoff?: number;
     followUpsDue?: number;
+    followUpsReadyNow?: number;
+    followUpDueBlockers?: Record<string, number>;
     nextScheduledRunEt?: string | null;
     needsApproval?: number;
     automaticSending?: boolean;
-    bottleneck?: string;
+    nextAutomaticAction?: string | null;
+    bottleneck?: string | null;
   };
   pipeline?: {
     drafted?: number;

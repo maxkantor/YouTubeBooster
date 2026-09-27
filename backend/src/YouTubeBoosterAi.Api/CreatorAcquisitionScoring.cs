@@ -131,12 +131,13 @@ public static class CreatorAcquisitionScoring
 
         // Qualification / draft quality
         // Manual admin Approve & Send may override score / band / stale-upload (human reviewed on Approvals).
-        // Automation keeps COOK-001 gates strict.
-        if (!manual && p.PriorityScore < 70)
+        // Automation keeps COOK-001 gates strict for INITIAL sends.
+        // Follow-ups: already passed initial send — do not re-apply score/band/stale/personalization package.
+        if (!manual && !followUpDue && p.PriorityScore < 70)
             return new AcqSendGateResult(false, "score_below_70");
-        if (!string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
+        if (!followUpDue && !string.Equals(p.InspectionStatus, "completed", StringComparison.OrdinalIgnoreCase))
             return new AcqSendGateResult(false, "inspection_incomplete");
-        if (!manual && (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60))
+        if (!manual && !followUpDue && (p.RecentUploadAt is null || (nowUtc - p.RecentUploadAt.Value).TotalDays > 60))
             return new AcqSendGateResult(false, "stale_upload");
         var standing = state.StandingCampaignApproval;
         // Manual campaigns require a recipient ApprovalId. Automatic campaigns (standing
@@ -145,26 +146,26 @@ public static class CreatorAcquisitionScoring
             return new AcqSendGateResult(false, "not_approved");
         if (string.IsNullOrWhiteSpace(p.Observation))
             return new AcqSendGateResult(false, "draft_incomplete");
-        if (!HasStrongPersonalization(p))
+        if (!followUpDue && !HasStrongPersonalization(p))
             return new AcqSendGateResult(false, "insufficient_personalization");
-        if (CreatorAcquisitionOpportunity.LooksLikeUnsupportedPrivateClaim(p.Observation)
+        if (!followUpDue && (CreatorAcquisitionOpportunity.LooksLikeUnsupportedPrivateClaim(p.Observation)
             || CreatorAcquisitionOpportunity.LooksLikeUnsupportedPrivateClaim(p.SuggestedImprovement)
-            || CreatorAcquisitionOpportunity.LooksLikeUnsupportedPrivateClaim(p.Body))
+            || CreatorAcquisitionOpportunity.LooksLikeUnsupportedPrivateClaim(p.Body)))
             return new AcqSendGateResult(false, "unsupported_private_claim");
-        if (!manual && !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(p))
+        if (!manual && !followUpDue && !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(p))
             return new AcqSendGateResult(false, "insufficient_personalization");
-        if (!manual && p.AuditGeneratedAt is null)
+        if (!manual && !followUpDue && p.AuditGeneratedAt is null)
             return new AcqSendGateResult(false, "insufficient_personalization");
         if (string.IsNullOrWhiteSpace(p.OpaqueToken) || p.OpaqueToken.Length < 16)
             return new AcqSendGateResult(false, "audit_token_missing");
-        if (CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body))
+        if (!followUpDue && CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body))
             return new AcqSendGateResult(false, "legacy_personal_template");
         if (!followUpDue && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body)))
             return new AcqSendGateResult(false, "draft_incomplete");
         if (!followUpDue && !string.IsNullOrWhiteSpace(p.ContentHash)
             && !string.Equals(ContentHash(p), p.ContentHash, StringComparison.Ordinal))
             return new AcqSendGateResult(false, "content_hash_changed");
-        if (!manual && (p.SubscriberCount < 1000 || p.SubscriberCount > 100000))
+        if (!manual && !followUpDue && (p.SubscriberCount < 1000 || p.SubscriberCount > 100000))
             return new AcqSendGateResult(false, "subscriber_out_of_band");
         return new AcqSendGateResult(true, followUpDue ? "ok_follow_up" : "ok");
     }
@@ -245,15 +246,18 @@ public static class CreatorAcquisitionScoring
     public static string BuildObservation(int titleIssues, int weakDescriptions, int sampleSize, string? exampleTitle)
     {
         var n = Math.Max(1, sampleSize);
-        if (weakDescriptions >= Math.Max(3, n / 2))
+        // Never claim more issue counts than videos in the sample.
+        var weak = Math.Clamp(weakDescriptions, 0, n);
+        var titles = Math.Clamp(titleIssues, 0, n);
+        if (weak >= Math.Max(3, n / 2))
         {
-            return $"{weakDescriptions} of your last {n} public videos have very short descriptions for search.";
+            return $"{weak} of your last {n} public videos have very short descriptions for search.";
         }
-        if (titleIssues >= Math.Max(3, n / 4))
+        if (titles >= Math.Max(3, n / 4))
         {
             return string.IsNullOrWhiteSpace(exampleTitle)
-                ? $"{titleIssues} of your last {n} public titles bury the dish or benefit later than they should."
-                : $"{titleIssues} of your last {n} public titles bury the dish or benefit later than they should.";
+                ? $"{titles} of your last {n} public titles bury the dish or benefit later than they should."
+                : $"{titles} of your last {n} public titles bury the dish or benefit later than they should.";
         }
         return GenericObservationFallback;
     }

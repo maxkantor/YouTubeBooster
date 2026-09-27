@@ -270,4 +270,41 @@ public class PersonalizedAuditConversionTests
         Assert.Equal(70, CreatorAcquisitionOpportunity.MinOpportunityScoreForAutoSend);
         Assert.Equal("opp-v1", CreatorAcquisitionOpportunity.AnalysisVersion);
     }
+
+    [Fact]
+    public void FollowUpDue_BypassesScoreBandStaleAndPersonalizationPackage()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var p = StrongProspect() with
+        {
+            SubscriberCount = 400_000,
+            PriorityScore = 55,
+            LastContactedAt = now.AddDays(-5),
+            FollowUpStep = 0,
+            NextFollowUpAt = now.AddHours(-1),
+            OutreachStatus = "sent",
+            AuditGeneratedAt = null,
+            OpportunityEvidenceJson = null,
+            PersonalizationConfidence = null,
+            RecentUploadAt = now.AddDays(-90)
+        };
+        var gate = CreatorAcquisitionScoring.ExplainSendEligibility(p, now, AutoState(), alreadyContacted: true);
+        Assert.True(gate.Ok, gate.Reason);
+        Assert.Equal("ok_follow_up", gate.Reason);
+    }
+
+    [Fact]
+    public void InitialSend_StillRequiresPersonalizationPackage()
+    {
+        var p = StrongProspect() with
+        {
+            AuditGeneratedAt = null,
+            OpportunityEvidenceJson = null,
+            PersonalizationConfidence = null
+        };
+        p = p with { ContentHash = CreatorAcquisitionScoring.ContentHash(p with { ContentHash = null }) };
+        var gate = CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, AutoState(), false);
+        Assert.False(gate.Ok);
+        Assert.Equal("insufficient_personalization", gate.Reason);
+    }
 }

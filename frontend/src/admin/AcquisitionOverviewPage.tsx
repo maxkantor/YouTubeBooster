@@ -116,6 +116,7 @@ export function AcquisitionOverviewPage() {
     { label: 'Public emails', value: status?.publicEmails ?? summary?.inventory?.withPublicEmail ?? 0 },
     { label: 'Qualified unsent', value: status?.qualifiedUnsent ?? 0 },
     { label: 'Ready now', value: readyNow },
+    { label: 'Follow-ups ready', value: status?.followUpsReadyNow ?? 0 },
     { label: 'Missing email eligible', value: discoveryEligible },
     { label: 'Discovery backoff', value: status?.discoveryBackoff ?? summary?.inventory?.backoff ?? 0 },
     { label: 'Follow-ups due', value: followUpsDue },
@@ -128,6 +129,17 @@ export function AcquisitionOverviewPage() {
           : '—'
     }
   ];
+
+  const formatBlockers = (blockers?: Record<string, number> | null) => {
+    if (!blockers || Object.keys(blockers).length === 0) return null;
+    return Object.entries(blockers)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${v} ${k}`)
+      .join(', ');
+  };
+  const fuBlockers = formatBlockers(status?.followUpDueBlockers);
+  const quBlockers = formatBlockers(status?.qualifiedUnsentBlockers);
+  const nextAction = status?.nextAutomaticAction || 'Loading…';
 
   return (
     <AdminShell title="Acquisition" subtitle="Automation health first. Manual send lives on Approvals.">
@@ -178,10 +190,24 @@ export function AcquisitionOverviewPage() {
         >
           BOTTLENECK: {bottleneck}
         </p>
+        <p className="ops-muted" style={{ marginTop: 8, fontWeight: 600 }}>
+          NEXT AUTOMATIC ACTION: {nextAction}
+        </p>
+        {fuBlockers ? (
+          <p className="ops-muted" style={{ marginTop: 6 }}>
+            Follow-ups due blockers: {fuBlockers}
+          </p>
+        ) : null}
+        {quBlockers ? (
+          <p className="ops-muted" style={{ marginTop: 6 }}>
+            Qualified unsent blockers: {quBlockers}
+          </p>
+        ) : null}
         <p className="ops-muted" style={{ marginTop: 8 }}>
           Manual send (if needed):{' '}
           <Link to="/admin/acquisition/approvals?tab=ready">Approvals → Ready to Send</Link>
           {needsApproval > 0 ? ` · ${needsApproval} need human review` : ''}
+          {automatic ? ' · COOK-001 automatic sends do not require Approvals' : ''}
         </p>
       </section>
 
