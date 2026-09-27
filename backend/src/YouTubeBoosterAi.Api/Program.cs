@@ -1524,15 +1524,25 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
 {
     var ticket = await appDataStore.GetSupportTicketAsync(ticketId, cancellationToken);
     if (ticket is null) return Results.NotFound();
-    var blocked = await appDataStore.GetOutreachContactAsync(ticket.Ticket.Email, cancellationToken);
-    if (blocked is not null && string.Equals(blocked.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
-        return Results.BadRequest(new { error = "This address unsubscribed. Do not email them again." });
+
+    // Marketing unsubscribe blocks founder outreach only — never block legitimate support/contact replies.
+    if (AdminNotificationPrefs.IsMarketingSource(ticket.Ticket.Source))
+    {
+        var blocked = await appDataStore.GetOutreachContactAsync(ticket.Ticket.Email, cancellationToken);
+        if (blocked is not null && string.Equals(blocked.Status, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { error = "This address unsubscribed. Do not email them again." });
+    }
 
     var (fromAddress, adminEmail) = await SupportCrmEmail.LoadAddressesAsync(secretValueProvider, cancellationToken);
     if (string.IsNullOrWhiteSpace(fromAddress)) return Results.Problem("SES sender identity is not configured.");
 
     var subject = string.IsNullOrWhiteSpace(request.Subject) ? $"Re: {ticket.Ticket.Subject}" : request.Subject.Trim();
     var site = configuration["App:PublicSiteUrl"] ?? configuration["PUBLIC_SITE_URL"] ?? "https://youtubeboosterai.com";
+    await appDataStore.TrackEventAsync("crm_reply_attempted", ticketId, new Dictionary<string, string?>
+    {
+        ["to"] = ticket.Ticket.Email
+    }, cancellationToken);
+
     var send = await SupportCrmEmail.SendToRecipientAsync(
         ses,
         fromAddress,
@@ -1545,6 +1555,12 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
         cancellationToken);
     if (!send.Ok)
     {
+        await appDataStore.SaveSupportReplyAsync(ticketId, subject, request.Body ?? string.Empty, null, "failed", cancellationToken);
+        await appDataStore.TrackEventAsync("crm_reply_failed", ticketId, new Dictionary<string, string?>
+        {
+            ["to"] = ticket.Ticket.Email,
+            ["error"] = send.Error
+        }, cancellationToken);
         await appDataStore.TrackEventAsync("support_reply_failed", ticketId, new Dictionary<string, string?>
         {
             ["to"] = ticket.Ticket.Email,
@@ -1554,6 +1570,11 @@ adminProtectedApi.MapPost("/crm/support/tickets/{ticketId}/reply", async (
     }
 
     await appDataStore.SaveSupportReplyAsync(ticketId, subject, request.Body ?? string.Empty, send.SesMessageId, "sent", cancellationToken);
+    await appDataStore.TrackEventAsync("crm_reply_sent", ticketId, new Dictionary<string, string?>
+    {
+        ["to"] = ticket.Ticket.Email,
+        ["sesMessageId"] = send.SesMessageId
+    }, cancellationToken);
     await appDataStore.TrackEventAsync("support_reply_sent", ticketId, new Dictionary<string, string?>
     {
         ["to"] = ticket.Ticket.Email,

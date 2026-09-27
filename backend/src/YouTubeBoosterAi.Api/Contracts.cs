@@ -214,7 +214,8 @@ public sealed record AdminSupportTicketDetailResponse(
     AdminSupportTicketDto Ticket,
     string? Name,
     string Message,
-    IReadOnlyList<AdminSupportMessageDto> Thread
+    IReadOnlyList<AdminSupportMessageDto> Thread,
+    IReadOnlyList<PaymentRecord>? RelatedPayments = null
 );
 
 public sealed record AdminSupportMessageDto(

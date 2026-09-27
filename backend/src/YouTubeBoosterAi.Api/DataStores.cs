@@ -55,6 +55,8 @@ public interface IAppDataStore
     Task<AdminListResponse<PurchaseRecord>> ListPurchasesAsync(int limit, string? cursor, CancellationToken cancellationToken);
     Task<AdminListResponse<AdminSupportTicketDto>> ListSupportTicketsAsync(int limit, string? cursor, CancellationToken cancellationToken);
     Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken);
+    /// <summary>Latest contact-form/support ticket for an email (not founder outreach), if any.</summary>
+    Task<AdminSupportTicketDto?> FindLatestContactTicketByEmailAsync(string email, CancellationToken cancellationToken);
     Task SaveSupportReplyAsync(string ticketId, string subject, string body, string? sesMessageId, string? deliveryStatus, CancellationToken cancellationToken);
     Task SaveSupportInboundAsync(string ticketId, string subject, string body, CancellationToken cancellationToken);
     Task SaveSupportNoteAsync(string ticketId, string body, string adminEmail, CancellationToken cancellationToken);
@@ -684,6 +686,38 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
         return Task.FromResult(new AdminListResponse<AdminSupportTicketDto>(items, null));
     }
 
+    public Task<AdminSupportTicketDto?> FindLatestContactTicketByEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        var key = NormalizeEmail(email);
+        var match = _supportTicketsById
+            .Select(pair =>
+            {
+                _supportMeta.TryGetValue(pair.Key, out var meta);
+                return new AdminSupportTicketDto(
+                    TicketId: pair.Key,
+                    Email: pair.Value.Email,
+                    Name: pair.Value.Name,
+                    Subject: pair.Value.Subject,
+                    Status: meta?.Status ?? "open",
+                    ProductArea: pair.Value.ProductArea,
+                    ChannelUrl: pair.Value.ChannelUrl,
+                    CreatedAt: meta?.CreatedAt ?? DateTimeOffset.UtcNow,
+                    UpdatedAt: meta?.UpdatedAt ?? DateTimeOffset.UtcNow,
+                    Priority: meta?.Priority ?? "normal",
+                    LinkedUserId: _supportLinkedUserId.GetValueOrDefault(pair.Key),
+                    AccountEmail: meta?.AccountEmail,
+                    OrderReference: meta?.OrderReference,
+                    Source: meta?.Source ?? "contact_form",
+                    LastMessageAt: meta?.LastMessageAt,
+                    AssignedAdmin: meta?.AssignedAdmin);
+            })
+            .Where(t => string.Equals(NormalizeEmail(t.Email), key, StringComparison.OrdinalIgnoreCase))
+            .Where(t => AdminNotificationPrefs.IsContactLikeSource(t.Source))
+            .OrderByDescending(t => t.LastMessageAt ?? t.UpdatedAt)
+            .FirstOrDefault();
+        return Task.FromResult(match);
+    }
+
     public Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken)
     {
         if (!_supportTicketsById.TryGetValue(ticketId, out var req))
@@ -707,7 +741,11 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
             meta?.LastMessageAt,
             meta?.AssignedAdmin);
         var thread = _supportThreads.TryGetValue(ticketId, out var list) ? list.ToArray() : Array.Empty<AdminSupportMessageDto>();
-        return Task.FromResult<AdminSupportTicketDetailResponse?>(new AdminSupportTicketDetailResponse(ticket, req.Name, req.Message, thread));
+        IReadOnlyList<PaymentRecord>? payments = null;
+        var linked = _supportLinkedUserId.GetValueOrDefault(ticketId);
+        if (!string.IsNullOrWhiteSpace(linked))
+            payments = _payments.Where(p => string.Equals(p.UserId, linked, StringComparison.OrdinalIgnoreCase)).ToArray();
+        return Task.FromResult<AdminSupportTicketDetailResponse?>(new AdminSupportTicketDetailResponse(ticket, req.Name, req.Message, thread, payments));
     }
 
     public Task SaveSupportReplyAsync(string ticketId, string subject, string body, string? sesMessageId, string? deliveryStatus, CancellationToken cancellationToken)
@@ -754,6 +792,10 @@ public sealed partial class InMemoryAppDataStore : IAppDataStore
             "received",
             "user",
             null));
+        if (_supportTicketsById.TryGetValue(ticketId, out var req))
+        {
+            _supportTicketsById[ticketId] = req with { Subject = subject, Message = body };
+        }
         if (_supportMeta.TryGetValue(ticketId, out var meta))
         {
             _supportMeta[ticketId] = meta with { UpdatedAt = now, LastMessageAt = now };
@@ -1812,6 +1854,45 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         return new AdminListResponse<AdminSupportTicketDto>(items, EncodeCursor(response.LastEvaluatedKey));
     }
 
+    public async Task<AdminSupportTicketDto?> FindLatestContactTicketByEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        var key = email.Trim().ToLowerInvariant();
+        var tableName = GetTableName("Storage:SupportTable", "ybai-support");
+        var response = await _dynamoDb.ScanAsync(new ScanRequest
+        {
+            TableName = tableName,
+            FilterExpression = "sk = :sk AND email = :email",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":sk"] = StringValue("DETAILS"),
+                [":email"] = StringValue(email.Trim())
+            },
+            Limit = 100
+        }, cancellationToken);
+
+        // Also match case-insensitive via scan of DETAILS then filter in memory (email may be stored mixed-case).
+        if (response.Items.Count == 0)
+        {
+            response = await _dynamoDb.ScanAsync(new ScanRequest
+            {
+                TableName = tableName,
+                FilterExpression = "sk = :sk",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":sk"] = StringValue("DETAILS")
+                },
+                Limit = 200
+            }, cancellationToken);
+        }
+
+        return response.Items
+            .Select(ReadSupportTicket)
+            .Where(t => string.Equals(t.Email.Trim(), key, StringComparison.OrdinalIgnoreCase))
+            .Where(t => AdminNotificationPrefs.IsContactLikeSource(t.Source))
+            .OrderByDescending(t => t.LastMessageAt ?? t.UpdatedAt)
+            .FirstOrDefault();
+    }
+
     public async Task<AdminSupportTicketDetailResponse?> GetSupportTicketAsync(string ticketId, CancellationToken cancellationToken)
     {
         var tableName = GetTableName("Storage:SupportTable", "ybai-support");
@@ -1830,7 +1911,10 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
         var thread = await ListSupportThreadAsync(ticketId, cancellationToken);
         var message = response.Item.GetValueOrDefault("message")?.S ?? string.Empty;
         var name = EmptyToNull(response.Item.GetValueOrDefault("name")?.S);
-        return new AdminSupportTicketDetailResponse(ticket, name, message, thread);
+        IReadOnlyList<PaymentRecord>? payments = null;
+        if (!string.IsNullOrWhiteSpace(ticket.LinkedUserId))
+            payments = await ListPaymentsByUserAsync(ticket.LinkedUserId, cancellationToken);
+        return new AdminSupportTicketDetailResponse(ticket, name, message, thread, payments);
     }
 
     public async Task SaveSupportReplyAsync(string ticketId, string subject, string body, string? sesMessageId, string? deliveryStatus, CancellationToken cancellationToken)
@@ -1903,10 +1987,16 @@ public sealed partial class DynamoDbAppDataStore : IAppDataStore
                 ["pk"] = StringValue($"TICKET#{ticketId}"),
                 ["sk"] = StringValue("DETAILS")
             },
-            UpdateExpression = "SET updatedAt = :u, lastMessageAt = :u",
+            UpdateExpression = "SET updatedAt = :u, lastMessageAt = :u, #msg = :body, subject = :subject",
+            ExpressionAttributeNames = new Dictionary<string, string>
+            {
+                ["#msg"] = "message"
+            },
             ExpressionAttributeValues = new Dictionary<string, AttributeValue>
             {
-                [":u"] = StringValue(sentAt.ToString("O"))
+                [":u"] = StringValue(sentAt.ToString("O")),
+                [":body"] = StringValue(body),
+                [":subject"] = StringValue(subject)
             }
         }, cancellationToken);
 

@@ -1024,14 +1024,13 @@ export function ContactListPage() {
   };
 
   return (
-    <AdminShell title="Support">
+    <AdminShell title="Contacts">
       {error && <p className="admin-crm-error">{error}</p>}
       <div className="admin-crm-panel" style={{ marginBottom: 16 }}>
         <h2>Send outreach (SES)</h2>
         <p className="admin-crm-muted">
-          From: <code>contact@youtubeboosterai.com</code> (SSM <code>ses/from-email</code>). Reply-To and BCC: Admin CRM inbox
-          (SSM <code>admin/email</code>). Paste an address only from the creator’s public contact page — do not guess. The sent
-          message is stored on this Support thread.
+          From verified YouTubeBooster SES identity. Reply-To and BCC: Admin inbox (SSM <code>admin/email</code>).
+          Paste an address only from the creator’s public contact page — do not guess. The sent message is stored on this thread.
         </p>
         {outErr && <p className="admin-crm-error">{outErr}</p>}
         <div className="admin-crm-toolbar" style={{ flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
@@ -1095,38 +1094,41 @@ export function ContactListPage() {
               <table className="admin-crm-table admin-crm-table-sticky">
                 <thead>
                   <tr>
-                    <th>Ticket</th>
+                    <th>Name</th>
+                    <th>Email</th>
                     <th>Subject</th>
-                    <th>Contact</th>
-                    <th>Linked user</th>
+                    <th>Source</th>
                     <th>Status</th>
-                    <th>Priority</th>
-                    <th>Last message</th>
+                    <th>Tags</th>
+                    <th>Last activity</th>
                     <th>Created</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredSupport.map((t) => (
                     <tr key={t.ticketId}>
-                      <td className="admin-crm-mono">{t.ticketId}</td>
+                      <td>{t.name ?? '—'}</td>
+                      <td className="admin-crm-muted">{t.email}</td>
                       <td>
                         <Link to={`/admin/contacts/${encodeURIComponent(t.ticketId)}`}>{t.subject}</Link>
                       </td>
-                      <td>
-                        <div>{t.name ?? '—'}</div>
-                        <div className="admin-crm-muted">{t.email}</div>
-                      </td>
-                      <td>
-                        {t.linkedUserId ? (
-                          <Link to={`/admin/user/${encodeURIComponent(t.linkedUserId)}`}>Open</Link>
-                        ) : (
-                          <span className="admin-crm-muted">—</span>
-                        )}
-                      </td>
+                      <td>{t.source === 'contact_form' || t.source === 'CONTACT_FORM' ? 'CONTACT_FORM' : (t.source ?? '—')}</td>
                       <td>{contactsStatusBadge(t.status)}</td>
-                      <td>{t.priority ?? 'normal'}</td>
+                      <td className="admin-crm-muted">{t.productArea || '—'}</td>
                       <td className="admin-crm-nowrap">{t.lastMessageAt ? formatDt(t.lastMessageAt) : '—'}</td>
                       <td className="admin-crm-nowrap">{formatDt(t.createdAt)}</td>
+                      <td className="admin-crm-nowrap">
+                        <Link className="admin-crm-btn admin-crm-btn-ghost" to={`/admin/contacts/${encodeURIComponent(t.ticketId)}`}>
+                          View
+                        </Link>{' '}
+                        <Link
+                          className="admin-crm-btn admin-crm-btn-primary"
+                          to={`/admin/contacts/${encodeURIComponent(t.ticketId)}#reply`}
+                        >
+                          Reply
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1193,6 +1195,9 @@ export function ContactTicketPage() {
           setStatusValue(d.ticket.status || 'open');
           setPriorityValue(d.ticket.priority || 'normal');
           setLinkUserId(d.ticket.linkedUserId ?? '');
+          if (typeof window !== 'undefined' && window.location.hash === '#reply') {
+            requestAnimationFrame(() => document.getElementById('reply')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+          }
         }
       })
       .catch((e) => {
@@ -1288,22 +1293,23 @@ export function ContactTicketPage() {
   };
 
   return (
-    <AdminShell title="Support thread">
+    <AdminShell title="Contact thread">
       <button type="button" className="admin-crm-btn" style={{ marginBottom: 16 }} onClick={() => navigate('/admin/contacts')}>
-        ← Inbox
+        ← Contacts
       </button>
       {loading && <p style={{ color: '#64748b' }}>Loading…</p>}
       {error && <p className="admin-crm-error">{error}</p>}
       {data && (
         <>
           <div className="admin-crm-panel">
-            <h2>{data.ticket.subject}</h2>
+            <h2>CONTACT</h2>
             <div className="admin-crm-muted" style={{ marginBottom: 12 }}>
               Ticket <span className="admin-crm-mono">{data.ticket.ticketId}</span>
             </div>
             <div className="admin-crm-two-col">
               <div>
-                <p><strong>Contact</strong>: {data.name ?? '—'} · {data.ticket.email}</p>
+                <p><strong>Name</strong>: {data.name ?? '—'}</p>
+                <p><strong>Email</strong>: {data.ticket.email}</p>
                 {data.ticket.accountEmail && <p><strong>Account email</strong>: {data.ticket.accountEmail}</p>}
                 {data.ticket.orderReference && <p><strong>Order reference</strong>: {data.ticket.orderReference}</p>}
                 {data.ticket.channelUrl && (
@@ -1311,27 +1317,50 @@ export function ContactTicketPage() {
                     <strong>Channel</strong>: <a href={data.ticket.channelUrl} target="_blank" rel="noreferrer">{data.ticket.channelUrl}</a>
                   </p>
                 )}
-                <p><strong>Source</strong>: {data.ticket.source ?? 'contact_form'}</p>
-                <p className="admin-crm-muted">
-                  Outbound From: contact@youtubeboosterai.com. Recipient replies go to the Admin CRM inbox
-                  (SSM admin/email). Continue the conversation with Send reply below so the thread stays in CRM.
+                <p>
+                  <strong>Source</strong>:{' '}
+                  {data.ticket.source === 'contact_form' || data.ticket.source === 'CONTACT_FORM'
+                    ? 'CONTACT_FORM'
+                    : (data.ticket.source ?? 'contact_form')}
                 </p>
+                <p><strong>Tags</strong>: {data.ticket.productArea || '—'}</p>
               </div>
               <div>
                 <p><strong>Status</strong>: {contactsStatusBadge(data.ticket.status)}</p>
                 <p><strong>Priority</strong>: {data.ticket.priority ?? 'normal'}</p>
-                <p><strong>Last message</strong>: {data.ticket.lastMessageAt ? formatDt(data.ticket.lastMessageAt) : '—'}</p>
+                <p><strong>Last activity</strong>: {data.ticket.lastMessageAt ? formatDt(data.ticket.lastMessageAt) : '—'}</p>
                 <p><strong>Created</strong>: {formatDt(data.ticket.createdAt)}</p>
                 {data.ticket.assignedAdmin && <p><strong>Assigned</strong>: {data.ticket.assignedAdmin}</p>}
+                {data.ticket.linkedUserId ? (
+                  <p>
+                    <strong>User/account</strong>:{' '}
+                    <Link to={`/admin/user/${encodeURIComponent(data.ticket.linkedUserId)}`}>{data.ticket.linkedUserId}</Link>
+                  </p>
+                ) : (
+                  <p className="admin-crm-muted">No linked user yet</p>
+                )}
               </div>
             </div>
+            {Array.isArray(data.relatedPayments) && data.relatedPayments.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <strong>Related orders</strong>
+                <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+                  {data.relatedPayments.map((p) => (
+                    <li key={p.paymentId} className="admin-crm-muted">
+                      {p.amount.toFixed(2)} {p.currency} · {p.mode} · {formatDt(p.createdAt)} ·{' '}
+                      <Link to="/admin/orders">{p.stripeCheckoutSessionId}</Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {statusErr && <p className="admin-crm-error">{statusErr}</p>}
             <div className="admin-crm-toolbar" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               <select className="admin-crm-select" value={statusValue} onChange={(e) => setStatusValue(e.target.value)}>
                 <option value="open">Open</option>
                 <option value="pending">Pending</option>
                 <option value="resolved">Resolved</option>
-                <option value="closed">Closed</option>
+                <option value="closed">Closed / Archive</option>
               </select>
               <select className="admin-crm-select" value={priorityValue} onChange={(e) => setPriorityValue(e.target.value)}>
                 <option value="low">Low</option>
@@ -1340,6 +1369,27 @@ export function ContactTicketPage() {
               </select>
               <button type="button" className="admin-crm-btn admin-crm-btn-primary" disabled={statusSaving} onClick={updateTicket}>
                 {statusSaving ? 'Saving…' : 'Update'}
+              </button>
+              <button
+                type="button"
+                className="admin-crm-btn"
+                disabled={statusSaving}
+                onClick={async () => {
+                  setStatusValue('closed');
+                  setStatusSaving(true);
+                  setStatusErr('');
+                  try {
+                    await adminApi.crmPatchSupportTicket(ticketId!, { status: 'closed', priority: priorityValue });
+                    const refreshed = await adminApi.crmSupportTicket(ticketId!);
+                    setData(refreshed);
+                  } catch (e) {
+                    setStatusErr(e instanceof Error ? e.message : 'Failed to archive');
+                  } finally {
+                    setStatusSaving(false);
+                  }
+                }}
+              >
+                Archive
               </button>
             </div>
             {linkErr && <p className="admin-crm-error" style={{ marginTop: 12 }}>{linkErr}</p>}
@@ -1362,52 +1412,59 @@ export function ContactTicketPage() {
             </div>
           </div>
           <div className="admin-crm-panel">
-            <h2>Conversation</h2>
+            <h2>CONVERSATION</h2>
             <div className="admin-crm-thread" style={{ marginTop: 16 }}>
-              {data.ticket.source !== 'founder_outreach' && (
-              <div className="admin-crm-msg admin-crm-msg-in">
-                <div className="admin-crm-msg-meta">Original · {formatDt(data.ticket.createdAt)}</div>
-                <div className="admin-crm-msg-body">{data.message}</div>
-              </div>
-              )}
-              {data.thread.map((m) => (
-                <div
-                  key={m.messageId}
-                  className={`admin-crm-msg ${m.direction.toLowerCase() === 'outbound' ? 'admin-crm-msg-out' : 'admin-crm-msg-in'}`}
-                >
-                  <div className="admin-crm-msg-meta">
-                    {m.direction} · {formatDt(m.sentAt)}
-                    {m.createdByType ? ` · ${m.createdByType}` : ''}
-                    {m.sesMessageId ? (
-                      <>
-                        {' '}
-                        · SES <code className="admin-crm-mono">{m.sesMessageId}</code>
-                      </>
-                    ) : null}
-                    {m.deliveryStatus ? ` · ${m.deliveryStatus}` : ''}
-                  </div>
-                  <div className="admin-crm-msg-body">{m.body}</div>
+              {data.thread.length === 0 && data.ticket.source !== 'founder_outreach' && data.message ? (
+                <div className="admin-crm-msg admin-crm-msg-in">
+                  <div className="admin-crm-msg-meta">INBOUND · CONTACT_FORM · {formatDt(data.ticket.createdAt)} · received</div>
+                  <div className="admin-crm-msg-body">{data.message}</div>
                 </div>
-              ))}
+              ) : null}
+              {data.thread.map((m) => {
+                const dir = m.direction.toLowerCase();
+                const label =
+                  dir === 'outbound' ? 'OUTBOUND' : dir === 'internal_note' ? 'NOTE' : 'INBOUND';
+                const delivery = (m.deliveryStatus || '').toLowerCase();
+                const deliveryLabel =
+                  delivery === 'failed' ? 'FAILED' : delivery === 'sent' ? 'SENT' : delivery === 'received' ? 'RECEIVED' : (m.deliveryStatus || '');
+                return (
+                  <div
+                    key={m.messageId}
+                    className={`admin-crm-msg ${dir === 'outbound' ? 'admin-crm-msg-out' : 'admin-crm-msg-in'}`}
+                  >
+                    <div className="admin-crm-msg-meta">
+                      {label}
+                      {deliveryLabel ? ` · ${deliveryLabel}` : ''}
+                      {' · '}
+                      {formatDt(m.sentAt)}
+                      {m.createdByType ? ` · ${m.createdByType}` : ''}
+                      {m.subject ? ` · ${m.subject}` : ''}
+                    </div>
+                    <div className="admin-crm-msg-body">{m.body}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-          <div className="admin-crm-panel">
-            <h2>Reply (SES)</h2>
+          <div className="admin-crm-panel" id="reply">
+            <h2>Reply</h2>
             {sendErr && <p className="admin-crm-error">{sendErr}</p>}
+            <p className="admin-crm-muted" style={{ marginBottom: 8 }}>
+              To: <strong>{data.ticket.email}</strong>
+            </p>
             <input className="admin-crm-input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Subject" />
             <textarea className="admin-crm-textarea" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message" />
             <button type="button" className="admin-crm-btn admin-crm-btn-primary" disabled={sending || !body.trim()} onClick={sendReply}>
-              {sending ? 'Sending…' : 'Send reply'}
+              {sending ? 'Sending…' : 'Send Reply'}
             </button>
             <p className="admin-crm-muted" style={{ marginTop: 8 }}>
-              Sends UTF-8 HTML + text from contact@youtubeboosterai.com, BCC + Reply-To the Admin inbox. Stored on this thread.
+              Sends from the verified YouTubeBooster support identity. Reply is stored on this conversation. Failures are shown honestly.
             </p>
           </div>
           <div className="admin-crm-panel">
             <h2>Log recipient reply</h2>
             <p className="admin-crm-muted">
-              When the creator replies, it arrives at the Admin CRM inbox. Paste it here so the thread stays complete, then
-              answer with Send reply (not from Gmail).
+              Until SES Receiving / MX is wired for inbound mail, paste recipient replies here so the thread stays complete.
             </p>
             {inboundErr && <p className="admin-crm-error">{inboundErr}</p>}
             <input className="admin-crm-input" value={inboundSubject} onChange={(e) => setInboundSubject(e.target.value)} placeholder="Subject" />

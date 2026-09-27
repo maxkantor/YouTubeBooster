@@ -25,7 +25,7 @@ const BOTTOM_NAV: NavItem[] = [
   { to: 'users', label: 'Users', icon: '◎' },
   { to: 'orders', label: 'Orders', icon: '◈' },
   { to: 'audits', label: 'Audits', icon: '◉' },
-  { to: 'contacts', label: 'Support', icon: '✉' },
+  { to: 'contacts', label: 'Contacts', icon: '✉' },
   { to: 'activity', label: 'Activity logs', icon: '▤' },
   { to: 'diagnostics', label: 'Diagnostics', icon: '⚙' }
 ];

@@ -586,6 +586,12 @@ public sealed class StripeCheckoutService : ICheckoutService
                 session.PaymentIntentId,
                 metadata.GetValueOrDefault("planCode") ?? "premium",
                 cancellationToken);
+            await _appDataStore.TrackEventAsync("purchase_admin_notification_sent", session.Id, new Dictionary<string, string?>
+            {
+                ["userId"] = user.UserId,
+                ["amount"] = payment.Amount.ToString("F2", CultureInfo.InvariantCulture),
+                ["livemode"] = "true"
+            }, cancellationToken);
             await _appDataStore.TrackEventAsync("payment_notifications_sent", session.Id, new Dictionary<string, string?>
             {
                 ["userId"] = user.UserId,
@@ -595,6 +601,10 @@ public sealed class StripeCheckoutService : ICheckoutService
         }
         catch (Exception ex)
         {
+            await _appDataStore.TrackEventAsync("purchase_admin_notification_failed", session.Id, new Dictionary<string, string?>
+            {
+                ["error"] = ex.Message
+            }, cancellationToken);
             await _appDataStore.TrackEventAsync("payment_notification_failed", session.Id, new Dictionary<string, string?>
             {
                 ["error"] = ex.Message
@@ -754,6 +764,12 @@ public sealed class SupportService : ISupportService
             throw new InvalidOperationException(err);
         }
 
+        // Normalize public contact submissions to contact_form (display tag CONTACT_FORM in CRM).
+        var source = string.IsNullOrWhiteSpace(request.Source) ? "contact_form" : request.Source.Trim();
+        if (source.Equals("CONTACT_FORM", StringComparison.OrdinalIgnoreCase))
+            source = "contact_form";
+        request = request with { Source = source };
+
         string? linked = linkedUserIdFromAuth;
         if (linked is null)
         {
@@ -776,9 +792,56 @@ public sealed class SupportService : ISupportService
             }
         }
 
-        var ticketId = await _appDataStore.SaveSupportTicketAsync(request, linked, cancellationToken);
-        await _supportNotificationService.NotifyNewTicketAsync(ticketId, request, cancellationToken);
-        return new SupportTicketResponse(ticketId, "open");
+        string ticketId;
+        var existing = AdminNotificationPrefs.IsContactLikeSource(source)
+            ? await _appDataStore.FindLatestContactTicketByEmailAsync(request.Email, cancellationToken)
+            : null;
+
+        if (existing is not null)
+        {
+            ticketId = existing.TicketId;
+            await _appDataStore.SaveSupportInboundAsync(ticketId, request.Subject, request.Message, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(linked) && string.IsNullOrWhiteSpace(existing.LinkedUserId))
+            {
+                await _appDataStore.LinkSupportTicketUserAsync(ticketId, linked, "system", cancellationToken);
+            }
+            // Reopen closed/resolved threads when the same contact writes again.
+            if (!string.Equals(existing.Status, "open", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(existing.Status, "pending", StringComparison.OrdinalIgnoreCase))
+            {
+                await _appDataStore.UpdateSupportTicketStatusAsync(
+                    ticketId,
+                    new AdminSupportTicketPatchRequest("open", null),
+                    "system",
+                    cancellationToken);
+            }
+            await _appDataStore.TrackEventAsync("contact_submitted", ticketId, new Dictionary<string, string?>
+            {
+                ["ticketId"] = ticketId,
+                ["email"] = request.Email,
+                ["productArea"] = request.ProductArea,
+                ["linkedUserId"] = linked,
+                ["reused"] = "true"
+            }, cancellationToken);
+        }
+        else
+        {
+            ticketId = await _appDataStore.SaveSupportTicketAsync(request, linked, cancellationToken);
+        }
+
+        try
+        {
+            await _supportNotificationService.NotifyNewTicketAsync(ticketId, request, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            await _appDataStore.TrackEventAsync("contact_admin_notification_failed", ticketId, new Dictionary<string, string?>
+            {
+                ["reason"] = ex.Message
+            }, cancellationToken);
+        }
+
+        return new SupportTicketResponse(ticketId, existing is null ? "open" : (existing.Status ?? "open"));
     }
 
     private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();

@@ -208,6 +208,7 @@ public static class CreatorAcquisitionEndpoints
             HttpContext http,
             [FromBody] AcqInboundRequest? request,
             ICreatorAcquisitionService acq,
+            IAppDataStore appDataStore,
             ISecretValueProvider secrets,
             CancellationToken cancellationToken) =>
         {
@@ -219,14 +220,34 @@ public static class CreatorAcquisitionEndpoints
                 return Results.BadRequest(new { error = "fromEmail required" });
             var preview = string.IsNullOrWhiteSpace(request.Preview) ? "(no preview)" : request.Preview.Trim();
             if (preview.Length > 240) preview = preview[..237] + "…";
-            var row = await acq.RecordInboundAsync(request.FromEmail.Trim(), request.Subject ?? "(no subject)", preview, request.MessageId, request.InReplyTo, cancellationToken);
-            return Results.Ok(new
+            try
             {
-                ok = row is not null,
-                prospectId = row?.ProspectId,
-                channel = row?.ChannelName,
-                crmPath = row?.TicketId is null ? null : $"/admin/contacts/{row.TicketId}"
-            });
+                var row = await acq.RecordInboundAsync(request.FromEmail.Trim(), request.Subject ?? "(no subject)", preview, request.MessageId, request.InReplyTo, cancellationToken);
+                await appDataStore.TrackEventAsync(
+                    row is null ? "acquisition_inbound_failed" : "acquisition_inbound_processed",
+                    row?.ProspectId ?? request.FromEmail.Trim(),
+                    new Dictionary<string, string?>
+                    {
+                        ["matched"] = (row is not null).ToString(),
+                        ["ticketId"] = row?.TicketId
+                    },
+                    cancellationToken);
+                return Results.Ok(new
+                {
+                    ok = row is not null,
+                    prospectId = row?.ProspectId,
+                    channel = row?.ChannelName,
+                    crmPath = row?.TicketId is null ? null : $"/admin/contacts/{row.TicketId}"
+                });
+            }
+            catch (Exception ex)
+            {
+                await appDataStore.TrackEventAsync("acquisition_inbound_failed", request.FromEmail.Trim(), new Dictionary<string, string?>
+                {
+                    ["error"] = ex.Message
+                }, cancellationToken);
+                throw;
+            }
         });
 
         var admin = app.MapGroup("/api/admin/crm/acquisition");

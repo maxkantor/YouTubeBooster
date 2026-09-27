@@ -49,8 +49,13 @@ public sealed class SesPaymentAdminNotificationService : IPaymentAdminNotificati
         string planCode,
         CancellationToken cancellationToken)
     {
+        if (!await AdminNotificationPrefs.IsEnabledAsync(_secrets, AdminNotificationPrefs.PurchaseCompleted, cancellationToken))
+            return;
+
         var from = await _secrets.GetValueAsync("ses/from-email", secure: true, cancellationToken);
         var adminTo = await _secrets.GetValueAsync("admin/email", secure: false, cancellationToken);
+        if (string.IsNullOrWhiteSpace(adminTo))
+            adminTo = await _secrets.GetValueAsync("ses/admin-email", secure: false, cancellationToken);
         if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(adminTo))
         {
             return;
@@ -70,7 +75,7 @@ public sealed class SesPaymentAdminNotificationService : IPaymentAdminNotificati
                        ?? _configuration["BILLING_FROM_NAME"]
                        ?? "YouTubeBoosterAI";
         var fromSource = $"{fromName} <{from}>";
-        var subject = $"[YouTubeBoosterAI] New payment received — {payment.Amount:F2} {payment.Currency} ({payment.Mode})";
+        var subject = $"[YouTubeBooster] New purchase — {payment.Amount:F2} {payment.Currency}";
         var body = $"""
             A successful Stripe checkout completed.
 
@@ -99,14 +104,15 @@ public sealed class SesPaymentAdminNotificationService : IPaymentAdminNotificati
                 ReturnPath = from,
                 Message = new Message
                 {
-                    Subject = new Content(subject),
-                    Body = new Body { Text = new Content(body) }
+                    Subject = new Content(subject) { Charset = "UTF-8" },
+                    Body = new Body { Text = new Content(body) { Charset = "UTF-8" } }
                 }
             }, cancellationToken);
         }
         catch
         {
-            // Caller may log via activity; avoid throwing from webhook
+            // Caller logs payment_notification_failed; avoid throwing from webhook
+            throw;
         }
     }
 }

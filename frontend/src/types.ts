@@ -323,6 +323,16 @@ export type AdminSupportTicketDetail = {
   name: string | null;
   message: string;
   thread: AdminSupportMessage[];
+  relatedPayments?: Array<{
+    paymentId: string;
+    userId: string;
+    amount: number;
+    currency: string;
+    mode: string;
+    stripeCheckoutSessionId: string;
+    createdAt: string;
+    accountEmail?: string;
+  }> | null;
 };
 
 export type AdminDemoAuditRow = {

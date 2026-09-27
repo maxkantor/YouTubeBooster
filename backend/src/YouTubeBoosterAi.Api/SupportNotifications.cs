@@ -34,11 +34,27 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
 
     public async Task NotifyNewTicketAsync(string ticketId, SupportTicketRequest request, CancellationToken cancellationToken)
     {
+        var eventName = AdminNotificationPrefs.IsContactLikeSource(request.Source)
+            ? AdminNotificationPrefs.ContactSubmitted
+            : AdminNotificationPrefs.SupportCreated;
+        if (!await AdminNotificationPrefs.IsEnabledAsync(_secretValueProvider, eventName, cancellationToken))
+        {
+            await _appDataStore.TrackEventAsync("contact_admin_notification_skipped", ticketId, new Dictionary<string, string?>
+            {
+                ["reason"] = "pref_disabled",
+                ["event"] = eventName
+            }, cancellationToken);
+            return;
+        }
+
         var fromAddress = await _secretValueProvider.GetValueAsync("ses/from-email", secure: true, cancellationToken);
         var adminEmail = await _secretValueProvider.GetValueAsync("admin/email", secure: false, cancellationToken);
+        if (string.IsNullOrWhiteSpace(adminEmail))
+            adminEmail = await _secretValueProvider.GetValueAsync("ses/admin-email", secure: false, cancellationToken);
+
         if (string.IsNullOrWhiteSpace(fromAddress) || string.IsNullOrWhiteSpace(adminEmail))
         {
-            await _appDataStore.TrackEventAsync("contact_notification_failed", ticketId, new Dictionary<string, string?>
+            await _appDataStore.TrackEventAsync("contact_admin_notification_failed", ticketId, new Dictionary<string, string?>
             {
                 ["reason"] = "missing_ses_or_admin_email"
             }, cancellationToken);
@@ -54,7 +70,7 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
                        ?? _configuration["SUPPORT_FROM_NAME"]
                        ?? "YouTubeBooster Support";
         var fromSource = $"{fromName} <{fromAddress}>";
-        var subject = $"[YouTubeBooster] New contact form submission — {request.Subject}";
+        var subject = $"[YouTubeBooster] New contact: {request.Subject}";
         var body = $"""
             New contact / support thread
 
@@ -67,6 +83,7 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
             Order reference: {request.OrderReference ?? "(not provided)"}
             Channel URL: {request.ChannelUrl ?? "(not provided)"}
             Area: {request.ProductArea}
+            Source: {request.Source ?? "contact_form"}
 
             Subject:
             {request.Subject}
@@ -87,21 +104,21 @@ public sealed class SesSupportNotificationService : ISupportNotificationService
                 ReturnPath = fromAddress,
                 Message = new Message
                 {
-                    Subject = new Content(subject),
-                    Body = new Body { Text = new Content(body) }
+                    Subject = new Content(subject) { Charset = "UTF-8" },
+                    Body = new Body { Text = new Content(body) { Charset = "UTF-8" } }
                 }
             };
 
             await _ses.SendEmailAsync(sendRequest, cancellationToken);
 
-            await _appDataStore.TrackEventAsync("contact_notification_sent", ticketId, new Dictionary<string, string?>
+            await _appDataStore.TrackEventAsync("contact_admin_notification_sent", ticketId, new Dictionary<string, string?>
             {
                 ["to"] = adminEmail
             }, cancellationToken);
         }
         catch (Exception ex)
         {
-            await _appDataStore.TrackEventAsync("contact_notification_failed", ticketId, new Dictionary<string, string?>
+            await _appDataStore.TrackEventAsync("contact_admin_notification_failed", ticketId, new Dictionary<string, string?>
             {
                 ["reason"] = ex.Message
             }, cancellationToken);
