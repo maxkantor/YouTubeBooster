@@ -483,6 +483,52 @@ public sealed partial class CreatorAcquisitionService
 
         bool WithinBudget() => hardDeadlineUtc is null || DateTime.UtcNow < hardDeadlineUtc.Value.AddSeconds(-2);
 
+        // 0a) Refresh stale / under-analyzed cooking contactable so drafts can clear send gates.
+        if (WithinBudget())
+        {
+            var refresh = all
+                .Where(p => string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase))
+                .Where(p => MatchesCampaignAudience(p, cfg))
+                .Where(p => p.LastContactedAt is null)
+                .Where(CreatorAcquisitionScoring.IsVerifiedPublicEmail)
+                .Where(p => p.PriorityScore >= 70)
+                .Where(p =>
+                    p.RecentUploadAt is null
+                    || (now - p.RecentUploadAt.Value).TotalDays > 60
+                    || p.AuditGeneratedAt is null
+                    || string.IsNullOrWhiteSpace(p.OpportunityEvidenceJson)
+                    || !CreatorAcquisitionScoring.HasStrongPersonalization(p))
+                .OrderByDescending(p => p.PriorityScore)
+                .Take(4)
+                .ToList();
+            foreach (var p in refresh)
+            {
+                if (!WithinBudget()) break;
+                try
+                {
+                    await InspectAndUpsertAsync(new AcqUpsertProspectRequest(
+                        ChannelInput: string.IsNullOrWhiteSpace(p.Handle) ? p.ChannelUrl : p.Handle,
+                        PrimaryNiche: string.IsNullOrWhiteSpace(p.PrimaryNiche) ? "cooking" : p.PrimaryNiche,
+                        Campaign: p.Campaign,
+                        Language: p.Language,
+                        OfficialWebsite: p.OfficialWebsite,
+                        PublicBusinessEmail: p.PublicBusinessEmail,
+                        ContactSourceUrl: p.ContactSourceUrl,
+                        ContactType: p.ContactType,
+                        Notes: "scheduler_requalify",
+                        Market: p.Market,
+                        Strategic: p.Strategic,
+                        StrategicGoal: p.StrategicGoal), cancellationToken);
+                }
+                catch
+                {
+                    // best-effort refresh
+                }
+            }
+            all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
+            ready = CountReadyToSend(all, cfg, state, DateTimeOffset.UtcNow);
+        }
+
         // 0) Convert already-verified emails into drafts BEFORE spending the tick on more discovery.
         // Sep 26 starved draft prep after creator/email work burned the 20s budget → Ready stayed 0.
         if (cfg.AutoPrepareDrafts && ready < remaining && WithinBudget())
@@ -636,12 +682,14 @@ public sealed partial class CreatorAcquisitionService
         return started;
     }
 
-    internal static bool MatchesCampaignAudience(AcqProspectRecord p, AcqCampaignConfig cfg)
+    public static bool MatchesCampaignAudience(AcqProspectRecord p, AcqCampaignConfig cfg)
     {
         if (string.Equals(cfg.CampaignId, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase))
         {
+            // COOK-001 is cooking-only. Blank niche used to default via NormalizeCategory and polluted inventory.
+            if (string.IsNullOrWhiteSpace(p.PrimaryNiche)) return false;
             return string.Equals(p.PrimaryNiche, "cooking", StringComparison.OrdinalIgnoreCase)
-                   || string.IsNullOrWhiteSpace(p.PrimaryNiche);
+                   || string.Equals(AcquisitionTaxonomy.NormalizeCategory(p.PrimaryNiche), "cooking", StringComparison.OrdinalIgnoreCase);
         }
 
         if (!string.IsNullOrWhiteSpace(cfg.Category)

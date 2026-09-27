@@ -1739,6 +1739,40 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
     {
         var p = await _store.GetProspectAsync(prospectId, cancellationToken);
         if (p is null) return;
+        await ApplySesEventToProspectAsync(p, eventType, cancellationToken);
+    }
+
+    public async Task<bool> ApplySesEventResolvedAsync(
+        string? prospectId,
+        string? opaqueToken,
+        string? sesMessageId,
+        string? destinationEmail,
+        string eventType,
+        CancellationToken cancellationToken)
+    {
+        AcqProspectRecord? p = null;
+        if (!string.IsNullOrWhiteSpace(prospectId))
+            p = await _store.GetProspectAsync(prospectId.Trim(), cancellationToken);
+        if (p is null && !string.IsNullOrWhiteSpace(opaqueToken))
+            p = await _store.GetByTokenAsync(opaqueToken.Trim(), cancellationToken);
+        if (p is null && !string.IsNullOrWhiteSpace(sesMessageId))
+        {
+            var all = await _store.ListProspectsAsync(cancellationToken);
+            p = all.FirstOrDefault(r =>
+                string.Equals(r.LastSesMessageId, sesMessageId.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
+        if (p is null && EmailAddressHelpers.LooksLikeEmail(destinationEmail))
+            p = await _store.GetByEmailAsync(destinationEmail!.Trim(), cancellationToken);
+        if (p is null) return false;
+        await ApplySesEventToProspectAsync(p, eventType, cancellationToken);
+        return true;
+    }
+
+    private async Task ApplySesEventToProspectAsync(
+        AcqProspectRecord p,
+        string eventType,
+        CancellationToken cancellationToken)
+    {
         var nextStatus = eventType.ToLowerInvariant() switch
         {
             "delivery" => AdvanceOutreachStatus(p.OutreachStatus, "delivered"),

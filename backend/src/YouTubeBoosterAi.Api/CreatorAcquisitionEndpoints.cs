@@ -156,15 +156,23 @@ public static class CreatorAcquisitionEndpoints
             if (string.IsNullOrWhiteSpace(eventType)) return 0;
 
             string? prospectId = null;
-            if (root.TryGetProperty("mail", out var mail) && mail.TryGetProperty("tags", out var tags))
+            string? oid = null;
+            string? messageId = null;
+            string? destinationEmail = null;
+
+            if (root.TryGetProperty("mail", out var mail))
             {
-                if (tags.TryGetProperty("prospect_id", out var pidArr) && pidArr.ValueKind == System.Text.Json.JsonValueKind.Array
-                    && pidArr.GetArrayLength() > 0)
-                    prospectId = pidArr[0].GetString();
-                else if (tags.TryGetProperty("prospect_id", out var pidStr) && pidStr.ValueKind == System.Text.Json.JsonValueKind.String)
-                    prospectId = pidStr.GetString();
+                if (mail.TryGetProperty("messageId", out var mid))
+                    messageId = mid.GetString();
+                if (mail.TryGetProperty("destination", out var dest) && dest.ValueKind == System.Text.Json.JsonValueKind.Array
+                    && dest.GetArrayLength() > 0)
+                    destinationEmail = dest[0].GetString();
+                if (mail.TryGetProperty("tags", out var tags))
+                {
+                    prospectId = ReadSesTag(tags, "prospect_id") ?? ReadSesTag(tags, "prospect-id");
+                    oid = ReadSesTag(tags, "oid");
+                }
             }
-            if (string.IsNullOrWhiteSpace(prospectId)) return 0;
 
             var normalized = eventType.ToLowerInvariant() switch
             {
@@ -173,10 +181,28 @@ public static class CreatorAcquisitionEndpoints
                 "complaint" => "complaint",
                 "reject" => "reject",
                 "click" => "click",
+                "send" => "send",
                 _ => eventType.ToLowerInvariant()
             };
-            await acq.ApplySesEventAsync(prospectId, normalized, cancellationToken);
-            return 1;
+            // "send" is SES accepted — do not overwrite CRM status from it.
+            if (normalized is "send" or "click") return 0;
+
+            var applied = await acq.ApplySesEventResolvedAsync(
+                prospectId, oid, messageId, destinationEmail, normalized, cancellationToken);
+            return applied ? 1 : 0;
+        }
+
+        static string? ReadSesTag(System.Text.Json.JsonElement tags, string name)
+        {
+            foreach (var prop in tags.EnumerateObject())
+            {
+                if (!string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.Array && prop.Value.GetArrayLength() > 0)
+                    return prop.Value[0].GetString();
+                if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return prop.Value.GetString();
+            }
+            return null;
         }
         publicApi.MapPost("/inbound", async (
             HttpContext http,
@@ -1582,6 +1608,13 @@ public interface ICreatorAcquisitionService
     Task<bool> IsGloballyUnsubscribedAsync(string email, CancellationToken cancellationToken);
     Task<AcqProspectRecord?> RecordInboundAsync(string email, string subject, string preview, string? messageId, string? inReplyTo, CancellationToken cancellationToken);
     Task ApplySesEventAsync(string prospectId, string eventType, CancellationToken cancellationToken);
+    Task<bool> ApplySesEventResolvedAsync(
+        string? prospectId,
+        string? opaqueToken,
+        string? sesMessageId,
+        string? destinationEmail,
+        string eventType,
+        CancellationToken cancellationToken);
     Task RecordFunnelAsync(string token, string eventName, CancellationToken cancellationToken);
     Task<object?> GetPersonalizedAuditAsync(string token, CancellationToken cancellationToken);
     Task<object> MigrateRescoreAsync(int limit, CancellationToken cancellationToken);

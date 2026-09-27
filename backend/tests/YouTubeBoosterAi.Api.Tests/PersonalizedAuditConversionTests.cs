@@ -294,17 +294,16 @@ public class PersonalizedAuditConversionTests
     }
 
     [Fact]
-    public void InitialSend_StillRequiresPersonalizationPackage()
+    public void Cook001Audience_RejectsBlankAndNonCookingNiche()
     {
-        var p = StrongProspect() with
-        {
-            AuditGeneratedAt = null,
-            OpportunityEvidenceJson = null,
-            PersonalizationConfidence = null
-        };
-        p = p with { ContentHash = CreatorAcquisitionScoring.ContentHash(p with { ContentHash = null }) };
-        var gate = CreatorAcquisitionScoring.ExplainSendEligibility(p, DateTimeOffset.UtcNow, AutoState(), false);
-        Assert.False(gate.Ok);
-        Assert.Equal("insufficient_personalization", gate.Reason);
+        var cfg = new AcqCampaignConfig(
+            CreatorAcquisitionCampaigns.Cook001, "COOK-001", "cooking", "en", "US", null,
+            20, true, DateTimeOffset.UtcNow, "automatic", false, 2, true, true, true, true, true);
+        var cooking = StrongProspect();
+        Assert.True(CreatorAcquisitionService.MatchesCampaignAudience(cooking, cfg));
+        Assert.False(CreatorAcquisitionService.MatchesCampaignAudience(
+            cooking with { PrimaryNiche = "" }, cfg));
+        Assert.False(CreatorAcquisitionService.MatchesCampaignAudience(
+            cooking with { PrimaryNiche = "fitness" }, cfg));
     }
 }

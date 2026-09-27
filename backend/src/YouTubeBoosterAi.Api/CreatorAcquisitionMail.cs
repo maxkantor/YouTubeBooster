@@ -78,7 +78,6 @@ public static class CreatorAcquisitionMail
         var boundary = "yb" + Guid.NewGuid().ToString("N");
         var fromHeader = $"{fromName} <{fromEmail}>";
         var listUnsub = $"<{unsubscribeUrl}>";
-        var raw = BuildRaw(fromHeader, replyTo, to, subject, text, html, unsubscribeUrl, boundary);
         var tags = new Dictionary<string, string>
         {
             ["campaign"] = SanitizeTag(prospect.Campaign),
@@ -87,6 +86,8 @@ public static class CreatorAcquisitionMail
             ["prospect_id"] = SanitizeTag(prospect.ProspectId),
             ["oid"] = SanitizeTag(prospect.OpaqueToken)
         };
+        var configSet = string.IsNullOrWhiteSpace(state.ConfigSet) ? null : state.ConfigSet.Trim();
+        var raw = BuildRaw(fromHeader, replyTo, to, subject, text, html, unsubscribeUrl, boundary, tags, configSet);
         return new AcqMimeMessage(fromHeader, replyTo, to, subject, text, html, listUnsub, raw, tags);
     }
 
@@ -255,13 +256,23 @@ public static class CreatorAcquisitionMail
         string text,
         string html,
         string unsubscribeUrl,
-        string boundary)
+        string boundary,
+        IReadOnlyDictionary<string, string>? sesTags = null,
+        string? configurationSet = null)
     {
         var sb = new StringBuilder();
         sb.Append("From: ").Append(fromHeader).Append("\r\n");
         sb.Append("To: ").Append(to).Append("\r\n");
         sb.Append("Reply-To: ").Append(replyTo).Append("\r\n");
         sb.Append("Subject: ").Append(EncodeSubject(subject)).Append("\r\n");
+        // Redundant with SendRawEmail Tags/ConfigurationSetName so SNS events always carry correlation.
+        if (!string.IsNullOrWhiteSpace(configurationSet))
+            sb.Append("X-SES-CONFIGURATION-SET: ").Append(configurationSet.Trim()).Append("\r\n");
+        if (sesTags is { Count: > 0 })
+        {
+            var tagHeader = string.Join(", ", sesTags.Select(kv => $"{kv.Key}={kv.Value}"));
+            sb.Append("X-SES-MESSAGE-TAGS: ").Append(tagHeader).Append("\r\n");
+        }
         sb.Append("MIME-Version: 1.0\r\n");
         sb.Append("Content-Type: multipart/alternative; boundary=\"").Append(boundary).Append("\"\r\n");
         sb.Append("List-Unsubscribe: <").Append(unsubscribeUrl).Append(">\r\n");

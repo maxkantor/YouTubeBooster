@@ -472,6 +472,30 @@ public class AcqAutomationUpgradeTests
         return stamped with { ContentHash = CreatorAcquisitionScoring.ContentHash(stamped with { ContentHash = null }) };
     }
 
+    [Fact]
+    public async Task SesDelivery_ResolvesByDestinationEmailWhenTagsMissing()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var p = ReadyToSend("COOK-001-ses1", "ses-dest@example-creator.test", "UCses1") with
+        {
+            OutreachStatus = "sent",
+            LastContactedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            LastSesMessageId = "ses-msg-123"
+        };
+        await store.UpsertProspectAsync(p, CancellationToken.None);
+        var (svc, _) = CreateSendingService(store);
+        var ok = await svc.ApplySesEventResolvedAsync(
+            prospectId: null,
+            opaqueToken: null,
+            sesMessageId: null,
+            destinationEmail: "ses-dest@example-creator.test",
+            eventType: "delivery",
+            CancellationToken.None);
+        Assert.True(ok);
+        var after = await store.GetProspectAsync(p.ProspectId, CancellationToken.None);
+        Assert.Equal("delivered", after!.OutreachStatus);
+    }
+
     private static AcqApprovalRecord Approval(params AcqProspectRecord[] rows) =>
         new(
             "APR-1",
