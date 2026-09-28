@@ -293,34 +293,47 @@ public static class CreatorAcquisitionScoring
     public static bool HasStrongPersonalization(AcqProspectRecord p)
     {
         if (string.IsNullOrWhiteSpace(p.Observation)) return false;
-        if (string.Equals(p.Observation.Trim(), GenericObservationFallback, StringComparison.Ordinal))
-            return false;
         if (CreatorAcquisitionCopy.LooksLikeLegacyPersonalSender(p.Subject, p.Body))
             return false;
 
         var obs = p.Observation;
         var hasCount = System.Text.RegularExpressions.Regex.IsMatch(obs, @"\d+\s+of\s+(your\s+)?(the\s+)?last\s+\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (!hasCount) return false;
+        var hasConcreteExample = !string.IsNullOrWhiteSpace(p.ExampleVideoTitle)
+            || (!string.IsNullOrWhiteSpace(p.SuggestedImprovement)
+                && p.SuggestedImprovement.Contains("For example", StringComparison.OrdinalIgnoreCase));
+
+        // Generic fallback observation alone is not enough — but with a concrete video example it is.
+        if (string.Equals(p.Observation.Trim(), GenericObservationFallback, StringComparison.Ordinal)
+            && !hasConcreteExample)
+            return false;
+
+        // Packaging/title/description observations with a concrete video example are sendable
+        // even when the observation text lacks the older "N of last M" phrasing.
+        if (hasConcreteExample
+            && (obs.Contains("title", StringComparison.OrdinalIgnoreCase)
+                || obs.Contains("description", StringComparison.OrdinalIgnoreCase)
+                || obs.Contains("upload", StringComparison.OrdinalIgnoreCase)
+                || obs.Contains("packaging", StringComparison.OrdinalIgnoreCase)))
+            return true;
 
         var finding = (p.FindingType ?? "").ToUpperInvariant();
         if (finding is "DESCRIPTION_DEPTH" or "TITLE_OPPORTUNITY" or "DESCRIPTION_OPPORTUNITY" or "TITLE_CLARITY"
-            or "SEARCH_DISCOVERABILITY" or "KEYWORD_OPPORTUNITY" or "VIDEO_METADATA" or "UPLOAD_CONSISTENCY")
+            or "SEARCH_DISCOVERABILITY" or "KEYWORD_OPPORTUNITY" or "VIDEO_METADATA" or "UPLOAD_CONSISTENCY"
+            or "CONTENT_POSITIONING" or "PACKAGING_SIGNAL" or "TITLE_STRUCTURE")
         {
+            // Counted "N of last M" is preferred, but a stored finding + concrete video example is enough.
             if (finding is "DESCRIPTION_DEPTH" or "TITLE_OPPORTUNITY")
-                return !string.IsNullOrWhiteSpace(p.ExampleVideoTitle)
-                       || (!string.IsNullOrWhiteSpace(p.SuggestedImprovement)
-                           && p.SuggestedImprovement.Contains("For example", StringComparison.OrdinalIgnoreCase));
-            return true;
+                return hasConcreteExample;
+            return hasCount || hasConcreteExample;
         }
+
+        if (!hasCount) return false;
 
         // Infer from observation when FindingType not yet stored.
         if (obs.Contains("description", StringComparison.OrdinalIgnoreCase)
             || obs.Contains("title", StringComparison.OrdinalIgnoreCase))
         {
-            if (!string.IsNullOrWhiteSpace(p.ExampleVideoTitle)) return true;
-            if (!string.IsNullOrWhiteSpace(p.SuggestedImprovement)
-                && p.SuggestedImprovement.Contains("For example", StringComparison.OrdinalIgnoreCase))
-                return true;
+            if (hasConcreteExample) return true;
             // Counted evidence without example is still stronger than the generic fallback.
             return p.SampleSize >= 5 && (p.WeakDescriptionCount >= 3 || p.TitleIssueCount >= 3);
         }

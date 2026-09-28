@@ -7,6 +7,7 @@ public sealed partial class CreatorAcquisitionService
     public const int Cook001ProductionDailyLimit = 100;
     /// <summary>Keep at least this many READY prospects when daily capacity remains.</summary>
     public const int ReadyInventoryTarget = 15;
+    public const string DeployMarker = "throughput-v3-20260928";
 
     public async Task<AcqCampaignConfig> EnsureCook001PersistedAsync(CancellationToken cancellationToken)
     {

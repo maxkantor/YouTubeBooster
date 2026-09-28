@@ -781,6 +781,24 @@ public class CreatorAcquisitionContactTests
     }
 
     [Fact]
+    public void HasStrongPersonalization_GenericFallback_AllowedWithConcreteExample()
+    {
+        var p = Prospect() with
+        {
+            Observation = CreatorAcquisitionScoring.GenericObservationFallback,
+            SuggestedImprovement =
+                "For example, on \"Salmon for People Who Don't Like Salmon,\" we'd test putting the dish earlier in the title.",
+            FindingType = "CONTENT_POSITIONING",
+            ExampleVideoTitle = "Salmon for People Who Don't Like Salmon",
+            Subject = null,
+            Body = null
+        };
+        Assert.True(CreatorAcquisitionScoring.HasStrongPersonalization(p));
+        var bare = p with { SuggestedImprovement = null, ExampleVideoTitle = null };
+        Assert.False(CreatorAcquisitionScoring.HasStrongPersonalization(bare));
+    }
+
+    [Fact]
     public void EmailDiscoveryJob_ProgressCounters_AddUp()
     {
         var job = new AcqEmailDiscoveryJobState(

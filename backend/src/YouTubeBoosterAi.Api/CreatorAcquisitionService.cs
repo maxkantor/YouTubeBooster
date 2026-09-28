@@ -578,6 +578,23 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         string? improvement = p.SuggestedImprovement;
         string? findingType = p.FindingType;
 
+        if (string.IsNullOrWhiteSpace(exampleTitle)
+            && !string.IsNullOrWhiteSpace(improvement))
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(
+                improvement,
+                @"For example,\s+on\s+""([^""]+)""",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (m.Success)
+                exampleTitle = m.Groups[1].Value.Trim();
+        }
+        if (string.IsNullOrWhiteSpace(findingType) && !string.IsNullOrWhiteSpace(observation))
+        {
+            findingType = observation.Contains("description", StringComparison.OrdinalIgnoreCase)
+                ? "DESCRIPTION_OPPORTUNITY"
+                : "TITLE_CLARITY";
+        }
+
         if (CreatorAcquisitionScoring.TryParseObservationEvidence(
                 p.Observation, out var parsedCount, out var parsedSample, out var parsedExample, out var isDesc))
         {
@@ -657,7 +674,25 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                     ? "DESCRIPTION_OPPORTUNITY"
                     : "TITLE_CLARITY",
                 SuggestedImprovement = improvement ?? CreatorAcquisitionScoring.BuildImprovement(
-                    Math.Max(1, titleIssues), Math.Max(1, weakDescriptions), exampleTitle)
+                    Math.Max(1, titleIssues), Math.Max(1, weakDescriptions), exampleTitle),
+                ExampleVideoTitle = string.IsNullOrWhiteSpace(draftProbe.ExampleVideoTitle)
+                    ? exampleTitle
+                    : draftProbe.ExampleVideoTitle
+            };
+        }
+
+        // Last chance: observation + concrete For-example improvement is enough to stamp a draft.
+        if (!CreatorAcquisitionScoring.HasStrongPersonalization(draftProbe)
+            && !string.IsNullOrWhiteSpace(observation)
+            && !string.IsNullOrWhiteSpace(draftProbe.SuggestedImprovement)
+            && draftProbe.SuggestedImprovement.Contains("For example", StringComparison.OrdinalIgnoreCase))
+        {
+            draftProbe = draftProbe with
+            {
+                FindingType = string.IsNullOrWhiteSpace(draftProbe.FindingType) ? "TITLE_CLARITY" : draftProbe.FindingType,
+                ExampleVideoTitle = string.IsNullOrWhiteSpace(draftProbe.ExampleVideoTitle)
+                    ? (exampleTitle ?? "recent upload")
+                    : draftProbe.ExampleVideoTitle
             };
         }
 
@@ -741,7 +776,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             UpdatedAt = DateTimeOffset.UtcNow
         };
         if (string.IsNullOrWhiteSpace(next.OpportunityEvidenceJson)
-            || next.PersonalizationConfidence is null)
+            || next.PersonalizationConfidence is null
+            || !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(next))
         {
             var baseScore = CreatorAcquisitionScoring.Score(new AcqScoreInput(
                 next.SubscriberCount,
@@ -766,13 +802,19 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 next.ExampleVideoTitle,
                 next.FindingType,
                 next.Language ?? "en");
-            next = next with
+            // Prefer rebuilt evidence when it clears the auto-send bar; otherwise keep prior JSON.
+            var rebuilt = next with
             {
                 OpportunityEvidenceJson = CreatorAcquisitionOpportunity.ToJson(opp),
                 PrimaryOpportunity = opp.PrimaryOpportunity,
                 PersonalizationConfidence = opp.PersonalizationConfidence,
-                PriorityScore = Math.Max(next.PriorityScore, opp.Score)
+                PriorityScore = Math.Max(next.PriorityScore, opp.Score),
+                AuditGeneratedAt = next.AuditGeneratedAt ?? DateTimeOffset.UtcNow
             };
+            if (CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(rebuilt)
+                || string.IsNullOrWhiteSpace(next.OpportunityEvidenceJson)
+                || next.PersonalizationConfidence is null)
+                next = rebuilt;
         }
         next = next with { ContentHash = CreatorAcquisitionScoring.ContentHash(next) };
         var state = await LoadStateAsync(next.Campaign, cancellationToken);
@@ -879,6 +921,12 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         {
             candidates = all.Where(p =>
                 string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+            // COOK-001 automatic prep must not burn the tick on non-cooking pollution.
+            if (string.Equals(campaign, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase))
+            {
+                var cfg = await ResolveCampaignConfigAsync(campaign, cancellationToken);
+                candidates = candidates.Where(p => MatchesCampaignAudience(p, cfg));
+            }
             var filter = (request.Filter ?? "email_found").Trim().ToLowerInvariant();
             candidates = candidates.Where(p =>
                 EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)

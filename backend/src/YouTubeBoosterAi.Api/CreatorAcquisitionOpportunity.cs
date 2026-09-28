@@ -68,13 +68,27 @@ public static class CreatorAcquisitionOpportunity
         }
 
         if (!string.IsNullOrWhiteSpace(exampleTitle)
-            && (findingType is "DESCRIPTION_DEPTH" or "TITLE_OPPORTUNITY" or "DESCRIPTION_OPPORTUNITY" or "TITLE_CLARITY"))
+            && (findingType is "DESCRIPTION_DEPTH" or "TITLE_OPPORTUNITY" or "DESCRIPTION_OPPORTUNITY" or "TITLE_CLARITY"
+                or "CONTENT_POSITIONING" or "PACKAGING_SIGNAL" or "TITLE_STRUCTURE"
+                or "SEARCH_DISCOVERABILITY" or "KEYWORD_OPPORTUNITY" or "VIDEO_METADATA" or "UPLOAD_CONSISTENCY"))
         {
             components.Add(new AcqOpportunityComponent(
                 "ANALYZED_RECENT_VIDEO",
                 $"Public sample includes \"{TrimTitle(exampleTitle)}\" as a concrete packaging example.",
                 Confidence: 0.88,
                 Points: 8));
+        }
+
+        // Title/packaging findings without numeric titleIssues still count when we have a concrete example.
+        if (!string.IsNullOrWhiteSpace(exampleTitle)
+            && titleIssues <= 0
+            && findingType is "CONTENT_POSITIONING" or "PACKAGING_SIGNAL" or "TITLE_STRUCTURE" or "TITLE_CLARITY")
+        {
+            components.Add(new AcqOpportunityComponent(
+                "WEAK_TITLE_PACKAGING",
+                $"Recent public titles show inconsistent packaging for search/browse (e.g. \"{TrimTitle(exampleTitle)}\").",
+                Confidence: 0.78,
+                Points: 12));
         }
 
         var mixed = DetectMixedLanguage(language, videoTitles, videoDescriptions);
@@ -143,10 +157,19 @@ public static class CreatorAcquisitionOpportunity
             return p.PriorityScore >= MinOpportunityScoreForAutoSend
                    && !string.IsNullOrWhiteSpace(p.ExampleVideoTitle);
         }
-        return evidence.Score >= MinOpportunityScoreForAutoSend
+
+        var evidenceOk = evidence.Score >= MinOpportunityScoreForAutoSend
                && evidence.PersonalizationConfidence >= MinPersonalizationConfidence
                && evidence.Components.Count > 0
                && CreatorAcquisitionScoring.HasStrongPersonalization(p);
+        if (evidenceOk) return true;
+
+        // Opportunity blend can undershoot PriorityScore when packaging counts are sparse.
+        // A concrete video example + high confidence + already-qualified priority clears auto-send.
+        return p.PriorityScore >= MinOpportunityScoreForAutoSend
+               && evidence.PersonalizationConfidence >= MinPersonalizationConfidence
+               && evidence.Components.Count > 0
+               && !string.IsNullOrWhiteSpace(p.ExampleVideoTitle);
     }
 
     public static bool LooksLikeUnsupportedPrivateClaim(string? text)
