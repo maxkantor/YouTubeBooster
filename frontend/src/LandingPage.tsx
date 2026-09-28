@@ -1505,7 +1505,7 @@ export function LandingPage() {
                 <li>Instant access</li>
                 <li>Free preview before you pay</li>
                 <li>Public YouTube data only</li>
-                <li>Secure checkout via Stripe</li>
+                <li>Secure payment powered by Stripe</li>
               </ul>
               <p className="landing-pricing-microcopy">Unlock the full report after the free preview when you are ready.</p>
             </form>

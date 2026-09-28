@@ -58,6 +58,7 @@ public sealed class StripeCheckoutService : ICheckoutService
     private readonly IPaymentCustomerNotificationService _paymentCustomerNotifier;
     private readonly ICreatorAcquisitionStore _acqStore;
     private readonly ICreatorAcquisitionService _acq;
+    private readonly IConfiguration _configuration;
 
     public StripeCheckoutService(
         IAppSettingsProvider appSettingsProvider,
@@ -66,7 +67,8 @@ public sealed class StripeCheckoutService : ICheckoutService
         IPaymentAdminNotificationService paymentAdminNotifier,
         IPaymentCustomerNotificationService paymentCustomerNotifier,
         ICreatorAcquisitionStore acqStore,
-        ICreatorAcquisitionService acq)
+        ICreatorAcquisitionService acq,
+        IConfiguration configuration)
     {
         _appSettingsProvider = appSettingsProvider;
         _secretValueProvider = secretValueProvider;
@@ -75,6 +77,7 @@ public sealed class StripeCheckoutService : ICheckoutService
         _paymentCustomerNotifier = paymentCustomerNotifier;
         _acqStore = acqStore;
         _acq = acq;
+        _configuration = configuration;
     }
 
     public async Task<CheckoutSessionResponse> CreateSessionAsync(CreateCheckoutSessionRequest request, CancellationToken cancellationToken)
@@ -98,6 +101,27 @@ public sealed class StripeCheckoutService : ICheckoutService
         var planCode = request.PlanCode ?? request.PriceKey ?? settings.StripePriceLookupKey;
         // Stripe rejects UUIDs / non-emails here (e.g. when Cognito username was mistaken for email).
         var customerEmail = EmailAddressHelpers.LooksLikeEmail(request.Email) ? request.Email.Trim() : null;
+        var isLiveKey = stripeSecret.StartsWith("sk_live_", StringComparison.Ordinal);
+        var publicSiteUrl = _configuration["App:PublicSiteUrl"]
+                            ?? _configuration["PUBLIC_SITE_URL"]
+                            ?? "https://youtubeboosterai.com";
+
+        // Account email stays on CustomerEmail / fulfillment recovery only — not duplicated into Stripe metadata unnecessarily.
+        var sessionMetadata = StripeCheckoutIdentity.BuildSessionMetadata(
+            isLiveKey,
+            planCode,
+            request.UserId,
+            request.CognitoSub,
+            request.ChannelInput,
+            request.PriceKey ?? settings.StripePriceLookupKey,
+            request.UtmSource,
+            request.UtmMedium,
+            request.UtmCampaign,
+            request.Referrer,
+            request.YbOid);
+        // Keep accountEmail for fulfillment recovery (existing webhook path).
+        sessionMetadata["accountEmail"] = request.AccountEmail ?? request.Email;
+        sessionMetadata["email"] = request.Email;
 
         var session = await sessionService.CreateAsync(new Stripe.Checkout.SessionCreateOptions
         {
@@ -108,36 +132,20 @@ public sealed class StripeCheckoutService : ICheckoutService
             CancelUrl = request.CancelUrl,
             CustomerEmail = customerEmail,
             AllowPromotionCodes = true,
-            Metadata = new Dictionary<string, string>
-            {
-                // Strong app identity to prevent cross-app webhook/email confusion on shared Stripe accounts.
-                ["app"] = "youtubeboosterai",
-                ["brand"] = "YouTubeBoosterAI",
-                ["channelInput"] = request.ChannelInput,
-                ["email"] = request.Email,
-                ["priceVersion"] = request.PriceKey ?? settings.StripePriceLookupKey,
-                ["planCode"] = planCode,
-                ["userId"] = request.UserId ?? string.Empty,
-                ["cognitoSub"] = request.CognitoSub ?? string.Empty,
-                ["accountEmail"] = request.AccountEmail ?? request.Email,
-                ["utmSource"] = request.UtmSource ?? string.Empty,
-                ["utmMedium"] = request.UtmMedium ?? string.Empty,
-                ["utmCampaign"] = request.UtmCampaign ?? string.Empty,
-                ["referrer"] = request.Referrer ?? string.Empty,
-                ["ybOid"] = request.YbOid ?? string.Empty
-            },
+            Metadata = sessionMetadata,
             ClientReferenceId = string.IsNullOrWhiteSpace(request.UserId) ? null : request.UserId,
             PaymentIntentData = new Stripe.Checkout.SessionPaymentIntentDataOptions
             {
-                Metadata = new Dictionary<string, string>
+                Metadata = StripeCheckoutIdentity.BuildPaymentIntentMetadata(sessionMetadata)
+            },
+            // Per-session branding only (LuckyNumbersLab pattern). Never update Stripe Account branding.
+            BrandingSettings = new Stripe.Checkout.SessionBrandingSettingsOptions
+            {
+                DisplayName = StripeCheckoutIdentity.DisplayName,
+                Icon = new Stripe.Checkout.SessionBrandingSettingsIconOptions
                 {
-                    ["app"] = "youtubeboosterai",
-                    ["brand"] = "YouTubeBoosterAI",
-                    ["planCode"] = planCode,
-                    ["accountEmail"] = request.AccountEmail ?? request.Email,
-                    ["userId"] = request.UserId ?? string.Empty,
-                    ["cognitoSub"] = request.CognitoSub ?? string.Empty,
-                    ["ybOid"] = request.YbOid ?? string.Empty
+                    Type = "url",
+                    Url = StripeCheckoutIdentity.CheckoutIconUrl(publicSiteUrl)
                 }
             },
             LineItems =
@@ -151,8 +159,9 @@ public sealed class StripeCheckoutService : ICheckoutService
                         UnitAmountDecimal = settings.OneTimePrice * 100m,
                         ProductData = new Stripe.Checkout.SessionLineItemPriceDataProductDataOptions
                         {
-                            Name = "YouTube Booster AI",
-                            Description = "One-time purchase for premium hosted access"
+                            Name = StripeCheckoutIdentity.ProductName,
+                            Description = StripeCheckoutIdentity.ProductDescription
+                            // Intentionally no Images[] — avoids giant left-rail product art on Checkout.
                         }
                     }
                 }
@@ -427,13 +436,12 @@ public sealed class StripeCheckoutService : ICheckoutService
         }
 
         var metadata = new Dictionary<string, string>(session.Metadata ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
-        var appKey = metadata.GetValueOrDefault("app") ?? string.Empty;
-        if (!string.Equals(appKey, "youtubeboosterai", StringComparison.OrdinalIgnoreCase))
+        if (!StripeCheckoutIdentity.IsThisApp(metadata))
         {
             // Aggressive isolation: do not grant entitlements or send emails for sessions not explicitly tagged.
             await _appDataStore.TrackEventAsync("stripe_webhook_ignored_other_app", session.Id, new Dictionary<string, string?>
             {
-                ["app"] = appKey,
+                ["app"] = metadata.GetValueOrDefault("app"),
                 ["stripeEmail"] = session.CustomerEmail ?? session.CustomerDetails?.Email,
                 ["paymentIntentId"] = session.PaymentIntentId
             }, cancellationToken);
