@@ -112,13 +112,32 @@ export function AcquisitionOverviewPage() {
       label: 'SES remaining',
       value: status?.sesRemaining ?? summary?.sesRemaining ?? (summary?.sesQuotaAvailable ? '—' : 'Unavailable')
     },
-    { label: 'Discovered', value: status?.discovered ?? summary?.inventory?.totalCreators ?? 0 },
+    { label: 'Creators', value: status?.discovered ?? summary?.inventory?.totalCreators ?? 0 },
     { label: 'Public emails', value: status?.publicEmails ?? summary?.inventory?.withPublicEmail ?? 0 },
+    {
+      label: 'Missing public email',
+      value: summary?.inventory?.missingPublicEmail ?? summary?.inventory?.missingEmail ?? 0
+    },
+    {
+      label: 'Discovery due now',
+      value: status?.discoveryDueNow ?? status?.missingEmailEligible ?? summary?.inventory?.discoveryDueNow ?? discoveryEligible
+    },
+    {
+      label: 'Discovery backoff',
+      value: status?.discoveryBackoff ?? summary?.inventory?.discoveryBackoff ?? summary?.inventory?.backoff ?? 0
+    },
+    {
+      label: 'Needs manual review',
+      value: summary?.inventory?.needsManualReview ?? 0
+    },
     { label: 'Qualified unsent', value: status?.qualifiedUnsent ?? 0 },
+    { label: 'Draft missing', value: status?.draftMissing ?? summary?.inventory?.draftMissing ?? 0 },
     { label: 'Ready now', value: readyNow },
+    {
+      label: 'Ready inventory target',
+      value: status?.readyInventoryTarget ?? summary?.inventory?.readyInventoryTarget ?? 15
+    },
     { label: 'Follow-ups ready', value: status?.followUpsReadyNow ?? 0 },
-    { label: 'Missing email eligible', value: discoveryEligible },
-    { label: 'Discovery backoff', value: status?.discoveryBackoff ?? summary?.inventory?.backoff ?? 0 },
     { label: 'Follow-ups due', value: followUpsDue },
     {
       label: 'Next scheduled run',
@@ -185,10 +204,15 @@ export function AcquisitionOverviewPage() {
           ))}
         </div>
         <p
-          className={readyNow > 0 && dailyRemaining > 0 ? 'ops-muted' : 'admin-crm-error'}
+          className={
+            readyNow >= (status?.readyInventoryTarget ?? summary?.inventory?.readyInventoryTarget ?? 15) &&
+            dailyRemaining > 0
+              ? 'ops-muted'
+              : 'admin-crm-error'
+          }
           style={{ marginTop: 16, fontWeight: 600 }}
         >
-          BOTTLENECK: {bottleneck}
+          PIPELINE BOTTLENECK: {bottleneck}
         </p>
         <p className="ops-muted" style={{ marginTop: 8, fontWeight: 600 }}>
           NEXT AUTOMATIC ACTION: {nextAction}

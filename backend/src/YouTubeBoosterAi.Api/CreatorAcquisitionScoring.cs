@@ -558,17 +558,26 @@ public static class CreatorAcquisitionScoring
         return true;
     }
 
-    /// <summary>Next weekday 8:00 America/New_York strictly after <paramref name="utcNow"/>.</summary>
-    public static DateTimeOffset NextWeekdaySendEastern(DateTimeOffset utcNow, int hourEt = 8)
+    /// <summary>
+    /// Next weekday send slot in America/New_York strictly after <paramref name="utcNow"/>.
+    /// Default slots: 8, 10, 12, 14, 16 ET (bounded daytime replenishment window).
+    /// </summary>
+    public static readonly int[] WeekdaySendHoursEt = [8, 10, 12, 14, 16];
+
+    public static DateTimeOffset NextWeekdaySendEastern(DateTimeOffset utcNow, int hourEt = -1)
     {
         var et = EasternDate(utcNow);
+        var hours = hourEt >= 0 ? new[] { hourEt } : WeekdaySendHoursEt;
         var d = et.Date;
         for (var i = 0; i < 10; i++)
         {
             var day = d.AddDays(i);
             if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
-            var sendAt = new DateTimeOffset(day.Year, day.Month, day.Day, hourEt, 0, 0, et.Offset);
-            if (sendAt > et) return sendAt;
+            foreach (var hour in hours)
+            {
+                var sendAt = new DateTimeOffset(day.Year, day.Month, day.Day, hour, 0, 0, et.Offset);
+                if (sendAt > et) return sendAt;
+            }
         }
         return et.AddDays(1);
     }

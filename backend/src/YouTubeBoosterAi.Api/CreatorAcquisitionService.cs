@@ -484,12 +484,13 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         if (!EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
             return new AcqDraftPrepareResult(p, false, "missing_email");
 
-        // Idempotent: already has a complete draft (queued or auto-approved).
+        // Idempotent: already has a complete draft that clears auto-send personalization gates.
         if (!p.PreviewPlaceholder
             && !string.IsNullOrWhiteSpace(p.Subject)
             && !string.IsNullOrWhiteSpace(p.Body)
             && !string.IsNullOrWhiteSpace(p.Observation)
             && CreatorAcquisitionScoring.HasStrongPersonalization(p)
+            && CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(p)
             && (string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase)))
         {
@@ -891,10 +892,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                     || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
                        && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body))
-                    // Re-stamp drafts prepared before personalized-audit fields existed.
+                    // Re-stamp drafts that fail auto-send personalization (clears sticky DRAFT_MISSING).
                     || p.AuditGeneratedAt is null
                     || string.IsNullOrWhiteSpace(p.OpportunityEvidenceJson)
-                    || !CreatorAcquisitionScoring.HasStrongPersonalization(p)));
+                    || !CreatorAcquisitionScoring.HasStrongPersonalization(p)
+                    || !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(p)));
             if (filter is "email_found" or "verified")
             {
                 candidates = candidates.Where(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
@@ -1033,7 +1035,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var today = CreatorAcquisitionScoring.EasternDate(DateTimeOffset.UtcNow).Date;
         var runYmd = today.ToString("yyyy-MM-dd");
         var cohortRunId = $"{campaign}-{runYmd}";
-        var sentToday = all.Count(p => p.LastContactedAt is not null && CreatorAcquisitionScoring.EasternDate(p.LastContactedAt.Value).Date == today);
+        var sentToday = all.Count(p =>
+            string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
+            && p.LastContactedAt is not null
+            && CreatorAcquisitionScoring.EasternDate(p.LastContactedAt.Value).Date == today);
         var remaining = Math.Max(0, state.DailyLimit - sentToday);
         if (remaining == 0)
             return new AcqWeekdaySendResult(true, 0, 0, 0, ["daily_limit_reached"], state.DailyLimit, cohortRunId, state.RampBlockReason);
@@ -1086,12 +1091,12 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var replenish = new AcqReplenishStats(0, 0, 0);
         var deadline = DateTime.UtcNow.AddSeconds(DispatchTickBudgetSeconds);
 
-        // Capacity-first: replenish against full daily capacity (not the soft health send cap).
+        // Capacity-first: replenish toward ReadyInventoryTarget while daily capacity remains.
         // Dry-run still replenishes (no SES); only the send loop is simulated.
         if (dailyCapacityRemaining > 0)
         {
             var readyBefore = CountReadyToSend(all.ToList(), cfg, state, DateTimeOffset.UtcNow);
-            if (readyBefore < dailyCapacityRemaining)
+            if (readyBefore < ReadyInventoryTarget)
                 replenish = await ReplenishCampaignInventoryAsync(cfg, dailyCapacityRemaining, cancellationToken, deadline);
             all = await _store.ListProspectsAsync(cancellationToken);
         }
@@ -1500,13 +1505,15 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         if (budgetHit)
             reasonCounts["EXECUTION_BUDGET"] = reasonCounts.GetValueOrDefault("EXECUTION_BUDGET") + 1;
         // Continue while daily capacity remains and this tick made progress, hit the runtime
-        // budget, produced ready inventory, or sent and still has capacity. Do not spin forever
-        // solely because actionableDiscovery > 0 when this tick made no upstream progress.
+        // budget, or still has ready inventory to send. Daytime schedule retries when discovery
+        // is due but this tick made no progress (avoids infinite same-tick spin).
+        var inventoryStarved = capacityLeft > 0 && replenish.ReadyAfter < ReadyInventoryTarget;
         var moreWork = capacityLeft > 0 && (
             budgetHit
             || upstreamProgress > 0
-            || replenish.ReadyAfter > 0
-            || (usedAfterSend > 0 && capacityLeft > 0));
+            || (replenish.ReadyAfter > 0 && usedAfterSend < capacityLeft)
+            || (usedAfterSend > 0 && capacityLeft > 0)
+            || (inventoryStarved && upstreamProgress > 0));
         string stopReason;
         if (capacityLeft <= 0)
             stopReason = "DAILY_CAPACITY_REACHED";
@@ -1519,7 +1526,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         else if (actionableDiscovery > 0 && upstreamProgress == 0)
             stopReason = "CONTACT_DISCOVERY_NO_PROGRESS";
         else if (replenish.ReadyAfter == 0 && usedAfterSend == 0)
-            stopReason = "NO_READY_INVENTORY";
+            stopReason = inventoryStarved ? "READY_INVENTORY_LOW" : "NO_READY_INVENTORY";
         else
             stopReason = "COMPLETE";
         static int CountKeys(Dictionary<string, int> counts, params string[] keys) =>
@@ -2046,7 +2053,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         var ids = candidates
-            .OrderByDescending(p => p.PriorityScore)
+            // Never-attempted first, then due retries by next-eligible time, then priority.
+            .OrderBy(p => p.ContactResearchAttempts)
+            .ThenBy(p => p.ContactResearchNextAt ?? DateTimeOffset.MinValue)
+            .ThenByDescending(p => p.PriorityScore)
             .Select(p => p.ProspectId)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(500)

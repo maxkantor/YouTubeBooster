@@ -5,6 +5,8 @@ namespace YouTubeBoosterAi.Api;
 public sealed partial class CreatorAcquisitionService
 {
     public const int Cook001ProductionDailyLimit = 100;
+    /// <summary>Keep at least this many READY prospects when daily capacity remains.</summary>
+    public const int ReadyInventoryTarget = 15;
 
     public async Task<AcqCampaignConfig> EnsureCook001PersistedAsync(CancellationToken cancellationToken)
     {
@@ -480,11 +482,13 @@ public sealed partial class CreatorAcquisitionService
         var contactAttempted = 0;
         var noPublic = 0;
         var invalid = 0;
+        // Top up READY inventory toward target while daily capacity remains (100/day is a ceiling).
+        bool NeedsInventory() => remaining > 0 && ready < ReadyInventoryTarget;
 
         bool WithinBudget() => hardDeadlineUtc is null || DateTime.UtcNow < hardDeadlineUtc.Value.AddSeconds(-2);
 
         // 0a) Refresh stale / under-analyzed cooking contactable so drafts can clear send gates.
-        if (WithinBudget())
+        if (WithinBudget() && NeedsInventory())
         {
             var refresh = all
                 .Where(p => string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase))
@@ -497,7 +501,8 @@ public sealed partial class CreatorAcquisitionService
                     || (now - p.RecentUploadAt.Value).TotalDays > 60
                     || p.AuditGeneratedAt is null
                     || string.IsNullOrWhiteSpace(p.OpportunityEvidenceJson)
-                    || !CreatorAcquisitionScoring.HasStrongPersonalization(p))
+                    || !CreatorAcquisitionScoring.HasStrongPersonalization(p)
+                    || !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(p))
                 .OrderByDescending(p => p.PriorityScore)
                 .Take(4)
                 .ToList();
@@ -531,7 +536,7 @@ public sealed partial class CreatorAcquisitionService
 
         // 0) Convert already-verified emails into drafts BEFORE spending the tick on more discovery.
         // Sep 26 starved draft prep after creator/email work burned the 20s budget → Ready stayed 0.
-        if (cfg.AutoPrepareDrafts && ready < remaining && WithinBudget())
+        if (cfg.AutoPrepareDrafts && NeedsInventory() && WithinBudget())
         {
             var batch = await PrepareDraftBatchAsync(
                 new AcqDraftPrepareBatchRequest(cfg.CampaignId, null, "email_found", false),
@@ -542,19 +547,20 @@ public sealed partial class CreatorAcquisitionService
             ready = CountReadyToSend(all, cfg, state, DateTimeOffset.UtcNow);
         }
 
-        // 1) Discover more creators when sendable inventory is still low.
-        if (cfg.AutoDiscover && ready < remaining && WithinBudget())
+        // 1) Discover more creators when READY inventory is still below target.
+        // Prefer fresh discovery even while older prospects sit in email-discovery backoff.
+        if (cfg.AutoDiscover && NeedsInventory() && WithinBudget())
         {
             try
             {
-                for (var tick = 0; tick < 3 && ready < remaining && WithinBudget(); tick++)
+                for (var tick = 0; tick < 3 && NeedsInventory() && WithinBudget(); tick++)
                 {
                     var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveCreatorDiscoveryPointer, cancellationToken);
                     var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
                         ? null
                         : await GetCreatorDiscoveryJobAsync(beforePointer.Trim(), cancellationToken);
                     var addedBefore = beforeJob?.Added ?? 0;
-                    var job = await ResumeOrStartCreatorDiscoveryAsync(cfg, remaining - ready, cancellationToken);
+                    var job = await ResumeOrStartCreatorDiscoveryAsync(cfg, Math.Max(ReadyInventoryTarget - ready, 5), cancellationToken);
                     discovered += Math.Max(0, job.Added - addedBefore);
                     if (!string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase))
                         break;
@@ -568,11 +574,11 @@ public sealed partial class CreatorAcquisitionService
         }
 
         // 2) Contact discovery — sendable inventory is driven by public emails.
-        if (cfg.AutoFindEmails && ready < remaining && WithinBudget())
+        if (cfg.AutoFindEmails && NeedsInventory() && WithinBudget())
         {
             try
             {
-                for (var tick = 0; tick < 4 && ready < remaining && WithinBudget(); tick++)
+                for (var tick = 0; tick < 4 && NeedsInventory() && WithinBudget(); tick++)
                 {
                     var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveEmailDiscoveryPointer, cancellationToken);
                     var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
@@ -603,7 +609,7 @@ public sealed partial class CreatorAcquisitionService
         }
 
         // 3) Prepare drafts again for newly found emails, then recount ready lane.
-        if (cfg.AutoPrepareDrafts && ready < remaining && WithinBudget())
+        if (cfg.AutoPrepareDrafts && NeedsInventory() && WithinBudget())
         {
             var batch = await PrepareDraftBatchAsync(
                 new AcqDraftPrepareBatchRequest(cfg.CampaignId, null, "email_found", false),
@@ -631,6 +637,7 @@ public sealed partial class CreatorAcquisitionService
 
     private const string ActiveEmailDiscoveryPointer = "active-email-discovery";
     private const string ActiveCreatorDiscoveryPointer = "active-creator-discovery";
+    private const string CreatorDiscoveryLangPointer = "creator-discovery-lang";
 
     private async Task<AcqEmailDiscoveryJobState> ResumeOrStartEmailDiscoveryAsync(
         string campaign,
@@ -666,10 +673,19 @@ public sealed partial class CreatorAcquisitionService
                 return await TickCreatorDiscoveryAsync(existing.JobId, cancellationToken);
         }
 
+        // COOK-001: rotate en ↔ ru on each fresh job so discovery is not a finite query list.
+        var language = cfg.Language;
+        if (string.Equals(cfg.CampaignId, CreatorAcquisitionCampaigns.Cook001, StringComparison.OrdinalIgnoreCase))
+        {
+            var langPointer = await _store.GetCohortRunAsync(cfg.CampaignId, CreatorDiscoveryLangPointer, cancellationToken);
+            language = string.Equals(langPointer?.Trim(), "en", StringComparison.OrdinalIgnoreCase) ? "ru" : "en";
+            await _store.SaveCohortRunAsync(cfg.CampaignId, CreatorDiscoveryLangPointer, language, cancellationToken);
+        }
+
         var started = await StartCreatorDiscoveryAsync(
             new AcqCreatorDiscoveryStartRequest(
                 cfg.Category,
-                cfg.Language,
+                language,
                 string.IsNullOrWhiteSpace(cfg.Market) ? null : cfg.Market,
                 cfg.Tier,
                 Math.Min(20, Math.Max(5, stillNeed)),

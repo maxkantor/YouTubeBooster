@@ -150,13 +150,22 @@ public class CreatorAcquisitionTests
     [Fact]
     public void NextWeekdaySendEastern_IsAfterNowOnWeekdayMorning()
     {
-        // Wednesday 10:00 ET → Thursday 08:00 ET
+        // Wednesday 10:00 ET → next slot 12:00 ET (daytime window 8/10/12/14/16)
         var wed = new DateTimeOffset(2026, 9, 16, 14, 0, 0, TimeSpan.Zero); // ~10am ET
         var next = CreatorAcquisitionScoring.NextWeekdaySendEastern(wed);
         Assert.True(next > CreatorAcquisitionScoring.EasternDate(wed));
-        Assert.Equal(8, next.Hour);
+        Assert.Equal(12, next.Hour);
         Assert.NotEqual(DayOfWeek.Saturday, next.DayOfWeek);
         Assert.NotEqual(DayOfWeek.Sunday, next.DayOfWeek);
+    }
+
+    [Fact]
+    public void NextWeekdaySendEastern_SingleHourStillSupported()
+    {
+        var wed = new DateTimeOffset(2026, 9, 16, 14, 0, 0, TimeSpan.Zero);
+        var next = CreatorAcquisitionScoring.NextWeekdaySendEastern(wed, hourEt: 8);
+        Assert.Equal(8, next.Hour);
+        Assert.Equal(DayOfWeek.Thursday, next.DayOfWeek);
     }
 
     [Fact]

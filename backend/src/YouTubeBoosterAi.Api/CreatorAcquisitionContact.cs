@@ -36,7 +36,8 @@ public static class CreatorAcquisitionContact
     private static readonly string[] NavLinkHints =
     [
         "contact", "about", "work with me", "work with", "collaborate", "collaboration",
-        "partnership", "partnerships", "business", "media kit", "press"
+        "partnership", "partnerships", "business", "media kit", "press", "booking",
+        "brand deals", "sponsorship", "enquire", "inquiry"
     ];
 
     private static readonly string[] BlockedHosts =
@@ -52,7 +53,8 @@ public static class CreatorAcquisitionContact
         "/contact", "/contact-us", "/contactus", "/about", "/about-us", "/work-with-me",
         "/workwithme", "/collaborate", "/collab", "/press", "/media", "/business",
         "/partnerships", "/partnership", "/advertising", "/advertise", "/sponsor",
-        "/sponsors", "/brand", "/brands", "/inquiries", "/enquiry", "/booking"
+        "/sponsors", "/brand", "/brands", "/inquiries", "/enquiry", "/booking",
+        "/bookings", "/media-kit", "/mediakit", "/brand-deals", "/for-brands"
     ];
 
     private static readonly string[] PreferredLocalParts =

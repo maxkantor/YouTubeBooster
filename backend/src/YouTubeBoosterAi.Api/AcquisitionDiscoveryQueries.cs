@@ -24,11 +24,22 @@ public static class AcquisitionDiscoveryQueries
 
         string[] list = (cat, lang, india) switch
         {
-            ("cooking", "ru", _) => ["рецепты домашняя кухня", "готовим дома рецепты", "кулинария канал рецепты"],
+            ("cooking", "ru", _) =>
+            [
+                "рецепты домашняя кухня", "готовим дома рецепты", "кулинария канал рецепты",
+                "выпечка рецепты", "простые ужины рецепты", "еда обзор рецепты",
+                "барбекю гриль рецепты", "завтрак рецепты канал"
+            ],
             ("cooking", "hi", true) => ["खाना पकाना रेसिपी", "Indian cooking recipes Hindi", "घर का खाना रेसिपी चैनल"],
             ("cooking", "hi", _) => ["खाना पकाना रेसिपी", "Hindi cooking recipes", "घर का खाना रेसिपी"],
             ("cooking", "en", true) => ["Indian cooking recipes English", "home cooking India English", "vegetarian recipes India"],
-            ("cooking", _, _) => ["home cooking recipes", "homemade recipes channel", "weeknight cooking recipes"],
+            ("cooking", _, _) =>
+            [
+                "home cooking recipes", "homemade recipes channel", "weeknight cooking recipes",
+                "easy dinner recipes youtube", "baking recipes from scratch", "meal prep recipes channel",
+                "bbq grilling recipes", "food review cooking channel", "culinary cooking tips",
+                "kitchen cooking channel", "healthy homemade meals", "family dinner recipes"
+            ],
 
             ("technology", "ru", _) => ["технологии искусственный интеллект", "программирование канал", "нейросети обзор"],
             ("technology", "hi", true) => ["टेक्नोलॉजी एआई हिंदी", "programming India Hindi", "टेक्नोलॉजी चैनल हिंदी"],
@@ -111,7 +122,12 @@ public static class AcquisitionDiscoveryQueries
         var cat = AcquisitionTaxonomy.NormalizeCategory(category);
         string[] needles = cat switch
         {
-            "cooking" => ["cook", "recipe", "food", "kitchen", "рецепт", "кухн", "еда", "готов", "खाना", "रेसिपी", "पकवान"],
+            "cooking" =>
+            [
+                "cook", "recipe", "food", "kitchen", "bake", "baking", "bbq", "grill", "culinary",
+                "meal prep", "mealprep", "chef", "рецепт", "кухн", "еда", "готов", "выпечк", "барбекю",
+                "खाना", "रेसिपी", "पकवान"
+            ],
             "technology" => ["tech", "ai ", "artificial", "software", "program", "code", "нейро", "технолог", "програм", "टेक्न", "एआई", "कोड"],
             "fitness" => ["fit", "workout", "gym", "sport", "yoga", "train", "фитнес", "тренир", "спорт", "फिटनेस", "योग", "व्यायाम"],
             "business" => ["business", "startup", "entrepreneur", "founder", "бизнес", "стартап", "предприн", "बिज़नेस", "स्टार्टअप", "उद्यम"],

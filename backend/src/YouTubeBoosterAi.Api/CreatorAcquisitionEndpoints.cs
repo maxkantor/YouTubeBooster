@@ -282,9 +282,6 @@ public static class CreatorAcquisitionEndpoints
                 || r.ApprovedAt is not null
                 || r.LastContactedAt is not null);
             var sent = rows.Count(r => r.LastContactedAt is not null);
-            var sentToday = rows.Count(r =>
-                r.LastContactedAt is not null
-                && CreatorAcquisitionScoring.EasternDate(r.LastContactedAt.Value).Date == todayEt);
             static bool StatusAtLeast(string? status, params string[] stages) =>
                 stages.Any(s => string.Equals(status, s, StringComparison.OrdinalIgnoreCase));
 
@@ -319,6 +316,9 @@ public static class CreatorAcquisitionEndpoints
                 .Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
                 .Where(r => CreatorAcquisitionService.MatchesCampaignAudience(r, cfg))
                 .ToList();
+            var sentToday = cookRows.Count(r =>
+                r.LastContactedAt is not null
+                && CreatorAcquisitionScoring.EasternDate(r.LastContactedAt.Value).Date == todayEt);
             // COOK-001-scoped approved (matches Admin Approvals Ready to Send).
             var approved = cookRows.Count(r => string.Equals(r.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase));
             var skipReasons = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -588,6 +588,16 @@ public static class CreatorAcquisitionEndpoints
             var followUpDueBlockers = AcqProspectLifecycle.TallyBlockers(followUpDueRows, now, state, rows);
             var followUpsReadyNow = followUpDueRows.Count(r =>
                 CreatorAcquisitionScoring.ExplainSendEligibility(r, now, state, alreadyContacted: true).Ok);
+            var draftMissing = qualifiedUnsentBlockers.GetValueOrDefault("DRAFT_MISSING");
+            var needsManualReview = cookRows.Count(r =>
+                string.Equals(r.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(r.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase));
+            var alreadyAttemptedDiscovery = cookRows.Count(r =>
+                !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r)
+                && (r.ContactResearchLastAt is not null
+                    || r.ContactResearchNextAt is not null
+                    || (!string.IsNullOrWhiteSpace(r.ContactDiscoveryResult)
+                        && !string.Equals(r.ContactDiscoveryResult, "none", StringComparison.OrdinalIgnoreCase))));
             var nextAutomaticAction = BuildNextAutomaticAction(
                 automaticSending,
                 autoPauseReason,
@@ -597,8 +607,11 @@ public static class CreatorAcquisitionEndpoints
                 followUpDueRows.Count,
                 followUpDueBlockers,
                 discoveryEligible,
+                discoveryBackoff,
                 qualifiedUnsentRows.Count,
-                qualifiedUnsentBlockers);
+                qualifiedUnsentBlockers,
+                draftMissing,
+                CreatorAcquisitionService.ReadyInventoryTarget);
 
             return Results.Ok(new
             {
@@ -694,9 +707,17 @@ public static class CreatorAcquisitionEndpoints
                     totalCreators = cookRows.Count,
                     withPublicEmail = contactVerifiedCook,
                     missingEmail = needsEmailCook,
+                    missingPublicEmail = needsEmailCook,
                     discoveryEligible,
+                    discoveryDueNow = discoveryEligible,
                     backoff = discoveryBackoff,
+                    discoveryBackoff,
+                    needsManualReview,
                     noPublicEmail,
+                    noEmailFound = noPublicEmail,
+                    alreadyAttempted = alreadyAttemptedDiscovery,
+                    draftMissing,
+                    readyInventoryTarget = CreatorAcquisitionService.ReadyInventoryTarget,
                     qualified = qualifiedCook,
                     analyzed = analyzedCook,
                     auditsGenerated = auditsGeneratedCook,
@@ -815,7 +836,10 @@ public static class CreatorAcquisitionEndpoints
                     qualifiedUnsentBlockers,
                     readyNow = readyLane,
                     missingEmailEligible = discoveryEligible,
+                    discoveryDueNow = discoveryEligible,
                     discoveryBackoff,
+                    draftMissing,
+                    readyInventoryTarget = CreatorAcquisitionService.ReadyInventoryTarget,
                     followUpsDue = followUpDueRows.Count,
                     followUpsReadyNow,
                     followUpDueBlockers,
@@ -830,13 +854,16 @@ public static class CreatorAcquisitionEndpoints
                         sesQuota.Available ? sesQuota.Remaining : null,
                         readyLane,
                         discoveryEligible,
+                        discoveryBackoff,
                         cookRows.Count,
                         contactVerifiedCook,
                         followUpDueRows.Count,
                         followUpsReadyNow,
                         followUpDueBlockers,
                         qualifiedUnsentRows.Count,
-                        qualifiedUnsentBlockers)
+                        qualifiedUnsentBlockers,
+                        draftMissing,
+                        CreatorAcquisitionService.ReadyInventoryTarget)
                 },
                 taxonomy = AcquisitionTaxonomy.Catalog(),
                 segments = new
@@ -1545,8 +1572,11 @@ public static class CreatorAcquisitionEndpoints
         int followUpsDue,
         Dictionary<string, int> followUpBlockers,
         int missingEmailEligible,
+        int discoveryBackoff,
         int qualifiedUnsent,
-        Dictionary<string, int> qualifiedUnsentBlockers)
+        Dictionary<string, int> qualifiedUnsentBlockers,
+        int draftMissing,
+        int readyInventoryTarget)
     {
         if (!string.IsNullOrWhiteSpace(autoPauseReason))
             return $"Paused — {autoPauseReason}. Owner action may be required.";
@@ -1554,17 +1584,26 @@ public static class CreatorAcquisitionEndpoints
             return "Automatic sending is off. Owner must enable automatic COOK-001 or approve manual sends.";
         if (dailyRemaining <= 0)
             return "Daily limit reached. Next sends resume tomorrow (Eastern).";
-        if (followUpsReadyNow > 0)
-            return $"{followUpsReadyNow} eligible follow-up(s) will send on the next scheduled run (capacity remaining {dailyRemaining}).";
-        if (readyNow > 0)
-            return $"{readyNow} initial ready message(s) will send on the next scheduled run.";
-        if (followUpsDue > 0)
-            return $"{followUpsDue} follow-up(s) appear due but none are sendable: {FormatBlockerSummary(followUpBlockers)}.";
-        if (qualifiedUnsent > 0)
-            return $"{qualifiedUnsent} qualified unsent prospect(s) are blocked: {FormatBlockerSummary(qualifiedUnsentBlockers)}. Next run will re-prepare drafts where personalization is missing.";
+
+        var parts = new List<string>();
         if (missingEmailEligible > 0)
-            return $"Next run will attempt public email discovery for {missingEmailEligible} eligible creator(s).";
-        return "No sendable inventory — next run continues discovery/qualification only.";
+            parts.Add($"attempt public email discovery for {missingEmailEligible} due creator(s)");
+        if (draftMissing > 0)
+            parts.Add($"prepare {draftMissing} missing draft(s)");
+        if (readyNow < readyInventoryTarget && dailyRemaining > 0)
+            parts.Add("discover/qualify fresh cooking creators while inventory is below target");
+        if (readyNow > 0 || followUpsReadyNow > 0)
+            parts.Add($"send up to {Math.Min(dailyRemaining, readyNow + followUpsReadyNow)} eligible message(s) (capacity {dailyRemaining})");
+        else if (parts.Count == 0 && discoveryBackoff > 0)
+            parts.Add($"{discoveryBackoff} creator(s) remain in email-discovery backoff; continue fresh creator discovery on the next daytime run");
+        else if (parts.Count == 0 && followUpsDue > 0)
+            return $"{followUpsDue} follow-up(s) appear due but none are sendable: {FormatBlockerSummary(followUpBlockers)}.";
+        else if (parts.Count == 0 && qualifiedUnsent > 0)
+            return $"{qualifiedUnsent} qualified unsent prospect(s) are blocked: {FormatBlockerSummary(qualifiedUnsentBlockers)}. Next run will re-prepare drafts where personalization is missing.";
+        else if (parts.Count == 0)
+            return "No sendable inventory — next daytime run continues discovery/qualification only.";
+
+        return "Next run will " + string.Join(", then ", parts) + ".";
     }
 
     private static string ComputeAcquisitionBottleneck(
@@ -1574,13 +1613,16 @@ public static class CreatorAcquisitionEndpoints
         int? sesRemaining,
         int readyNow,
         int missingEmailEligible,
+        int discoveryBackoff,
         int totalCreators,
         int publicEmails,
         int followUpsDue,
         int followUpsReadyNow = 0,
         Dictionary<string, int>? followUpBlockers = null,
         int qualifiedUnsent = 0,
-        Dictionary<string, int>? qualifiedUnsentBlockers = null)
+        Dictionary<string, int>? qualifiedUnsentBlockers = null,
+        int draftMissing = 0,
+        int readyInventoryTarget = 15)
     {
         if (!string.IsNullOrWhiteSpace(autoPauseReason))
             return $"PAUSED — {autoPauseReason}";
@@ -1590,6 +1632,12 @@ public static class CreatorAcquisitionEndpoints
             return "DAILY LIMIT REACHED";
         if (sesRemaining is <= 0)
             return "SES PROVIDER QUOTA REACHED";
+        if (draftMissing > 0 && readyNow < readyInventoryTarget)
+            return $"DRAFT_GENERATION — {draftMissing} qualified prospect(s) need drafts; ready {readyNow}/{readyInventoryTarget}";
+        if (readyNow + followUpsReadyNow > 0
+            && readyNow < readyInventoryTarget
+            && dailyRemaining > readyNow)
+            return $"READY_INVENTORY_LOW — {readyNow} ready now, {followUpsReadyNow} follow-ups ready, {dailyRemaining} capacity remaining (target {readyInventoryTarget})";
         if (readyNow > 0 || followUpsReadyNow > 0)
             return $"NONE — {readyNow} initial ready, {followUpsReadyNow} follow-ups ready (capacity remaining {dailyRemaining})";
         if (followUpsDue > 0)
@@ -1597,11 +1645,13 @@ public static class CreatorAcquisitionEndpoints
         if (qualifiedUnsent > 0)
             return $"QUALIFIED UNSENT BLOCKED — {qualifiedUnsent}; blockers: {FormatBlockerSummary(qualifiedUnsentBlockers ?? new Dictionary<string, int>())}";
         if (missingEmailEligible > 0)
-            return $"CONTACT DISCOVERY — {missingEmailEligible} creators eligible for email discovery, only {readyNow} ready to send";
+            return $"EMAIL_DISCOVERY — {missingEmailEligible} creators due now, {discoveryBackoff} in backoff, only {readyNow} ready to send";
+        if (discoveryBackoff > 0 && publicEmails < Math.Max(10, totalCreators / 3))
+            return $"EMAIL_DISCOVERY_BACKOFF — {discoveryBackoff} creators waiting; fresh creator discovery continues";
         if (publicEmails == 0 && totalCreators > 0)
-            return $"CONTACT DISCOVERY — {totalCreators} creators, 0 public emails";
+            return $"EMAIL_DISCOVERY — {totalCreators} creators, 0 public emails";
         if (totalCreators < 40)
-            return $"CREATOR DISCOVERY — inventory low ({totalCreators} cooking creators)";
+            return $"CREATOR_DISCOVERY — inventory low ({totalCreators} cooking creators)";
         return "NO QUALIFIED SENDABLE INVENTORY — discovery/qualification gates blocked remaining capacity";
     }
 }

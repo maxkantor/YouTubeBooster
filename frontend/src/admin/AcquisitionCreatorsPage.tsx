@@ -753,7 +753,12 @@ export function AcquisitionCreatorsPage() {
             {' · '}
             Missing email: <strong>{summary?.inventory?.missingEmail ?? discoveryCensus.missingEmail}</strong>
             {' · '}
-            Eligible now: <strong>{summary?.inventory?.discoveryEligible ?? discoveryCensus.eligibleNow}</strong>
+            Eligible now:{' '}
+            <strong>
+              {summary?.inventory?.discoveryDueNow ??
+                summary?.inventory?.discoveryEligible ??
+                discoveryCensus.eligibleNow}
+            </strong>
             {' · '}
             Backoff: <strong>{summary?.inventory?.backoff ?? discoveryCensus.inBackoff}</strong>
             {' · '}
@@ -767,22 +772,38 @@ export function AcquisitionCreatorsPage() {
           </div>
         </div>
         <div className="acq-discovery-census ops-muted" style={{ marginBottom: 10, fontSize: 13 }}>
-          Missing email <strong>{discoveryCensus.missingEmail}</strong>
+          <strong>EMAIL DISCOVERY</strong> (authoritative COOK-001)
           {' · '}
-          Eligible now <strong>{discoveryCensus.eligibleNow}</strong>
+          Missing public email{' '}
+          <strong>
+            {summary?.inventory?.missingPublicEmail ?? summary?.inventory?.missingEmail ?? discoveryCensus.missingEmail}
+          </strong>
           {' · '}
-          In backoff <strong>{discoveryCensus.inBackoff}</strong>
+          Discovery due now{' '}
+          <strong>
+            {summary?.inventory?.discoveryDueNow ??
+              summary?.inventory?.discoveryEligible ??
+              discoveryCensus.eligibleNow}
+          </strong>
           {' · '}
-          Needs review <strong>{discoveryCensus.needsReview}</strong>
+          Discovery backoff{' '}
+          <strong>
+            {summary?.inventory?.discoveryBackoff ?? summary?.inventory?.backoff ?? discoveryCensus.inBackoff}
+          </strong>
           {' · '}
-          No email found <strong>{discoveryCensus.noEmailFound}</strong>
+          Needs manual review{' '}
+          <strong>{summary?.inventory?.needsManualReview ?? discoveryCensus.needsReview}</strong>
           {' · '}
-          Already attempted <strong>{discoveryCensus.alreadyAttempted}</strong>
+          No email found{' '}
+          <strong>{summary?.inventory?.noEmailFound ?? summary?.inventory?.noPublicEmail ?? discoveryCensus.noEmailFound}</strong>
+          {' · '}
+          Already attempted{' '}
+          <strong>{summary?.inventory?.alreadyAttempted ?? discoveryCensus.alreadyAttempted}</strong>
           {discoveryCensus.extraJobOnly > 0 && (
             <>
               {' · '}
-              Backend job filter would also include {discoveryCensus.extraJobOnly} extra row
-              {discoveryCensus.extraJobOnly === 1 ? '' : 's'} (review / unverified, not EMAIL REQUIRED or NOT FOUND)
+              Filtered table may include {discoveryCensus.extraJobOnly} extra row
+              {discoveryCensus.extraJobOnly === 1 ? '' : 's'} outside COOK-001 cooking audience
             </>
           )}
         </div>

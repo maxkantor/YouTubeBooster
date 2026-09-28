@@ -34,9 +34,9 @@ public static class AcqProspectLifecycle
         return code switch
         {
             "READY_TO_SEND" => "NONE",
-            "DISCOVERY_PENDING" => "NO_EMAIL",
+            "DISCOVERY_PENDING" => "EMAIL_DISCOVERY_DUE",
             "DISCOVERY_BACKOFF" => "EMAIL_DISCOVERY_BACKOFF",
-            "NO_PUBLIC_EMAIL_FOUND" => "NO_EMAIL",
+            "NO_PUBLIC_EMAIL_FOUND" => "EMAIL_NOT_FOUND",
             "INVALID_EMAIL" => "INVALID_EMAIL",
             "COOLDOWN" => "COOLDOWN",
             "ALREADY_CONTACTED" => "ALREADY_SENT",

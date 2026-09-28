@@ -2,10 +2,15 @@ name: YouTubeBooster Daily Growth Automation
 
 on:
   schedule:
-    # 8:00 AM America/New_York weekdays (EDT UTC-4 -> 12:00 UTC Mon–Fri)
+    # Bounded daytime acquisition window (America/New_York weekdays).
+    # EDT (UTC-4): 8/10/12/14/16 ET → 12/14/16/18/20 UTC
+    # EST (UTC-5): same clock hours shift one hour later in UTC — GH Actions cron is UTC-fixed;
+    # 12–20 UTC covers the business-day send window year-round without overnight sends.
     - cron: '0 12 * * 1-5'
-    # Continuation: 12:00 PM ET weekdays — consume remaining COOK-001 daily capacity
+    - cron: '0 14 * * 1-5'
     - cron: '0 16 * * 1-5'
+    - cron: '0 18 * * 1-5'
+    - cron: '0 20 * * 1-5'
   workflow_dispatch:
     inputs:
       dry_run:

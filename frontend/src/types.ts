@@ -837,9 +837,17 @@ export type AcqSummary = {
     totalCreators?: number;
     withPublicEmail?: number;
     missingEmail?: number;
+    missingPublicEmail?: number;
     discoveryEligible?: number;
+    discoveryDueNow?: number;
     backoff?: number;
+    discoveryBackoff?: number;
+    needsManualReview?: number;
     noPublicEmail?: number;
+    noEmailFound?: number;
+    alreadyAttempted?: number;
+    draftMissing?: number;
+    readyInventoryTarget?: number;
     qualified?: number;
     autoEligible?: number;
     manualReview?: number;
@@ -865,7 +873,10 @@ export type AcqSummary = {
     qualifiedUnsentBlockers?: Record<string, number>;
     readyNow?: number;
     missingEmailEligible?: number;
+    discoveryDueNow?: number;
     discoveryBackoff?: number;
+    draftMissing?: number;
+    readyInventoryTarget?: number;
     followUpsDue?: number;
     followUpsReadyNow?: number;
     followUpDueBlockers?: Record<string, number>;
