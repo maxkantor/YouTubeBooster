@@ -139,10 +139,16 @@ public sealed class StripeCheckoutService : ICheckoutService
                 Metadata = StripeCheckoutIdentity.BuildPaymentIntentMetadata(sessionMetadata)
             },
             // Per-session branding only (LuckyNumbersLab pattern). Never update Stripe Account branding.
+            // Set both Icon and Logo so the shared-account MK AI logo does not win the Checkout header.
             BrandingSettings = new Stripe.Checkout.SessionBrandingSettingsOptions
             {
                 DisplayName = StripeCheckoutIdentity.DisplayName,
                 Icon = new Stripe.Checkout.SessionBrandingSettingsIconOptions
+                {
+                    Type = "url",
+                    Url = StripeCheckoutIdentity.CheckoutIconUrl(publicSiteUrl)
+                },
+                Logo = new Stripe.Checkout.SessionBrandingSettingsLogoOptions
                 {
                     Type = "url",
                     Url = StripeCheckoutIdentity.CheckoutIconUrl(publicSiteUrl)
