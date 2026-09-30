@@ -160,6 +160,16 @@ export function buildCanonicalWindowMetrics(input) {
         : null;
   const entitled =
     stripe && typeof stripe.entitledPaidUsers === 'number' ? stripe.entitledPaidUsers : null;
+  const entitledAccounts =
+    stripe && typeof stripe.entitledAccounts === 'number' ? stripe.entitledAccounts : entitled;
+  const verifiedPaidCrm =
+    stripe && typeof stripe.verifiedPaidCustomers === 'number' ? stripe.verifiedPaidCustomers : null;
+  const nonCustomerEntitlements =
+    stripe && typeof stripe.nonCustomerEntitlements === 'number'
+      ? stripe.nonCustomerEntitlements
+      : null;
+  const nonCustomerReason =
+    stripe && typeof stripe.nonCustomerReason === 'string' ? stripe.nonCustomerReason : null;
 
   const qualifiedLanding =
     input.landing?.exp002Sessions != null || input.landing?.exp003Sessions != null
@@ -203,6 +213,30 @@ export function buildCanonicalWindowMetrics(input) {
       unit: 'users',
       label: 'entitled_paid_users',
       source: entitled == null ? 'admin_crm_unavailable' : 'admin_crm'
+    },
+    entitled_accounts: {
+      value: entitledAccounts,
+      unit: 'users',
+      label: 'entitled_accounts',
+      source: entitledAccounts == null ? 'admin_crm_unavailable' : 'admin_crm'
+    },
+    verified_paid_customers_crm: {
+      value: verifiedPaidCrm,
+      unit: 'customers',
+      label: 'verified_paid_customers_crm',
+      source: verifiedPaidCrm == null ? 'admin_crm_unavailable' : 'admin_crm'
+    },
+    non_customer_entitlements: {
+      value: nonCustomerEntitlements,
+      unit: 'users',
+      label: 'non_customer_entitlements',
+      source: nonCustomerEntitlements == null ? 'admin_crm_unavailable' : 'admin_crm'
+    },
+    non_customer_reason: {
+      value: nonCustomerReason,
+      unit: 'label',
+      label: 'non_customer_reason',
+      source: nonCustomerReason == null ? 'admin_crm_unavailable' : 'admin_crm'
     },
     live_revenue: {
       value: netRevenue,
@@ -295,7 +329,16 @@ export function reconcileCanonicalWindows(windows) {
       warnings.push(`${label}: unique paying customers (${cust}) exceed payments (${pay}).`);
     }
     if (typeof cust === 'number' && typeof entitled === 'number' && entitled > cust) {
-      warnings.push(`${label}: entitled paid users (${entitled}) exceed unique customers (${cust}).`);
+      const nonCust = w.non_customer_entitlements?.value;
+      const reason = w.non_customer_reason?.value || w.non_customer_reason?.label;
+      if (typeof nonCust === 'number' && nonCust >= entitled - cust) {
+        // Classified: entitled includes owner/manual/test — not a data-quality failure.
+      } else {
+        warnings.push(
+          `${label}: entitled paid users (${entitled}) exceed unique customers (${cust})` +
+            (reason ? ` — classified non-customer: ${reason}` : ' (classify entitlements).')
+        );
+      }
     }
     if (typeof pay === 'number' && typeof attributed === 'number' && attributed > pay) {
       warnings.push(`${label}: attributed payments exceed total payments.`);

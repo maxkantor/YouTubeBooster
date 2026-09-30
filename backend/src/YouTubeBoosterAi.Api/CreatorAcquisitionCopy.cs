@@ -64,15 +64,16 @@ public static class CreatorAcquisitionCopy
         var subject = SubjectFor(SubjectVariantCode(variant), channel);
         var ctaBlock = string.IsNullOrWhiteSpace(trackedUrl)
             ? CtaMarker
-            : $"View your free audit:\n{trackedUrl.Trim()}";
+            : $"{CtaPlainLeadIn}\n{trackedUrl.Trim()}";
 
+        // One conversion objective: get the creator to open the free channel audit (tracked CTA).
+        // Do not claim a full platform run beyond the public packaging observation we actually have.
         var body = JoinParagraphs(
             "Hi,",
             $"I was looking at {channel} and noticed {LowerFirst(obs)}",
-            "I ran your channel through YouTubeBoosterAI and found a few other opportunities worth checking.",
-            "I put the results here:",
+            "YouTubeBoosterAI can run a free public audit of your channel packaging (titles, descriptions, and search clarity).",
+            "Open your free audit here — no signup required:",
             ctaBlock,
-            "No signup required.",
             BrandSignature
         );
         return (subject, body);

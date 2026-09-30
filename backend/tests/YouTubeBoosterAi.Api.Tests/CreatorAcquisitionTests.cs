@@ -412,6 +412,147 @@ public class CreatorAcquisitionTests
         Assert.Equal(14, descriptions);
         Assert.Equal(5.2, cadence);
     }
+
+    [Fact]
+    public void PermanentContactExhaustion_NotActionable_AndClassified()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var formOnly = Prospect(email: null) with
+        {
+            ContactSourceUrl = null,
+            ContactVerifiedAt = null,
+            ContactType = "form_only",
+            ContactResearchStatus = "form_only",
+            ContactDiscoveryResult = "form_only",
+            ContactResearchAttempts = 2,
+            ContactResearchNextAt = now.AddDays(-1)
+        };
+        Assert.True(CreatorAcquisitionService.IsPermanentContactExhaustion(formOnly));
+        Assert.False(CreatorAcquisitionService.IsActionableEmailDiscovery(formOnly, now));
+        Assert.Equal("FORM_ONLY", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(formOnly, now));
+
+        var notFound = formOnly with
+        {
+            ContactType = "none",
+            ContactResearchStatus = "not_found",
+            ContactDiscoveryResult = "not_found"
+        };
+        Assert.True(CreatorAcquisitionService.IsPermanentContactExhaustion(notFound));
+        Assert.False(CreatorAcquisitionService.IsActionableEmailDiscovery(notFound, now));
+        Assert.Equal("NO_PUBLIC_EMAIL_FOUND", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(notFound, now));
+
+        var fresh = Prospect(email: null) with
+        {
+            ContactSourceUrl = null,
+            ContactVerifiedAt = null,
+            ContactType = "none",
+            ContactResearchStatus = null,
+            ContactDiscoveryResult = null,
+            ContactResearchAttempts = 0,
+            ContactResearchNextAt = null,
+            ContactResearchLastAt = null
+        };
+        Assert.False(CreatorAcquisitionService.IsPermanentContactExhaustion(fresh));
+        Assert.True(CreatorAcquisitionService.IsActionableEmailDiscovery(fresh, now));
+        Assert.Equal("EMAIL_DISCOVERY_DUE", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(fresh, now));
+    }
+
+    [Fact]
+    public void TemporaryFetchFailure_RemainsActionableWhenDue()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var temp = Prospect(email: null) with
+        {
+            ContactSourceUrl = null,
+            ContactVerifiedAt = null,
+            ContactType = "none",
+            ContactResearchStatus = "temporary_fetch_failure",
+            ContactDiscoveryResult = "temporary_failure",
+            ContactResearchAttempts = 1,
+            ContactResearchNextAt = now.AddHours(-1)
+        };
+        Assert.False(CreatorAcquisitionService.IsPermanentContactExhaustion(temp));
+        Assert.True(CreatorAcquisitionService.IsActionableEmailDiscovery(temp, now));
+        Assert.Equal("WEBSITE_FETCH_FAILED", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(temp, now));
+
+        var backoff = temp with { ContactResearchNextAt = now.AddDays(2) };
+        Assert.False(CreatorAcquisitionService.IsActionableEmailDiscovery(backoff, now));
+        Assert.Equal("DISCOVERY_BACKOFF", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(backoff, now));
+    }
+
+    [Fact]
+    public void DraftLifecycle_ReconcilesSentCooldownMissingEmailDisqualified()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var state = State();
+        var sent = Prospect() with
+        {
+            LastContactedAt = now.AddDays(-3),
+            OutreachStatus = "sent",
+            FollowUpStep = 0,
+            NextFollowUpAt = now.AddDays(11)
+        };
+        Assert.Equal("COOLDOWN", AcqProspectLifecycle.ClassifyDraftLifecycle(sent, now, state));
+
+        var followUp = sent with
+        {
+            LastContactedAt = now.AddDays(-16),
+            NextFollowUpAt = now.AddHours(-1),
+            FollowUpStep = 0
+        };
+        var fuBucket = AcqProspectLifecycle.ClassifyDraftLifecycle(followUp, now, state);
+        Assert.True(fuBucket is "FOLLOWUP_PENDING" or "SENT" or "COOLDOWN");
+
+        var noEmail = Prospect(email: null) with
+        {
+            ContactVerifiedAt = null,
+            ContactSourceUrl = null,
+            ContactType = "none",
+            LastContactedAt = null,
+            OutreachStatus = "draft_ready"
+        };
+        Assert.Equal("NO_VALID_EMAIL", AcqProspectLifecycle.ClassifyDraftLifecycle(noEmail, now, state));
+
+        var disqualified = Prospect(subs: 500_000, score: 40) with
+        {
+            LastContactedAt = null,
+            OutreachStatus = "needs_review",
+            PriorityScore = 40
+        };
+        Assert.Equal("DISQUALIFIED", AcqProspectLifecycle.ClassifyDraftLifecycle(disqualified, now, state));
+
+        var tallies = AcqProspectLifecycle.TallyDraftLifecycle(
+            new[] { sent, noEmail, disqualified }, now, state);
+        Assert.Equal(3, tallies.Values.Sum());
+        Assert.True(tallies.ContainsKey("COOLDOWN") || tallies.ContainsKey("SENT"));
+        Assert.Equal(1, tallies["NO_VALID_EMAIL"]);
+        Assert.Equal(1, tallies["DISQUALIFIED"]);
+    }
+
+    [Fact]
+    public void OutreachCopy_CtaIsFreeAudit_NotFalseFullRunClaim()
+    {
+        var copy = CreatorAcquisitionCopy.Build(
+            "A", "Chef", "Chef Channel",
+            "12 of your last 20 public videos have very short descriptions.",
+            "Add search-focused descriptions.",
+            "https://youtubeboosterai.com/api/public/acq/go/tok");
+        Assert.DoesNotContain("I ran your channel through", copy.Body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("free audit", copy.Body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/api/public/acq/go/", copy.Body);
+    }
+
+    [Fact]
+    public void TrackedUrl_CarriesCookAttribution()
+    {
+        var url = OutreachPolicy.BuildTrackedUrl(
+            "https://youtubeboosterai.com", "opaqueToken123", "COOK-001-P1", "A", "2026-09-30");
+        Assert.Contains("utm_campaign=COOK-001", url);
+        Assert.Contains("utm_source=outreach", url);
+        Assert.Contains("utm_medium=email", url);
+        Assert.Contains("yb_oid=opaqueToken123", url);
+        Assert.Contains("/api/public/acq/go/", url);
+    }
 }
 
 public class OutreachPolicyTests

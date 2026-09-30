@@ -106,7 +106,8 @@ public sealed record AcqProspectRecord(
     string? AnalyzedThumbnailUrl = null,
     DateTimeOffset? AnalysisTimestamp = null,
     string? AnalysisVersion = null,
-    DateTimeOffset? AuditGeneratedAt = null
+    DateTimeOffset? AuditGeneratedAt = null,
+    DateTimeOffset? FirstClickedAt = null
 );
 
 public sealed record AcqApprovalRecord(

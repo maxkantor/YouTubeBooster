@@ -40,6 +40,8 @@ test('CRM entitlements count live paid to entitled within 24h without emails', (
   });
   assert.equal(summary.livePaidPayments, 1);
   assert.equal(summary.entitledPaidUsers, 1);
+  assert.equal(summary.verifiedPaidCustomers, 1);
+  assert.equal(summary.nonCustomerEntitlements, 0);
   assert.equal(summary.paidToEntitledWithin24h, 1);
   assert.equal(JSON.stringify(summary).includes('@'), false);
   assert.ok(paid);
@@ -55,4 +57,32 @@ test('CRM entitlements: zero live payments is 0 not invented customers', () => {
   assert.equal(summary.livePaidPayments, 0);
   assert.equal(summary.entitledPaidUsers, 0);
   assert.equal(summary.paidToEntitledWithin24h, 0);
+});
+
+test('founder/manual entitlements classify as non-customer, not verified paid', () => {
+  const summary = summarizeCrmEntitlements({
+    payments: [],
+    entitlements: [
+      {
+        userId: 'user_fcfb3313dad24dfe94b5771ab2e45834',
+        status: 'active',
+        source: 'manual',
+        grantedAt: '2026-03-25T14:24:29.000Z',
+        paymentId: ''
+      },
+      {
+        userId: 'user_c53361b5970040f2a540d519cd2036f1',
+        status: 'active',
+        source: 'stripe',
+        grantedAt: '2026-03-24T15:06:23.000Z',
+        paymentId: 'cs_test_abc'
+      }
+    ],
+    startYmd: '2026-03-01',
+    endYmd: '2026-09-30'
+  });
+  assert.equal(summary.entitledAccounts, 2);
+  assert.equal(summary.verifiedPaidCustomers, 0);
+  assert.equal(summary.nonCustomerEntitlements, 2);
+  assert.ok(summary.nonCustomerReason);
 });

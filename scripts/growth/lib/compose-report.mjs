@@ -240,21 +240,55 @@ export function formatCrmAcquisitionText(dist) {
   const sesRemaining = d.sesRemaining ?? d.sesQuota?.remaining ?? null;
   const automatic = d.automaticSending === true || d.sendingMode === 'automatic';
   const pause = d.automaticPauseReason || '';
-  const delivered = d.deliveryTelemetryAvailable
-    ? String(funnel.delivered ?? 0)
-    : 'NOT TRACKED';
+  const deliveryTracking = d.deliveryTracking || (d.deliveryTelemetryAvailable ? 'TRACKED' : 'NOT_TRACKED');
+  const delivered =
+    deliveryTracking === 'NOT_TRACKED'
+      ? 'NOT TRACKED'
+      : String(funnel.delivered ?? 'NOT TRACKED');
+  const clicks = d.clicks || {};
+  const draftLifecycle = d.draftLifecycle || {};
+  const discoveryBlockers = d.discoveryBlockers || lastRun.discoveryBlockers || {};
+  const stopReason = lastRun.stopReason || d.stopReason || 'n/a';
   const lines = [];
 
-  lines.push('YOUTUBEBOOSTER OUTREACH');
-  lines.push('=======================');
+  lines.push('YOUTUBEBOOSTERAI — DAILY GROWTH');
+  lines.push('===============================');
   lines.push(`Campaign: ${d.campaign || 'COOK-001'}`);
-  lines.push(`Automatic: ${automatic ? 'ON' : 'OFF'}`);
-  lines.push(`Dry run: ${d.dryRun ? 'ON' : 'OFF'}`);
-  lines.push(`Daily limit: ${dailyLimit}`);
-  lines.push(`Sent today: ${sentToday}`);
+  lines.push(`Automatic: ${automatic ? 'ON' : 'OFF'}${pause ? ` (${pause})` : ''}`);
+  lines.push(`Owner action: ${automatic && !d.blockingApproval ? 'NONE' : d.requiredOwnerApproval || 'see MAX ACTION'}`);
+  lines.push('');
+  lines.push('CUSTOMERS TODAY');
+  lines.push(`NEW PAID: ${d.cohort?.verifiedCustomers ?? funnel.converted ?? 0}`);
+  lines.push(`REVENUE: $${Number(d.cohort?.verifiedRevenue || 0).toFixed(2)}`);
+  lines.push('');
+  lines.push('ACQUISITION TODAY');
+  lines.push(`Discovered: ${lastRun.discovered ?? lastRun.creatorsDiscovered ?? 0}`);
+  lines.push(`Public emails found: ${lastRun.emailsFound ?? lastRun.publicEmailsFound ?? 0}`);
+  lines.push(`Contact attempts: ${lastRun.contactDiscoveryAttempted ?? lastRun.emailsAttempted ?? 0}`);
+  lines.push(`Qualified: ${inv.qualified ?? 0}`);
+  lines.push(`Drafted (this run): ${lastRun.draftsPrepared ?? 0}`);
+  lines.push(`SES attempted: ${d.sesAttemptedThisRun ?? lastRun.sesAttempted ?? 0}`);
   lines.push(`SES accepted: ${d.sesAcceptedThisRun ?? sentToday}`);
-  lines.push(`Remaining campaign capacity: ${remaining}`);
-  lines.push(`SES remaining capacity: ${sesRemaining ?? 'Unavailable'}`);
+  lines.push(`Delivered: ${delivered}`);
+  lines.push(`Delivery tracking: ${deliveryTracking}`);
+  lines.push(`Clicked today: ${clicks.today ?? 'NOT TRACKED'}`);
+  lines.push(`Clicked 7d: ${clicks.last7Days ?? 'NOT TRACKED'}`);
+  lines.push(`Clicked lifetime: ${clicks.lifetime ?? funnel.clicked ?? 0}`);
+  lines.push(`Audit started: ${d.cohortFunnel?.auditStarts ?? d.personalizationFunnel?.auditEngaged ?? 0}`);
+  lines.push(`Audit completed: ${d.cohortFunnel?.auditCompletions ?? 0}`);
+  lines.push(`Signup: ${d.cohortFunnel?.accountsCreated ?? 0}`);
+  lines.push(`Checkout: ${d.cohortFunnel?.checkoutStarts ?? 0}`);
+  lines.push(`Paid: ${d.cohortFunnel?.paid ?? funnel.converted ?? 0}`);
+  lines.push(`Stop reason: ${stopReason}`);
+  if (Object.keys(discoveryBlockers).length) {
+    lines.push(
+      `Discovery blockers: ${Object.entries(discoveryBlockers)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')}`
+    );
+  }
   lines.push('');
   const totalCreators = inv.totalCreators ?? board.totalProspects ?? d.prospectsEvaluated ?? 0;
   const withEmail = inv.withPublicEmail ?? board.usableEmails ?? d.contactVerified ?? 0;
@@ -262,20 +296,36 @@ export function formatCrmAcquisitionText(dist) {
   const discoveryEligible = inv.discoveryEligible ?? board.discoveryEligible ?? 0;
   const backoff = inv.backoff ?? board.backoff ?? 0;
   const noPublic = inv.noPublicEmail ?? board.noPublicEmail ?? nr.noUsableEmail ?? 0;
-  const autoEligible = inv.autoEligible ?? pipe.eligibleNow ?? d.sendEligible ?? readyToSend;
-  const discoveryAttempts = lastRun.emailsAttempted ?? lastRun.processed ?? 0;
-  const emailsFoundToday = lastRun.emailsFound ?? 0;
-  lines.push('CREATOR INVENTORY');
-  lines.push('-----------------');
-  lines.push(`Total creators: ${totalCreators}`);
-  lines.push(`With public email: ${withEmail}`);
-  lines.push(`Missing public email: ${missingEmail}`);
-  lines.push(`Discovery eligible: ${discoveryEligible}`);
-  lines.push(`In backoff: ${backoff}`);
-  lines.push(`No public email: ${noPublic}`);
+  const followUpsDue = pipe.followUpsDue ?? d.followUpsDue ?? 0;
+  const suppressed = pipe.blockedBySuppression ?? nr.suppressed ?? 0;
+  lines.push('PIPELINE');
+  lines.push(`Total prospects: ${totalCreators}`);
+  lines.push(`Contactable: ${withEmail}`);
+  lines.push(`Ready: ${readyToSend}`);
+  lines.push(`Needs approval: ${needsApproval}`);
+  lines.push(`Follow-ups due: ${followUpsDue}`);
+  lines.push(`Cooldown: ${pipe.blockedByCooldown ?? nr.cooldown ?? 0}`);
+  lines.push(`Suppressed: ${suppressed}`);
+  lines.push(`Missing email: ${missingEmail}`);
+  lines.push(`Discovery backoff: ${backoff}`);
+  lines.push(`Discovery eligible now: ${discoveryEligible}`);
+  lines.push(`No public email (exhausted): ${noPublic}`);
+  lines.push(`Daily remaining: ${remaining} / ${dailyLimit}`);
+  lines.push(`SES remaining: ${sesRemaining ?? 'Unavailable'}`);
+  if (Object.keys(draftLifecycle).length) {
+    lines.push('Draft lifecycle (reconciles draftsGenerated):');
+    for (const [k, v] of Object.entries(draftLifecycle).sort((a, b) => b[1] - a[1])) {
+      lines.push(`  ${k}: ${v}`);
+    }
+  } else {
+    lines.push(`Drafts generated (obs+subject): ${funnel.drafted} — lifecycle UNAVAILABLE until API deploy`);
+  }
   lines.push('');
-  lines.push('CONTACT DISCOVERY');
-  lines.push('-----------------');
+  const autoEligible = inv.autoEligible ?? pipe.eligibleNow ?? d.sendEligible ?? readyToSend;
+  const discoveryAttempts = lastRun.emailsAttempted ?? lastRun.processed ?? lastRun.contactDiscoveryAttempted ?? 0;
+  const emailsFoundToday = lastRun.emailsFound ?? 0;
+  lines.push('CONTACT DISCOVERY DETAIL');
+  lines.push('------------------------');
   lines.push(`Attempts this run: ${discoveryAttempts}`);
   lines.push(`Public emails found: ${emailsFoundToday}`);
   lines.push(`Creators evaluated: ${d.prospectsEvaluated ?? totalCreators}`);
@@ -314,13 +364,14 @@ export function formatCrmAcquisitionText(dist) {
     }
     lines.push('');
   }
-  const stopReason =
+  const stopReasonResolved =
     d.lastRun?.stopReason ||
     d.lastRun?.StopReason ||
+    stopReason ||
     d.automaticPauseReason ||
     (remaining <= 0 ? 'DAILY_LIMIT_REACHED' : null) ||
     'n/a';
-  lines.push(`AUTOMATION STOP REASON: ${stopReason}`);
+  lines.push(`AUTOMATION STOP REASON: ${stopReasonResolved}`);
   lines.push('');
   lines.push('SENDABILITY');
   lines.push('-----------');
@@ -1003,10 +1054,10 @@ export function composeGrowthReport(opts) {
   t.push('-'.repeat(40));
   t.push(AUDIT_LANDING_DEFINITION);
   t.push(
-    `7d (${range7.rangeLabel}): sessions=${cell(m7?.sessions)} | audit_landing_sessions=${cell(m7?.qualified_landing_sessions)} | audit_starts=${cell(m7?.audit_starts)} | audit_completions=${cell(m7?.audit_completions)} | pricing=${cell(m7?.pricing_viewers)} | checkout_starts=${cell(m7?.checkout_starts)} | verified_live_payments=${cell(m7?.successful_live_payments)} | verified_unique_customers=${cell(m7?.unique_paying_customers)} | entitled=${cell(m7?.entitled_paid_users)} | verified_revenue=${cell(m7?.live_revenue)}`
+    `7d (${range7.rangeLabel}): sessions=${cell(m7?.sessions)} | audit_landing_sessions=${cell(m7?.qualified_landing_sessions)} | audit_starts=${cell(m7?.audit_starts)} | audit_completions=${cell(m7?.audit_completions)} | pricing=${cell(m7?.pricing_viewers)} | checkout_starts=${cell(m7?.checkout_starts)} | verified_live_payments=${cell(m7?.successful_live_payments)} | verified_unique_customers=${cell(m7?.unique_paying_customers)} | entitled_accounts=${cell(m7?.entitled_accounts) !== 'Unknown' ? cell(m7?.entitled_accounts) : cell(m7?.entitled_paid_users)} | verified_paid_crm=${cell(m7?.verified_paid_customers_crm)} | non_customer_entitlements=${cell(m7?.non_customer_entitlements)} | reason=${m7?.non_customer_reason?.value || 'n/a'} | verified_revenue=${cell(m7?.live_revenue)}`
   );
   t.push(
-    `30d (${range30.rangeLabel}): sessions=${cell(m30?.sessions)} | audit_landing_sessions=${cell(m30?.qualified_landing_sessions)} | audit_starts=${cell(m30?.audit_starts)} | audit_completions=${cell(m30?.audit_completions)} | pricing=${cell(m30?.pricing_viewers)} | checkout_starts=${cell(m30?.checkout_starts)} | verified_live_payments=${cell(m30?.successful_live_payments)} | verified_unique_customers=${cell(m30?.unique_paying_customers)} | entitled=${cell(m30?.entitled_paid_users)} | verified_revenue=${cell(m30?.live_revenue)}`
+    `30d (${range30.rangeLabel}): sessions=${cell(m30?.sessions)} | audit_landing_sessions=${cell(m30?.qualified_landing_sessions)} | audit_starts=${cell(m30?.audit_starts)} | audit_completions=${cell(m30?.audit_completions)} | pricing=${cell(m30?.pricing_viewers)} | checkout_starts=${cell(m30?.checkout_starts)} | verified_live_payments=${cell(m30?.successful_live_payments)} | verified_unique_customers=${cell(m30?.unique_paying_customers)} | entitled_accounts=${cell(m30?.entitled_accounts) !== 'Unknown' ? cell(m30?.entitled_accounts) : cell(m30?.entitled_paid_users)} | verified_paid_crm=${cell(m30?.verified_paid_customers_crm)} | non_customer_entitlements=${cell(m30?.non_customer_entitlements)} | reason=${m30?.non_customer_reason?.value || 'n/a'} | verified_revenue=${cell(m30?.live_revenue)}`
   );
   const a30 = opts.snapshot?.windows?.['30d']?.stripe?.attribution;
   if (a30) {
@@ -1087,8 +1138,11 @@ export function composeGrowthReport(opts) {
   t.push(`  DAILY REMAINING: ${pipelineMetric(pipe.dailyRemaining ?? dist.dailyRemaining, crmOk)} / limit ${pipe.dailyLimit ?? dist.deliverability?.dailyLimit ?? 100}`);
   t.push(`  EXPECTED TO ATTEMPT: ${pipelineMetric(pipe.expectedToAttempt, crmOk)}`);
   t.push(`  SENT LIFETIME (CRM): ${dist.lifetimeCrmSent ?? funnel.sent}`);
-  t.push(`  DELIVERED: ${funnel.delivered}`);
-  t.push(`  CLICKED: ${funnel.clicked}`);
+  t.push(`  DELIVERED: ${dist.deliveryTracking === 'NOT_TRACKED' ? 'NOT TRACKED' : funnel.delivered}`);
+  t.push(`  Delivery tracking: ${dist.deliveryTracking || (dist.deliveryTelemetryAvailable ? 'TRACKED' : 'NOT_TRACKED')}`);
+  t.push(`  CLICKED today: ${dist.clicks?.today ?? 'NOT TRACKED'}`);
+  t.push(`  CLICKED 7d: ${dist.clicks?.last7Days ?? 'NOT TRACKED'}`);
+  t.push(`  CLICKED lifetime: ${dist.clicks?.lifetime ?? funnel.clicked}`);
   t.push(`  CONVERTED: ${funnel.converted}`);
   t.push(`Change deployed: ${ship.change}`);
   t.push(`Experiment: ${ship.experiment}`);
@@ -1115,12 +1169,29 @@ export function composeGrowthReport(opts) {
   }
   t.push('');
 
-  t.push('PRODUCTION HEALTH');
-  t.push('---------------------');
-  t.push(`Overall: ${opts.health?.ok ? 'OK' : 'FAILED / unavailable'}`);
+  t.push('TECHNICAL HEALTH');
+  t.push('----------------');
+  t.push(`Overall API/site: ${opts.health?.ok ? 'OK' : 'FAILED / unavailable'}`);
   for (const c of opts.health?.checks || []) {
     t.push(`- ${c.name}: ${c.ok ? 'ok' : 'FAIL'}`);
   }
+  t.push(`GA4: ${opts.snapshot?.sources?.ga4 === 'ok' ? 'OK' : opts.snapshot?.sources?.ga4 ? 'ERROR' : 'UNAVAILABLE'}`);
+  t.push(`Stripe: ${opts.snapshot?.sources?.stripe === 'ok' ? 'OK' : opts.snapshot?.sources?.stripe ? 'ERROR' : 'UNAVAILABLE'}`);
+  t.push(`SES send API: ${(dist.sesAttemptedThisRun || 0) >= 0 && dist.crmSummaryOk !== false ? 'OK' : 'UNAVAILABLE'}`);
+  t.push('');
+  t.push('GROWTH HEALTH');
+  t.push('-------------');
+  const stop = dist.lastRun?.stopReason || dist.stopReason || 'n/a';
+  t.push(`Prospect discovery: ${Number(dist.lastRun?.discovered || 0) > 0 ? 'ACTIVE' : stop}`);
+  t.push(`Contact discovery: ${stop}`);
+  t.push(`Outbound inventory: ready=${dist.inventory?.readyToSend ?? dist.crmBoard?.readyToSend ?? 0}; needsApproval=${dist.needsApproval ?? 0}`);
+  t.push(`SES delivery measurement: ${dist.deliveryTracking || (dist.deliveryTelemetryAvailable ? 'TRACKED' : 'NOT_TRACKED')}`);
+  t.push(`Clicks today/7d/lifetime: ${dist.clicks?.today ?? '?'}/${dist.clicks?.last7Days ?? '?'}/${dist.clicks?.lifetime ?? dist.outreachFunnel?.clicked ?? '?'}`);
+  t.push(`Audit activation (COOK-001): starts=${dist.cohortFunnel?.auditStarts ?? 0}; completes=${dist.cohortFunnel?.auditCompletions ?? 0}`);
+  t.push(`Checkout conversion (site-wide 7d): ${cell(m7?.checkout_starts)} starts → ${cell(m7?.successful_live_payments)} paid`);
+  t.push(
+    `Reply tracking: ${dist.replyTracking || 'EXTERNAL CONFIGURATION REQUIRED (SES receipt/WorkMail → /api/public/acq/inbound)'}`
+  );
   t.push('');
 
   t.push('DATA SOURCES');
@@ -1249,8 +1320,11 @@ export function composeGrowthReport(opts) {
     ['COOK-001 BLOCKED BY OTHER (approved)', pipelineMetric(dist.pipeline?.blockedByOther, dist.crmSummaryOk)],
     ['COOK-001 SES ACCEPTED TODAY', String(dist.sesAcceptedThisRun ?? dist.cohort?.emailsSent ?? 0)],
     ['COOK-001 SENT LIFETIME (CRM)', String(dist.lifetimeCrmSent ?? dist.outreachFunnel?.sent ?? 0)],
-    ['COOK-001 DELIVERED', String(dist.outreachFunnel?.delivered ?? 'Unknown')],
-    ['COOK-001 CLICKED', String(dist.outreachFunnel?.clicked ?? 'Unknown')],
+    ['COOK-001 DELIVERED', dist.deliveryTracking === 'NOT_TRACKED' ? 'NOT TRACKED' : String(dist.outreachFunnel?.delivered ?? 'Unknown')],
+    ['COOK-001 Delivery tracking', String(dist.deliveryTracking || 'NOT_TRACKED')],
+    ['COOK-001 CLICKED today', String(dist.clicks?.today ?? 'NOT TRACKED')],
+    ['COOK-001 CLICKED 7d', String(dist.clicks?.last7Days ?? 'NOT TRACKED')],
+    ['COOK-001 CLICKED lifetime', String(dist.clicks?.lifetime ?? dist.outreachFunnel?.clicked ?? 'Unknown')],
     ['COOK-001 CONVERTED', String(dist.outreachFunnel?.converted ?? 0)]
   ]
     .map(

@@ -108,6 +108,16 @@ export async function loadCrmAcquisitionSummary() {
       sesRemaining: s.sesRemaining ?? null,
       sesMax24HourSend: s.sesMax24HourSend ?? null,
       deliveryTelemetryAvailable: s.deliveryTelemetryAvailable === true,
+      deliveryTracking: s.deliveryTracking || (s.deliveryTelemetryAvailable ? 'TRACKED' : 'NOT_TRACKED'),
+      clicks: s.clicks || {
+        today: s.clickedToday ?? null,
+        last7Days: s.clickedLast7Days ?? null,
+        lifetime: s.clickedLifetime ?? s.clicked ?? 0
+      },
+      draftLifecycle: s.draftLifecycle || null,
+      discoveryBlockers: s.discoveryBlockers || null,
+      lastRun: s.lastRun || null,
+      stopReason: s.lastRun?.stopReason || null,
       contactVerified: s.contactVerified ?? 0,
       discovered: s.discovered ?? 0,
       skipReasonCounts: s.skipReasonCounts || null,

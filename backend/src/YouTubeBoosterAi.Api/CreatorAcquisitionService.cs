@@ -1546,6 +1546,12 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
             && MatchesCampaignAudience(p, cfg)
             && IsActionableEmailDiscovery(p, DateTimeOffset.UtcNow));
+        var discoveryBlockers = allAfter
+            .Where(p => string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
+            .Where(p => MatchesCampaignAudience(p, cfg))
+            .Where(p => !CreatorAcquisitionScoring.IsVerifiedPublicEmail(p))
+            .GroupBy(p => ClassifyContactDiscoveryBlocker(p, DateTimeOffset.UtcNow))
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
         var upstreamProgress = replenish.Discovered + replenish.EmailsFound + replenish.DraftsPrepared
             + replenish.ContactDiscoveryAttempted;
         var capacityLeft = Math.Max(0, dailyCapacityRemaining - usedAfterSend);
@@ -1571,12 +1577,19 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             stopReason = "EXECUTION_BUDGET";
         else if (moreWork)
             stopReason = "CONTINUE";
+        else if (actionableDiscovery > 0 && replenish.ContactDiscoveryAttempted > 0 && replenish.EmailsFound == 0)
+            stopReason = "CONTACT_SOURCES_EXHAUSTED";
         else if (actionableDiscovery > 0 && upstreamProgress == 0)
             stopReason = "CONTACT_DISCOVERY_NO_PROGRESS";
         else if (replenish.ReadyAfter == 0 && usedAfterSend == 0)
             stopReason = inventoryStarved ? "READY_INVENTORY_LOW" : "NO_READY_INVENTORY";
         else
             stopReason = "COMPLETE";
+        if (stopReason is "CONTACT_DISCOVERY_NO_PROGRESS" or "CONTACT_SOURCES_EXHAUSTED")
+        {
+            foreach (var kv in discoveryBlockers.OrderByDescending(x => x.Value).Take(8))
+                reasonCounts[$"DISCOVERY_{kv.Key}"] = kv.Value;
+        }
         static int CountKeys(Dictionary<string, int> counts, params string[] keys) =>
             keys.Sum(k => counts.GetValueOrDefault(k));
         var suppressedCount = CountKeys(reasonCounts,
@@ -1715,6 +1728,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             dailyCapacityRemaining,
             sendCapacityRemaining = Math.Max(0, remaining - usedAfterSend),
             actionableDiscoveryRemaining = actionableDiscovery,
+            discoveryBlockers,
             variantSplit = true,
             lastInvocationSent = sent,
             lastInvocationContactDiscoveryAttempted = replenish.ContactDiscoveryAttempted
@@ -1878,7 +1892,16 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         };
         if (mapped is null) return;
         var status = AdvanceOutreachStatus(p.OutreachStatus, mapped);
-        await _store.UpsertProspectAsync(p with { OutreachStatus = status, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken);
+        var firstClick = p.FirstClickedAt;
+        if (firstClick is null && status is "clicked" or "audit_started" or "audit_completed"
+            or "pricing_viewed" or "checkout_started" or "customer")
+            firstClick = DateTimeOffset.UtcNow;
+        await _store.UpsertProspectAsync(p with
+        {
+            OutreachStatus = status,
+            FirstClickedAt = firstClick,
+            UpdatedAt = DateTimeOffset.UtcNow
+        }, cancellationToken);
         await _appDataStore.TrackEventAsync(eventName, p.ProspectId, new Dictionary<string, string?>
         {
             ["campaign"] = p.Campaign,
@@ -2081,8 +2104,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
         else
         {
+            var cfg = await ResolveCampaignConfigAsync(campaign, cancellationToken);
             candidates = all.Where(p =>
-                string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+                string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
+                && MatchesCampaignAudience(p, cfg));
             var filter = (request.Filter ?? "email_required").Trim().ToLowerInvariant();
             candidates = filter switch
             {
@@ -2092,6 +2117,9 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 "not_found" => candidates.Where(p =>
                     string.Equals(p.ContactDiscoveryResult, "not_found", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(p.ContactResearchStatus, "not_found", StringComparison.OrdinalIgnoreCase)),
+                "force_exhausted" when request.ForceRetry => candidates.Where(p =>
+                    !CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)
+                    && IsPermanentContactExhaustion(p)),
                 _ => candidates.Where(p =>
                     NeedsEmailDiscovery(p)
                     && (request.ForceRetry
@@ -2101,8 +2129,14 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         var ids = candidates
-            // Never-attempted first, then due retries by next-eligible time, then priority.
-            .OrderBy(p => p.ContactResearchAttempts)
+            // Fresh never-attempted first, then temporary failures due now, then other retries.
+            // Permanently exhausted prospects are excluded by NeedsEmailDiscovery.
+            .OrderBy(p => p.ContactResearchAttempts > 0 ? 1 : 0)
+            .ThenBy(p => p.ContactResearchAttempts)
+            .ThenBy(p =>
+                string.Equals(p.ContactResearchStatus, "temporary_fetch_failure", StringComparison.OrdinalIgnoreCase)
+                    ? 0
+                    : 1)
             .ThenBy(p => p.ContactResearchNextAt ?? DateTimeOffset.MinValue)
             .ThenByDescending(p => p.PriorityScore)
             .Select(p => p.ProspectId)
@@ -2302,13 +2336,63 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             return false;
         if (string.Equals(p.OutreachStatus, "rejected", StringComparison.OrdinalIgnoreCase)) return false;
         if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)) return false;
+        // Permanent exhaustion outcomes must not recycle every backoff cycle and starve fresh prospects.
+        if (IsPermanentContactExhaustion(p)) return false;
         return true;
     }
 
+    /// <summary>
+    /// form_only / not_found / no_website are permanent for automation until ForceRetry.
+    /// temporary_fetch_failure remains eligible when NextAt is due.
+    /// </summary>
+    public static bool IsPermanentContactExhaustion(AcqProspectRecord p)
+    {
+        var status = (p.ContactResearchStatus ?? "").Trim().ToLowerInvariant();
+        var result = (p.ContactDiscoveryResult ?? "").Trim().ToLowerInvariant();
+        if (status is "temporary_fetch_failure" || result is "temporary_failure")
+            return false;
+        if (status is "form_only" or "not_found")
+            return true;
+        if (result is "form_only" or "not_found" or "no_website" or "no_public_email")
+            return true;
+        return false;
+    }
+
     /// <summary>Eligible for an automatic contact-discovery attempt right now (respects backoff).</summary>
-    internal static bool IsActionableEmailDiscovery(AcqProspectRecord p, DateTimeOffset now) =>
+    public static bool IsActionableEmailDiscovery(AcqProspectRecord p, DateTimeOffset now) =>
         NeedsEmailDiscovery(p)
         && (p.ContactResearchNextAt is null || p.ContactResearchNextAt <= now);
+
+    /// <summary>Classify why a missing-email prospect is not progressing for reports/stop reasons.</summary>
+    public static string ClassifyContactDiscoveryBlocker(AcqProspectRecord p, DateTimeOffset now)
+    {
+        if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)) return "EMAIL_ALREADY_KNOWN";
+        if (string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase))
+            return "NEEDS_REVIEW";
+        if (p.ContactResearchNextAt is not null && p.ContactResearchNextAt > now)
+            return "DISCOVERY_BACKOFF";
+        if (IsPermanentContactExhaustion(p))
+        {
+            var result = (p.ContactDiscoveryResult ?? p.ContactResearchStatus ?? "").Trim().ToLowerInvariant();
+            return result switch
+            {
+                "form_only" => "FORM_ONLY",
+                "no_website" => "NO_WEBSITE",
+                "not_found" or "no_public_email" => "NO_PUBLIC_EMAIL_FOUND",
+                _ => "SOURCE_EXHAUSTED"
+            };
+        }
+        if (p.ContactResearchAttempts <= 0
+            && string.IsNullOrWhiteSpace(p.ContactDiscoveryResult)
+            && p.ContactResearchLastAt is null)
+            return "EMAIL_DISCOVERY_DUE";
+        if (string.Equals(p.ContactResearchStatus, "temporary_fetch_failure", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(p.ContactDiscoveryResult, "temporary_failure", StringComparison.OrdinalIgnoreCase))
+            return "WEBSITE_FETCH_FAILED";
+        if (IsActionableEmailDiscovery(p, now)) return "EMAIL_DISCOVERY_DUE";
+        return "OTHER";
+    }
 
     private static bool ShouldAutoPrepareDraft(AcqProspectRecord p) =>
         CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)

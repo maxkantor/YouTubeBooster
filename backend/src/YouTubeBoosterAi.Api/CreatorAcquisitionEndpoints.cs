@@ -287,9 +287,6 @@ public static class CreatorAcquisitionEndpoints
 
             var delivered = rows.Count(r => StatusAtLeast(r.OutreachStatus,
                 "delivered", "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
-            // SES delivery events are available when a configuration set is wired; zero deliveries
-            // must not be reported as "NOT TRACKED" if the event pipeline is configured.
-            var deliveryTelemetryAvailable = !string.IsNullOrWhiteSpace(state.ConfigSet) || delivered > 0;
             // Clicked = CTA tracked; do not count SES delivery alone as a click.
             var clicked = rows.Count(r => StatusAtLeast(r.OutreachStatus,
                 "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
@@ -316,6 +313,19 @@ public static class CreatorAcquisitionEndpoints
                 .Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
                 .Where(r => CreatorAcquisitionService.MatchesCampaignAudience(r, cfg))
                 .ToList();
+            var deliveredCook = cookRows.Count(r => StatusAtLeast(r.OutreachStatus,
+                "delivered", "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
+            var deliveredExact = cookRows.Count(r =>
+                string.Equals(r.OutreachStatus, "delivered", StringComparison.OrdinalIgnoreCase));
+            // SES config-set name alone ≠ live SNS delivery events. Prefer exact delivery status.
+            var deliveryTracking = string.IsNullOrWhiteSpace(state.ConfigSet)
+                ? "NOT_TRACKED"
+                : deliveredExact > 0
+                    ? "TRACKED"
+                    : deliveredCook > 0
+                        ? "PARTIAL" // funnel advanced (e.g. click) without isolated SES Delivery events
+                        : "CONFIGURED_AWAITING_EVENTS";
+            var deliveryTelemetryAvailable = deliveryTracking is "TRACKED" or "PARTIAL";
             var sentToday = cookRows.Count(r =>
                 r.LastContactedAt is not null
                 && CreatorAcquisitionScoring.EasternDate(r.LastContactedAt.Value).Date == todayEt);
@@ -437,6 +447,28 @@ public static class CreatorAcquisitionEndpoints
             var cutoff7 = now.AddDays(-7);
             var sentLast7Days = cookRows.Count(r =>
                 r.LastContactedAt is not null && r.LastContactedAt.Value >= cutoff7);
+
+            bool IsClickedOrBeyond(string? status) =>
+                StatusAtLeast(status,
+                    "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer");
+            DateTimeOffset? ClickMoment(AcqProspectRecord r) =>
+                r.FirstClickedAt ?? (IsClickedOrBeyond(r.OutreachStatus) ? r.UpdatedAt : null);
+            var clickedCook = cookRows.Count(r => IsClickedOrBeyond(r.OutreachStatus));
+            var clickedToday = cookRows.Count(r =>
+            {
+                var at = ClickMoment(r);
+                return at is not null && CreatorAcquisitionScoring.EasternDate(at.Value).Date == todayEt;
+            });
+            var clickedLast7Days = cookRows.Count(r =>
+            {
+                var at = ClickMoment(r);
+                return at is not null && at.Value >= cutoff7;
+            });
+            var draftLifecycle = AcqProspectLifecycle.TallyDraftLifecycle(cookRows, now, state, rows);
+            var discoveryBlockers = cookRows
+                .Where(r => !CreatorAcquisitionScoring.IsVerifiedPublicEmail(r))
+                .GroupBy(r => CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(r, now))
+                .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
 
             // Not-reviewable breakdown among COOK-001 drafts that are NOT Needs Approval.
             // Exclusive categories — every drafted-but-not-needs-approval row lands in exactly one bucket.
@@ -654,8 +686,24 @@ public static class CreatorAcquisitionEndpoints
                 sentLifetime = sent,
                 recentlySentWindowDays = 7,
                 delivered,
+                deliveredExact,
+                deliveryTracking,
                 deliveryTelemetryAvailable,
                 clicked,
+                clickedToday,
+                clickedLast7Days,
+                clickedLifetime = clickedCook,
+                clicks = new
+                {
+                    today = clickedToday,
+                    last7Days = clickedLast7Days,
+                    lifetime = clickedCook,
+                    uniqueProspectsToday = clickedToday,
+                    uniqueProspectsLast7Days = clickedLast7Days,
+                    uniqueProspectsLifetime = clickedCook
+                },
+                draftLifecycle,
+                discoveryBlockers,
                 auditStarted,
                 auditCompleted,
                 pricingViewed,

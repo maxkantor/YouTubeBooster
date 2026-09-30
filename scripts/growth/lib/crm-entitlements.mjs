@@ -8,6 +8,12 @@ const REGION = process.env.AWS_REGION || 'us-east-1';
 const PAYMENTS_TABLE = process.env.YB_PAYMENTS_TABLE || 'ybai-purchases';
 const USERS_TABLE = process.env.YB_USERS_TABLE || 'ybai-users';
 
+/** Known founder/owner/test accounts — never counted as acquired customers. */
+export const NON_CUSTOMER_USER_IDS = new Set([
+  'user_fcfb3313dad24dfe94b5771ab2e45834',
+  'user_c53361b5970040f2a540d519cd2036f1'
+]);
+
 function awsJson(args) {
   const r = spawnSync('aws', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
   if (r.status !== 0) {
@@ -69,6 +75,26 @@ function scanAll(table, extraArgs) {
   return { ok: true, items };
 }
 
+/**
+ * Classify why an active entitlement is not a verified external YouTubeBooster customer.
+ * Returns null when the entitlement may represent a real customer.
+ */
+export function classifyNonCustomerEntitlement(ent) {
+  const userId = ent?.userId || '';
+  const source = String(ent?.source || '').toLowerCase();
+  const paymentId = String(ent?.paymentId || '');
+  if (NON_CUSTOMER_USER_IDS.has(userId)) {
+    if (source === 'manual') return 'owner_manual_entitlement';
+    if (paymentId.startsWith('cs_test_')) return 'owner_stripe_test_checkout';
+    if (paymentId.startsWith('cs_live_')) return 'owner_self_live_payment';
+    return 'owner_or_founder_account';
+  }
+  if (source === 'manual') return 'manual_entitlement';
+  if (source === 'test_payment' || source === 'test') return 'test_entitlement';
+  if (paymentId.startsWith('cs_test_')) return 'stripe_test_checkout';
+  return null;
+}
+
 export function summarizeCrmEntitlements({ payments, entitlements, startYmd, endYmd, nowMs = Date.now() }) {
   const livePaid = [];
   for (const p of payments || []) {
@@ -107,10 +133,37 @@ export function summarizeCrmEntitlements({ payments, entitlements, startYmd, end
 
   const entitledUserIds = new Set(activeEnts.map((e) => e.userId).filter(Boolean));
 
+  const nonCustomerReasons = {};
+  const customerUserIds = new Set();
+  for (const userId of entitledUserIds) {
+    const userEnts = activeEnts.filter((e) => e.userId === userId);
+    let nonCustomer = null;
+    for (const ent of userEnts) {
+      const reason = classifyNonCustomerEntitlement(ent);
+      if (reason) {
+        nonCustomer = reason;
+        break;
+      }
+    }
+    if (nonCustomer) {
+      nonCustomerReasons[userId] = nonCustomer;
+    } else {
+      customerUserIds.add(userId);
+    }
+  }
+
+  const reasonTallies = {};
+  for (const reason of Object.values(nonCustomerReasons)) {
+    reasonTallies[reason] = (reasonTallies[reason] || 0) + 1;
+  }
+  const primaryNonCustomerReason =
+    Object.entries(reasonTallies).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
   let matched = 0;
   let within24h = 0;
   let missingEntitlementTs = 0;
   for (const p of livePaid) {
+    if (NON_CUSTOMER_USER_IDS.has(p.userId)) continue;
     const ent =
       activeEnts.find((e) => p.paymentId && e.paymentId && e.paymentId === p.paymentId) ||
       activeEnts.find((e) => p.userId && e.userId && e.userId === p.userId);
@@ -124,11 +177,17 @@ export function summarizeCrmEntitlements({ payments, entitlements, startYmd, end
     if (delta >= 0 && delta <= 24 * 60 * 60 * 1000) within24h += 1;
   }
 
-  const activationWithin24h = livePaid.length === 0 ? 0 : missingEntitlementTs === livePaid.length ? null : within24h;
+  const activationWithin24h =
+    livePaid.length === 0 ? 0 : missingEntitlementTs === livePaid.length ? null : within24h;
 
   return {
     livePaidPayments: livePaid.length,
     entitledPaidUsers: entitledUserIds.size,
+    entitledAccounts: entitledUserIds.size,
+    verifiedPaidCustomers: customerUserIds.size,
+    nonCustomerEntitlements: Object.keys(nonCustomerReasons).length,
+    nonCustomerReason: primaryNonCustomerReason,
+    nonCustomerReasonTallies: reasonTallies,
     paymentEntitlementMatches: matched,
     paidToEntitledWithin24h: activationWithin24h,
     paymentsMissingEntitlementTimestamp: missingEntitlementTs

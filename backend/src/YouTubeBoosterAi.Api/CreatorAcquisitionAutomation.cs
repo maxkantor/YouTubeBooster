@@ -488,7 +488,40 @@ public sealed partial class CreatorAcquisitionService
 
         bool WithinBudget() => hardDeadlineUtc is null || DateTime.UtcNow < hardDeadlineUtc.Value.AddSeconds(-2);
 
-        // 0a) Refresh stale / under-analyzed cooking contactable so drafts can clear send gates.
+        // 0a) Promote high-confidence review_email contacts so COOK-001 is not stuck awaiting Approvals.
+        if (WithinBudget() && NeedsInventory())
+        {
+            var review = all
+                .Where(p => string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase))
+                .Where(p => MatchesCampaignAudience(p, cfg))
+                .Where(p => p.LastContactedAt is null)
+                .Where(p =>
+                    string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase))
+                .Where(p => EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
+                .Where(p => !string.IsNullOrWhiteSpace(p.ContactSourceUrl))
+                .Where(p => string.Equals(p.ContactConfidence, "high", StringComparison.OrdinalIgnoreCase))
+                .Where(p => !OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
+                .OrderByDescending(p => p.PriorityScore)
+                .Take(3)
+                .ToList();
+            foreach (var p in review)
+            {
+                if (!WithinBudget()) break;
+                try
+                {
+                    await AcceptDiscoveredEmailAsync(p.ProspectId, accept: true, "scheduler", "auto_promote_public_review", cancellationToken);
+                }
+                catch
+                {
+                    // best-effort
+                }
+            }
+            all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
+            ready = CountReadyToSend(all, cfg, state, DateTimeOffset.UtcNow);
+        }
+
+        // 0b) Refresh stale / under-analyzed cooking contactable so drafts can clear send gates.
         if (WithinBudget() && NeedsInventory())
         {
             var refresh = all
@@ -579,7 +612,7 @@ public sealed partial class CreatorAcquisitionService
         {
             try
             {
-                for (var tick = 0; tick < 4 && NeedsInventory() && WithinBudget(); tick++)
+                for (var tick = 0; tick < 6 && NeedsInventory() && WithinBudget(); tick++)
                 {
                     var beforePointer = await _store.GetCohortRunAsync(cfg.CampaignId, ActiveEmailDiscoveryPointer, cancellationToken);
                     var beforeJob = string.IsNullOrWhiteSpace(beforePointer)
@@ -590,7 +623,7 @@ public sealed partial class CreatorAcquisitionService
                     var notFoundBefore = beforeJob?.NotFound ?? 0;
                     var failedBefore = beforeJob?.Failed ?? 0;
 
-                    var job = await ResumeOrStartEmailDiscoveryAsync(cfg.CampaignId, 8, cancellationToken);
+                    var job = await ResumeOrStartEmailDiscoveryAsync(cfg.CampaignId, 12, cancellationToken);
                     emailsFound += Math.Max(0, job.Found - foundBefore);
                     contactAttempted += Math.Max(0, job.Processed - processedBefore);
                     noPublic += Math.Max(0, job.NotFound - notFoundBefore);
@@ -645,12 +678,37 @@ public sealed partial class CreatorAcquisitionService
         int batchSize,
         CancellationToken cancellationToken)
     {
+        var now = DateTimeOffset.UtcNow;
         var pointer = await _store.GetCohortRunAsync(campaign, ActiveEmailDiscoveryPointer, cancellationToken);
         if (!string.IsNullOrWhiteSpace(pointer))
         {
             var existing = await GetEmailDiscoveryJobAsync(pointer.Trim(), cancellationToken);
             if (existing is not null && string.Equals(existing.Status, "running", StringComparison.OrdinalIgnoreCase))
-                return await TickEmailDiscoveryAsync(existing.JobId, batchSize, cancellationToken);
+            {
+                var all = await _store.ListProspectsAsync(cancellationToken);
+                var byId = all.ToDictionary(p => p.ProspectId, StringComparer.OrdinalIgnoreCase);
+                var remainingActionable = 0;
+                for (var i = existing.Cursor; i < existing.ProspectIds.Count; i++)
+                {
+                    if (!byId.TryGetValue(existing.ProspectIds[i], out var row)) continue;
+                    if (IsActionableEmailDiscovery(row, now)) remainingActionable++;
+                }
+
+                // Stale jobs often retain exhausted form_only / not_found IDs after backoff rules change.
+                // Abandon and rebuild from current actionable inventory so fresh prospects are not starved.
+                if (remainingActionable == 0)
+                {
+                    await SaveDiscoveryJobAsync(existing with
+                    {
+                        Status = "completed",
+                        UpdatedAt = now
+                    }, cancellationToken);
+                }
+                else
+                {
+                    return await TickEmailDiscoveryAsync(existing.JobId, batchSize, cancellationToken);
+                }
+            }
         }
 
         var started = await StartEmailDiscoveryAsync(

@@ -323,11 +323,19 @@ for (const w of windows) {
       source: crmTables.source,
       livePaidPayments: crm.livePaidPayments,
       entitledPaidUsers: crm.entitledPaidUsers,
+      entitledAccounts: crm.entitledAccounts,
+      verifiedPaidCustomers: crm.verifiedPaidCustomers,
+      nonCustomerEntitlements: crm.nonCustomerEntitlements,
+      nonCustomerReason: crm.nonCustomerReason,
       paymentEntitlementMatches: crm.paymentEntitlementMatches,
       paidToEntitledWithin24h: crm.paidToEntitledWithin24h
     };
     if (entry.stripe) {
       entry.stripe.entitledPaidUsers = crm.entitledPaidUsers;
+      entry.stripe.entitledAccounts = crm.entitledAccounts;
+      entry.stripe.verifiedPaidCustomers = crm.verifiedPaidCustomers;
+      entry.stripe.nonCustomerEntitlements = crm.nonCustomerEntitlements;
+      entry.stripe.nonCustomerReason = crm.nonCustomerReason;
       entry.stripe.activationWithin24h = crm.paidToEntitledWithin24h;
     } else {
       entry.stripe = {
@@ -335,6 +343,10 @@ for (const w of windows) {
         uniquePayingCustomers: null,
         netLiveRevenueUsd: null,
         entitledPaidUsers: crm.entitledPaidUsers,
+        entitledAccounts: crm.entitledAccounts,
+        verifiedPaidCustomers: crm.verifiedPaidCustomers,
+        nonCustomerEntitlements: crm.nonCustomerEntitlements,
+        nonCustomerReason: crm.nonCustomerReason,
         activationWithin24h: crm.paidToEntitledWithin24h
       };
     }

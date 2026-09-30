@@ -149,4 +149,91 @@ public static class AcqProspectLifecycle
         }
         return counts;
     }
+
+    /// <summary>
+    /// Exclusive lifecycle bucket for prospects that have a generated draft (observation+subject).
+    /// "Drafts generated" must reconcile to these states — never treat drafts as sendable inventory.
+    /// </summary>
+    public static string ClassifyDraftLifecycle(
+        AcqProspectRecord p,
+        DateTimeOffset now,
+        AcqCampaignState state,
+        IReadOnlyList<AcqProspectRecord>? all = null)
+    {
+        var hasDraft = !string.IsNullOrWhiteSpace(p.Observation) && !string.IsNullOrWhiteSpace(p.Subject);
+        if (!hasDraft) return "NO_DRAFT";
+
+        var outreach = (p.OutreachStatus ?? "").ToLowerInvariant();
+        var suppression = (p.SuppressionStatus ?? "none").ToLowerInvariant();
+
+        if (suppression is "unsubscribed" || outreach is "unsubscribed")
+            return "UNSUBSCRIBED";
+        if (suppression is "bounced" || outreach is "bounced")
+            return "BOUNCED";
+        if (suppression is "complained" || outreach is "complained")
+            return "COMPLAINT";
+        if (suppression is not "none" || outreach is "suppressed")
+            return "SUPPRESSED";
+        if (outreach is "customer")
+            return "CONVERTED";
+        if (outreach is "replied" or "interested")
+            return "REPLIED";
+        if (outreach is "rejected" or "not_interested")
+            return "DISQUALIFIED";
+
+        if (p.LastContactedAt is not null)
+        {
+            if (CreatorAcquisitionScoring.IsFollowUpDue(p, now))
+                return "FOLLOWUP_PENDING";
+            var cooldownDays = state.CooldownDays > 0 ? state.CooldownDays : OutreachPolicy.DefaultCooldownDays;
+            if (OutreachPolicy.InCooldown(p.LastContactedAt, now, cooldownDays))
+                return "COOLDOWN";
+            return "SENT";
+        }
+
+        if (string.IsNullOrWhiteSpace(p.PublicBusinessEmail)
+            || !EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
+            || !CreatorAcquisitionScoring.IsVerifiedPublicEmail(p))
+            return "NO_VALID_EMAIL";
+        if (OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
+            return "INVALID_EMAIL";
+
+        var why = CreatorAcquisitionService.WhyNotSentCode(p, now, state, all);
+        if (why == "READY_TO_SEND")
+            return "READY";
+        if (CreatorAcquisitionScoring.IsReadyForApproval(p)
+            || string.Equals(p.OutreachStatus, "approved", StringComparison.OrdinalIgnoreCase))
+            return "WAITING";
+
+        if (why is "NOT_QUALIFIED" or "INSUFFICIENT_PERSONALIZATION" or "UNSUPPORTED_CLAIM"
+            || p.PriorityScore < 70
+            || (p.SubscriberCount is < 1000 or > 100_000))
+            return "DISQUALIFIED";
+
+        if (p.AuditGeneratedAt is null
+            || string.IsNullOrWhiteSpace(p.Body)
+            || !CreatorAcquisitionScoring.HasStrongPersonalization(p))
+            return "STALE";
+
+        if (why is "DISCOVERY_PENDING" or "DISCOVERY_BACKOFF" or "NO_PUBLIC_EMAIL_FOUND")
+            return "NO_VALID_EMAIL";
+
+        return "OTHER";
+    }
+
+    public static Dictionary<string, int> TallyDraftLifecycle(
+        IEnumerable<AcqProspectRecord> prospects,
+        DateTimeOffset now,
+        AcqCampaignState state,
+        IReadOnlyList<AcqProspectRecord>? all = null)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var p in prospects)
+        {
+            var bucket = ClassifyDraftLifecycle(p, now, state, all);
+            if (bucket == "NO_DRAFT") continue;
+            counts[bucket] = counts.GetValueOrDefault(bucket) + 1;
+        }
+        return counts;
+    }
 }
