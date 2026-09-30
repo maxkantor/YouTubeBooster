@@ -635,6 +635,34 @@ public sealed partial class CreatorAcquisitionService
                     if (job.Processed <= processedBefore && job.Found <= foundBefore)
                         break;
                 }
+
+                // If the pointer/job path made no attempts but actionable due prospects remain,
+                // force a targeted discovery batch so we never report NO_PROGRESS while due work exists.
+                if (contactAttempted == 0 && WithinBudget() && NeedsInventory())
+                {
+                    all = (await _store.ListProspectsAsync(cancellationToken)).ToList();
+                    var dueIds = all
+                        .Where(p => string.Equals(p.Campaign, cfg.CampaignId, StringComparison.OrdinalIgnoreCase))
+                        .Where(p => MatchesCampaignAudience(p, cfg))
+                        .Where(p => IsActionableEmailDiscovery(p, DateTimeOffset.UtcNow))
+                        .OrderBy(p => p.ContactResearchAttempts)
+                        .ThenByDescending(p => p.PriorityScore)
+                        .Select(p => p.ProspectId)
+                        .Take(8)
+                        .ToList();
+                    if (dueIds.Count > 0)
+                    {
+                        var forced = await StartEmailDiscoveryAsync(
+                            new AcqEmailDiscoveryStartRequest(cfg.CampaignId, dueIds, "email_required", false, false, 8),
+                            "scheduler",
+                            cancellationToken);
+                        contactAttempted += forced.Processed;
+                        emailsFound += forced.Found;
+                        noPublic += forced.NotFound;
+                        invalid += forced.Failed;
+                        await _store.SaveCohortRunAsync(cfg.CampaignId, ActiveEmailDiscoveryPointer, forced.JobId, cancellationToken);
+                    }
+                }
             }
             catch
             {

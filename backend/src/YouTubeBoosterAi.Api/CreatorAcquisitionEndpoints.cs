@@ -313,9 +313,13 @@ public static class CreatorAcquisitionEndpoints
                 .Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
                 .Where(r => CreatorAcquisitionService.MatchesCampaignAudience(r, cfg))
                 .ToList();
-            var deliveredCook = cookRows.Count(r => StatusAtLeast(r.OutreachStatus,
+            // Funnel / click / delivery: all COOK-001 campaign rows (include already-sent even if niche drifted).
+            var cookCampaignRows = rows
+                .Where(r => string.Equals(r.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var deliveredCook = cookCampaignRows.Count(r => StatusAtLeast(r.OutreachStatus,
                 "delivered", "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
-            var deliveredExact = cookRows.Count(r =>
+            var deliveredExact = cookCampaignRows.Count(r =>
                 string.Equals(r.OutreachStatus, "delivered", StringComparison.OrdinalIgnoreCase));
             // SES config-set name alone ≠ live SNS delivery events. Prefer exact delivery status.
             var deliveryTracking = string.IsNullOrWhiteSpace(state.ConfigSet)
@@ -453,13 +457,13 @@ public static class CreatorAcquisitionEndpoints
                     "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer");
             DateTimeOffset? ClickMoment(AcqProspectRecord r) =>
                 r.FirstClickedAt ?? (IsClickedOrBeyond(r.OutreachStatus) ? r.UpdatedAt : null);
-            var clickedCook = cookRows.Count(r => IsClickedOrBeyond(r.OutreachStatus));
-            var clickedToday = cookRows.Count(r =>
+            var clickedCook = cookCampaignRows.Count(r => IsClickedOrBeyond(r.OutreachStatus));
+            var clickedToday = cookCampaignRows.Count(r =>
             {
                 var at = ClickMoment(r);
                 return at is not null && CreatorAcquisitionScoring.EasternDate(at.Value).Date == todayEt;
             });
-            var clickedLast7Days = cookRows.Count(r =>
+            var clickedLast7Days = cookCampaignRows.Count(r =>
             {
                 var at = ClickMoment(r);
                 return at is not null && at.Value >= cutoff7;
