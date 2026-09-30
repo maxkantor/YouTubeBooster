@@ -100,6 +100,8 @@ backend/youtubebooster-api.zip
 # Lambda zip + publish staging (regenerate: backend/publish-lambda.sh)
 artifacts/*.zip
 artifacts/publish/
+scripts/growth/inbound-lambda.zip
+scripts/growth/inbound-lambda/smoke.eml
 
 # Elastic Beanstalk Files
 .elasticbeanstalk/*

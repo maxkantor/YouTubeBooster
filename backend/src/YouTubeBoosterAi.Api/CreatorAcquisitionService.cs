@@ -1788,11 +1788,38 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         AcqProspectRecord? last = null;
         foreach (var p in matches)
         {
-            if (!string.IsNullOrWhiteSpace(p.TicketId))
-                await _appDataStore.SaveSupportInboundAsync(p.TicketId, subject, preview, cancellationToken);
+            var ticketId = p.TicketId;
+            if (string.IsNullOrWhiteSpace(ticketId))
+            {
+                try
+                {
+                    ticketId = await _appDataStore.SaveSupportTicketAsync(
+                        new SupportTicketRequest(
+                            Email: p.PublicBusinessEmail!,
+                            Name: p.ChannelName,
+                            Subject: string.IsNullOrWhiteSpace(subject) ? $"Reply from {p.ChannelName}" : subject,
+                            Message: preview,
+                            ProductArea: "creator_acquisition",
+                            ChannelUrl: p.ChannelUrl,
+                            OrderReference: p.ProspectId,
+                            AccountEmail: null,
+                            Source: "founder_outreach"),
+                        linkedUserId: null,
+                        cancellationToken);
+                }
+                catch
+                {
+                    ticketId = p.TicketId;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(ticketId))
+                await _appDataStore.SaveSupportInboundAsync(ticketId, subject, preview, cancellationToken);
+
             last = p with
             {
                 OutreachStatus = "replied",
+                TicketId = ticketId ?? p.TicketId,
                 NextFollowUpAt = null,
                 UpdatedAt = DateTimeOffset.UtcNow,
                 Notes = TrimPreview(preview)

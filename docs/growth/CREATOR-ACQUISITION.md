@@ -99,9 +99,10 @@ Do not use Max’s personal mailbox in campaign headers.
 
 1. SES identity `hello@youtubeboosterai.com` is covered by the verified domain. Custom MAIL FROM is optional.
 2. SES configuration set `yb-creator-acquisition` exists; add SNS/event destinations later for DELIVERED/bounce/complaint CRM updates.
-3. Postal address is in SSM. Unsubscribe HMAC is required.
-4. Conservative operator is the weekday cron; do not backfill historical lists. `run-cook-001-weekday.mjs` default `--max` is 10 (cap 30).
-5. Increase volume only via the 10→20→30 ramp while bounce/complaint/unsubscribe rates stay healthy.
+3. **Inbound replies:** CASE C wired — MX → SES Email Receiving → S3 → Lambda `youtubebooster-inbound-mail` → `POST /api/public/acq/inbound`. See `docs/growth/INBOUND-EMAIL.md`. Ops: `node scripts/growth/wire-inbound-email.mjs` (dry-run) / `--apply`.
+4. Postal address is in SSM. Unsubscribe HMAC is required.
+5. Conservative operator is the weekday cron; do not backfill historical lists. `run-cook-001-weekday.mjs` default `--max` is 10 (cap 30).
+6. Increase volume only via the 10→20→30 ramp while bounce/complaint/unsubscribe rates stay healthy.
 
 Do **not** run `daily-outreach-send.mjs` against the old roster.
 

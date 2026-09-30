@@ -1190,7 +1190,7 @@ export function composeGrowthReport(opts) {
   t.push(`Audit activation (COOK-001): starts=${dist.cohortFunnel?.auditStarts ?? 0}; completes=${dist.cohortFunnel?.auditCompletions ?? 0}`);
   t.push(`Checkout conversion (site-wide 7d): ${cell(m7?.checkout_starts)} starts → ${cell(m7?.successful_live_payments)} paid`);
   t.push(
-    `Reply tracking: ${dist.replyTracking || 'EXTERNAL CONFIGURATION REQUIRED (SES receipt/WorkMail → /api/public/acq/inbound)'}`
+    `Reply tracking: ${dist.replyTracking || 'SES receiving → S3 → youtubebooster-inbound-mail → /api/public/acq/inbound (hello@youtubeboosterai.com)'}`
   );
   t.push('');
 
