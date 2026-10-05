@@ -339,14 +339,25 @@ public static class CreatorAcquisitionEndpoints
             var deliveryTelemetryAvailable = deliveryTracking is "TRACKED" or "PARTIAL";
             var emailDeliveryStatus = new
             {
-                SES_ACCEPTED = sesAcceptedCook,
-                DELIVERED = deliveredExact,
-                DELIVERY_UNKNOWN = deliveryUnknown,
-                BOUNCED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase)),
-                COMPLAINED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase)),
-                CLICKED = cookCampaignRows.Count(r => StatusAtLeast(r.OutreachStatus,
+                sesAccepted = sesAcceptedCook,
+                delivered = deliveredExact,
+                deliveryUnknown,
+                bounced = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase)),
+                complained = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase)),
+                clicked = cookCampaignRows.Count(r => StatusAtLeast(r.OutreachStatus,
                     "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer")),
-                UNSUBSCRIBED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+                unsubscribed = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase)),
+                labels = new
+                {
+                    SES_ACCEPTED = sesAcceptedCook,
+                    DELIVERED = deliveredExact,
+                    DELIVERY_UNKNOWN = deliveryUnknown,
+                    BOUNCED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase)),
+                    COMPLAINED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase)),
+                    CLICKED = cookCampaignRows.Count(r => StatusAtLeast(r.OutreachStatus,
+                        "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer")),
+                    UNSUBSCRIBED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+                }
             };
             var sentToday = cookRows.Count(r =>
                 r.LastContactedAt is not null
@@ -737,8 +748,8 @@ public static class CreatorAcquisitionEndpoints
                     sesAcceptedLifetime = sesAcceptedCook,
                     delivered = deliveredExact,
                     deliveryUnknown,
-                    bounced = emailDeliveryStatus.BOUNCED,
-                    complaints = emailDeliveryStatus.COMPLAINED,
+                    bounced = emailDeliveryStatus.bounced,
+                    complaints = emailDeliveryStatus.complained,
                     clicks = clickedCook,
                     auditStarts = auditStarted,
                     auditCompletions = auditCompleted,
