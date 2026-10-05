@@ -439,7 +439,7 @@ public class CreatorAcquisitionTests
         };
         Assert.True(CreatorAcquisitionService.IsPermanentContactExhaustion(notFound));
         Assert.False(CreatorAcquisitionService.IsActionableEmailDiscovery(notFound, now));
-        Assert.Equal("NO_PUBLIC_EMAIL_FOUND", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(notFound, now));
+        Assert.Equal("CONTACT_NOT_FOUND", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(notFound, now));
 
         var fresh = Prospect(email: null) with
         {
@@ -473,11 +473,11 @@ public class CreatorAcquisitionTests
         };
         Assert.False(CreatorAcquisitionService.IsPermanentContactExhaustion(temp));
         Assert.True(CreatorAcquisitionService.IsActionableEmailDiscovery(temp, now));
-        Assert.Equal("WEBSITE_FETCH_FAILED", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(temp, now));
+        Assert.Equal("RETRY_LATER", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(temp, now));
 
         var backoff = temp with { ContactResearchNextAt = now.AddDays(2) };
         Assert.False(CreatorAcquisitionService.IsActionableEmailDiscovery(backoff, now));
-        Assert.Equal("DISCOVERY_BACKOFF", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(backoff, now));
+        Assert.Equal("RETRY_LATER", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(backoff, now));
     }
 
     [Fact]

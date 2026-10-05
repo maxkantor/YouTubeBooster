@@ -45,6 +45,10 @@ public class AcquisitionDiscoveryQueriesTests
     {
         Assert.Equal("inactive", AcquisitionDiscoveryQueries.Qualify(
             "technology", "en", null, "AI Explained", "software", null, 12000, 0));
+        Assert.Equal("inactive", AcquisitionDiscoveryQueries.Qualify(
+            "technology", "en", null, "AI Explained", "software", null, 12000, 3));
+        Assert.Equal("above_band", AcquisitionDiscoveryQueries.Qualify(
+            "cooking", "en", null, "Home Cooking Recipes", "dinner recipes", null, 150_000, 40));
         Assert.Equal("category_mismatch", AcquisitionDiscoveryQueries.Qualify(
             "technology", "en", null, "Best Chocolate Cake", "baking recipes", null, 12000, 40));
         Assert.Null(AcquisitionDiscoveryQueries.Qualify(

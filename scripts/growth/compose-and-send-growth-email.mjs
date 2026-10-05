@@ -195,7 +195,19 @@ if (invokedAsCli) {
       // Keep channel-level requiredOwnerApproval from distribution file when present;
       // do not invent a second approval CRM.
       skipReasonCountsAllCandidates:
-        crmSummary.skipReasonCounts || base.skipReasonCountsAllCandidates || base.skipReasonCounts || {}
+        crmSummary.skipReasonCounts || base.skipReasonCountsAllCandidates || base.skipReasonCounts || {},
+      deliveryTracking: crmSummary.deliveryTracking || base.deliveryTracking,
+      deliveryTelemetryAvailable: crmSummary.deliveryTelemetryAvailable ?? base.deliveryTelemetryAvailable,
+      emailDeliveryStatus: crmSummary.emailDeliveryStatus || base.emailDeliveryStatus || null,
+      emailAcquisition: crmSummary.emailAcquisition || base.emailAcquisition || null,
+      performanceGates: crmSummary.performanceGates || base.performanceGates || null,
+      sesConfigSet: crmSummary.sesConfigSet || base.sesConfigSet || null,
+      clicks: crmSummary.clicks || base.clicks || null,
+      draftLifecycle: crmSummary.draftLifecycle || base.draftLifecycle || null,
+      discoveryBlockers: crmSummary.discoveryBlockers || base.discoveryBlockers || null,
+      cohortFunnel: crmSummary.cohortFunnel || base.cohortFunnel || null,
+      personalizationFunnel: crmSummary.personalizationFunnel || base.personalizationFunnel || null,
+      stopReason: crmSummary.stopReason || base.stopReason || null
     };
   } else if (!distribution) {
     distribution = undefined;

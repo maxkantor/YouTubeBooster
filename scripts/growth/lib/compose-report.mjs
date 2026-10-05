@@ -261,7 +261,46 @@ export function formatCrmAcquisitionText(dist) {
   lines.push(`NEW PAID: ${d.cohort?.verifiedCustomers ?? funnel.converted ?? 0}`);
   lines.push(`REVENUE: $${Number(d.cohort?.verifiedRevenue || 0).toFixed(2)}`);
   lines.push('');
-  lines.push('ACQUISITION TODAY');
+  const ea = d.emailAcquisition || {};
+  const gates = d.performanceGates || {};
+  lines.push('EMAIL ACQUISITION');
+  lines.push('-----------------');
+  lines.push(`Discovered: ${ea.discovered ?? lastRun.discovered ?? lastRun.creatorsDiscovered ?? 0}`);
+  lines.push(`Contact attempts: ${ea.contactAttempts ?? lastRun.contactDiscoveryAttempted ?? lastRun.emailsAttempted ?? 0}`);
+  lines.push(`Public emails found: ${ea.publicEmailsFound ?? lastRun.emailsFound ?? lastRun.publicEmailsFound ?? 0}`);
+  lines.push(`Qualified: ${ea.qualified ?? inv.qualified ?? 0}`);
+  lines.push(`Drafted: ${ea.drafted ?? lastRun.draftsPrepared ?? 0}`);
+  lines.push(`Eligible: ${ea.eligible ?? pipe.eligibleNow ?? d.sendEligible ?? 0}`);
+  lines.push(`SES accepted: ${ea.sesAccepted ?? d.sesAcceptedThisRun ?? sentToday}`);
+  lines.push(
+    `Delivered: ${
+      deliveryTracking === 'NOT_TRACKED'
+        ? 'DELIVERY_UNKNOWN / NOT TRACKED'
+        : String(ea.delivered ?? funnel.delivered ?? delivered)
+    }`
+  );
+  lines.push(`Bounced: ${ea.bounced ?? funnel.bounced ?? 0}`);
+  lines.push(`Complaints: ${ea.complaints ?? 0}`);
+  lines.push(`Clicks: ${ea.clicks ?? clicks.lifetime ?? funnel.clicked ?? 0}`);
+  lines.push(`Audit starts: ${ea.auditStarts ?? d.cohortFunnel?.auditStarts ?? 0}`);
+  lines.push(`Audit completions: ${ea.auditCompletions ?? d.cohortFunnel?.auditCompletions ?? 0}`);
+  lines.push(`Signups: ${ea.signups ?? d.cohortFunnel?.accountsCreated ?? 0}`);
+  lines.push(`Checkout starts: ${ea.checkoutStarts ?? d.cohortFunnel?.checkoutStarts ?? 0}`);
+  lines.push(`Verified customers: ${ea.verifiedCustomers ?? funnel.converted ?? 0}`);
+  lines.push(`Revenue: $${Number(ea.revenue || d.cohort?.verifiedRevenue || 0).toFixed(2)}`);
+  lines.push(`Delivery tracking: ${deliveryTracking}`);
+  lines.push(`Stop reason: ${stopReason}`);
+  if (Object.keys(discoveryBlockers).length) {
+    lines.push(
+      `Prospect blockers: ${Object.entries(discoveryBlockers)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')}`
+    );
+  }
+  lines.push('');
+  lines.push('ACQUISITION TODAY (legacy detail)');
   lines.push(`Discovered: ${lastRun.discovered ?? lastRun.creatorsDiscovered ?? 0}`);
   lines.push(`Public emails found: ${lastRun.emailsFound ?? lastRun.publicEmailsFound ?? 0}`);
   lines.push(`Contact attempts: ${lastRun.contactDiscoveryAttempted ?? lastRun.emailsAttempted ?? 0}`);
@@ -280,6 +319,20 @@ export function formatCrmAcquisitionText(dist) {
   lines.push(`Checkout: ${d.cohortFunnel?.checkoutStarts ?? 0}`);
   lines.push(`Paid: ${d.cohortFunnel?.paid ?? funnel.converted ?? 0}`);
   lines.push(`Stop reason: ${stopReason}`);
+  if (gates.technicalAutomation || gates.acquisitionPerformance) {
+    lines.push('');
+    lines.push('TECHNICAL vs ACQUISITION');
+    lines.push(`Automation: ${gates.technicalAutomation || 'n/a'}`);
+    lines.push(`Acquisition performance: ${gates.acquisitionPerformance || 'n/a'}`);
+    if (gates.firstBrokenStage) lines.push(`First broken stage: ${gates.firstBrokenStage}`);
+    if (Array.isArray(gates.flags) && gates.flags.length) lines.push(`Flags: ${gates.flags.join(', ')}`);
+    if (gates.rates) {
+      lines.push(`Delivered→Clicked: ${gates.rates.deliveredToClicked ?? 'N/A'}`);
+      lines.push(`Clicked→Audit start: ${gates.rates.clickedToAuditStarted ?? 'N/A'}`);
+      lines.push(`Delivered→Paid: ${gates.rates.deliveredToPaid ?? 'N/A'}`);
+      lines.push(`Revenue/100 delivered: ${gates.rates.revenuePer100Delivered ?? 'N/A'}`);
+    }
+  }
   if (Object.keys(discoveryBlockers).length) {
     lines.push(
       `Discovery blockers: ${Object.entries(discoveryBlockers)
@@ -689,8 +742,38 @@ export function defaultDecisionText({
         ? 'COLLECTING'
         : 'n/a';
   const funnel = `${c.emailsSent} sent → ${c.auditClicks} clicks → ${c.auditCompletions} completed audit → ${c.verifiedCustomers} paid`;
+  const gates = d.performanceGates || {};
+  const firstBroken =
+    gates.firstBrokenStage ||
+    (() => {
+      const delivered = Number(d.outreachFunnel?.delivered ?? 0) || 0;
+      const clicks = Number(c.auditClicks || 0) || 0;
+      const starts = Number(c.auditStarts || 0) || 0;
+      const completes = Number(c.auditCompletions || 0) || 0;
+      const paid = Number(c.verifiedCustomers || 0) || 0;
+      const tracking = d.deliveryTracking || 'NOT_TRACKED';
+      if (tracking === 'NOT_TRACKED' || tracking === 'CONFIGURED_AWAITING_EVENTS') return 'DELIVERY_MEASUREMENT';
+      if (delivered >= 30 && clicks / delivered < 0.02) return 'DELIVERED_TO_CLICKED';
+      if (clicks > 0 && starts <= 0) return 'CLICKED_TO_AUDIT_STARTED';
+      if (starts > 0 && completes <= 0) return 'AUDIT_STARTED_TO_COMPLETED';
+      if (completes > 0 && paid <= 0) return 'AUDIT_COMPLETED_TO_PAID';
+      if (paid <= 0 && (d.sesAcceptedThisRun || 0) > 0) return 'NO_VERIFIED_CUSTOMERS';
+      return null;
+    })();
+  const acquisitionHealth =
+    gates.acquisitionPerformance ||
+    (Number(c.verifiedCustomers || 0) > 0
+      ? 'CONVERTING'
+      : firstBroken
+        ? 'UNDERPERFORMING'
+        : 'COLLECTING');
   const compact = [
     `Decision: ${d.blockingApproval ? 'BLOCKING APPROVAL' : d.executed ? exp004State : d.distributionAttempted || (d.prospectsEvaluated || 0) > 0 ? 'DISTRIBUTION FAILED' : 'NO DISTRIBUTION'}`,
+    '',
+    `Automation: ${gates.technicalAutomation || 'HEALTHY'}`,
+    `Acquisition performance: ${acquisitionHealth}`,
+    firstBroken ? `First measurable broken stage: ${firstBroken}` : 'First measurable broken stage: insufficient evidence — COLLECTING',
+    Array.isArray(gates.flags) && gates.flags.length ? `Performance flags: ${gates.flags.join(', ')}` : null,
     '',
     `COOK-001 sent ${c.emailsSent} qualified creator emails today.`,
     `${c.verifiedCustomers} verified customers / $${Number(c.verifiedRevenue || 0).toFixed(0)} revenue this run.`,
@@ -702,7 +785,9 @@ export function defaultDecisionText({
     `Next eligible ramp: ${d.deliverability?.nextRampDecision || `hold; ${c.rampBlockReason || 'sample_too_small'}`}`,
     '',
     `EXP-004 remains ${exp004State}.`
-  ].join('\n');
+  ]
+    .filter((line) => line != null)
+    .join('\n');
 
   const diagnostics = [];
 
@@ -1002,6 +1087,63 @@ export function composeGrowthReport(opts) {
   t.push(`Checkout: ${cell(m7?.checkout_starts)}`);
   t.push(`Paid (verified): ${cell(m7?.unique_paying_customers)}`);
   t.push('');
+  t.push('SITE FUNNEL');
+  t.push('-----------');
+  t.push(`Qualified landing sessions: ${cell(m7?.qualified_landing_sessions)}`);
+  t.push(`Audit starts: ${cell(m7?.audit_starts)}`);
+  t.push(`Audit completions: ${cell(m7?.audit_completions)}`);
+  t.push(`Signups: ${cell(m7?.pricing_viewers)}`);
+  t.push(`Checkout starts: ${cell(m7?.checkout_starts)}`);
+  t.push(`Checkout completed / verified payments: ${cell(m7?.successful_live_payments)}`);
+  t.push(`Verified unique customers: ${cell(m7?.unique_paying_customers)}`);
+  if (windows['7d']?.landing) {
+    const lb = windows['7d'].landing;
+    t.push(
+      `EXP-003 nested analyzer sessions (not double-counted in portfolio): ${lb.exp003Sessions ?? 0}`
+    );
+  }
+  t.push('');
+  t.push('EMAIL ACQUISITION (CRM)');
+  t.push('-----------------------');
+  const ea = dist.emailAcquisition || {};
+  const gates = dist.performanceGates || {};
+  t.push(`Discovered: ${ea.discovered ?? dist.lastRun?.discovered ?? 0}`);
+  t.push(`Contact attempts: ${ea.contactAttempts ?? dist.lastRun?.contactDiscoveryAttempted ?? 0}`);
+  t.push(`Public emails found: ${ea.publicEmailsFound ?? dist.lastRun?.emailsFound ?? 0}`);
+  t.push(`Qualified: ${ea.qualified ?? dist.inventory?.qualified ?? 0}`);
+  t.push(`Drafted: ${ea.drafted ?? dist.lastRun?.draftsPrepared ?? 0}`);
+  t.push(`Eligible: ${ea.eligible ?? dist.pipeline?.eligibleNow ?? dist.sendEligible ?? 0}`);
+  t.push(`SES accepted: ${ea.sesAccepted ?? dist.sesAcceptedThisRun ?? 0}`);
+  t.push(
+    `Delivered: ${
+      dist.deliveryTracking === 'NOT_TRACKED'
+        ? 'DELIVERY_UNKNOWN / NOT TRACKED'
+        : String(ea.delivered ?? dist.outreachFunnel?.delivered ?? 0)
+    }`
+  );
+  t.push(`Bounced: ${ea.bounced ?? 0}`);
+  t.push(`Complaints: ${ea.complaints ?? 0}`);
+  t.push(`Clicks: ${ea.clicks ?? dist.clicks?.lifetime ?? dist.outreachFunnel?.clicked ?? 0}`);
+  t.push(`Audit starts: ${ea.auditStarts ?? dist.cohortFunnel?.auditStarts ?? 0}`);
+  t.push(`Audit completions: ${ea.auditCompletions ?? dist.cohortFunnel?.auditCompletions ?? 0}`);
+  t.push(`Signups: ${ea.signups ?? dist.cohortFunnel?.accountsCreated ?? 0}`);
+  t.push(`Checkout starts: ${ea.checkoutStarts ?? dist.cohortFunnel?.checkoutStarts ?? 0}`);
+  t.push(`Verified customers: ${ea.verifiedCustomers ?? dist.outreachFunnel?.converted ?? 0}`);
+  t.push(`Revenue: $${Number(ea.revenue || dist.cohort?.verifiedRevenue || 0).toFixed(2)}`);
+  if (ea.prospectBlockers && typeof ea.prospectBlockers === 'object') {
+    t.push(
+      `Prospect blockers: ${Object.entries(ea.prospectBlockers)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')}`
+    );
+  }
+  t.push(`Automation: ${gates.technicalAutomation || 'HEALTHY'}`);
+  t.push(`Acquisition performance: ${gates.acquisitionPerformance || 'n/a'}`);
+  if (gates.firstBrokenStage) t.push(`First broken stage: ${gates.firstBrokenStage}`);
+  if (Array.isArray(gates.flags) && gates.flags.length) t.push(`Flags: ${gates.flags.join(', ')}`);
+  t.push('');
   t.push('AUTOMATION HEALTH');
   t.push('-----------------');
   t.push(`Creator discovery / CRM: ${opts.snapshot?.sources?.crm === 'ok' || dist.crmSummaryOk ? 'OK' : dist.crmSummaryOk === false ? 'ERROR' : 'UNAVAILABLE'}`);
@@ -1009,6 +1151,8 @@ export function composeGrowthReport(opts) {
   t.push(`SES: ${(dist.sesAttemptedThisRun || 0) >= 0 && dist.crmSummaryOk !== false ? 'OK' : 'UNAVAILABLE'}`);
   t.push(`GA4: ${opts.snapshot?.sources?.ga4 === 'ok' ? 'OK' : opts.snapshot?.sources?.ga4 ? 'ERROR' : 'UNAVAILABLE'}`);
   t.push(`Stripe: ${opts.snapshot?.sources?.stripe === 'ok' ? 'OK' : opts.snapshot?.sources?.stripe ? 'ERROR' : 'UNAVAILABLE'}`);
+  t.push(`Technical automation status: ${gates.technicalAutomation || 'HEALTHY'}`);
+  t.push(`Acquisition performance: ${gates.acquisitionPerformance || 'UNDERPERFORMING (0 verified customers)'}`);
   t.push('');
   t.push('DELIVERABILITY');
   t.push('--------------');

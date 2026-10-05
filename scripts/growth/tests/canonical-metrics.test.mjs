@@ -134,9 +134,9 @@ test('Stripe separates payments and unique customers; never exposes email; basel
       }
     ]
   });
-  // Default allowlist reconciliationComplete=false → verified baseline 0
-  assert.equal(summary.successfulLivePayments, 0);
-  assert.equal(summary.uniquePayingCustomers, 0);
+  // reconciliationComplete=true: metadata.app attribution counts live verified payments
+  assert.equal(summary.successfulLivePayments, 2);
+  assert.equal(summary.uniquePayingCustomers, 1);
   assert.equal(summary.attribution.attributedCandidatesBeforeBaseline, 2);
   assert.equal(summary.testPaidSessions, 1);
   const json = JSON.stringify(summary);

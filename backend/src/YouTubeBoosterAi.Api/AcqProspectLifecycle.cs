@@ -35,9 +35,12 @@ public static class AcqProspectLifecycle
         {
             "READY_TO_SEND" => "NONE",
             "DISCOVERY_PENDING" => "EMAIL_DISCOVERY_DUE",
-            "DISCOVERY_BACKOFF" => "EMAIL_DISCOVERY_BACKOFF",
-            "NO_PUBLIC_EMAIL_FOUND" => "EMAIL_NOT_FOUND",
+            "DISCOVERY_BACKOFF" or "RETRY_LATER" => "EMAIL_DISCOVERY_BACKOFF",
+            "NO_PUBLIC_EMAIL_FOUND" or "CONTACT_NOT_FOUND" or "FORM_ONLY" or "NO_WEBSITE" or "PERMANENTLY_UNCONTACTABLE"
+                => "EMAIL_NOT_FOUND",
             "INVALID_EMAIL" => "INVALID_EMAIL",
+            "SUPPRESSED" => "SUPPRESSED",
+            "CONTACT_FOUND" => "NONE",
             "COOLDOWN" => "COOLDOWN",
             "ALREADY_CONTACTED" => "ALREADY_SENT",
             "DUPLICATE_EMAIL" or "DUPLICATE_CHANNEL" => "ALREADY_SENT",
@@ -215,7 +218,9 @@ public static class AcqProspectLifecycle
             || !CreatorAcquisitionScoring.HasStrongPersonalization(p))
             return "STALE";
 
-        if (why is "DISCOVERY_PENDING" or "DISCOVERY_BACKOFF" or "NO_PUBLIC_EMAIL_FOUND")
+        if (why is "DISCOVERY_PENDING" or "DISCOVERY_BACKOFF" or "RETRY_LATER"
+            or "NO_PUBLIC_EMAIL_FOUND" or "CONTACT_NOT_FOUND" or "FORM_ONLY" or "NO_WEBSITE"
+            or "PERMANENTLY_UNCONTACTABLE")
             return "NO_VALID_EMAIL";
 
         return "OTHER";

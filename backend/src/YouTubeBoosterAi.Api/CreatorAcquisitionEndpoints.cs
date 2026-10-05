@@ -321,7 +321,14 @@ public static class CreatorAcquisitionEndpoints
                 "delivered", "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer"));
             var deliveredExact = cookCampaignRows.Count(r =>
                 string.Equals(r.OutreachStatus, "delivered", StringComparison.OrdinalIgnoreCase));
-            // SES config-set name alone ≠ live SNS delivery events. Prefer exact delivery status.
+            var sesAcceptedCook = cookCampaignRows.Count(r =>
+                r.LastContactedAt is not null
+                && !string.Equals(r.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase));
+            var deliveryUnknown = cookCampaignRows.Count(r =>
+                r.LastContactedAt is not null
+                && string.Equals(r.OutreachStatus, "sent", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(r.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase));
+            // SES config-set must be attached on send. TRACKED only when Delivery events landed.
             var deliveryTracking = string.IsNullOrWhiteSpace(state.ConfigSet)
                 ? "NOT_TRACKED"
                 : deliveredExact > 0
@@ -330,6 +337,17 @@ public static class CreatorAcquisitionEndpoints
                         ? "PARTIAL" // funnel advanced (e.g. click) without isolated SES Delivery events
                         : "CONFIGURED_AWAITING_EVENTS";
             var deliveryTelemetryAvailable = deliveryTracking is "TRACKED" or "PARTIAL";
+            var emailDeliveryStatus = new
+            {
+                SES_ACCEPTED = sesAcceptedCook,
+                DELIVERED = deliveredExact,
+                DELIVERY_UNKNOWN = deliveryUnknown,
+                BOUNCED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase)),
+                COMPLAINED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase)),
+                CLICKED = cookCampaignRows.Count(r => StatusAtLeast(r.OutreachStatus,
+                    "clicked", "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer")),
+                UNSUBSCRIBED = cookCampaignRows.Count(r => string.Equals(r.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase))
+            };
             var sentToday = cookRows.Count(r =>
                 r.LastContactedAt is not null
                 && CreatorAcquisitionScoring.EasternDate(r.LastContactedAt.Value).Date == todayEt);
@@ -691,8 +709,45 @@ public static class CreatorAcquisitionEndpoints
                 recentlySentWindowDays = 7,
                 delivered,
                 deliveredExact,
+                deliveryUnknown,
                 deliveryTracking,
                 deliveryTelemetryAvailable,
+                sesConfigSet = state.ConfigSet,
+                emailDeliveryStatus,
+                performanceGates = BuildPerformanceGates(
+                    deliveryTracking,
+                    deliveredExact > 0 ? deliveredExact : (deliveryTelemetryAvailable ? deliveredCook : 0),
+                    clickedCook,
+                    auditStarted,
+                    auditCompleted,
+                    pricingViewed,
+                    checkoutStartedCrm,
+                    converted),
+                emailAcquisition = new
+                {
+                    discovered = IntFromLastRun(lastRun, "discovered", "creatorsDiscovered") ?? cookRows.Count,
+                    contactAttempts = IntFromLastRun(lastRun, "contactDiscoveryAttempted", "emailsAttempted") ?? 0,
+                    publicEmailsFound = IntFromLastRun(lastRun, "emailsFound", "publicEmailsFound") ?? 0,
+                    publicEmailsLifetime = contactVerifiedCook,
+                    qualified = qualifiedCook,
+                    drafted = IntFromLastRun(lastRun, "draftsPrepared") ?? draftsCook,
+                    draftedLifetime = draftsCook,
+                    eligible = sendEligible,
+                    sesAccepted = lastRunSesAccepted > 0 ? lastRunSesAccepted : sentToday,
+                    sesAcceptedLifetime = sesAcceptedCook,
+                    delivered = deliveredExact,
+                    deliveryUnknown,
+                    bounced = emailDeliveryStatus.BOUNCED,
+                    complaints = emailDeliveryStatus.COMPLAINED,
+                    clicks = clickedCook,
+                    auditStarts = auditStarted,
+                    auditCompletions = auditCompleted,
+                    signups = pricingViewed,
+                    checkoutStarts = checkoutStartedCrm,
+                    verifiedCustomers = converted,
+                    revenue = 0,
+                    prospectBlockers = discoveryBlockers
+                },
                 clicked,
                 clickedToday,
                 clickedLast7Days,
@@ -1607,6 +1662,83 @@ public static class CreatorAcquisitionEndpoints
                 row.ChannelName, unsub, state.PostalAddress ?? "");
             return (from, to, row.Subject!, html, text, tracked);
         }
+    }
+
+    private static int? IntFromLastRun(object? lastRun, params string[] keys)
+    {
+        if (lastRun is not System.Text.Json.JsonElement el || el.ValueKind != System.Text.Json.JsonValueKind.Object)
+            return null;
+        foreach (var key in keys)
+        {
+            if (el.TryGetProperty(key, out var prop) && prop.TryGetInt32(out var n))
+                return n;
+        }
+        return null;
+    }
+
+    private static object BuildPerformanceGates(
+        string deliveryTracking,
+        int delivered,
+        int clicked,
+        int auditStarts,
+        int auditCompletions,
+        int signups,
+        int checkoutStarts,
+        int paid)
+    {
+        var flags = new List<string>();
+        var ratesCalculable = (deliveryTracking is "TRACKED" or "PARTIAL") && delivered > 0;
+        if (ratesCalculable && delivered >= 30)
+        {
+            var clickRate = clicked / (double)delivered;
+            if (clickRate < 0.02)
+                flags.Add("SUBJECT_OR_OFFER_REVIEW");
+        }
+        if (clicked > 0 && auditStarts <= 0)
+            flags.Add("LANDING_OR_CTA_REVIEW");
+        if (auditStarts > 0 && auditCompletions <= 0)
+            flags.Add("AUDIT_COMPLETION_REVIEW");
+        if (auditCompletions > 0 && paid <= 0)
+            flags.Add("VALUE_OR_MONETIZATION_REVIEW");
+
+        string? firstBroken = null;
+        if (!ratesCalculable && delivered <= 0 && clicked <= 0)
+            firstBroken = deliveryTracking is "NOT_TRACKED" or "CONFIGURED_AWAITING_EVENTS"
+                ? "DELIVERY_MEASUREMENT"
+                : "DELIVERED_TO_CLICKED";
+        else if (ratesCalculable && delivered >= 30 && clicked / (double)delivered < 0.02)
+            firstBroken = "DELIVERED_TO_CLICKED";
+        else if (clicked > 0 && auditStarts <= 0)
+            firstBroken = "CLICKED_TO_AUDIT_STARTED";
+        else if (auditStarts > 0 && auditCompletions <= 0)
+            firstBroken = "AUDIT_STARTED_TO_COMPLETED";
+        else if (auditCompletions > 0 && paid <= 0)
+            firstBroken = "AUDIT_COMPLETED_TO_PAID";
+        else if (paid <= 0 && (delivered > 0 || clicked > 0 || auditStarts > 0))
+            firstBroken = "NO_VERIFIED_CUSTOMERS";
+
+        return new
+        {
+            technicalAutomation = "HEALTHY",
+            acquisitionPerformance = paid > 0
+                ? "CONVERTING"
+                : flags.Count > 0 || firstBroken is not null
+                    ? "UNDERPERFORMING"
+                    : "COLLECTING",
+            flags,
+            firstBrokenStage = firstBroken,
+            rates = new
+            {
+                deliveredToClicked = ratesCalculable ? OutreachPolicy.RateOrNa(clicked, delivered) : "N/A — delivery tracking incomplete",
+                clickedToAuditStarted = OutreachPolicy.RateOrNa(auditStarts, clicked),
+                auditStartedToCompleted = OutreachPolicy.RateOrNa(auditCompletions, auditStarts),
+                auditCompletedToSignup = OutreachPolicy.RateOrNa(signups, auditCompletions),
+                signupToCheckout = OutreachPolicy.RateOrNa(checkoutStarts, signups),
+                checkoutToPaid = OutreachPolicy.RateOrNa(paid, checkoutStarts),
+                deliveredToPaid = ratesCalculable ? OutreachPolicy.RateOrNa(paid, delivered) : "N/A — delivery tracking incomplete",
+                revenuePer100Delivered = ratesCalculable ? OutreachPolicy.RevenuePer100(0, delivered) : "N/A — delivery tracking incomplete"
+            }
+        };
     }
 
     private static string FormatBlockerSummary(Dictionary<string, int> blockers)

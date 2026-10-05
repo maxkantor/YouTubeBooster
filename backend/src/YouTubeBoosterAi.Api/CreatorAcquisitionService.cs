@@ -117,9 +117,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             FromEmail: from?.Trim(),
             FromName: fromName.Trim(),
             ReplyTo: reply?.Trim(),
-            ConfigSet: string.IsNullOrWhiteSpace(_configuration["CreatorAcquisition:ConfigSet"])
-                ? null
-                : _configuration["CreatorAcquisition:ConfigSet"]!.Trim(),
+            ConfigSet: await ResolveConfigSetAsync(cancellationToken),
             MaxDailyLimit: maxLimit,
             RampEnabled: useSavedLimit && standing ? false : rampEnabled,
             CooldownDays: cooldown,
@@ -128,6 +126,22 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             RampBlockReason: ramp.BlockReason,
             AllowWeekends: allowWeekends
         );
+    }
+
+    /// <summary>
+    /// SES Configuration Set that fans Delivery/Bounce/Complaint to SNS → /api/public/acq/ses-events.
+    /// Without this name on SendRawEmail, CRM delivery stays NOT_TRACKED / DELIVERY_UNKNOWN.
+    /// </summary>
+    internal async Task<string> ResolveConfigSetAsync(CancellationToken cancellationToken)
+    {
+        var fromConfig = _configuration["CreatorAcquisition:ConfigSet"]?.Trim();
+        if (!string.IsNullOrWhiteSpace(fromConfig)) return fromConfig;
+        var fromEnv = Environment.GetEnvironmentVariable("YTB_SES_CONFIG_SET")?.Trim();
+        if (!string.IsNullOrWhiteSpace(fromEnv)) return fromEnv;
+        var fromSecrets = (await _secrets.GetValueAsync("ses/config-set", secure: false, cancellationToken))?.Trim()
+            ?? (await _secrets.GetValueAsync("outreach/ses-config-set", secure: false, cancellationToken))?.Trim();
+        if (!string.IsNullOrWhiteSpace(fromSecrets)) return fromSecrets;
+        return "yb-creator-acquisition";
     }
 
     public async Task<AcqProspectRecord> InspectAndUpsertAsync(AcqUpsertProspectRequest request, CancellationToken cancellationToken)
@@ -928,32 +942,61 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 candidates = candidates.Where(p => MatchesCampaignAudience(p, cfg));
             }
             var filter = (request.Filter ?? "email_found").Trim().ToLowerInvariant();
+            // Automatic prep: only verified sendable contacts. Prefer first drafts.
+            // Do NOT endlessly re-stamp every weak draft (that produced 50 drafts / 0 emails).
             candidates = candidates.Where(p =>
                 EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
                 && string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase)
                 && p.PriorityScore >= 0
-                && p.LastContactedAt is null
-                && (p.PreviewPlaceholder
-                    || string.IsNullOrWhiteSpace(p.Subject)
-                    || string.IsNullOrWhiteSpace(p.Body)
-                    || string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
-                       && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body))
-                    // Re-stamp drafts that fail auto-send personalization (clears sticky DRAFT_MISSING).
-                    || p.AuditGeneratedAt is null
-                    || string.IsNullOrWhiteSpace(p.OpportunityEvidenceJson)
-                    || !CreatorAcquisitionScoring.HasStrongPersonalization(p)
-                    || !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(p)));
+                && p.LastContactedAt is null);
             if (filter is "email_found" or "verified")
             {
                 candidates = candidates.Where(CreatorAcquisitionScoring.IsVerifiedPublicEmail);
+            }
+
+            var nowUtc = DateTimeOffset.UtcNow;
+            var material = candidates.ToList();
+            static bool NeedsFirstDraft(AcqProspectRecord p) =>
+                p.PreviewPlaceholder
+                || string.IsNullOrWhiteSpace(p.Subject)
+                || string.IsNullOrWhiteSpace(p.Body)
+                || string.Equals(p.OutreachStatus, "needs_review", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.OutreachStatus, "discovered", StringComparison.OrdinalIgnoreCase)
+                || (string.Equals(p.OutreachStatus, "draft_ready", StringComparison.OrdinalIgnoreCase)
+                    && (string.IsNullOrWhiteSpace(p.Subject) || string.IsNullOrWhiteSpace(p.Body)));
+
+            static bool NeedsLimitedRefresh(AcqProspectRecord p, DateTimeOffset now) =>
+                !NeedsFirstDraft(p)
+                && !string.IsNullOrWhiteSpace(p.Subject)
+                && !string.IsNullOrWhiteSpace(p.Body)
+                && (
+                    p.AuditGeneratedAt is null
+                    || string.IsNullOrWhiteSpace(p.OpportunityEvidenceJson)
+                    || !CreatorAcquisitionScoring.HasStrongPersonalization(p)
+                    || !CreatorAcquisitionOpportunity.MeetsAutoSendThreshold(p))
+                && (p.AuditGeneratedAt is null || (now - p.AuditGeneratedAt.Value).TotalDays >= 7);
+
+            if (request.Force)
+            {
+                candidates = material;
+            }
+            else
+            {
+                var first = material.Where(NeedsFirstDraft)
+                    .OrderByDescending(p => p.PriorityScore)
+                    .Take(8);
+                var refresh = material.Where(p => NeedsLimitedRefresh(p, nowUtc))
+                    .OrderByDescending(p => p.PriorityScore)
+                    .Take(3);
+                candidates = first.Concat(refresh)
+                    .GroupBy(p => p.ProspectId, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.First());
             }
         }
 
         var list = candidates
             .OrderByDescending(p => p.PriorityScore)
-            .Take(100)
+            .Take(request.Force || request.ProspectIds is { Count: > 0 } ? 100 : 11)
             .ToList();
 
         var results = new List<AcqDraftPrepareBatchItem>();
@@ -977,11 +1020,19 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             }
 
             var result = await PrepareDraftAsync(c.ProspectId, cancellationToken);
-            if (result.DraftPrepared)
+            // Do not count idempotent already_complete as newly drafted (inflates draftsPrepared).
+            if (result.DraftPrepared
+                && !string.Equals(result.Reason, "already_complete", StringComparison.OrdinalIgnoreCase))
             {
                 prepared++;
                 results.Add(new AcqDraftPrepareBatchItem(
                     c.ProspectId, c.Handle, true, result.Reason, result.Prospect?.Subject));
+            }
+            else if (result.DraftPrepared)
+            {
+                skipped++;
+                results.Add(new AcqDraftPrepareBatchItem(
+                    c.ProspectId, c.Handle, false, "already_complete", result.Prospect?.Subject));
             }
             else
             {
@@ -1327,10 +1378,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                     Source = mime.FromHeader,
                     Destinations = [p.PublicBusinessEmail!],
                     RawMessage = new RawMessage { Data = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(mime.RawRfc822)) },
-                    Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList()
+                    Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList(),
+                    ConfigurationSetName = string.IsNullOrWhiteSpace(state.ConfigSet)
+                        ? "yb-creator-acquisition"
+                        : state.ConfigSet
                 };
-                if (!string.IsNullOrWhiteSpace(state.ConfigSet))
-                    sendReq.ConfigurationSetName = state.ConfigSet;
                 var sesRes = await _ses.SendRawEmailAsync(sendReq, cancellationToken);
                 var sentAt = DateTimeOffset.UtcNow;
                 var followUpDueNow = CreatorAcquisitionScoring.IsFollowUpDue(p, sentAt);
@@ -1476,10 +1528,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                         Source = mime.FromHeader,
                         Destinations = [p.PublicBusinessEmail!],
                         RawMessage = new RawMessage { Data = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(mime.RawRfc822)) },
-                        Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList()
+                        Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList(),
+                        ConfigurationSetName = string.IsNullOrWhiteSpace(state.ConfigSet)
+                            ? "yb-creator-acquisition"
+                            : state.ConfigSet
                     };
-                    if (!string.IsNullOrWhiteSpace(state.ConfigSet))
-                        sendReq.ConfigurationSetName = state.ConfigSet;
                     var sesRes = await _ses.SendRawEmailAsync(sendReq, cancellationToken);
                     var sentAt = DateTimeOffset.UtcNow;
                     string? ticketId = null;
@@ -1558,25 +1611,35 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var budgetHit = DateTime.UtcNow >= deadline && capacityLeft > 0;
         if (budgetHit)
             reasonCounts["EXECUTION_BUDGET"] = reasonCounts.GetValueOrDefault("EXECUTION_BUDGET") + 1;
-        // Continue while daily capacity remains and this tick made progress, hit the runtime
-        // budget, or still has ready inventory to send. Daytime schedule retries when discovery
-        // is due but this tick made no progress (avoids infinite same-tick spin).
+        // Continue only when sendable work remains. Do NOT CONTINUE solely because contact
+        // attempts / draft re-stamps / discovery churn happened with 0 emails and 0 ready —
+        // that burned CONTINUATION_INVOCATION_CAP (12) without acquisition progress.
+        var fruitlessUpstream = replenish.EmailsFound == 0
+            && replenish.ReadyAfter == 0
+            && usedAfterSend == 0
+            && (replenish.ContactDiscoveryAttempted > 0
+                || replenish.DraftsPrepared > 0
+                || replenish.Discovered > 0);
         var inventoryStarved = capacityLeft > 0 && replenish.ReadyAfter < ReadyInventoryTarget;
-        var moreWork = capacityLeft > 0 && (
-            budgetHit
-            || upstreamProgress > 0
-            || (replenish.ReadyAfter > 0 && usedAfterSend < capacityLeft)
-            || (usedAfterSend > 0 && capacityLeft > 0)
-            || (inventoryStarved && upstreamProgress > 0));
+        var moreWork = capacityLeft > 0
+            && !fruitlessUpstream
+            && (
+                replenish.ReadyAfter > 0
+                || replenish.EmailsFound > 0
+                || (budgetHit && replenish.ReadyAfter > 0));
         string stopReason;
         if (capacityLeft <= 0)
             stopReason = "DAILY_CAPACITY_REACHED";
         else if (remaining <= usedAfterSend && usedAfterSend > 0 && remaining < dailyCapacityRemaining)
             stopReason = "HEALTH_SEND_CAP";
-        else if (budgetHit)
+        else if (budgetHit && replenish.ReadyAfter > 0)
             stopReason = "EXECUTION_BUDGET";
         else if (moreWork)
             stopReason = "CONTINUE";
+        else if (fruitlessUpstream && replenish.ContactDiscoveryAttempted > 0 && replenish.EmailsFound == 0)
+            stopReason = actionableDiscovery > 0 ? "CONTACT_DISCOVERY_NO_PROGRESS" : "CONTACT_SOURCES_EXHAUSTED";
+        else if (fruitlessUpstream && replenish.DraftsPrepared > 0 && replenish.EmailsFound == 0)
+            stopReason = "DRAFT_REFRESH_ONLY";
         else if (actionableDiscovery > 0 && replenish.ContactDiscoveryAttempted > 0 && replenish.EmailsFound == 0)
             stopReason = "CONTACT_SOURCES_EXHAUSTED";
         else if (actionableDiscovery > 0 && upstreamProgress == 0)
@@ -1585,7 +1648,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             stopReason = inventoryStarved ? "READY_INVENTORY_LOW" : "NO_READY_INVENTORY";
         else
             stopReason = "COMPLETE";
-        if (stopReason is "CONTACT_DISCOVERY_NO_PROGRESS" or "CONTACT_SOURCES_EXHAUSTED")
+        if (stopReason is "CONTACT_DISCOVERY_NO_PROGRESS" or "CONTACT_SOURCES_EXHAUSTED" or "DRAFT_REFRESH_ONLY")
         {
             foreach (var kv in discoveryBlockers.OrderByDescending(x => x.Value).Take(8))
                 reasonCounts[$"DISCOVERY_{kv.Key}"] = kv.Value;
@@ -2393,12 +2456,17 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
     /// <summary>Classify why a missing-email prospect is not progressing for reports/stop reasons.</summary>
     public static string ClassifyContactDiscoveryBlocker(AcqProspectRecord p, DateTimeOffset now)
     {
-        if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)) return "EMAIL_ALREADY_KNOWN";
+        if (CreatorAcquisitionScoring.IsVerifiedPublicEmail(p)) return "CONTACT_FOUND";
+        if (!string.Equals(p.SuppressionStatus, "none", StringComparison.OrdinalIgnoreCase))
+            return "SUPPRESSED";
+        if (EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail)
+            && OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
+            return "INVALID_EMAIL";
         if (string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
             || string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase))
             return "NEEDS_REVIEW";
         if (p.ContactResearchNextAt is not null && p.ContactResearchNextAt > now)
-            return "DISCOVERY_BACKOFF";
+            return "RETRY_LATER";
         if (IsPermanentContactExhaustion(p))
         {
             var result = (p.ContactDiscoveryResult ?? p.ContactResearchStatus ?? "").Trim().ToLowerInvariant();
@@ -2406,8 +2474,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             {
                 "form_only" => "FORM_ONLY",
                 "no_website" => "NO_WEBSITE",
-                "not_found" or "no_public_email" => "NO_PUBLIC_EMAIL_FOUND",
-                _ => "SOURCE_EXHAUSTED"
+                "not_found" or "no_public_email" => "CONTACT_NOT_FOUND",
+                _ => "PERMANENTLY_UNCONTACTABLE"
             };
         }
         if (p.ContactResearchAttempts <= 0
@@ -2416,7 +2484,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             return "EMAIL_DISCOVERY_DUE";
         if (string.Equals(p.ContactResearchStatus, "temporary_fetch_failure", StringComparison.OrdinalIgnoreCase)
             || string.Equals(p.ContactDiscoveryResult, "temporary_failure", StringComparison.OrdinalIgnoreCase))
-            return "WEBSITE_FETCH_FAILED";
+            return "RETRY_LATER";
         if (IsActionableEmailDiscovery(p, now)) return "EMAIL_DISCOVERY_DUE";
         return "OTHER";
     }
@@ -3428,10 +3496,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 Source = mime.FromHeader,
                 Destinations = [p.PublicBusinessEmail!],
                 RawMessage = new RawMessage { Data = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(mime.RawRfc822)) },
-                Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList()
+                Tags = mime.SesTags.Select(kv => new MessageTag { Name = kv.Key, Value = kv.Value }).ToList(),
+                ConfigurationSetName = string.IsNullOrWhiteSpace(state.ConfigSet)
+                    ? "yb-creator-acquisition"
+                    : state.ConfigSet
             };
-            if (!string.IsNullOrWhiteSpace(state.ConfigSet))
-                sendReq.ConfigurationSetName = state.ConfigSet;
             var sesRes = await _ses.SendRawEmailAsync(sendReq, cancellationToken);
 
             var ticketId = await _appDataStore.SaveSupportTicketAsync(

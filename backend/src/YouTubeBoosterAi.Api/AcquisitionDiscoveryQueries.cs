@@ -10,7 +10,9 @@ public static class AcquisitionDiscoveryQueries
     public const int MaxTarget = 30;
     public const int MinSubscribers = 1000;
     public const int MaxSubscribersPreferred = 100_000;
-    public const int MaxSubscribersHard = 250_000;
+    /// <summary>Hard ceiling aligned with COOK-001 send band (avoid agency-scale channels).</summary>
+    public const int MaxSubscribersHard = 100_000;
+    public const int MinVideos = 8;
 
     public static int ClampTarget(int? requested) =>
         Math.Clamp(requested is > 0 ? requested.Value : DefaultTarget, 5, MaxTarget);
@@ -162,9 +164,10 @@ public static class AcquisitionDiscoveryQueries
         if (kids.Contains("для детей") || kids.Contains("for kids") || kids.Contains("nursery")
             || kids.Contains("cocomelon") || kids.Contains("kids songs"))
             return "children";
-        if (videoCount <= 0) return "inactive";
+        if (videoCount < MinVideos) return "inactive";
         if (subscribers > 0 && subscribers < MinSubscribers) return "below_band";
         if (subscribers > MaxSubscribersHard) return "above_band";
+        // Prefer sweet-spot growth channels (5k–50k) when volume is abundant: still allow 1k–100k.
         if (!CategoryMatches(category, title, description)) return "category_mismatch";
         if (!LanguageMatches(language, title, description)) return "language_mismatch";
         var requested = AcquisitionTaxonomy.NormalizeMarket(market);

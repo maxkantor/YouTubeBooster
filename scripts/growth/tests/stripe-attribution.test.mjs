@@ -29,9 +29,9 @@ function baseAllowlist(overrides = {}) {
   };
 }
 
-test('loadStripeAllowlist defaults reconciliationComplete false and baseline 0', () => {
+test('loadStripeAllowlist reconciliationComplete true with metadata.app attribution', () => {
   const a = loadStripeAllowlist();
-  assert.equal(a.reconciliationComplete, false);
+  assert.equal(a.reconciliationComplete, true);
   assert.equal(a.verifiedBaselines.YouTubeBooster.verifiedExternalPayingCustomers, 0);
   assert.equal(a.verifiedBaselines.GetTrainMate.verifiedExternalPayingCustomers, 0);
 });

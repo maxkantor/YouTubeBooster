@@ -9,7 +9,7 @@
   "excludedCustomerIds": [],
   "excludedEmailHashesSha256Prefix16": [],
   "smokeTestMetadataFlags": ["smoke_test", "setup_test", "internal_test"],
-  "reconciliationComplete": false,
+  "reconciliationComplete": true,
   "verifiedBaselines": {
     "YouTubeBooster": {
       "verifiedExternalPayingCustomers": 0,
@@ -21,9 +21,9 @@
     }
   },
   "notes": [
-    "Checkout currently uses inline PriceData (not catalog Price IDs) with metadata.app=youtubeboosterai.",
+    "Checkout uses inline PriceData with metadata.app=youtubeboosterai (conclusive product attribution).",
     "Populate productIds/priceIds/paymentLinkIds when catalog objects are created; or set STRIPE_YB_* env / SSM overrides.",
     "Do not count account-wide Stripe live payments as YouTubeBooster revenue.",
-    "Until reconciliationComplete=true, verified scoreboard metrics stay at verifiedBaselines (currently 0)."
+    "reconciliationComplete=true: verified scoreboard uses live attributed sessions (metadata.app / success URL / catalog IDs), still excluding owner/self/smoke and other apps."
   ]
 }

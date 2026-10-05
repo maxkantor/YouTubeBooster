@@ -31,6 +31,7 @@ test('formatCrmAcquisitionText does not ask to approve when automatic sending is
     needsApproval: 1,
     crmActionRequired: false,
     crmActionMessage: 'Automation is operating normally.',
+    deliveryTracking: 'NOT_TRACKED',
     crmBoard: {
       totalProspects: 350,
       usableEmails: 119,
@@ -51,15 +52,15 @@ test('formatCrmAcquisitionText does not ask to approve when automatic sending is
     cohort: { auditStarts: 2, signups: 1, verifiedCustomers: 0 }
   });
   const text = lines.join('\n');
-  assert.match(text, /YOUTUBEBOOSTER OUTREACH/);
-  assert.match(text, /Daily limit: 100/);
-  assert.match(text, /Sent today: 18/);
-  assert.match(text, /Remaining campaign capacity: 82/);
+  assert.match(text, /YOUTUBEBOOSTERAI — DAILY GROWTH/);
+  assert.match(text, /EMAIL ACQUISITION/);
+  assert.match(text, /Daily remaining: 82 \/ 100/);
+  assert.match(text, /SES accepted: 18/);
   assert.match(text, /AUTOMATIC ACQUISITION: RUNNING/);
   assert.match(text, /Owner action required: NONE/);
   assert.doesNotMatch(text, /waiting for approval/);
   assert.doesNotMatch(text, /MAX — ACTION REQUIRED/);
-  assert.match(text, /Delivered: NOT TRACKED/);
+  assert.match(text, /Delivered: (NOT TRACKED|DELIVERY_UNKNOWN)/);
 });
 
 test('composeGrowthReport merges CRM board into subject and body', () => {
