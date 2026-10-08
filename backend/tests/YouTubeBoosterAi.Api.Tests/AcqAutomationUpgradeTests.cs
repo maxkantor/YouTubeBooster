@@ -541,6 +541,17 @@ public class AcqAutomationUpgradeTests
             InMemoryCreatorAcquisitionStore.NormalizeSesMessageId("010001a1-abc"));
     }
 
+    [Fact]
+    public void SnsEnvelope_DetectsSpacedTypeNotification()
+    {
+        // Real AWS SNS HTTPS payloads put spaces around the colon.
+        const string spaced = """{"Type" : "Notification","MessageId" : "x","Message" : "{}"}""";
+        const string compact = """{"Type":"Notification","MessageId":"x","Message":"{}"}""";
+        Assert.True(CreatorAcquisitionEndpoints.LooksLikeSnsEnvelope(spaced));
+        Assert.True(CreatorAcquisitionEndpoints.LooksLikeSnsEnvelope(compact));
+        Assert.False(CreatorAcquisitionEndpoints.LooksLikeSnsEnvelope("""{"prospectId":"a","eventType":"delivery"}"""));
+    }
+
     private static AcqApprovalRecord Approval(params AcqProspectRecord[] rows) =>
         new(
             "APR-1",

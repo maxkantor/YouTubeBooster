@@ -5,6 +5,14 @@ namespace YouTubeBoosterAi.Api;
 
 public static class CreatorAcquisitionEndpoints
 {
+    /// <summary>True when body looks like an SNS envelope (handles spaced "Type" : "Notification").</summary>
+    public static bool LooksLikeSnsEnvelope(string raw) =>
+        !string.IsNullOrWhiteSpace(raw)
+        && raw.Contains("\"Type\"", StringComparison.Ordinal)
+        && (raw.Contains("Notification", StringComparison.Ordinal)
+            || raw.Contains("SubscriptionConfirmation", StringComparison.Ordinal)
+            || raw.Contains("UnsubscribeConfirmation", StringComparison.Ordinal));
+
     public static void MapCreatorAcquisition(this WebApplication app)
     {
         var publicApi = app.MapGroup("/api/public/acq");
@@ -100,31 +108,39 @@ public static class CreatorAcquisitionEndpoints
             if (string.IsNullOrWhiteSpace(raw))
                 return Results.BadRequest(new { error = "empty body" });
 
-            // SNS subscription / notification envelope
-            if ((raw.Contains("\"Type\"", StringComparison.Ordinal) && raw.Contains("SubscriptionConfirmation", StringComparison.Ordinal))
-                || raw.Contains("\"Type\":\"Notification\"", StringComparison.Ordinal)
-                || raw.Contains("\"Type\": \"Notification\"", StringComparison.Ordinal))
+            // SNS HTTPS bodies use spaced JSON ("Type" : "Notification"). Detect via parse, not brittle
+            // substring matches — the old Type\":\"Notification check returned 400 for real SNS Delivery.
+            if (LooksLikeSnsEnvelope(raw))
             {
-                using var doc = System.Text.Json.JsonDocument.Parse(raw);
-                var root = doc.RootElement;
-                var type = root.TryGetProperty("Type", out var t) ? t.GetString() : null;
-                if (string.Equals(type, "SubscriptionConfirmation", StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    var subscribeUrl = root.TryGetProperty("SubscribeURL", out var u) ? u.GetString() : null;
-                    if (!string.IsNullOrWhiteSpace(subscribeUrl))
+                    using var doc = System.Text.Json.JsonDocument.Parse(raw);
+                    var root = doc.RootElement;
+                    var type = root.TryGetProperty("Type", out var t) ? t.GetString() : null;
+                    if (string.Equals(type, "SubscriptionConfirmation", StringComparison.OrdinalIgnoreCase))
                     {
-                        using var httpClient = new HttpClient();
-                        await httpClient.GetAsync(subscribeUrl, cancellationToken);
+                        var subscribeUrl = root.TryGetProperty("SubscribeURL", out var u) ? u.GetString() : null;
+                        if (!string.IsNullOrWhiteSpace(subscribeUrl))
+                        {
+                            using var httpClient = new HttpClient();
+                            await httpClient.GetAsync(subscribeUrl, cancellationToken);
+                        }
+                        return Results.Ok(new { ok = true, subscribed = true });
                     }
-                    return Results.Ok(new { ok = true, subscribed = true });
+                    if (string.Equals(type, "UnsubscribeConfirmation", StringComparison.OrdinalIgnoreCase))
+                        return Results.Ok(new { ok = true, unsubscribed = true });
+                    if (string.Equals(type, "Notification", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var message = root.TryGetProperty("Message", out var m) ? m.GetString() : null;
+                        if (string.IsNullOrWhiteSpace(message))
+                            return Results.BadRequest(new { error = "sns message missing" });
+                        var applied = await ApplySesNotificationAsync(acq, message, cancellationToken);
+                        return Results.Ok(new { ok = true, applied });
+                    }
                 }
-                if (string.Equals(type, "Notification", StringComparison.OrdinalIgnoreCase))
+                catch (System.Text.Json.JsonException)
                 {
-                    var message = root.TryGetProperty("Message", out var m) ? m.GetString() : null;
-                    if (string.IsNullOrWhiteSpace(message))
-                        return Results.BadRequest(new { error = "sns message missing" });
-                    var applied = await ApplySesNotificationAsync(acq, message, cancellationToken);
-                    return Results.Ok(new { ok = true, applied });
+                    return Results.BadRequest(new { error = "invalid sns json" });
                 }
             }
 
