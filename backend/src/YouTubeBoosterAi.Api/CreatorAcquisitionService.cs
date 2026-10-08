@@ -1595,6 +1595,9 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
         var reasonCounts = OutreachPolicy.AggregateSkipReasons(reasons);
         var allAfter = await _store.ListProspectsAsync(cancellationToken);
+        // Reconcile with post-send eligibility — replenish.ReadyAfter is pre-send and can keep
+        // moreWork=true after the only "ready" item was sent or proven unsendable this tick.
+        var readyAfterSend = CountReadyToSend(allAfter.ToList(), cfg, state, DateTimeOffset.UtcNow);
         var actionableDiscovery = allAfter.Count(p =>
             string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase)
             && MatchesCampaignAudience(p, cfg)
@@ -1611,29 +1614,34 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var budgetHit = DateTime.UtcNow >= deadline && capacityLeft > 0;
         if (budgetHit)
             reasonCounts["EXECUTION_BUDGET"] = reasonCounts.GetValueOrDefault("EXECUTION_BUDGET") + 1;
+        // CountReadyToSend said ready, but this tick sent nothing and did not hit the tick budget —
+        // the "ready" item is not actually consumable (history/suppression/customer/etc.).
+        var stuckReady = readyAfterSend > 0 && usedAfterSend == 0 && !budgetHit;
         // Continue only when sendable work remains. Do NOT CONTINUE solely because contact
         // attempts / draft re-stamps / discovery churn happened with 0 emails and 0 ready —
         // that burned CONTINUATION_INVOCATION_CAP (12) without acquisition progress.
         var fruitlessUpstream = replenish.EmailsFound == 0
-            && replenish.ReadyAfter == 0
+            && readyAfterSend == 0
             && usedAfterSend == 0
             && (replenish.ContactDiscoveryAttempted > 0
                 || replenish.DraftsPrepared > 0
                 || replenish.Discovered > 0);
-        var inventoryStarved = capacityLeft > 0 && replenish.ReadyAfter < ReadyInventoryTarget;
+        var inventoryStarved = capacityLeft > 0 && readyAfterSend < ReadyInventoryTarget;
         var moreWork = capacityLeft > 0
             && !fruitlessUpstream
+            && !stuckReady
             && (
-                replenish.ReadyAfter > 0
-                || replenish.EmailsFound > 0
-                || (budgetHit && replenish.ReadyAfter > 0));
+                readyAfterSend > 0
+                || replenish.EmailsFound > 0);
         string stopReason;
         if (capacityLeft <= 0)
             stopReason = "DAILY_CAPACITY_REACHED";
         else if (remaining <= usedAfterSend && usedAfterSend > 0 && remaining < dailyCapacityRemaining)
             stopReason = "HEALTH_SEND_CAP";
-        else if (budgetHit && replenish.ReadyAfter > 0)
+        else if (budgetHit && readyAfterSend > 0)
             stopReason = "EXECUTION_BUDGET";
+        else if (stuckReady)
+            stopReason = sesAttempted > 0 ? "READY_SEND_FAILED" : "STUCK_READY_NO_PROGRESS";
         else if (moreWork)
             stopReason = "CONTINUE";
         else if (fruitlessUpstream && replenish.ContactDiscoveryAttempted > 0 && replenish.EmailsFound == 0)
@@ -1644,11 +1652,12 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             stopReason = "CONTACT_SOURCES_EXHAUSTED";
         else if (actionableDiscovery > 0 && upstreamProgress == 0)
             stopReason = "CONTACT_DISCOVERY_NO_PROGRESS";
-        else if (replenish.ReadyAfter == 0 && usedAfterSend == 0)
+        else if (readyAfterSend == 0 && usedAfterSend == 0)
             stopReason = inventoryStarved ? "READY_INVENTORY_LOW" : "NO_READY_INVENTORY";
         else
             stopReason = "COMPLETE";
-        if (stopReason is "CONTACT_DISCOVERY_NO_PROGRESS" or "CONTACT_SOURCES_EXHAUSTED" or "DRAFT_REFRESH_ONLY")
+        if (stopReason is "CONTACT_DISCOVERY_NO_PROGRESS" or "CONTACT_SOURCES_EXHAUSTED" or "DRAFT_REFRESH_ONLY"
+            or "STUCK_READY_NO_PROGRESS" or "READY_SEND_FAILED")
         {
             foreach (var kv in discoveryBlockers.OrderByDescending(x => x.Value).Take(8))
                 reasonCounts[$"DISCOVERY_{kv.Key}"] = kv.Value;
@@ -1779,7 +1788,9 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             suppressed = priorSuppressed + suppressedCount,
             duplicates = priorDuplicates + duplicatesCount,
             cooldown = priorCooldown + cooldownCount,
-            ready = replenish.ReadyAfter,
+            ready = readyAfterSend,
+            readyBeforeSend = replenish.ReadyAfter,
+            stuckReady,
             initialSesAttempted = priorInitialAttempted + initialSesAttempted,
             initialSesAccepted = priorInitialAccepted + initialSesAccepted,
             followupSesAttempted = priorFollowAttempted + followupSesAttempted,
@@ -1915,24 +1926,40 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         if (p is null && !string.IsNullOrWhiteSpace(opaqueToken))
             p = await _store.GetByTokenAsync(opaqueToken.Trim(), cancellationToken);
         if (p is null && !string.IsNullOrWhiteSpace(sesMessageId))
-        {
-            var all = await _store.ListProspectsAsync(cancellationToken);
-            p = all.FirstOrDefault(r =>
-                string.Equals(r.LastSesMessageId, sesMessageId.Trim(), StringComparison.OrdinalIgnoreCase));
-        }
+            p = await _store.GetBySesMessageIdAsync(sesMessageId, cancellationToken);
         if (p is null && EmailAddressHelpers.LooksLikeEmail(destinationEmail))
             p = await _store.GetByEmailAsync(destinationEmail!.Trim(), cancellationToken);
         if (p is null) return false;
-        await ApplySesEventToProspectAsync(p, eventType, cancellationToken);
+        await ApplySesEventToProspectAsync(p, eventType, sesMessageId, cancellationToken);
         return true;
     }
 
     private async Task ApplySesEventToProspectAsync(
         AcqProspectRecord p,
         string eventType,
+        CancellationToken cancellationToken) =>
+        await ApplySesEventToProspectAsync(p, eventType, sesMessageId: null, cancellationToken);
+
+    private async Task ApplySesEventToProspectAsync(
+        AcqProspectRecord p,
+        string eventType,
+        string? sesMessageId,
         CancellationToken cancellationToken)
     {
-        var nextStatus = eventType.ToLowerInvariant() switch
+        var normalizedType = eventType.ToLowerInvariant();
+        // Idempotent dedupe for duplicate SNS deliveries of the same SES event.
+        var mid = InMemoryCreatorAcquisitionStore.NormalizeSesMessageId(sesMessageId ?? p.LastSesMessageId);
+        if (!string.IsNullOrWhiteSpace(mid) && normalizedType is "delivery" or "bounce" or "complaint" or "reject")
+        {
+            var claimed = await _store.TryClaimIdempotencyAsync($"ses:{mid}:{normalizedType}", cancellationToken);
+            if (!claimed)
+            {
+                // Already applied this exact event — treat as success without rewriting history.
+                return;
+            }
+        }
+
+        var nextStatus = normalizedType switch
         {
             "delivery" => AdvanceOutreachStatus(p.OutreachStatus, "delivered"),
             "bounce" => "bounced",
@@ -1941,23 +1968,29 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             "click" => p.OutreachStatus, // open/click from SES is not our attributable CTA
             _ => p.OutreachStatus
         };
-        var suppression = eventType.ToLowerInvariant() switch
+        var suppression = normalizedType switch
         {
             "bounce" => "bounced",
             "complaint" => "complained",
             _ => p.SuppressionStatus
         };
-        if (eventType.Equals("complaint", StringComparison.OrdinalIgnoreCase))
+        if (normalizedType == "complaint")
             await _store.SaveCampaignFlagsAsync(p.Campaign, false, true, cancellationToken);
-        if (eventType.Equals("bounce", StringComparison.OrdinalIgnoreCase) && EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
+        if (normalizedType == "bounce" && EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
             await SaveSuppressionLedgerAsync(p.PublicBusinessEmail!, "BOUNCED", "ses", cancellationToken);
-        if (eventType.Equals("complaint", StringComparison.OrdinalIgnoreCase) && EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
+        if (normalizedType == "complaint" && EmailAddressHelpers.LooksLikeEmail(p.PublicBusinessEmail))
             await SaveSuppressionLedgerAsync(p.PublicBusinessEmail!, "COMPLAINT", "ses", cancellationToken);
+
+        // Out-of-order: never downgrade funnel (AdvanceOutreachStatus) or wipe LastSesMessageId.
+        var keepMessageId = string.IsNullOrWhiteSpace(p.LastSesMessageId) && !string.IsNullOrWhiteSpace(mid)
+            ? mid
+            : p.LastSesMessageId;
         await _store.UpsertProspectAsync(p with
         {
             OutreachStatus = nextStatus,
             SuppressionStatus = suppression,
-            NextFollowUpAt = eventType.ToLowerInvariant() is "bounce" or "complaint" or "reject"
+            LastSesMessageId = keepMessageId,
+            NextFollowUpAt = normalizedType is "bounce" or "complaint" or "reject"
                 ? null
                 : p.NextFollowUpAt,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -2219,14 +2252,15 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         }
 
         var ids = candidates
-            // Fresh never-attempted first, then temporary failures due now, then other retries.
+            // Prefer creators with an official website seed (higher chance of public business email).
             // Permanently exhausted prospects are excluded by NeedsEmailDiscovery.
-            .OrderBy(p => p.ContactResearchAttempts > 0 ? 1 : 0)
+            .OrderBy(p => string.IsNullOrWhiteSpace(p.OfficialWebsite) ? 1 : 0)
+            .ThenBy(p => p.ContactResearchAttempts > 0 ? 1 : 0)
             .ThenBy(p => p.ContactResearchAttempts)
             .ThenBy(p =>
                 string.Equals(p.ContactResearchStatus, "temporary_fetch_failure", StringComparison.OrdinalIgnoreCase)
-                    ? 0
-                    : 1)
+                    ? 1  // deprioritize repeated temp failures vs first-time website prospects
+                    : 0)
             .ThenBy(p => p.ContactResearchNextAt ?? DateTimeOffset.MinValue)
             .ThenByDescending(p => p.PriorityScore)
             .Select(p => p.ProspectId)
@@ -2433,14 +2467,17 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
 
     /// <summary>
     /// form_only / not_found / no_website are permanent for automation until ForceRetry.
-    /// temporary_fetch_failure remains eligible when NextAt is due.
+    /// temporary_fetch_failure remains eligible when NextAt is due — until attempt cap, then suppressed.
     /// </summary>
     public static bool IsPermanentContactExhaustion(AcqProspectRecord p)
     {
         var status = (p.ContactResearchStatus ?? "").Trim().ToLowerInvariant();
         var result = (p.ContactDiscoveryResult ?? "").Trim().ToLowerInvariant();
         if (status is "temporary_fetch_failure" || result is "temporary_failure")
-            return false;
+        {
+            // Bound unproductive temporary-failure churn (was re-queueing every day).
+            return p.ContactResearchAttempts >= CreatorAcquisitionContact.MaxTemporaryFetchAttempts;
+        }
         if (status is "form_only" or "not_found")
             return true;
         if (result is "form_only" or "not_found" or "no_website" or "no_public_email")
@@ -2465,8 +2502,6 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         if (string.Equals(p.ContactResearchStatus, "review_email", StringComparison.OrdinalIgnoreCase)
             || string.Equals(p.ContactDiscoveryResult, "review", StringComparison.OrdinalIgnoreCase))
             return "NEEDS_REVIEW";
-        if (p.ContactResearchNextAt is not null && p.ContactResearchNextAt > now)
-            return "RETRY_LATER";
         if (IsPermanentContactExhaustion(p))
         {
             var result = (p.ContactDiscoveryResult ?? p.ContactResearchStatus ?? "").Trim().ToLowerInvariant();
@@ -2475,9 +2510,12 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 "form_only" => "FORM_ONLY",
                 "no_website" => "NO_WEBSITE",
                 "not_found" or "no_public_email" => "CONTACT_NOT_FOUND",
+                "temporary_failure" or "temporary_fetch_failure" => "TEMP_FAILURE_EXHAUSTED",
                 _ => "PERMANENTLY_UNCONTACTABLE"
             };
         }
+        if (p.ContactResearchNextAt is not null && p.ContactResearchNextAt > now)
+            return "RETRY_LATER";
         if (p.ContactResearchAttempts <= 0
             && string.IsNullOrWhiteSpace(p.ContactDiscoveryResult)
             && p.ContactResearchLastAt is null)

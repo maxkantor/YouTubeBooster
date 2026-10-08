@@ -174,6 +174,28 @@ public static class CreatorAcquisitionEndpoints
                 }
             }
 
+            // Delivery / bounce payloads often put the recipient outside mail.destination.
+            if (string.IsNullOrWhiteSpace(destinationEmail)
+                && root.TryGetProperty("delivery", out var delivery)
+                && delivery.TryGetProperty("recipients", out var dRecipients)
+                && dRecipients.ValueKind == System.Text.Json.JsonValueKind.Array
+                && dRecipients.GetArrayLength() > 0)
+                destinationEmail = dRecipients[0].GetString();
+            if (string.IsNullOrWhiteSpace(destinationEmail)
+                && root.TryGetProperty("bounce", out var bounce)
+                && bounce.TryGetProperty("bouncedRecipients", out var bRecipients)
+                && bRecipients.ValueKind == System.Text.Json.JsonValueKind.Array
+                && bRecipients.GetArrayLength() > 0
+                && bRecipients[0].TryGetProperty("emailAddress", out var bEmail))
+                destinationEmail = bEmail.GetString();
+            if (string.IsNullOrWhiteSpace(destinationEmail)
+                && root.TryGetProperty("complaint", out var complaint)
+                && complaint.TryGetProperty("complainedRecipients", out var cRecipients)
+                && cRecipients.ValueKind == System.Text.Json.JsonValueKind.Array
+                && cRecipients.GetArrayLength() > 0
+                && cRecipients[0].TryGetProperty("emailAddress", out var cEmail))
+                destinationEmail = cEmail.GetString();
+
             var normalized = eventType.ToLowerInvariant() switch
             {
                 "delivery" => "delivery",
@@ -727,15 +749,46 @@ public static class CreatorAcquisitionEndpoints
                 emailDeliveryStatus,
                 performanceGates = BuildPerformanceGates(
                     deliveryTracking,
-                    deliveredExact > 0 ? deliveredExact : (deliveryTelemetryAvailable ? deliveredCook : 0),
-                    clickedCook,
-                    auditStarted,
-                    auditCompleted,
-                    pricingViewed,
-                    checkoutStartedCrm,
-                    converted),
+                    deliveredExact,
+                    clickedLast7Days,
+                    // 7-day CRM cohort: audit starts among COOK-001 rows that clicked in-window
+                    // (do not mix lifetime clicks with site-wide GA4 audits).
+                    cookCampaignRows.Count(r =>
+                    {
+                        var at = ClickMoment(r);
+                        return at is not null && at.Value >= cutoff7
+                            && StatusAtLeast(r.OutreachStatus,
+                                "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer");
+                    }),
+                    cookCampaignRows.Count(r =>
+                    {
+                        var at = ClickMoment(r);
+                        return at is not null && at.Value >= cutoff7
+                            && StatusAtLeast(r.OutreachStatus,
+                                "audit_completed", "pricing_viewed", "checkout_started", "customer");
+                    }),
+                    cookCampaignRows.Count(r =>
+                    {
+                        var at = ClickMoment(r);
+                        return at is not null && at.Value >= cutoff7
+                            && StatusAtLeast(r.OutreachStatus, "pricing_viewed", "checkout_started", "customer");
+                    }),
+                    cookCampaignRows.Count(r =>
+                    {
+                        var at = ClickMoment(r);
+                        return at is not null && at.Value >= cutoff7
+                            && StatusAtLeast(r.OutreachStatus, "checkout_started", "customer");
+                    }),
+                    cookCampaignRows.Count(r =>
+                    {
+                        var at = ClickMoment(r);
+                        return at is not null && at.Value >= cutoff7
+                            && string.Equals(r.OutreachStatus, "customer", StringComparison.OrdinalIgnoreCase);
+                    }),
+                    cohortWindowDays: 7),
                 emailAcquisition = new
                 {
+                    cohortWindowDays = 7,
                     discovered = IntFromLastRun(lastRun, "discovered", "creatorsDiscovered") ?? cookRows.Count,
                     contactAttempts = IntFromLastRun(lastRun, "contactDiscoveryAttempted", "emailsAttempted") ?? 0,
                     publicEmailsFound = IntFromLastRun(lastRun, "emailsFound", "publicEmailsFound") ?? 0,
@@ -750,14 +803,30 @@ public static class CreatorAcquisitionEndpoints
                     deliveryUnknown,
                     bounced = emailDeliveryStatus.bounced,
                     complaints = emailDeliveryStatus.complained,
-                    clicks = clickedCook,
-                    auditStarts = auditStarted,
-                    auditCompletions = auditCompleted,
+                    clicks = clickedLast7Days,
+                    clicksLifetime = clickedCook,
+                    auditStarts = cookCampaignRows.Count(r =>
+                    {
+                        var at = ClickMoment(r);
+                        return at is not null && at.Value >= cutoff7
+                            && StatusAtLeast(r.OutreachStatus,
+                                "audit_started", "audit_completed", "pricing_viewed", "checkout_started", "customer");
+                    }),
+                    auditStartsLifetime = auditStarted,
+                    auditCompletions = cookCampaignRows.Count(r =>
+                    {
+                        var at = ClickMoment(r);
+                        return at is not null && at.Value >= cutoff7
+                            && StatusAtLeast(r.OutreachStatus,
+                                "audit_completed", "pricing_viewed", "checkout_started", "customer");
+                    }),
+                    auditCompletionsLifetime = auditCompleted,
                     signups = pricingViewed,
                     checkoutStarts = checkoutStartedCrm,
                     verifiedCustomers = converted,
                     revenue = 0,
-                    prospectBlockers = discoveryBlockers
+                    prospectBlockers = discoveryBlockers,
+                    note = "clicks/auditStarts above are COOK-001 CRM 7-day cohort — not site-wide GA4"
                 },
                 clicked,
                 clickedToday,
@@ -770,7 +839,8 @@ public static class CreatorAcquisitionEndpoints
                     lifetime = clickedCook,
                     uniqueProspectsToday = clickedToday,
                     uniqueProspectsLast7Days = clickedLast7Days,
-                    uniqueProspectsLifetime = clickedCook
+                    uniqueProspectsLifetime = clickedCook,
+                    source = "COOK-001_CRM"
                 },
                 draftLifecycle,
                 discoveryBlockers,
@@ -1687,21 +1757,28 @@ public static class CreatorAcquisitionEndpoints
         return null;
     }
 
+    /// <summary>
+    /// COOK-001 CRM cohort gates. Uses exact SES Delivery counts only — never SES accepted,
+    /// lifetime clicks mixed with 7d audits, or site-wide GA4.
+    /// </summary>
     private static object BuildPerformanceGates(
         string deliveryTracking,
-        int delivered,
+        int deliveredExact,
         int clicked,
         int auditStarts,
         int auditCompletions,
         int signups,
         int checkoutStarts,
-        int paid)
+        int paid,
+        int cohortWindowDays = 7)
     {
         var flags = new List<string>();
-        var ratesCalculable = (deliveryTracking is "TRACKED" or "PARTIAL") && delivered > 0;
-        if (ratesCalculable && delivered >= 30)
+        // Exact Delivery coverage required for delivery→click. PARTIAL/proxy must not invent rates.
+        var exactDeliveryAvailable = deliveryTracking is "TRACKED" && deliveredExact > 0;
+        var ratesCalculable = exactDeliveryAvailable;
+        if (ratesCalculable && deliveredExact >= 30)
         {
-            var clickRate = clicked / (double)delivered;
+            var clickRate = clicked / (double)deliveredExact;
             if (clickRate < 0.02)
                 flags.Add("SUBJECT_OR_OFFER_REVIEW");
         }
@@ -1713,20 +1790,24 @@ public static class CreatorAcquisitionEndpoints
             flags.Add("VALUE_OR_MONETIZATION_REVIEW");
 
         string? firstBroken = null;
-        if (!ratesCalculable && delivered <= 0 && clicked <= 0)
-            firstBroken = deliveryTracking is "NOT_TRACKED" or "CONFIGURED_AWAITING_EVENTS"
+        if (!exactDeliveryAvailable)
+            firstBroken = deliveryTracking is "NOT_TRACKED" or "CONFIGURED_AWAITING_EVENTS" or "PARTIAL"
                 ? "DELIVERY_MEASUREMENT"
                 : "DELIVERED_TO_CLICKED";
-        else if (ratesCalculable && delivered >= 30 && clicked / (double)delivered < 0.02)
-            firstBroken = "DELIVERED_TO_CLICKED";
-        else if (clicked > 0 && auditStarts <= 0)
+        else if (clicked <= 0)
+            // Zero clicks in cohort — never blame CLICKED_TO_AUDIT_STARTED.
+            firstBroken = deliveredExact >= 30
+                ? "DELIVERED_TO_CLICKED"
+                : "COLLECTING_CLICKS";
+        else if (auditStarts <= 0)
             firstBroken = "CLICKED_TO_AUDIT_STARTED";
-        else if (auditStarts > 0 && auditCompletions <= 0)
+        else if (auditCompletions <= 0)
             firstBroken = "AUDIT_STARTED_TO_COMPLETED";
-        else if (auditCompletions > 0 && paid <= 0)
+        else if (paid <= 0)
             firstBroken = "AUDIT_COMPLETED_TO_PAID";
-        else if (paid <= 0 && (delivered > 0 || clicked > 0 || auditStarts > 0))
-            firstBroken = "NO_VERIFIED_CUSTOMERS";
+
+        if (firstBroken is "COLLECTING_CLICKS")
+            firstBroken = null; // still collecting — not a broken stage
 
         return new
         {
@@ -1738,16 +1819,27 @@ public static class CreatorAcquisitionEndpoints
                     : "COLLECTING",
             flags,
             firstBrokenStage = firstBroken,
+            cohortWindowDays,
+            metricSource = "COOK-001_CRM",
+            siteWideGa4Excluded = true,
             rates = new
             {
-                deliveredToClicked = ratesCalculable ? OutreachPolicy.RateOrNa(clicked, delivered) : "N/A — delivery tracking incomplete",
-                clickedToAuditStarted = OutreachPolicy.RateOrNa(auditStarts, clicked),
+                deliveredToClicked = ratesCalculable
+                    ? OutreachPolicy.RateOrNa(clicked, deliveredExact)
+                    : "N/A — exact delivery coverage unavailable",
+                clickedToAuditStarted = clicked > 0
+                    ? OutreachPolicy.RateOrNa(auditStarts, clicked)
+                    : "N/A — zero COOK-001 CRM clicks in cohort",
                 auditStartedToCompleted = OutreachPolicy.RateOrNa(auditCompletions, auditStarts),
                 auditCompletedToSignup = OutreachPolicy.RateOrNa(signups, auditCompletions),
                 signupToCheckout = OutreachPolicy.RateOrNa(checkoutStarts, signups),
                 checkoutToPaid = OutreachPolicy.RateOrNa(paid, checkoutStarts),
-                deliveredToPaid = ratesCalculable ? OutreachPolicy.RateOrNa(paid, delivered) : "N/A — delivery tracking incomplete",
-                revenuePer100Delivered = ratesCalculable ? OutreachPolicy.RevenuePer100(0, delivered) : "N/A — delivery tracking incomplete"
+                deliveredToPaid = ratesCalculable
+                    ? OutreachPolicy.RateOrNa(paid, deliveredExact)
+                    : "N/A — exact delivery coverage unavailable",
+                revenuePer100Delivered = ratesCalculable
+                    ? OutreachPolicy.RevenuePer100(0, deliveredExact)
+                    : "N/A — exact delivery coverage unavailable"
             }
         };
     }

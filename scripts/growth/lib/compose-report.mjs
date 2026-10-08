@@ -743,21 +743,21 @@ export function defaultDecisionText({
         : 'n/a';
   const funnel = `${c.emailsSent} sent → ${c.auditClicks} clicks → ${c.auditCompletions} completed audit → ${c.verifiedCustomers} paid`;
   const gates = d.performanceGates || {};
+  // Prefer API gates (COOK-001 CRM 7d cohort). Do not re-derive from lifetime clicks or GA4.
   const firstBroken =
     gates.firstBrokenStage ||
     (() => {
-      const delivered = Number(d.outreachFunnel?.delivered ?? 0) || 0;
-      const clicks = Number(c.auditClicks || 0) || 0;
-      const starts = Number(c.auditStarts || 0) || 0;
-      const completes = Number(c.auditCompletions || 0) || 0;
-      const paid = Number(c.verifiedCustomers || 0) || 0;
+      const deliveredExact = Number(d.emailAcquisition?.delivered ?? d.deliveredExact ?? 0) || 0;
+      const clicks7d = Number(d.clicks?.last7Days ?? d.emailAcquisition?.clicks ?? 0) || 0;
       const tracking = d.deliveryTracking || 'NOT_TRACKED';
-      if (tracking === 'NOT_TRACKED' || tracking === 'CONFIGURED_AWAITING_EVENTS') return 'DELIVERY_MEASUREMENT';
-      if (delivered >= 30 && clicks / delivered < 0.02) return 'DELIVERED_TO_CLICKED';
-      if (clicks > 0 && starts <= 0) return 'CLICKED_TO_AUDIT_STARTED';
-      if (starts > 0 && completes <= 0) return 'AUDIT_STARTED_TO_COMPLETED';
-      if (completes > 0 && paid <= 0) return 'AUDIT_COMPLETED_TO_PAID';
-      if (paid <= 0 && (d.sesAcceptedThisRun || 0) > 0) return 'NO_VERIFIED_CUSTOMERS';
+      if (tracking !== 'TRACKED' || deliveredExact <= 0) return 'DELIVERY_MEASUREMENT';
+      if (clicks7d <= 0) return deliveredExact >= 30 ? 'DELIVERED_TO_CLICKED' : null;
+      const starts = Number(d.emailAcquisition?.auditStarts ?? 0) || 0;
+      const completes = Number(d.emailAcquisition?.auditCompletions ?? 0) || 0;
+      const paid = Number(c.verifiedCustomers || 0) || 0;
+      if (starts <= 0) return 'CLICKED_TO_AUDIT_STARTED';
+      if (completes <= 0) return 'AUDIT_STARTED_TO_COMPLETED';
+      if (paid <= 0) return 'AUDIT_COMPLETED_TO_PAID';
       return null;
     })();
   const acquisitionHealth =

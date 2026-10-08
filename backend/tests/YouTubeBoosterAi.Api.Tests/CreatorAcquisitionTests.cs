@@ -868,7 +868,29 @@ public class CreatorAcquisitionContactTests
             http, "https://down.cooksite.test", Array.Empty<string>(), CancellationToken.None);
         Assert.Equal("temporary_fetch_failure", result.Status);
         Assert.Equal("WEBSITE_UNREACHABLE", result.DiscoveryReason);
-        Assert.Equal(1, CreatorAcquisitionContact.BackoffDaysForOutcome(result.Status, 1));
+        Assert.Equal(3, CreatorAcquisitionContact.BackoffDaysForOutcome(result.Status, 1));
+        Assert.Equal(7, CreatorAcquisitionContact.BackoffDaysForOutcome(result.Status, 2));
+        Assert.Equal(14, CreatorAcquisitionContact.BackoffDaysForOutcome(result.Status, 3));
+        Assert.Equal(30, CreatorAcquisitionContact.BackoffDaysForOutcome(result.Status, 4));
+    }
+
+    [Fact]
+    public void TemporaryFetchFailure_ExhaustedAfterMaxAttempts()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var exhausted = Prospect(email: null) with
+        {
+            ContactSourceUrl = null,
+            ContactVerifiedAt = null,
+            ContactType = "none",
+            ContactResearchStatus = "temporary_fetch_failure",
+            ContactDiscoveryResult = "temporary_failure",
+            ContactResearchAttempts = CreatorAcquisitionContact.MaxTemporaryFetchAttempts,
+            ContactResearchNextAt = now.AddHours(-1)
+        };
+        Assert.True(CreatorAcquisitionService.IsPermanentContactExhaustion(exhausted));
+        Assert.False(CreatorAcquisitionService.IsActionableEmailDiscovery(exhausted, now));
+        Assert.Equal("TEMP_FAILURE_EXHAUSTED", CreatorAcquisitionService.ClassifyContactDiscoveryBlocker(exhausted, now));
     }
 
     [Fact]

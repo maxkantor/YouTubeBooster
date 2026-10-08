@@ -496,6 +496,51 @@ public class AcqAutomationUpgradeTests
         Assert.Equal("delivered", after!.OutreachStatus);
     }
 
+    [Fact]
+    public async Task SesDelivery_ResolvesByMessageId_WithAmazonSesSuffix()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var p = ReadyToSend("COOK-001-ses2", "ses-mid@example-creator.test", "UCses2") with
+        {
+            OutreachStatus = "sent",
+            LastContactedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            LastSesMessageId = "010001a1-test-message-id-000000"
+        };
+        await store.UpsertProspectAsync(p, CancellationToken.None);
+        var (svc, _) = CreateSendingService(store);
+        var ok = await svc.ApplySesEventResolvedAsync(
+            prospectId: null,
+            opaqueToken: null,
+            sesMessageId: "010001a1-test-message-id-000000@email.amazonses.com",
+            destinationEmail: null,
+            eventType: "delivery",
+            CancellationToken.None);
+        Assert.True(ok);
+        Assert.Equal("delivered", (await store.GetProspectAsync(p.ProspectId, CancellationToken.None))!.OutreachStatus);
+
+        // Duplicate Delivery event is idempotent — still delivered, no throw.
+        var again = await svc.ApplySesEventResolvedAsync(
+            prospectId: null,
+            opaqueToken: null,
+            sesMessageId: "010001a1-test-message-id-000000@email.amazonses.com",
+            destinationEmail: null,
+            eventType: "delivery",
+            CancellationToken.None);
+        Assert.True(again);
+        Assert.Equal("delivered", (await store.GetProspectAsync(p.ProspectId, CancellationToken.None))!.OutreachStatus);
+    }
+
+    [Fact]
+    public void NormalizeSesMessageId_StripsAmazonSuffix()
+    {
+        Assert.Equal(
+            "010001a1-abc",
+            InMemoryCreatorAcquisitionStore.NormalizeSesMessageId("010001a1-abc@email.amazonses.com"));
+        Assert.Equal(
+            "010001a1-abc",
+            InMemoryCreatorAcquisitionStore.NormalizeSesMessageId("010001a1-abc"));
+    }
+
     private static AcqApprovalRecord Approval(params AcqProspectRecord[] rows) =>
         new(
             "APR-1",

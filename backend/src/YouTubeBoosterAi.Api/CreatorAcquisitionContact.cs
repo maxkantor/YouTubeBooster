@@ -79,10 +79,22 @@ public static class CreatorAcquisitionContact
         _ => 30
     };
 
-    /// <summary>Temporary fetch failures retry sooner than permanent-looking no-email results.</summary>
+    /// <summary>
+    /// Temporary fetch failures escalate quickly so RETRY_LATER inventory is not re-burned daily.
+    /// After MaxTemporaryFetchAttempts the prospect is treated as exhausted by the caller.
+    /// </summary>
+    public const int MaxTemporaryFetchAttempts = 4;
+
+    /// <summary>Temporary fetch failures retry with escalating backoff; permanent misses stay long.</summary>
     public static int BackoffDaysForOutcome(string? status, int attemptCount) => (status ?? "").Trim().ToLowerInvariant() switch
     {
-        "temporary_fetch_failure" => 1,
+        "temporary_fetch_failure" => attemptCount switch
+        {
+            <= 1 => 3,
+            2 => 7,
+            3 => 14,
+            _ => 30
+        },
         "contact_needed" => attemptCount <= 1 ? 7 : BackoffDays(attemptCount),
         "not_found" or "form_only" or "no_public_email" => Math.Max(14, BackoffDays(attemptCount)),
         _ => BackoffDays(attemptCount)

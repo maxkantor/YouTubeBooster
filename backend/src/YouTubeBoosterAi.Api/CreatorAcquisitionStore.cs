@@ -11,6 +11,7 @@ public interface ICreatorAcquisitionStore
     Task<AcqProspectRecord?> GetProspectAsync(string prospectId, CancellationToken cancellationToken);
     Task<AcqProspectRecord?> GetByTokenAsync(string token, CancellationToken cancellationToken);
     Task<AcqProspectRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken);
+    Task<AcqProspectRecord?> GetBySesMessageIdAsync(string sesMessageId, CancellationToken cancellationToken);
     Task<AcqProspectRecord?> FindDuplicateAsync(string? channelId, string? channelUrl, string? handle, string? email, CancellationToken cancellationToken);
     Task<IReadOnlyList<AcqProspectRecord>> ListProspectsAsync(CancellationToken cancellationToken);
     Task SaveApprovalAsync(AcqApprovalRecord approval, CancellationToken cancellationToken);
@@ -33,9 +34,14 @@ public sealed class InMemoryCreatorAcquisitionStore : ICreatorAcquisitionStore
     private readonly ConcurrentDictionary<string, AcqRampPersist> _ramps = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _cohorts = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly ConcurrentDictionary<string, string> _bySesMessageId = new(StringComparer.OrdinalIgnoreCase);
+
     public Task UpsertProspectAsync(AcqProspectRecord prospect, CancellationToken cancellationToken)
     {
         _byId[prospect.ProspectId] = prospect;
+        var mid = NormalizeSesMessageId(prospect.LastSesMessageId);
+        if (!string.IsNullOrWhiteSpace(mid))
+            _bySesMessageId[mid] = prospect.ProspectId;
         return Task.CompletedTask;
     }
 
@@ -53,6 +59,27 @@ public sealed class InMemoryCreatorAcquisitionStore : ICreatorAcquisitionStore
         var key = email.Trim().ToLowerInvariant();
         return Task.FromResult(_byId.Values.FirstOrDefault(p =>
             string.Equals(p.PublicBusinessEmail?.Trim(), key, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public Task<AcqProspectRecord?> GetBySesMessageIdAsync(string sesMessageId, CancellationToken cancellationToken)
+    {
+        var mid = NormalizeSesMessageId(sesMessageId);
+        if (string.IsNullOrWhiteSpace(mid))
+            return Task.FromResult<AcqProspectRecord?>(null);
+        if (_bySesMessageId.TryGetValue(mid, out var id) && _byId.TryGetValue(id, out var row))
+            return Task.FromResult<AcqProspectRecord?>(row);
+        return Task.FromResult(_byId.Values.FirstOrDefault(p =>
+            string.Equals(NormalizeSesMessageId(p.LastSesMessageId), mid, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>Strip optional @email.amazonses.com suffix; compare case-insensitively via callers.</summary>
+    public static string NormalizeSesMessageId(string? messageId)
+    {
+        if (string.IsNullOrWhiteSpace(messageId)) return "";
+        var id = messageId.Trim();
+        var at = id.IndexOf('@');
+        if (at > 0) id = id[..at];
+        return id;
     }
 
     public Task<AcqProspectRecord?> FindDuplicateAsync(string? channelId, string? channelUrl, string? handle, string? email, CancellationToken cancellationToken)
@@ -181,6 +208,20 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
                 }
             }, cancellationToken);
         }
+        var mid = InMemoryCreatorAcquisitionStore.NormalizeSesMessageId(prospect.LastSesMessageId);
+        if (!string.IsNullOrWhiteSpace(mid))
+        {
+            await _db.PutItemAsync(new PutItemRequest
+            {
+                TableName = Table,
+                Item = new Dictionary<string, AttributeValue>
+                {
+                    ["pk"] = S($"ACQSESMSG#{mid}"),
+                    ["sk"] = S("META"),
+                    ["prospectId"] = S(prospect.ProspectId)
+                }
+            }, cancellationToken);
+        }
     }
 
     public async Task<AcqProspectRecord?> GetProspectAsync(string prospectId, CancellationToken cancellationToken)
@@ -220,6 +261,34 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
         return all.FirstOrDefault(p => string.Equals(p.PublicBusinessEmail?.Trim(), key, StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task<AcqProspectRecord?> GetBySesMessageIdAsync(string sesMessageId, CancellationToken cancellationToken)
+    {
+        var mid = InMemoryCreatorAcquisitionStore.NormalizeSesMessageId(sesMessageId);
+        if (string.IsNullOrWhiteSpace(mid)) return null;
+        var map = await _db.GetItemAsync(new GetItemRequest
+        {
+            TableName = Table,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = S($"ACQSESMSG#{mid}"),
+                ["sk"] = S("META")
+            }
+        }, cancellationToken);
+        var id = map.Item?.GetValueOrDefault("prospectId")?.S;
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            var byIndex = await GetProspectAsync(id, cancellationToken);
+            if (byIndex is not null) return byIndex;
+        }
+        // Fallback for historical sends before ACQSESMSG index existed.
+        var all = await ListProspectsAsync(cancellationToken);
+        return all.FirstOrDefault(p =>
+            string.Equals(
+                InMemoryCreatorAcquisitionStore.NormalizeSesMessageId(p.LastSesMessageId),
+                mid,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
     public async Task<AcqProspectRecord?> FindDuplicateAsync(string? channelId, string? channelUrl, string? handle, string? email, CancellationToken cancellationToken)
     {
         var all = await ListProspectsAsync(cancellationToken);
@@ -242,17 +311,25 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
 
     public async Task<IReadOnlyList<AcqProspectRecord>> ListProspectsAsync(CancellationToken cancellationToken)
     {
-        var res = await _db.ScanAsync(new ScanRequest
+        var items = new List<AcqProspectRecord>();
+        Dictionary<string, AttributeValue>? startKey = null;
+        do
         {
-            TableName = Table,
-            FilterExpression = "begins_with(pk, :p) AND sk = :sk",
-            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            var res = await _db.ScanAsync(new ScanRequest
             {
-                [":p"] = S("ACQPROSPECT#"),
-                [":sk"] = S("META")
-            }
-        }, cancellationToken);
-        return res.Items.Select(ReadProspect).OfType<AcqProspectRecord>().OrderByDescending(p => p.PriorityScore).ToArray();
+                TableName = Table,
+                FilterExpression = "begins_with(pk, :p) AND sk = :sk",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":p"] = S("ACQPROSPECT#"),
+                    [":sk"] = S("META")
+                },
+                ExclusiveStartKey = startKey
+            }, cancellationToken);
+            items.AddRange(res.Items.Select(ReadProspect).OfType<AcqProspectRecord>());
+            startKey = res.LastEvaluatedKey is { Count: > 0 } lek ? lek : null;
+        } while (startKey is not null);
+        return items.OrderByDescending(p => p.PriorityScore).ToArray();
     }
 
     public async Task SaveApprovalAsync(AcqApprovalRecord approval, CancellationToken cancellationToken)
