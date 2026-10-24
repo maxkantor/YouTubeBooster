@@ -866,15 +866,14 @@ public sealed partial class CreatorAcquisitionService
         if (followUpDue)
         {
             // Prior contact is expected. Keys without an advanced FollowUpStep are orphans
-            // from a claim that never reached CRM persistence — release and retry once.
+            // from a claim that never reached CRM persistence — force-reclaim once.
             var targetStep = Math.Max(1, p.FollowUpStep + 1);
             if (p.FollowUpStep >= targetStep)
                 return (p, false, AcqSendGuard.ReasonAlreadyFollowUp);
 
-            await ReleaseOutreachIdentityAsync(p, followUpDue: true, cancellationToken);
-            if (await ClaimOutreachIdentityAsync(p, followUpDue: true, cancellationToken))
-                return (p, true, null);
-            return (p, false, "idempotency_claimed");
+            var fuKeys = AcqSendGuard.IdempotencyKeys(p.Campaign, p.PublicBusinessEmail, p.ChannelId, targetStep);
+            await _store.ForceClaimIdempotencyKeysAsync(fuKeys, cancellationToken);
+            return (p, true, null);
         }
 
         if (HasPriorContactEvidence(all, p))
@@ -890,11 +889,10 @@ public sealed partial class CreatorAcquisitionService
             return (p, false, AcqSendGuard.ReasonAlreadyContacted);
         }
 
-        // Orphan initial claim — no CRM send evidence. Release and retry once.
-        await ReleaseOutreachIdentityAsync(p, followUpDue: false, cancellationToken);
-        if (await ClaimOutreachIdentityAsync(p, followUpDue: false, cancellationToken))
-            return (p, true, null);
-        return (p, false, "idempotency_claimed");
+        // Orphan initial claim — no CRM send evidence. Force-reclaim once.
+        var initialKeys = AcqSendGuard.IdempotencyKeys(p.Campaign, p.PublicBusinessEmail, p.ChannelId, 0);
+        await _store.ForceClaimIdempotencyKeysAsync(initialKeys, cancellationToken);
+        return (p, true, null);
     }
 
     public async Task<bool> IsGloballyUnsubscribedAsync(string email, CancellationToken cancellationToken)

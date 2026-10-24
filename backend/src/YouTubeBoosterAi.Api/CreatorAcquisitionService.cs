@@ -1500,9 +1500,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         {
             await PromoteAutomaticReadyDraftsAsync(campaign, state, cancellationToken);
             all = await _store.ListProspectsAsync(cancellationToken);
+            // Second pass is initial-send only — exclude follow-ups (they already ran above).
             var secondPass = all
                 .Where(p => string.Equals(p.Campaign, campaign, StringComparison.OrdinalIgnoreCase))
                 .Where(p => MatchesCampaignAudience(p, cfg))
+                .Where(p => !CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow))
                 .Where(p => SendLaneFor(p, DateTimeOffset.UtcNow, state, all) == "ready_to_send")
                 .OrderByDescending(p => p.PriorityScore)
                 .ToList();

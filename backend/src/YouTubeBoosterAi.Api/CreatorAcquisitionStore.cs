@@ -21,6 +21,11 @@ public interface ICreatorAcquisitionStore
     Task ReleaseIdempotencyAsync(string key, CancellationToken cancellationToken);
     /// <summary>Claim all keys or none. Rolls back partial claims on failure.</summary>
     Task<bool> TryClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken);
+    /// <summary>
+    /// Orphan repair: delete then put each key without condition_not_exists so a stuck
+    /// ACQIDEMPOTENCY row cannot permanently block an eligible send after release.
+    /// </summary>
+    Task ForceClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken);
     Task SaveCampaignFlagsAsync(string campaign, bool marketingSendingEnabled, bool complaintPause, CancellationToken cancellationToken);
     Task<(bool SendingEnabled, bool ComplaintPause)> GetCampaignFlagsAsync(string campaign, CancellationToken cancellationToken);
     Task<AcqRampPersist> GetRampAsync(string campaign, CancellationToken cancellationToken);
@@ -145,6 +150,16 @@ public sealed class InMemoryCreatorAcquisitionStore : ICreatorAcquisitionStore
             claimed.Add(key);
         }
         return true;
+    }
+
+    public async Task ForceClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
+    {
+        foreach (var key in keys.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            await ReleaseIdempotencyAsync(key, cancellationToken);
+            _idempotency[key] = 1;
+        }
+        await Task.CompletedTask;
     }
 
     public Task SaveCampaignFlagsAsync(string campaign, bool marketingSendingEnabled, bool complaintPause, CancellationToken cancellationToken)
@@ -431,22 +446,15 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
 
     public async Task ReleaseIdempotencyAsync(string key, CancellationToken cancellationToken)
     {
-        try
+        await _db.DeleteItemAsync(new DeleteItemRequest
         {
-            await _db.DeleteItemAsync(new DeleteItemRequest
+            TableName = Table,
+            Key = new Dictionary<string, AttributeValue>
             {
-                TableName = Table,
-                Key = new Dictionary<string, AttributeValue>
-                {
-                    ["pk"] = S($"ACQIDEMPOTENCY#{key}"),
-                    ["sk"] = S("META")
-                }
-            }, cancellationToken);
-        }
-        catch
-        {
-            // Best-effort release of orphan claims.
-        }
+                ["pk"] = S($"ACQIDEMPOTENCY#{key}"),
+                ["sk"] = S("META")
+            }
+        }, cancellationToken);
     }
 
     public async Task<bool> TryClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
@@ -467,6 +475,28 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
             claimed.Add(key);
         }
         return true;
+    }
+
+    public async Task ForceClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
+    {
+        var distinct = keys.Where(k => !string.IsNullOrWhiteSpace(k))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var key in distinct)
+        {
+            await ReleaseIdempotencyAsync(key, cancellationToken);
+            await _db.PutItemAsync(new PutItemRequest
+            {
+                TableName = Table,
+                Item = new Dictionary<string, AttributeValue>
+                {
+                    ["pk"] = S($"ACQIDEMPOTENCY#{key}"),
+                    ["sk"] = S("META"),
+                    ["createdAt"] = S(DateTimeOffset.UtcNow.ToString("O")),
+                    ["reclaimed"] = S("orphan")
+                }
+            }, cancellationToken);
+        }
     }
 
     public async Task SaveCampaignFlagsAsync(string campaign, bool marketingSendingEnabled, bool complaintPause, CancellationToken cancellationToken)
