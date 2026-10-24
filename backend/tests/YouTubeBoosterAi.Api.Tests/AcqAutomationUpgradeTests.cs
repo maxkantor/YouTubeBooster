@@ -542,6 +542,88 @@ public class AcqAutomationUpgradeTests
     }
 
     [Fact]
+    public async Task OrphanIdempotencyClaim_IsReleasedSoEligibleProspectCanSend()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var p = Prospect("orphan-1", "orphan@channel.test", "UCorphan");
+        await store.UpsertProspectAsync(p, CancellationToken.None);
+        await svc.PromoteAutomaticReadyDraftsAsync(CreatorAcquisitionCampaigns.Cook001, null, CancellationToken.None);
+
+        // Simulate orphan claim left after a prior failed send (keys exist, CRM never marked sent).
+        var keys = AcqSendGuard.IdempotencyKeys(CreatorAcquisitionCampaigns.Cook001, p.PublicBusinessEmail, p.ChannelId, 0);
+        Assert.True(await store.TryClaimIdempotencyKeysAsync(keys, CancellationToken.None));
+        var before = await store.GetProspectAsync(p.ProspectId, CancellationToken.None);
+        Assert.Null(before!.LastContactedAt);
+
+        var result = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, false);
+        Assert.Equal(1, result.SesAttempted);
+        Assert.Equal(1, result.Sent);
+        Assert.Equal(1, ses.SendRawCalls);
+        var after = await store.GetProspectAsync(p.ProspectId, CancellationToken.None);
+        Assert.NotNull(after!.LastContactedAt);
+        Assert.False(string.IsNullOrWhiteSpace(after.LastSesMessageId));
+    }
+
+    [Fact]
+    public async Task PartialIdempotencyClaim_DoesNotPermanentlyBlockSiblingChannel()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        // Claim email key only (partial) — all-or-nothing claim must roll back.
+        var keys = AcqSendGuard.IdempotencyKeys("COOK-001", "partial@channel.test", "UCpartial", 0);
+        Assert.True(await store.TryClaimIdempotencyAsync(keys[0], CancellationToken.None));
+        Assert.False(await store.TryClaimIdempotencyKeysAsync(keys, CancellationToken.None));
+        // After failed multi-claim, pre-existing key remains; releasing both clears orphans for retry.
+        foreach (var k in keys)
+            await store.ReleaseIdempotencyAsync(k, CancellationToken.None);
+        Assert.True(await store.TryClaimIdempotencyKeysAsync(keys, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task OrphanFollowUpClaim_IsReleasedSoDueFollowUpCanSend()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var initialAt = DateTimeOffset.UtcNow.AddDays(-5);
+        var p = ReadyToSend("fu-orphan-1", "fu-orphan@channel.test", "UCfuorphan") with
+        {
+            OutreachStatus = "sent",
+            LastContactedAt = initialAt,
+            FollowUpStep = 0,
+            NextFollowUpAt = initialAt.AddDays(4),
+            LastSesMessageId = "ses-initial-fu-orphan",
+            Subject = "Quick follow-up on the free audit for Example Cook",
+            Body = "Following up on the audit idea for your cooking channel."
+        };
+        await store.UpsertProspectAsync(p, CancellationToken.None);
+        Assert.True(CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow));
+
+        // Simulate orphan fu1 claim left after a prior failed follow-up attempt.
+        var fuKeys = AcqSendGuard.IdempotencyKeys(CreatorAcquisitionCampaigns.Cook001, p.PublicBusinessEmail, p.ChannelId, 1);
+        Assert.True(await store.TryClaimIdempotencyKeysAsync(fuKeys, CancellationToken.None));
+
+        var result = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, false);
+        Assert.Equal(1, result.SesAttempted);
+        Assert.Equal(1, result.Sent);
+        Assert.Equal(1, ses.SendRawCalls);
+        var after = await store.GetProspectAsync(p.ProspectId, CancellationToken.None);
+        Assert.Equal(1, after!.FollowUpStep);
+        Assert.NotNull(after.LastContactedAt);
+        Assert.True(after.LastContactedAt > initialAt);
+    }
+
+    [Fact]
+    public void WeekendHold_StopReason_WhenWeekendsDisallowed()
+    {
+        Assert.False(CreatorAcquisitionScoring.IsWeekdayEastern(
+            new DateTimeOffset(2026, 10, 24, 16, 0, 0, TimeSpan.Zero))); // Saturday UTC afternoon = Saturday ET
+        Assert.True(CreatorAcquisitionScoring.IsWeekdayEastern(
+            new DateTimeOffset(2026, 10, 23, 16, 0, 0, TimeSpan.Zero))); // Friday
+    }
+
+    [Fact]
     public void SnsEnvelope_DetectsSpacedTypeNotification()
     {
         // Real AWS SNS HTTPS payloads put spaces around the colon.

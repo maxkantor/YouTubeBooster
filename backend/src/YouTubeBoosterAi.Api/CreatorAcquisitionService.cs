@@ -1118,7 +1118,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         var reasons = new List<string>();
         var state = await LoadStateAsync(campaign, cancellationToken);
         if (!state.AllowWeekends && !CreatorAcquisitionScoring.IsWeekdayEastern(DateTimeOffset.UtcNow))
-            return new AcqWeekdaySendResult(state.MarketingSendingEnabled, 0, 0, 0, ["weekend_eastern"]);
+            return new AcqWeekdaySendResult(
+                state.MarketingSendingEnabled, 0, 0, 0, ["weekend_eastern"],
+                state.DailyLimit, null, null, 0, 0, null, false, 0, 0, 0, 0,
+                null, campaign, false, "WEEKEND_HOLD");
         if (!state.MarketingSendingEnabled)
             return new AcqWeekdaySendResult(false, 0, 0, 0, ["marketing_sending_disabled"]);
 
@@ -1266,6 +1269,14 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             var history = AcqSendGuard.HistoryBlockReason(all, p, CreatorAcquisitionScoring.IsFollowUpDue(p, DateTimeOffset.UtcNow));
             if (history is not null)
             {
+                var inherited = AcqSendGuard.InheritPriorContact(p, all);
+                if (!ReferenceEquals(inherited, p)
+                    && (inherited.LastContactedAt is not null
+                        || !string.Equals(inherited.OutreachStatus, p.OutreachStatus, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await _store.UpsertProspectAsync(inherited, cancellationToken);
+                    p = inherited;
+                }
                 Skip(p.ProspectId, history);
                 continue;
             }
@@ -1352,8 +1363,14 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             }
             if (!await ClaimOutreachIdentityAsync(p, followUpDue, cancellationToken))
             {
-                Skip(p.ProspectId, followUpDue ? AcqSendGuard.ReasonAlreadyFollowUp : AcqSendGuard.ReasonAlreadyContacted);
-                continue;
+                var (reconciled, claimed, skipReason) =
+                    await ReconcileFailedIdentityClaimAsync(p, followUpDue, all.ToList(), cancellationToken);
+                p = reconciled;
+                if (!claimed)
+                {
+                    Skip(p.ProspectId, skipReason ?? AcqSendGuard.ReasonAlreadyContacted);
+                    continue;
+                }
             }
 
             var unsub = UnsubscribeUrl(p.PublicBusinessEmail!, hmac);
@@ -1363,6 +1380,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             var mime = CreatorAcquisitionMail.Build(prepared, state, Site(), unsub, tracked);
             if (CreatorAcquisitionMail.TagsContainPii(mime.SesTags))
             {
+                await ReleaseOutreachIdentityAsync(p, followUpDue, cancellationToken);
                 Skip(p.ProspectId, "pii_in_tags");
                 continue;
             }
@@ -1371,6 +1389,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             sesAttempted++;
             if (followUpDue) followupSesAttempted++;
             else initialSesAttempted++;
+            string? sesMessageId = null;
             try
             {
                 var sendReq = new SendRawEmailRequest
@@ -1384,8 +1403,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                         : state.ConfigSet
                 };
                 var sesRes = await _ses.SendRawEmailAsync(sendReq, cancellationToken);
+                sesMessageId = sesRes.MessageId;
                 var sentAt = DateTimeOffset.UtcNow;
-                var followUpDueNow = CreatorAcquisitionScoring.IsFollowUpDue(p, sentAt);
+                // Use the lane decision that claimed identity — do not re-derive IsFollowUpDue
+                // after SES or a successful follow-up can persist FollowUpStep=0 and re-queue forever.
                 string? ticketId = null;
                 try
                 {
@@ -1418,10 +1439,10 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                     EmailVariant = variant,
                     CohortRunId = cohortRunId,
                     LastSesMessageId = sesRes.MessageId,
-                    FollowUpStep = followUpDueNow
+                    FollowUpStep = followUpDue
                         ? Math.Min(2, p.FollowUpStep + 1)
                         : 0,
-                    NextFollowUpAt = followUpDueNow
+                    NextFollowUpAt = followUpDue
                         ? (p.FollowUpStep + 1 >= 2 ? null : sentAt.AddDays(5))
                         : sentAt.AddDays(4),
                     UpdatedAt = sentAt
@@ -1440,7 +1461,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 {
                 }
                 sent++;
-                if (followUpDueNow) followupSesAccepted++;
+                if (followUpDue) followupSesAccepted++;
                 else initialSesAccepted++;
                 if (p.ApprovalId is not null)
                     sentThisRunByApproval[p.ApprovalId] = extraThisRun + 1;
@@ -1448,7 +1469,12 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             }
             catch (Exception ex)
             {
-                Skip(p.ProspectId, $"ses:{ex.Message}");
+                // Never release after SES accepted — that enables duplicate retries.
+                if (string.IsNullOrWhiteSpace(sesMessageId))
+                    await ReleaseOutreachIdentityAsync(p, followUpDue, cancellationToken);
+                Skip(p.ProspectId, string.IsNullOrWhiteSpace(sesMessageId)
+                    ? $"ses:{ex.Message}"
+                    : $"ses_persist:{ex.Message}");
             }
         }
 
@@ -1487,6 +1513,14 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 var p = candidate;
                 if (AcqSendGuard.HistoryBlockReason(all, p, followUpDue: false) is { } hist)
                 {
+                    var inherited = AcqSendGuard.InheritPriorContact(p, all);
+                    if (!ReferenceEquals(inherited, p)
+                        && (inherited.LastContactedAt is not null
+                            || !string.Equals(inherited.OutreachStatus, p.OutreachStatus, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        await _store.UpsertProspectAsync(inherited, cancellationToken);
+                        p = inherited;
+                    }
                     Skip(p.ProspectId, hist);
                     continue;
                 }
@@ -1505,8 +1539,14 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 }
                 if (!await ClaimOutreachIdentityAsync(p, followUpDue: false, cancellationToken))
                 {
-                    Skip(p.ProspectId, AcqSendGuard.ReasonAlreadyContacted);
-                    continue;
+                    var (reconciled, claimed, skipReason) =
+                        await ReconcileFailedIdentityClaimAsync(p, followUpDue: false, all.ToList(), cancellationToken);
+                    p = reconciled;
+                    if (!claimed)
+                    {
+                        Skip(p.ProspectId, skipReason ?? AcqSendGuard.ReasonAlreadyContacted);
+                        continue;
+                    }
                 }
                 var variant = OutreachPolicy.PersistVariant(p.EmailVariant, p.ProspectId);
                 var unsub = UnsubscribeUrl(p.PublicBusinessEmail!, hmac);
@@ -1516,11 +1556,13 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 var mime = CreatorAcquisitionMail.Build(prepared, state, Site(), unsub, tracked);
                 if (CreatorAcquisitionMail.TagsContainPii(mime.SesTags))
                 {
+                    await ReleaseOutreachIdentityAsync(p, followUpDue: false, cancellationToken);
                     Skip(p.ProspectId, "pii_in_tags");
                     continue;
                 }
                 sesAttempted++;
                 initialSesAttempted++;
+                string? sesMessageId = null;
                 try
                 {
                     var sendReq = new SendRawEmailRequest
@@ -1534,6 +1576,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                             : state.ConfigSet
                     };
                     var sesRes = await _ses.SendRawEmailAsync(sendReq, cancellationToken);
+                    sesMessageId = sesRes.MessageId;
                     var sentAt = DateTimeOffset.UtcNow;
                     string? ticketId = null;
                     try
@@ -1573,7 +1616,11 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
                 }
                 catch (Exception ex)
                 {
-                    Skip(p.ProspectId, $"ses:{ex.Message}");
+                    if (string.IsNullOrWhiteSpace(sesMessageId))
+                        await ReleaseOutreachIdentityAsync(p, followUpDue: false, cancellationToken);
+                    Skip(p.ProspectId, string.IsNullOrWhiteSpace(sesMessageId)
+                        ? $"ses:{ex.Message}"
+                        : $"ses_persist:{ex.Message}");
                 }
             }
         }
@@ -1641,7 +1688,19 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         else if (budgetHit && readyAfterSend > 0)
             stopReason = "EXECUTION_BUDGET";
         else if (stuckReady)
-            stopReason = sesAttempted > 0 ? "READY_SEND_FAILED" : "STUCK_READY_NO_PROGRESS";
+        {
+            var historyBlocked =
+                reasonCounts.GetValueOrDefault("ALREADY_CONTACTED")
+                + reasonCounts.GetValueOrDefault("DUPLICATE_EMAIL")
+                + reasonCounts.GetValueOrDefault("DUPLICATE_CHANNEL")
+                + reasonCounts.GetValueOrDefault("IDEMPOTENCY_CLAIMED")
+                + reasonCounts.GetValueOrDefault("RECONCILED_PRIOR_CONTACT");
+            stopReason = sesAttempted > 0
+                ? "READY_SEND_FAILED"
+                : historyBlocked > 0
+                    ? "READY_BLOCKED_BY_IDENTITY"
+                    : "STUCK_READY_NO_PROGRESS";
+        }
         else if (moreWork)
             stopReason = "CONTINUE";
         else if (fruitlessUpstream && replenish.ContactDiscoveryAttempted > 0 && replenish.EmailsFound == 0)
@@ -1657,7 +1716,7 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         else
             stopReason = "COMPLETE";
         if (stopReason is "CONTACT_DISCOVERY_NO_PROGRESS" or "CONTACT_SOURCES_EXHAUSTED" or "DRAFT_REFRESH_ONLY"
-            or "STUCK_READY_NO_PROGRESS" or "READY_SEND_FAILED")
+            or "STUCK_READY_NO_PROGRESS" or "READY_SEND_FAILED" or "READY_BLOCKED_BY_IDENTITY")
         {
             foreach (var kv in discoveryBlockers.OrderByDescending(x => x.Value).Take(8))
                 reasonCounts[$"DISCOVERY_{kv.Key}"] = kv.Value;

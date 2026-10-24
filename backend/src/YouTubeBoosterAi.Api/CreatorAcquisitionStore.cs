@@ -17,6 +17,10 @@ public interface ICreatorAcquisitionStore
     Task SaveApprovalAsync(AcqApprovalRecord approval, CancellationToken cancellationToken);
     Task<AcqApprovalRecord?> GetApprovalAsync(string approvalId, CancellationToken cancellationToken);
     Task<bool> TryClaimIdempotencyAsync(string key, CancellationToken cancellationToken);
+    Task<bool> IdempotencyKeyExistsAsync(string key, CancellationToken cancellationToken);
+    Task ReleaseIdempotencyAsync(string key, CancellationToken cancellationToken);
+    /// <summary>Claim all keys or none. Rolls back partial claims on failure.</summary>
+    Task<bool> TryClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken);
     Task SaveCampaignFlagsAsync(string campaign, bool marketingSendingEnabled, bool complaintPause, CancellationToken cancellationToken);
     Task<(bool SendingEnabled, bool ComplaintPause)> GetCampaignFlagsAsync(string campaign, CancellationToken cancellationToken);
     Task<AcqRampPersist> GetRampAsync(string campaign, CancellationToken cancellationToken);
@@ -116,6 +120,32 @@ public sealed class InMemoryCreatorAcquisitionStore : ICreatorAcquisitionStore
 
     public Task<bool> TryClaimIdempotencyAsync(string key, CancellationToken cancellationToken) =>
         Task.FromResult(_idempotency.TryAdd(key, 1));
+
+    public Task<bool> IdempotencyKeyExistsAsync(string key, CancellationToken cancellationToken) =>
+        Task.FromResult(_idempotency.ContainsKey(key));
+
+    public Task ReleaseIdempotencyAsync(string key, CancellationToken cancellationToken)
+    {
+        _idempotency.TryRemove(key, out _);
+        return Task.CompletedTask;
+    }
+
+    public async Task<bool> TryClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
+    {
+        if (keys.Count == 0) return true;
+        var claimed = new List<string>();
+        foreach (var key in keys.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!await TryClaimIdempotencyAsync(key, cancellationToken))
+            {
+                foreach (var prior in claimed)
+                    await ReleaseIdempotencyAsync(prior, cancellationToken);
+                return false;
+            }
+            claimed.Add(key);
+        }
+        return true;
+    }
 
     public Task SaveCampaignFlagsAsync(string campaign, bool marketingSendingEnabled, bool complaintPause, CancellationToken cancellationToken)
     {
@@ -383,6 +413,60 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
         {
             return false;
         }
+    }
+
+    public async Task<bool> IdempotencyKeyExistsAsync(string key, CancellationToken cancellationToken)
+    {
+        var res = await _db.GetItemAsync(new GetItemRequest
+        {
+            TableName = Table,
+            Key = new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = S($"ACQIDEMPOTENCY#{key}"),
+                ["sk"] = S("META")
+            }
+        }, cancellationToken);
+        return res.Item is { Count: > 0 };
+    }
+
+    public async Task ReleaseIdempotencyAsync(string key, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _db.DeleteItemAsync(new DeleteItemRequest
+            {
+                TableName = Table,
+                Key = new Dictionary<string, AttributeValue>
+                {
+                    ["pk"] = S($"ACQIDEMPOTENCY#{key}"),
+                    ["sk"] = S("META")
+                }
+            }, cancellationToken);
+        }
+        catch
+        {
+            // Best-effort release of orphan claims.
+        }
+    }
+
+    public async Task<bool> TryClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
+    {
+        if (keys.Count == 0) return true;
+        var distinct = keys.Where(k => !string.IsNullOrWhiteSpace(k))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var claimed = new List<string>();
+        foreach (var key in distinct)
+        {
+            if (!await TryClaimIdempotencyAsync(key, cancellationToken))
+            {
+                foreach (var prior in claimed)
+                    await ReleaseIdempotencyAsync(prior, cancellationToken);
+                return false;
+            }
+            claimed.Add(key);
+        }
+        return true;
     }
 
     public async Task SaveCampaignFlagsAsync(string campaign, bool marketingSendingEnabled, bool complaintPause, CancellationToken cancellationToken)

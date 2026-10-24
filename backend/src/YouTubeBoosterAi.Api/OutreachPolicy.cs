@@ -120,6 +120,8 @@ public static class OutreachPolicy
             "already_processing" => "ALREADY_CONTACTED",
             "already_sent_follow_up" => "ALREADY_CONTACTED",
             "idempotency" => "ALREADY_CONTACTED",
+            "idempotency_claimed" => "IDEMPOTENCY_CLAIMED",
+            "reconciled_prior_contact" => "RECONCILED_PRIOR_CONTACT",
             "replied" => "REPLIED",
             "converted" => "CONVERTED",
             "global_suppression_unsubscribed" => "GLOBAL_SUPPRESSION_UNSUBSCRIBED",

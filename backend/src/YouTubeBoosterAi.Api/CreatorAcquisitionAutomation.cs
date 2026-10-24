@@ -818,12 +818,83 @@ public sealed partial class CreatorAcquisitionService
     {
         var step = followUpDue ? Math.Max(1, p.FollowUpStep + 1) : 0;
         var keys = AcqSendGuard.IdempotencyKeys(p.Campaign, p.PublicBusinessEmail, p.ChannelId, step);
-        foreach (var key in keys)
+        // Claim all-or-nothing so a partial email claim cannot permanently block a ready prospect.
+        return await _store.TryClaimIdempotencyKeysAsync(keys, cancellationToken);
+    }
+
+    internal async Task ReleaseOutreachIdentityAsync(AcqProspectRecord p, bool followUpDue, CancellationToken cancellationToken)
+    {
+        var step = followUpDue ? Math.Max(1, p.FollowUpStep + 1) : 0;
+        foreach (var key in AcqSendGuard.IdempotencyKeys(p.Campaign, p.PublicBusinessEmail, p.ChannelId, step))
+            await _store.ReleaseIdempotencyAsync(key, cancellationToken);
+    }
+
+    /// <summary>
+    /// True when an initial-send idempotency key exists for this identity but no CRM prospect
+    /// with the same email/channel has LastContactedAt — a classic orphan after SES/claim races.
+    /// </summary>
+    internal static bool HasPriorContactEvidence(
+        IReadOnlyList<AcqProspectRecord> all,
+        AcqProspectRecord candidate)
+    {
+        var email = AcqSendGuard.NormalizeEmail(candidate.PublicBusinessEmail);
+        var channel = (candidate.ChannelId ?? "").Trim();
+        foreach (var other in all)
         {
-            if (!await _store.TryClaimIdempotencyAsync(key, cancellationToken))
-                return false;
+            if (other.LastContactedAt is null) continue;
+            var sameEmail = email.Length > 0
+                && string.Equals(AcqSendGuard.NormalizeEmail(other.PublicBusinessEmail), email, StringComparison.OrdinalIgnoreCase);
+            var sameChannel = channel.Length > 0
+                && string.Equals((other.ChannelId ?? "").Trim(), channel, StringComparison.OrdinalIgnoreCase);
+            if (sameEmail || sameChannel) return true;
         }
-        return true;
+        return candidate.LastContactedAt is not null;
+    }
+
+    /// <summary>
+    /// After a failed claim: inherit sibling send state when evidence exists; otherwise release
+    /// orphan keys so an eligible prospect can proceed once.
+    /// Follow-ups always have prior contact — orphan = fu keys held while FollowUpStep was never advanced.
+    /// Returns (prospect, claimedOk, skipReason).
+    /// </summary>
+    internal async Task<(AcqProspectRecord Prospect, bool Claimed, string? SkipReason)> ReconcileFailedIdentityClaimAsync(
+        AcqProspectRecord p,
+        bool followUpDue,
+        IReadOnlyList<AcqProspectRecord> all,
+        CancellationToken cancellationToken)
+    {
+        if (followUpDue)
+        {
+            // Prior contact is expected. Keys without an advanced FollowUpStep are orphans
+            // from a claim that never reached CRM persistence — release and retry once.
+            var targetStep = Math.Max(1, p.FollowUpStep + 1);
+            if (p.FollowUpStep >= targetStep)
+                return (p, false, AcqSendGuard.ReasonAlreadyFollowUp);
+
+            await ReleaseOutreachIdentityAsync(p, followUpDue: true, cancellationToken);
+            if (await ClaimOutreachIdentityAsync(p, followUpDue: true, cancellationToken))
+                return (p, true, null);
+            return (p, false, "idempotency_claimed");
+        }
+
+        if (HasPriorContactEvidence(all, p))
+        {
+            var inherited = AcqSendGuard.InheritPriorContact(p, all);
+            if (!ReferenceEquals(inherited, p)
+                && (inherited.LastContactedAt is not null
+                    || !string.Equals(inherited.OutreachStatus, p.OutreachStatus, StringComparison.OrdinalIgnoreCase)))
+            {
+                await _store.UpsertProspectAsync(inherited, cancellationToken);
+                return (inherited, false, "reconciled_prior_contact");
+            }
+            return (p, false, AcqSendGuard.ReasonAlreadyContacted);
+        }
+
+        // Orphan initial claim — no CRM send evidence. Release and retry once.
+        await ReleaseOutreachIdentityAsync(p, followUpDue: false, cancellationToken);
+        if (await ClaimOutreachIdentityAsync(p, followUpDue: false, cancellationToken))
+            return (p, true, null);
+        return (p, false, "idempotency_claimed");
     }
 
     public async Task<bool> IsGloballyUnsubscribedAsync(string email, CancellationToken cancellationToken)
