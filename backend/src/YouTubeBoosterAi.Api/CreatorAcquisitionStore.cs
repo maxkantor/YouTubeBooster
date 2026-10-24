@@ -446,15 +446,22 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
 
     public async Task ReleaseIdempotencyAsync(string key, CancellationToken cancellationToken)
     {
-        await _db.DeleteItemAsync(new DeleteItemRequest
+        try
         {
-            TableName = Table,
-            Key = new Dictionary<string, AttributeValue>
+            await _db.DeleteItemAsync(new DeleteItemRequest
             {
-                ["pk"] = S($"ACQIDEMPOTENCY#{key}"),
-                ["sk"] = S("META")
-            }
-        }, cancellationToken);
+                TableName = Table,
+                Key = new Dictionary<string, AttributeValue>
+                {
+                    ["pk"] = S($"ACQIDEMPOTENCY#{key}"),
+                    ["sk"] = S("META")
+                }
+            }, cancellationToken);
+        }
+        catch (AmazonDynamoDBException)
+        {
+            // Older role policies omitted DeleteItem; ForceClaim Put-overwrite covers orphans.
+        }
     }
 
     public async Task<bool> TryClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
@@ -479,12 +486,13 @@ public sealed class DynamoCreatorAcquisitionStore : ICreatorAcquisitionStore
 
     public async Task ForceClaimIdempotencyKeysAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
     {
+        // Put without condition_not_exists overwrites orphans. Do not DeleteItem here —
+        // production Lambda historically lacked dynamodb:DeleteItem on ybai-support.
         var distinct = keys.Where(k => !string.IsNullOrWhiteSpace(k))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         foreach (var key in distinct)
         {
-            await ReleaseIdempotencyAsync(key, cancellationToken);
             await _db.PutItemAsync(new PutItemRequest
             {
                 TableName = Table,
