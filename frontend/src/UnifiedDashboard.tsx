@@ -69,6 +69,28 @@ function formatNumber(n: number): string {
   return String(n);
 }
 
+/** Parse YouTube API ISO-8601 duration (e.g. PT45S, PT1M2S) to seconds. */
+function parseIso8601DurationSeconds(iso: string | null | undefined): number | null {
+  const raw = (iso || '').trim();
+  if (!raw) return null;
+  const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/i.exec(raw);
+  if (!m) return null;
+  const hours = Number(m[1] || 0);
+  const mins = Number(m[2] || 0);
+  const secs = Number(m[3] || 0);
+  const total = hours * 3600 + mins * 60 + secs;
+  return Number.isFinite(total) ? total : null;
+}
+
+/** Shorts ≈ ≤60s. Fall back to title hints when duration is missing. */
+function isYoutubeShort(video: PublicVideo): boolean {
+  const sec = parseIso8601DurationSeconds(video.duration);
+  if (sec != null && sec > 0) return sec <= 60;
+  return /\b#?shorts?\b/i.test(video.title || '');
+}
+
+type RunnerFormatFilter = 'all' | 'videos' | 'shorts';
+
 /** Copy text to clipboard; works in secure and fallback contexts. Returns true if successful. */
 async function copyToClipboard(text: string): Promise<boolean> {
   if (!text) return false;
@@ -226,7 +248,11 @@ export function UnifiedDashboard({
   /** Synced when videos load so Start can play before React commits runnerLoaded. */
   const runnerLoadedRef = useRef(false);
   const [runnerIndex, setRunnerIndex] = useState(0);
+  /** Always-current playlist position — player/interval callbacks must not close over stale runnerIndex. */
+  const runnerIndexRef = useRef(0);
   const [runnerLog, setRunnerLog] = useState<string[]>([]);
+  const [runnerFormatFilter, setRunnerFormatFilter] = useState<RunnerFormatFilter>('all');
+  const runnerFormatFilterRef = useRef<RunnerFormatFilter>('all');
   const [runnerSpeed, setRunnerSpeed] = useState(2);
   const [runnerWatchSeconds, setRunnerWatchSeconds] = useState(30);
   const [runnerShuffle, setRunnerShuffle] = useState(false);
@@ -274,6 +300,14 @@ export function UnifiedDashboard({
   useEffect(() => {
     runnerRunningRef.current = runnerRunning;
   }, [runnerRunning]);
+
+  useEffect(() => {
+    runnerIndexRef.current = runnerIndex;
+  }, [runnerIndex]);
+
+  useEffect(() => {
+    runnerFormatFilterRef.current = runnerFormatFilter;
+  }, [runnerFormatFilter]);
 
   useEffect(() => {
     if (!authSession?.idToken || premiumUnlocked || !shouldAutoStartUnlockCheckout()) return;
@@ -668,9 +702,17 @@ export function UnifiedDashboard({
     };
   }, [isPreviewMode]);
 
-  function getRunnerVideos() {
+  function getRunnerVideosUnfiltered() {
     if (runnerVideosRef.current.length) return runnerVideosRef.current;
     return (pyVideos ?? []).filter((v) => v && v.video_id);
+  }
+
+  function getRunnerVideos() {
+    const list = getRunnerVideosUnfiltered();
+    const filter = runnerFormatFilterRef.current;
+    if (filter === 'shorts') return list.filter(isYoutubeShort);
+    if (filter === 'videos') return list.filter((v) => !isYoutubeShort(v));
+    return list;
   }
 
   function buildPlayOrder() {
@@ -720,7 +762,8 @@ export function UnifiedDashboard({
     if (!runnerLoadedRef.current && !runnerLoaded) return null;
     const list = getRunnerVideos();
     const order = runnerPlayOrderRef.current.length ? runnerPlayOrderRef.current : buildPlayOrder();
-    const idx = order.length ? order[Math.min(runnerIndex, order.length - 1)] : -1;
+    const pos = runnerIndexRef.current;
+    const idx = order.length ? order[Math.min(pos, order.length - 1)] : -1;
     return idx >= 0 ? list[idx] : null;
   }
 
@@ -966,6 +1009,7 @@ export function UnifiedDashboard({
     setRunnerDesiredSpeed(1);
     setRunnerActualSpeed(1);
     setRunnerPosition(0);
+    runnerIndexRef.current = 0;
     setRunnerIndex(0);
     runnerMarkWatchStarted();
     runnerScheduleYouTubeWatchLimit();
@@ -1068,18 +1112,25 @@ export function UnifiedDashboard({
 
     // One selected video: loop the same clip from 0 after each watch limit.
     if (order.length === 1) {
+      runnerIndexRef.current = 0;
+      suppressRunnerIndexEffectRef.current = true;
       setRunnerIndex(0);
       runnerPlayCurrent();
       return;
     }
 
-    const next = (runnerIndex + 1) % order.length;
+    // Use ref — interval/player callbacks close over a stale runnerIndex and would stick on index 1.
+    const next = (runnerIndexRef.current + 1) % order.length;
     // New shuffled order each full cycle when shuffle is on.
     if (next === 0 && runnerShuffle) {
       runnerPlayOrderRef.current = buildPlayOrder();
       setRunnerPlayOrder([...runnerPlayOrderRef.current]);
     }
+    runnerIndexRef.current = next;
+    // Play immediately; suppress the index effect so we don't double-load.
+    suppressRunnerIndexEffectRef.current = true;
     setRunnerIndex(next);
+    runnerPlayCurrent();
   }
 
   function runnerPlayCurrent() {
@@ -1200,13 +1251,15 @@ export function UnifiedDashboard({
               runnerApplySpeed();
               return;
             }
-            // ENDED
+            // ENDED — Shorts often finish before the watch-seconds limit.
             if (state === w.YT.PlayerState.ENDED) {
+              if (runnerWatchLimitFiredRef.current) return;
               setRunnerSessionEnded((v: number) => v + 1);
               runnerAdvance();
               return;
             }
             // Unexpected pause while runner is active — resume (rate/buffer quirks).
+            // Do not resume near end / after ENDED (Shorts would loop until the watch limit).
             if (state === w.YT.PlayerState.PAUSED) {
               if (!runnerRunningRef.current || runnerWatchLimitFiredRef.current) return;
               runnerClearResumeTimer();
@@ -1216,7 +1269,20 @@ export function UnifiedDashboard({
                 if (!runnerRunningRef.current || runnerWatchLimitFiredRef.current) return;
                 try {
                   const p = (globalThis as any).__ybPlayerRef?.player;
-                  if (p && typeof p.playVideo === 'function') p.playVideo();
+                  if (!p || typeof p.playVideo !== 'function') return;
+                  const yt = (window as any).YT;
+                  if (yt?.PlayerState != null && typeof p.getPlayerState === 'function') {
+                    const ps = p.getPlayerState();
+                    if (ps === yt.PlayerState.ENDED || ps === yt.PlayerState.PLAYING) return;
+                  }
+                  if (typeof p.getDuration === 'function' && typeof p.getCurrentTime === 'function') {
+                    const dur = p.getDuration();
+                    const cur = p.getCurrentTime();
+                    if (typeof dur === 'number' && dur > 0 && typeof cur === 'number' && dur - cur < 1.25) {
+                      return;
+                    }
+                  }
+                  p.playVideo();
                 } catch {
                   // ignore
                 }
@@ -2331,7 +2397,7 @@ export function UnifiedDashboard({
                     }}
                   />
                   <p className="muted" style={{ marginTop: 12, fontSize: 13 }}>
-                    Video picker · runner log · mark issues
+                    Video picker · format filter · mark issues
                   </p>
                 </div>
               </div>
@@ -2399,6 +2465,29 @@ export function UnifiedDashboard({
                   />
                 </label>
                 <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                  Format
+                  <select
+                    value={runnerFormatFilter}
+                    disabled={runnerRunning}
+                    onChange={(e) => {
+                      const next = e.target.value as RunnerFormatFilter;
+                      setRunnerFormatFilter(next);
+                      runnerFormatFilterRef.current = next;
+                      if (runnerLoadedRef.current || runnerVideosRef.current.length) {
+                        runnerIndexRef.current = 0;
+                        setRunnerIndex(0);
+                        runnerPlayOrderRef.current = buildPlayOrder();
+                        setRunnerPlayOrder([...runnerPlayOrderRef.current]);
+                      }
+                    }}
+                    style={{ minWidth: 110 }}
+                  >
+                    <option value="all">All</option>
+                    <option value="videos">Long videos</option>
+                    <option value="shorts">Shorts</option>
+                  </select>
+                </label>
+                <label className="info-pill" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                   <input type="checkbox" checked={runnerShuffle} onChange={(e) => setRunnerShuffle(e.target.checked)} />
                   Shuffle
                 </label>
@@ -2416,10 +2505,17 @@ export function UnifiedDashboard({
                     }
                     runnerLoadedRef.current = true;
                     setRunnerLoaded(true);
+                    runnerIndexRef.current = 0;
                     setRunnerIndex(0);
-                  runnerPlayOrderRef.current = buildPlayOrder();
-                  setRunnerPlayOrder(runnerPlayOrderRef.current);
-                    appendRunnerLog(`Loaded ${v.length} videos.`);
+                    runnerPlayOrderRef.current = buildPlayOrder();
+                    setRunnerPlayOrder(runnerPlayOrderRef.current);
+                    const filtered = getRunnerVideos().length;
+                    appendRunnerLog(
+                      `Loaded ${v.length} uploads` +
+                        (runnerFormatFilterRef.current === 'all'
+                          ? '.'
+                          : ` (${filtered} in ${runnerFormatFilterRef.current} filter).`)
+                    );
                   }}
                 >
                   {pyVideosLoading ? '…' : '🔄'} Load Videos
@@ -2454,6 +2550,7 @@ export function UnifiedDashboard({
                       runnerLoadedRef.current = true;
                       setRunnerLoaded(true);
                       suppressRunnerIndexEffectRef.current = true;
+                      runnerIndexRef.current = 0;
                       setRunnerIndex(0);
                       runnerPlayOrderRef.current = buildPlayOrder();
                       setRunnerPlayOrder(runnerPlayOrderRef.current);
@@ -2484,6 +2581,7 @@ export function UnifiedDashboard({
                     runnerLoadedRef.current = true;
                     setRunnerLoaded(true);
                     suppressRunnerIndexEffectRef.current = true;
+                    runnerIndexRef.current = 0;
                     setRunnerIndex(0);
                     runnerPlayOrderRef.current = buildPlayOrder();
                     setRunnerPlayOrder(runnerPlayOrderRef.current);
@@ -2652,7 +2750,14 @@ export function UnifiedDashboard({
               </div>
 
               <div className="surface" style={{ marginTop: 12, padding: 16 }}>
-                <h3 className="dashboard-section-h3">Video picker (leave all unchecked to play all)</h3>
+                <h3 className="dashboard-section-h3">
+                  Video picker
+                  {runnerFormatFilter === 'all'
+                    ? ' (leave all unchecked to play all)'
+                    : runnerFormatFilter === 'shorts'
+                      ? ' — Shorts only'
+                      : ' — long videos only'}
+                </h3>
                 <div className="runner-video-picker-list">
                   {getRunnerVideos().map((v) => (
                     <label key={v.video_id} className="runner-video-picker-row">
@@ -2677,16 +2782,21 @@ export function UnifiedDashboard({
                         width={80}
                         height={45}
                       />
-                      <span className="runner-video-picker-title">{v.title}</span>
+                      <span className="runner-video-picker-title">
+                        {v.title}
+                        {isYoutubeShort(v) ? (
+                          <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
+                            Short
+                          </span>
+                        ) : null}
+                      </span>
                     </label>
                   ))}
-                </div>
-              </div>
-
-              <div className="surface" style={{ marginTop: 12, padding: 16 }}>
-                <h3 className="dashboard-section-h3">Runner Log</h3>
-                <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace', fontSize: 12, opacity: 0.9 }}>
-                  {runnerLog.length ? runnerLog.join('\n') : '—'}
+                  {!getRunnerVideos().length && (runnerLoaded || runnerVideosRef.current.length) ? (
+                    <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                      No uploads match this format filter. Switch Format to All or Load Videos again.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
