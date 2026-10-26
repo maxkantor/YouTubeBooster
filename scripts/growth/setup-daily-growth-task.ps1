@@ -1,17 +1,20 @@
 <#
 .SYNOPSIS
-    Setup Windows Scheduled Task for YouTubeBooster Daily Growth Automation
+    Setup Windows Scheduled Task — BACKUP for YouTubeBooster Daily Growth
 
 .DESCRIPTION
-    Creates, queries, triggers, or removes the Windows Scheduled Task:
-    "YouTubeBooster Daily Growth".
-    Runs Monday-Friday at 8:00 AM (or specified time) without needing Cursor active.
+    Primary trigger is Cursor Automation "YouTubeBooster daily paid growth"
+    (Mon–Fri 8:00 AM America/New_York).
+
+    This Windows task is the local BACKUP: it runs later the same morning so a
+    disabled/rate-limited Cursor Automation still produces the Admin email +
+    COOK-001 weekday send when this PC is on.
 
 .PARAMETER Action
     Register (default), Unregister, Status, or RunNow.
 
 .PARAMETER Time
-    Start time in 24-hour HH:mm format (default: "08:00").
+    Backup start time HH:mm (default: "08:30" — after Cursor's 08:00).
 
 .EXAMPLE
     .\scripts\growth\setup-daily-growth-task.ps1 -Action Register
@@ -25,7 +28,7 @@ param(
     [ValidateSet("Register", "Unregister", "Status", "RunNow")]
     [string]$Action = "Register",
 
-    [string]$Time = "08:00"
+    [string]$Time = "08:30"
 )
 
 $TaskName = "YouTubeBooster Daily Growth"
@@ -37,12 +40,15 @@ function Show-Status {
     $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($existing) {
         $info = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
+        $resultHex = if ($null -ne $info.LastTaskResult) { ("0x{0:X8}" -f [uint32]$info.LastTaskResult) } else { "n/a" }
         Write-Host "Task Name:        $($existing.TaskName)" -ForegroundColor Green
         Write-Host "State:            $($existing.State)" -ForegroundColor Green
+        Write-Host "Role:             BACKUP (Cursor Automation is primary at 08:00 ET)" -ForegroundColor Cyan
         Write-Host "Last Run Time:    $($info.LastRunTime)"
-        Write-Host "Last Result:      $($info.LastTaskResult)"
+        Write-Host "Last Result:      $($info.LastTaskResult) ($resultHex)"
         Write-Host "Next Run Time:    $($info.NextRunTime)"
         Write-Host "Script:           $RunnerPs1"
+        Write-Host "Log folder:       $(Join-Path $RepoRoot 'docs\growth\logs')"
     } else {
         Write-Host "Task '$TaskName' is NOT registered." -ForegroundColor Yellow
     }
@@ -61,7 +67,7 @@ switch ($Action) {
         } else {
             Write-Host "Triggering scheduled task '$TaskName'..." -ForegroundColor Cyan
             Start-ScheduledTask -TaskName $TaskName
-            Start-Sleep -Seconds 2
+            Start-Sleep -Seconds 3
             Show-Status
         }
     }
@@ -77,6 +83,10 @@ switch ($Action) {
     }
 
     "Register" {
+        if (-not (Test-Path $RunnerPs1)) {
+            throw "Runner script missing: $RunnerPs1"
+        }
+
         $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
         if ($existing) {
             Write-Host "Task '$TaskName' already exists. Updating..." -ForegroundColor Yellow
@@ -84,26 +94,36 @@ switch ($Action) {
         }
 
         $parsedTime = [datetime]::ParseExact($Time, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
-        $trigger = New-ScheduledTaskTrigger -Daily -At $parsedTime
+        # Weekdays only — matches Cursor Automation Mon–Fri 08:00 ET primary.
+        $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $parsedTime
 
         $powershellExe = (Get-Command powershell.exe).Source
-        $argumentList = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$RunnerPs1`""
-        $taskAction = New-ScheduledTaskAction -Execute $powershellExe -Argument $argumentList -WorkingDirectory $RepoRoot
+        $argumentList = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$RunnerPs1`""
+        $taskAction = New-ScheduledTaskAction -Execute $powershellExe -Argument $argumentList -WorkingDirectory "$RepoRoot"
 
-        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 45) -WakeToRun
+        $settings = New-ScheduledTaskSettingsSet `
+            -AllowStartIfOnBatteries `
+            -DontStopIfGoingOnBatteries `
+            -StartWhenAvailable `
+            -ExecutionTimeLimit (New-TimeSpan -Minutes 45) `
+            -WakeToRun `
+            -MultipleInstances IgnoreNew
 
-        $principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType S4U
+        # Interactive: runs in the logged-on user session (reliable PATH / AWS creds).
+        # Falls back notes: if the PC is locked/asleep past catch-up, StartWhenAvailable still applies.
+        $principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType Interactive -RunLevel Limited
 
         Register-ScheduledTask -TaskName $TaskName `
             -Trigger $trigger `
             -Action $taskAction `
             -Settings $settings `
             -Principal $principal `
-            -Description "YouTubeBooster AI Autonomous Daily Growth Automation (Daily including weekends at $Time)" | Out-Null
+            -Description "BACKUP for Cursor Automation 'YouTubeBooster daily paid growth'. Primary = Cursor 08:00 ET weekdays; this task = $Time ET weekdays (Admin email + COOK-001)." | Out-Null
 
-        Write-Host "Scheduled task '$TaskName' successfully registered!" -ForegroundColor Green
-        Write-Host "Schedule: Every day (including weekends) at $Time" -ForegroundColor Cyan
-        Write-Host "Catch-up: Will run automatically on wake/boot if missed." -ForegroundColor Cyan
+        Write-Host "Scheduled task '$TaskName' registered as BACKUP." -ForegroundColor Green
+        Write-Host "Primary:  Cursor Automation Mon-Fri 08:00 ET" -ForegroundColor Cyan
+        Write-Host "Backup:   Windows task Mon-Fri $Time ET (this PC must be on / logged in)" -ForegroundColor Cyan
+        Write-Host "Catch-up: StartWhenAvailable if the PC was asleep at $Time." -ForegroundColor Cyan
         Write-Host ""
         Show-Status
     }
