@@ -7,7 +7,7 @@ Agents must append every experiment here. Do not delete history.
 - **EXP-001** — post-checkout guest activation — eval **2026-08-17 Inconclusive**; **2026-08-19** growth report now reads `ybai-purchases` + `ybai-users` entitlements (no PII). Still **0** verified product-attributed payments. Next eval on first verified checkout/payment or **2026-08-24**. Funnel stage: post-purchase activation
 - **EXP-002** — SEO/growth pages: above-the-fold channel form → `/demo` (**Keep** lock review 2026-08-31; low SEO landing traffic; treatment unchanged) — funnel stage: acquisition / SEO (**main** treatment)
 - **EXP-003** — `/youtube-channel-analyzer` — **reclassified nested** under EXP-002 (same Acquisition/SEO locked stage; page remains live; not independently collecting) — eval **2026-08-19** page-level only
-- **EXP-004** — mini-audit share + sample paid report — **Keep** lock review 2026-08-31 (0 COOK-001 clicks; still collecting). COOK-001 ramp **10→20→30**/day; hold at 10 until 3 healthy days and ≥30 sends.
+- **EXP-004** — mini-audit share + sample paid report — **Keep** (58 lifetime CRM SENT, 1 click, 0 paid; **DELIVERABILITY SAFETY PAUSE** bounce_rate blocks weekday-send until Max clears). COOK-001 automatic mode; max 2 sends when gate green.
 
 ## Locked stages (do not launch overlapping treatments)
 
@@ -41,6 +41,20 @@ Do **not** start another Acquisition/SEO landing or form CRO while EXP-002 or EX
 Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded separately from the date).
 
 ## Log
+
+### 2026-10-27 — DELIVERABILITY SAFETY PAUSE blocks COOK-001 (blocking Max)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-001 **Inconclusive** (0 verified product-attributed payments). EXP-002 **Keep** (7d GA4 through 2026-10-26: 36 session_start events, 1 eligible EXP-002 SEO landing session, 2 audit_started). EXP-003 **Keep** (0 analyzer sessions /7d, 1 /30d). EXP-004 **Keep** (58 lifetime CRM SENT, 1 lifetime click, 0 paid; **distribution blocked**). |
+| Primary bottleneck | **Founder outreach distribution** — `health_stop:bounce_rate` / CRM `DELIVERABILITY SAFETY PAUSE` (2 bounces / 56 SES accepted ≈ 3.6% vs 3% gate). Checkout→paid still 0 verified customers. |
+| Distribution | **NOT EXECUTED.** Weekday-send invoked 1×; SES accepted **0**; skip reason `health_stop:bounce_rate`. SES accepted **this run: 0**. Lifetime CRM SENT: **58** (unchanged). |
+| Blocking owner approval | **Required.** (1) Acknowledge bounce policy and clear COOK-001 deliverability safety pause (or approve one-time override with max **2** sends). (2) On green gate: auto weekday-send to verified mailto **@thedefineddish** (COOK-001-140c578e) and **@lovelemonsfood** (COOK-001-7755b2cf) — both OFFICIAL_MAILTO probed 2026-10-27. |
+| GA4 7d (events) | session_start **36** · audit_started **2** · audit_completed **2** · pricing_viewed **9** · checkout_started **0** (data through 2026-10-26 ET) |
+| GA4 30d (events) | session_start **205** · checkout_started **2** · pricing_viewed **42** |
+| Verified customers | **0** external (product-attributed Stripe). New customers **this run: 0**. |
+| Verified revenue | **$0.00** net (product-attributed) |
+| Evaluation date | EXP-001: first verified payment. EXP-002/003: continue lock execution. EXP-004: next eval on first outreach-attributed audit or after safety pause cleared + 10 healthy send days. |
 
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
