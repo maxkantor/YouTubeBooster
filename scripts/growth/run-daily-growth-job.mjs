@@ -21,6 +21,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getAdminReportSentToday } from './lib/admin-report-once.mjs';
 import { etDateParts, weekdayNameForYmd } from './lib/time.mjs';
 import { parseActiveExperiments } from './lib/experiment-report.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
@@ -35,6 +36,7 @@ function parseArgs(argv) {
     dryRun: false,
     force: false,
     skipEmail: false,
+    forceEmail: false,
     maxSends: 100
   };
   for (let i = 0; i < argv.length; i++) {
@@ -42,6 +44,7 @@ function parseArgs(argv) {
     if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--force') opts.force = true;
     else if (a === '--skip-email') opts.skipEmail = true;
+    else if (a === '--force-email') opts.forceEmail = true;
     else if (a === '--max') opts.maxSends = Math.max(1, Math.min(500, Number(argv[++i] || 100)));
   }
   return opts;
@@ -367,6 +370,7 @@ function composeAndSendEmail(snapshotPath, distPath, evalPath, notesPath, opts) 
     args.push('--dry-run');
     log('(--dry-run / --skip-email set: printing preview without sending via SES)');
   }
+  if (opts.forceEmail) args.push('--force-email');
 
   const res = spawnSync(process.execPath, args, { encoding: 'utf8', cwd: ROOT });
   log(`Report generator output:\n${res.stdout || res.stderr || '(empty)'}`);
@@ -387,6 +391,18 @@ async function main() {
   log(`=======================================================`);
 
   fs.mkdirSync(LOG_DIR, { recursive: true });
+
+  // Cursor Automation (cloud) + Windows backup (local) share this SSM marker.
+  if (!opts.dryRun && !opts.forceEmail && !opts.force) {
+    const prior = getAdminReportSentToday(todayYmd);
+    if (prior.alreadySent) {
+      log(
+        `Skipping: Admin growth report already sent for ${todayYmd} ` +
+          `(${prior.source}; messageId=${prior.record?.messageId || 'n/a'}). No second email.`
+      );
+      process.exit(0);
+    }
+  }
 
   const lockRes = acquireLock();
   if (!lockRes.ok) {

@@ -2,7 +2,7 @@
 
 **Name:** YouTubeBooster daily paid growth  
 **Schedule (primary):** Monday–Friday **8:00 AM America/New_York** (Cursor Automation)  
-**Schedule (backup):** Monday–Friday **8:30 AM** local Windows Task `YouTubeBooster Daily Growth` via `scripts/growth/setup-daily-growth-task.ps1` (Admin email + COOK-001 only; keep Automation Active)  
+**Schedule (backup):** Monday–Friday **8:30 AM** local Windows Task `YouTubeBooster Daily Growth` via `scripts/growth/setup-daily-growth-task.ps1` (Admin email + COOK-001 only; keep Automation Active). Deduped via SSM `/youtubebooster/growth/last-admin-report` so cloud + Windows never send two Admin emails the same ET day.  
 **Repo:** `maxkantor/YouTubeBooster` · branch `main`  
 **Notify:** Full Admin email after every run → `scripts/growth/compose-and-send-growth-email.mjs`  
 **North star:** verified external paying customers (product Stripe only)  

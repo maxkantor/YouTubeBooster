@@ -19,15 +19,18 @@
  *   --ship-file path  JSON: change, experiment, url, primaryMetric, attribution, commit, amplify, verification, kind
  *   --distribution-file path  JSON acquisition lead: executed, channel, audience, attributedVisits, activations, checkoutStarts, newCustomersThisRun, existingCustomers, customersObservedInWindow, experimentAttributedCustomers, verifiedRevenue, requiredOwnerApproval, blockingApproval, exactActionPrepared
  *   --subject-prefix  Override subject prefix
+ *   --force-email     Send even if today's Admin report was already sent (ET)
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { getAdminReportSentToday, markAdminReportSentToday } from './lib/admin-report-once.mjs';
 import { composeGrowthReport } from './lib/compose-report.mjs';
 import { parseActiveExperiments } from './lib/experiment-report.mjs';
 import { loadCrmAcquisitionSummary } from './lib/load-crm-acquisition.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
+import { etDateParts } from './lib/time.mjs';
 import { sendAdminGrowthEmail } from './notify-admin-email.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,7 +51,8 @@ function parseArgs(argv) {
     evaluationsFile: null,
     distributionFile: null,
     subjectPrefix: 'YouTubeBooster Growth',
-    skipCollect: false
+    skipCollect: false,
+    forceEmail: false
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -64,6 +68,7 @@ function parseArgs(argv) {
     else if (a === '--distribution-file') out.distributionFile = argv[++i];
     else if (a === '--subject-prefix') out.subjectPrefix = argv[++i] ?? out.subjectPrefix;
     else if (a === '--skip-collect') out.skipCollect = true;
+    else if (a === '--force-email') out.forceEmail = true;
   }
   return out;
 }
@@ -124,6 +129,24 @@ const invokedAsCli =
 if (invokedAsCli) {
   (async () => {
   const args = parseArgs(process.argv.slice(2));
+  const todayYmd = etDateParts().ymd;
+  if (!args.dryRun && !args.forceEmail) {
+    const prior = getAdminReportSentToday(todayYmd);
+    if (prior.alreadySent) {
+      console.log(
+        JSON.stringify({
+          ok: true,
+          skipped: true,
+          reason: 'admin_report_already_sent_today',
+          ymd: todayYmd,
+          prior: prior.record,
+          source: prior.source
+        })
+      );
+      process.exit(0);
+    }
+  }
+
   let notes = args.notes;
   if (args.notesFile) notes = fs.readFileSync(args.notesFile, 'utf8');
 
@@ -289,6 +312,12 @@ if (invokedAsCli) {
       body: report.text,
       htmlBody: report.html
     });
+    const marker = markAdminReportSentToday({
+      ymd: todayYmd,
+      messageId: result.messageId,
+      subject: result.subjectSent ?? report.subject,
+      source: process.env.GROWTH_REPORT_SOURCE || 'compose-and-send'
+    });
     console.log(
       JSON.stringify(
         {
@@ -297,7 +326,8 @@ if (invokedAsCli) {
           subject: result.subjectSent ?? report.subject,
           snapshotPath: snapPath,
           warnings: report.warnings,
-          activeExperiments: experiments.map((e) => e.idLine)
+          activeExperiments: experiments.map((e) => e.idLine),
+          dedupeMarked: marker
         },
         null,
         2
