@@ -600,6 +600,19 @@ public class OutreachPolicyTests
     }
 
     [Fact]
+    public void Cook001LifetimeCounts_TripBounceRateHold_NotSampleTooSmall()
+    {
+        // Production evidence ~Oct 27 2026: 58 contacted, 2 bounced → ≥3% stop.
+        var health = OutreachPolicy.HealthFromCounts(sent: 58, bounced: 2, complaints: 0, unsubscribes: 5);
+        Assert.True(health.EnoughSample);
+        Assert.True(health.Unhealthy);
+        Assert.Equal("bounce_rate", health.Reason);
+        Assert.NotEqual("sample_too_small", health.Reason);
+        // Unsubscribe also exceeds 2%, but bounce wins the reason priority.
+        Assert.True(health.UnsubscribeRate is >= OutreachPolicy.UnsubscribeStop);
+    }
+
+    [Fact]
     public void Variant_PersistsAndIsDeterministic()
     {
         var a = OutreachPolicy.AssignVariant("COOK-001-P001");

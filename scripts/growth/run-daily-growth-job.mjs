@@ -163,6 +163,7 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const send = sendData.send || {};
   const funnel = sendData.funnel || {};
   const cf = sendData.cohortFunnel || {};
+  const crm = sendData.crmSummary || sendData.summary || {};
   const m7 = snapshot?.explicit7d || snapshot?.windows?.['7d']?.metrics || {};
   const checkoutStarts = m7.checkout_started?.value ?? m7.checkout_started ?? 0;
   const auditStarts = m7.audit_started?.value ?? m7.audit_started ?? 0;
@@ -170,6 +171,30 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const sesAttempted = Number(send.sesAttempted ?? send.attempted ?? 0) || 0;
   const evaluated = Number(send.evaluated ?? 0) || 0;
   const reasonCounts = send.reasonCounts || aggregateSkipReasons(send.reasons || []);
+  const reasons = send.reasons || [];
+  const healthStop = reasons.find((r) => /health_stop/i.test(String(r)));
+  const healthReason = healthStop
+    ? String(healthStop).replace(/^.*health_stop:/i, '').trim()
+    : null;
+  const configuredDailyLimit = Number(
+    crm.dailyLimit ?? sendData.dailyLimit ?? send.configuredDailyLimit ?? 100
+  ) || 100;
+  // API historically returned DailyLimit=0 on health_stop — treat that as capacity held, not misconfig.
+  const reportedDailyLimit = Number(send.dailyLimit);
+  const dailyLimit =
+    Number.isFinite(reportedDailyLimit) && reportedDailyLimit > 0
+      ? reportedDailyLimit
+      : configuredDailyLimit;
+  const rampBlockReason =
+    healthReason ||
+    send.rampBlockReason ||
+    crm.automaticPauseReason ||
+    crm.acquisitionStatus?.bottleneck ||
+    null;
+  const deliverabilityPaused =
+    Boolean(healthReason) ||
+    /DELIVERABILITY|SAFETY_PAUSED|bounce_rate|complaint_rate/i.test(String(rampBlockReason || '')) ||
+    crm.automaticSending === false && /DELIVERABILITY|SAFETY/i.test(String(crm.automaticPauseReason || ''));
   const crmClicks = Number(cf.clicked ?? funnel.clicked ?? 0) || 0;
   const crmAuditStarts = Number(cf.auditStarts ?? 0) || 0;
   const crmAuditCompletions = Number(cf.auditCompletions ?? 0) || 0;
@@ -180,15 +205,28 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const contactAttempted = Number(send.contactDiscoveryAttempted ?? 0) || 0;
   const publicEmailsFound = Number(send.emailsFound ?? 0) || 0;
   const draftsPrepared = Number(send.draftsPrepared ?? 0) || 0;
-  const finalStopReason = send.finalStopReason || send.stopReason || null;
+  let finalStopReason = send.finalStopReason || send.stopReason || null;
+  if (deliverabilityPaused && (!finalStopReason || finalStopReason === 'NO_MORE_WORK')) {
+    finalStopReason = 'DELIVERABILITY_PAUSE';
+  }
 
   let exactAction = `COOK-001 daily SES outreach (${sesAccepted} accepted / ${sesAttempted} SES attempts; ${evaluated} prospects evaluated; stop=${finalStopReason || 'n/a'}; discovered=${creatorsDiscovered}; contactAttempts=${contactAttempted}; publicEmails=${publicEmailsFound}; drafts=${draftsPrepared}; invocations=${send.invocations ?? 0})`;
   if (opts.dryRun) {
     exactAction = `[DRY-RUN] COOK-001 daily probe (${(sendData.verifiedProspectIds || []).length} verified candidates)`;
+  } else if (deliverabilityPaused) {
+    exactAction =
+      `DELIVERABILITY SAFETY PAUSE — sending held. Reason: ${rampBlockReason || healthReason || 'deliverability'}. ` +
+      `Configured DailyLimit ${configuredDailyLimit} (maximum). Effective send capacity this run: 0. ` +
+      `Discovery/SES not executed while paused. Stop: ${finalStopReason}.`;
   } else if (sesAccepted === 0) {
     const dominant = dominantSkipReason(reasonCounts);
     exactAction = `DISTRIBUTION FAILED / BLOCKED — SES accepted 0. Dominant skip: ${dominant}. Evaluated ${evaluated}, SES attempts ${sesAttempted}. Stop: ${finalStopReason || 'n/a'}.`;
   }
+
+  const automaticSending = crm.automaticSending === true && !deliverabilityPaused;
+  const automaticPauseReason = deliverabilityPaused
+    ? crm.automaticPauseReason || `DELIVERABILITY SAFETY PAUSE (${rampBlockReason || 'unknown'})`
+    : crm.automaticPauseReason || null;
 
   return {
     // Truthful: distribution executed ONLY when SES accepted >= 1.
@@ -207,7 +245,7 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     customersObservedInWindow: 0,
     experimentAttributedCustomers: crmCustomers > 0 ? String(crmCustomers) : '0',
     verifiedRevenue: '$0.00',
-    requiredOwnerApproval: 'none',
+    requiredOwnerApproval: deliverabilityPaused ? 'Review deliverability pause before re-enabling sends' : 'none',
     blockingApproval: false,
     exactActionPrepared: exactAction,
     sesAcceptedThisRun: sesAccepted,
@@ -224,15 +262,21 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     invocations: Number(send.invocations ?? 0) || 0,
     finalStopReason: finalStopReason,
     moreWork: send.moreWork === true,
-    skippedByReason: (send.reasons || []).slice(0, 40),
+    skippedByReason: reasons.slice(0, 40),
     skipReasonCounts: reasonCounts,
-    pipeline: sendData.pipeline || null,
+    pipeline: sendData.pipeline || crm.pipeline || null,
+    automaticSending,
+    sendingMode: crm.sendingMode || 'automatic',
+    automaticPauseReason,
+    dailyLimit: dailyLimit,
+    dailyRemaining: deliverabilityPaused ? 0 : Number(crm.dailyRemaining ?? Math.max(0, dailyLimit - (crm.sentToday || 0))) || 0,
+    crmSummaryOk: crm.ok !== false && (sendData.crmSummary || crm.dailyLimit != null),
     outreachFunnel: {
-      drafted: funnel.drafted ?? 0,
+      drafted: funnel.drafted ?? crm.draftsGenerated ?? 0,
       approved: funnel.approved ?? 0,
-      sent: funnel.sent ?? 0,
-      delivered: funnel.delivered ?? 0,
-      clicked: funnel.clicked ?? 0,
+      sent: funnel.sent ?? crm.sent ?? 0,
+      delivered: funnel.delivered ?? crm.delivered ?? 0,
+      clicked: funnel.clicked ?? crm.clicked ?? 0,
       converted: funnel.converted ?? 0
     },
     cohort: {
@@ -248,18 +292,20 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
       verifiedCustomers: crmCustomers,
       verifiedRevenue: 0,
       sameCohortTracking: 'crm_prospect_status',
-      dailyLimit: send.dailyLimit ?? 100,
-      nextRamp: 20,
-      rampBlockReason: send.rampBlockReason || 'sample_too_small'
+      dailyLimit: dailyLimit,
+      nextRamp: deliverabilityPaused ? 'held — deliverability pause' : 'n/a — saved DailyLimit is a maximum',
+      rampBlockReason: rampBlockReason || (deliverabilityPaused ? 'bounce_rate' : null)
     },
     deliverability: {
-      bounceRate: 'N/A (sample < 30)',
-      complaintRate: 'N/A',
-      unsubscribeRate: 'N/A',
-      dailyLimit: send.dailyLimit ?? 100,
-      nextRampDecision: send.rampBlockReason
-        ? `hold; ${send.rampBlockReason}`
-        : 'hold; sample_too_small'
+      bounceRate: deliverabilityPaused && healthReason === 'bounce_rate' ? 'at/above stop threshold (≥3%)' : 'see CRM',
+      complaintRate: deliverabilityPaused && healthReason === 'complaint_rate' ? 'at/above stop threshold' : 'see CRM',
+      unsubscribeRate: 'see CRM',
+      dailyLimit: dailyLimit,
+      nextRampDecision: deliverabilityPaused
+        ? `PAUSED — ${rampBlockReason || healthReason}; configured DailyLimit ${configuredDailyLimit} remains the maximum; effective send capacity 0 until pause clears`
+        : rampBlockReason
+          ? `hold; ${rampBlockReason}`
+          : `DailyLimit ${configuredDailyLimit} is a maximum (not a send target)`
     }
   };
 }
@@ -268,6 +314,13 @@ function aggregateSkipReasons(reasons) {
   const counts = {};
   for (const line of reasons || []) {
     const raw = String(line);
+    // Prefer full-line classification so "health_stop:bounce_rate" is not sliced to "bounce_rate"
+    // and mis-labeled NOT_QUALIFIED.
+    if (/health_stop/i.test(raw)) {
+      const code = normalizeSkipReason(raw);
+      counts[code] = (counts[code] || 0) + 1;
+      continue;
+    }
     let codePart = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
     if (raw.toLowerCase().includes(':ses:')) {
       codePart = raw.slice(raw.toLowerCase().indexOf(':ses:') + 1);
@@ -281,6 +334,11 @@ function aggregateSkipReasons(reasons) {
 function normalizeSkipReason(raw) {
   const r = String(raw || '').trim().toLowerCase();
   if (r.startsWith('ses:')) return r.includes('reject') ? 'SES_REJECTED' : 'SES_ERROR';
+  if (r.includes('health_stop')) {
+    if (r.includes('bounce')) return 'SAFETY_PAUSED_BOUNCE';
+    if (r.includes('complaint')) return 'SAFETY_PAUSED_COMPLAINT';
+    return 'SAFETY_PAUSED';
+  }
   const map = {
     cooldown: 'COOLDOWN',
     already_contacted: 'ALREADY_CONTACTED',
@@ -309,9 +367,11 @@ function normalizeSkipReason(raw) {
     draft_incomplete: 'NOT_QUALIFIED',
     content_hash_changed: 'NOT_QUALIFIED',
     pii_in_tags: 'NOT_QUALIFIED',
-    complaint_pause: 'SUPPRESSED'
+    complaint_pause: 'SUPPRESSED',
+    bounce_rate: 'SAFETY_PAUSED_BOUNCE',
+    complaint_rate: 'SAFETY_PAUSED_COMPLAINT',
+    unsubscribe_rate: 'SAFETY_PAUSED'
   };
-  if (r.startsWith('health_stop')) return 'SUPPRESSED';
   return map[r] || 'NOT_QUALIFIED';
 }
 

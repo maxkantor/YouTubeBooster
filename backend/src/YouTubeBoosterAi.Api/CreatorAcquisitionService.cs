@@ -1160,7 +1160,15 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
             if (health.Reason is "bounce_rate" or "complaint_rate")
             {
                 await _store.SaveCampaignFlagsAsync(campaign, state.MarketingSendingEnabled, true, cancellationToken);
-                return new AcqWeekdaySendResult(true, 0, 0, 0, [$"health_stop:{health.Reason}"], 0, cohortRunId, health.Reason);
+                // Keep configured DailyLimit in the result (do not report 0 — that confuses
+                // "effective capacity held at 0" with "campaign limit misconfigured to 0").
+                // StopReason must be DELIVERABILITY_PAUSE, not a silent null→NO_MORE_WORK.
+                return new AcqWeekdaySendResult(
+                    state.MarketingSendingEnabled, 0, 0, 0,
+                    [$"health_stop:{health.Reason}"],
+                    state.DailyLimit, cohortRunId, health.Reason,
+                    0, 0, null, false, 0, 0, 0, 0,
+                    null, campaign, false, "DELIVERABILITY_PAUSE");
             }
             if (state.RampEnabled)
             {

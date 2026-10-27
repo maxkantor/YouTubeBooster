@@ -308,13 +308,17 @@ if (!args.dryRun) {
         (combined.noPublicEmail || 0) + (Number(json.noPublicEmail ?? json.NoPublicEmail ?? 0) || 0);
       combined.reasons = combined.reasons.concat(json.reasons || json.Reasons || []).slice(0, 80);
       combined.dailyLimit = json.dailyLimit ?? json.DailyLimit ?? combined.dailyLimit;
+      combined.rampBlockReason = json.rampBlockReason ?? json.RampBlockReason ?? combined.rampBlockReason;
       combined.cohortRunId = json.cohortRunId ?? json.CohortRunId ?? combined.cohortRunId;
       combined.moreWork = json.moreWork === true || json.MoreWork === true;
       combined.stopReason = json.stopReason ?? json.StopReason ?? combined.stopReason;
       combined.invocations += 1;
       const sentThis = Number(json.sent ?? json.Sent ?? 0) || 0;
       if (!combined.moreWork) {
-        combined.finalStopReason = combined.stopReason || (sentThis > 0 ? 'COMPLETE' : 'NO_MORE_WORK');
+        const healthHeld = (combined.reasons || []).some((r) => /health_stop/i.test(String(r)));
+        combined.finalStopReason =
+          combined.stopReason ||
+          (healthHeld ? 'DELIVERABILITY_PAUSE' : sentThis > 0 ? 'COMPLETE' : 'NO_MORE_WORK');
         break;
       }
       if (i === maxInvocations - 1) {
@@ -329,6 +333,15 @@ if (!args.dryRun) {
 }
 
 const summaryAfter = await adminJson(cookie, '/api/admin/crm/acquisition/summary');
+const crmSummary = summaryAfter.json || {};
+// Prefer API stopReason (e.g. DELIVERABILITY_PAUSE) over runner fallback NO_MORE_WORK.
+if (send && typeof send === 'object') {
+  const reasons = send.reasons || [];
+  if (reasons.some((r) => /health_stop/i.test(String(r))) && (!send.stopReason || send.finalStopReason === 'NO_MORE_WORK')) {
+    send.stopReason = 'DELIVERABILITY_PAUSE';
+    send.finalStopReason = 'DELIVERABILITY_PAUSE';
+  }
+}
 console.log(
   JSON.stringify({
     ok: true,
@@ -340,7 +353,37 @@ console.log(
     probes: probes.slice(0, 40),
     approval,
     send,
+    dailyLimit: crmSummary.dailyLimit ?? send?.dailyLimit ?? 100,
+    sendEligible: crmSummary.sendEligible ?? crmSummary.approvedReadyToSend ?? 0,
+    pipeline: crmSummary.pipeline || null,
+    cohortFunnel: crmSummary.cohortFunnel || null,
+    funnel: {
+      drafted: crmSummary.draftsGenerated ?? crmSummary.drafts ?? 0,
+      approved: crmSummary.approved ?? 0,
+      sent: crmSummary.sent ?? 0,
+      delivered: crmSummary.delivered ?? 0,
+      clicked: crmSummary.clicked ?? 0,
+      converted: crmSummary.converted ?? 0
+    },
+    crmSummary: {
+      ok: summaryAfter.ok === true,
+      dailyLimit: crmSummary.dailyLimit ?? 100,
+      dailyRemaining: crmSummary.dailyRemaining ?? 0,
+      sentToday: crmSummary.sentToday ?? 0,
+      automaticSending: crmSummary.automaticSending === true,
+      automaticPauseReason: crmSummary.automaticPauseReason || null,
+      sendingMode: crmSummary.sendingMode || null,
+      acquisitionStatus: crmSummary.acquisitionStatus || null,
+      pipeline: crmSummary.pipeline || null,
+      draftsGenerated: crmSummary.draftsGenerated ?? 0,
+      sent: crmSummary.sent ?? 0,
+      delivered: crmSummary.delivered ?? 0,
+      bounced: crmSummary.bounced ?? 0,
+      complained: crmSummary.complained ?? 0,
+      clicked: crmSummary.clicked ?? 0,
+      deliveryUnknown: crmSummary.deliveryUnknown ?? 0
+    },
     summaryBefore: summaryBefore.json?.northStar || summaryBefore.json?.cohortFunnel || null,
-    summaryAfter: summaryAfter.json?.northStar || summaryAfter.json?.cohortFunnel || null
+    summaryAfter: crmSummary.northStar || crmSummary.cohortFunnel || null
   })
 );

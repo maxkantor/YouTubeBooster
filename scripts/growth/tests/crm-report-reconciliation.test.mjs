@@ -141,6 +141,69 @@ test('normalizeDistribution preserves pipeline when CRM summary ok', () => {
   assert.equal(pipelineMetric(d.pipeline.eligibleNow, d.crmSummaryOk), '0');
 });
 
+test('deliverability pause does not report AUTOMATIC ACQUISITION RUNNING', () => {
+  const d = normalizeDistribution({
+    executed: false,
+    distributionAttempted: false,
+    sesAcceptedThisRun: 0,
+    sesAttemptedThisRun: 0,
+    prospectsEvaluated: 0,
+    sendingMode: 'automatic',
+    automaticSending: false,
+    automaticPauseReason: 'DELIVERABILITY SAFETY PAUSE',
+    dailyLimit: 100,
+    dailyRemaining: 0,
+    crmSummaryOk: true,
+    finalStopReason: 'DELIVERABILITY_PAUSE',
+    skipReasonCounts: { SAFETY_PAUSED_BOUNCE: 1 },
+    exactActionPrepared:
+      'DELIVERABILITY SAFETY PAUSE — sending held. Reason: bounce_rate. Configured DailyLimit 100.',
+    deliverability: {
+      dailyLimit: 100,
+      nextRampDecision: 'PAUSED — bounce_rate; configured DailyLimit 100 remains the maximum; effective send capacity 0 until pause clears'
+    },
+    cohort: { dailyLimit: 100, rampBlockReason: 'bounce_rate', emailsSent: 0 }
+  });
+  assert.equal(d.automaticSending, false);
+  assert.match(d.crmActionMessage, /PAUSED/);
+  assert.doesNotMatch(d.crmActionMessage, /^AUTOMATIC ACQUISITION: RUNNING$/);
+  assert.equal(d.dailyLimit, 100);
+  assert.equal(d.dailyRemaining, 0);
+  assert.equal(d.executed, false);
+
+  const lines = formatCrmAcquisitionText(d);
+  const text = lines.join('\n');
+  assert.match(text, /PAUSED/);
+  assert.doesNotMatch(text, /Automatic: RUNNING/);
+  assert.match(text, /Daily remaining: 0 \/ 100/);
+});
+
+test('sendingMode automatic alone does not mark acquisition RUNNING when paused', () => {
+  const d = normalizeDistribution({
+    sendingMode: 'automatic',
+    automaticSending: false,
+    automaticPauseReason: 'DELIVERABILITY SAFETY PAUSE',
+    sesAcceptedThisRun: 0
+  });
+  assert.equal(d.automaticSending, false);
+  assert.match(d.crmActionMessage, /PAUSED/);
+});
+
+test('empty eligible queue with no SES is not treated as successful distribution', () => {
+  const d = normalizeDistribution({
+    executed: false,
+    distributionAttempted: false,
+    prospectsEvaluated: 0,
+    sesAttemptedThisRun: 0,
+    sesAcceptedThisRun: 0,
+    automaticSending: true,
+    pipeline: { eligibleNow: 0, readyToSend: 0, dailyLimit: 100, dailyRemaining: 100 }
+  });
+  assert.equal(d.executed, false);
+  assert.equal(d.distributionAttempted, false);
+  assert.equal(pipelineMetric(d.pipeline.eligibleNow, true), '0');
+});
+
 test('automatic COOK-001 report does not ask Max to open Approvals', () => {
   const report = composeGrowthReport({
     snapshot: { sources: { ga4: 'ok', stripe: 'ok', crm: 'ok' }, windows: {} },

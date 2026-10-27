@@ -238,8 +238,8 @@ export function formatCrmAcquisitionText(dist) {
   const dailyLimit = Number(pipe.dailyLimit ?? d.dailyLimit ?? d.deliverability?.dailyLimit ?? 100) || 100;
   const remaining = Number(pipe.dailyRemaining ?? d.dailyRemaining ?? Math.max(0, dailyLimit - sentToday));
   const sesRemaining = d.sesRemaining ?? d.sesQuota?.remaining ?? null;
-  const automatic = d.automaticSending === true || d.sendingMode === 'automatic';
   const pause = d.automaticPauseReason || '';
+  const automatic = d.automaticSending === true && !pause;
   const deliveryTracking = d.deliveryTracking || (d.deliveryTelemetryAvailable ? 'TRACKED' : 'NOT_TRACKED');
   const delivered =
     deliveryTracking === 'NOT_TRACKED'
@@ -248,14 +248,18 @@ export function formatCrmAcquisitionText(dist) {
   const clicks = d.clicks || {};
   const draftLifecycle = d.draftLifecycle || {};
   const discoveryBlockers = d.discoveryBlockers || lastRun.discoveryBlockers || {};
-  const stopReason = lastRun.stopReason || d.stopReason || 'n/a';
+  const stopReason = lastRun.stopReason || d.finalStopReason || d.stopReason || 'n/a';
   const lines = [];
 
   lines.push('YOUTUBEBOOSTERAI — DAILY GROWTH');
   lines.push('===============================');
   lines.push(`Campaign: ${d.campaign || 'COOK-001'}`);
-  lines.push(`Automatic: ${automatic ? 'ON' : 'OFF'}${pause ? ` (${pause})` : ''}`);
-  lines.push(`Owner action: ${automatic && !d.blockingApproval ? 'NONE' : d.requiredOwnerApproval || 'see MAX ACTION'}`);
+  lines.push(
+    `Automatic: ${automatic ? 'RUNNING' : pause ? `PAUSED (${pause})` : d.sendingMode === 'automatic' ? 'CONFIGURED (not running)' : 'OFF'}`
+  );
+  lines.push(
+    `Owner action: ${automatic && !d.blockingApproval ? 'NONE' : d.requiredOwnerApproval || (pause ? 'Review deliverability pause' : 'see MAX ACTION')}`
+  );
   lines.push('');
   lines.push('CUSTOMERS TODAY');
   lines.push(`NEW PAID: ${d.cohort?.verifiedCustomers ?? funnel.converted ?? 0}`);
@@ -599,16 +603,18 @@ export function normalizeDistribution(input, ctx = {}) {
   d.pipeline = input?.pipeline ?? d.pipeline ?? null;
   d.crmBoard = input?.crmBoard ?? d.crmBoard ?? null;
   d.needsApproval = Number(input?.needsApproval ?? d.crmBoard?.needsApproval ?? d.needsApproval ?? 0) || 0;
-  d.automaticSending = input?.automaticSending === true || d.automaticSending === true;
+  d.automaticSending = input?.automaticSending === true;
   d.sendingMode = input?.sendingMode || d.sendingMode || null;
   d.automaticPauseReason = input?.automaticPauseReason || d.automaticPauseReason || null;
   d.sesRemaining = input?.sesRemaining ?? d.sesRemaining ?? null;
   d.deliveryTelemetryAvailable = input?.deliveryTelemetryAvailable ?? d.deliveryTelemetryAvailable ?? false;
-  const autoOn = d.automaticSending === true || d.sendingMode === 'automatic';
+  // sendingMode === 'automatic' alone is NOT "RUNNING" — pause / safety hold must win.
+  const autoOn = d.automaticSending === true && !d.automaticPauseReason;
   d.crmActionRequired =
     input?.crmActionRequired === true ||
+    Boolean(d.automaticPauseReason) ||
     (!autoOn && d.needsApproval > 0);
-  if (autoOn && !d.automaticPauseReason) d.crmActionRequired = false;
+  if (autoOn) d.crmActionRequired = false;
   d.crmActionMessage =
     input?.crmActionMessage ||
     (d.automaticPauseReason
@@ -617,7 +623,9 @@ export function normalizeDistribution(input, ctx = {}) {
         ? 'AUTOMATIC ACQUISITION: RUNNING'
         : d.needsApproval > 0
           ? `${d.needsApproval} outreach draft${d.needsApproval === 1 ? '' : 's'} waiting for approval.`
-          : 'No action required.');
+          : d.sendingMode === 'automatic'
+            ? 'AUTOMATIC ACQUISITION: NOT RUNNING (see hold reason / CRM)'
+            : 'No action required.');
   d.approvalsUrl =
     input?.approvalsUrl ||
     d.crmBoard?.approvalsUrl ||
