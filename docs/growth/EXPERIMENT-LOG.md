@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-10-28 — COOK-001 blocked by deliverability pause (bounce_rate)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-001 **Inconclusive** (0 verified payments). EXP-002 **Keep** (7d: 39 session_start events, 1 eligible EXP-002 landing session, 3 audit_started events). EXP-003 **Keep** (0 analyzer sessions/7d, 1/30d). EXP-004 **Keep** (58 lifetime CRM SENT, 1 click, 0 paid; **DELIVERABILITY SAFETY PAUSE**). |
+| Primary bottleneck | **Distribution blocked** — `health_stop:bounce_rate` (2 bounced / 58 sent ≈ 3.4% ≥ 3% stop). Automatic COOK-001 sending paused. |
+| Distribution | **Not executed.** Weekday-send `DELIVERABILITY_PAUSE`; SES accepted this run: **0**. Official mailto re-probed for @thedefineddish (score 100) and @lovelemonsfood (score 88); drafts refreshed; send held by safety gate. |
+| Blocking owner approval | Max: review bounce recipients; clear **DELIVERABILITY SAFETY PAUSE** (or confirm resume); then allow weekday-send **max 2** to @thedefineddish + @lovelemonsfood. |
+| GA4 7d (through 2026-10-27) | session_start **39** · audit_started **3** · audit_completed **1** · pricing_viewed **8** · checkout_started **0** |
+| GA4 30d | session_start **205** · audit_started **6** · pricing_viewed **40** · checkout_started **2** |
+| Verified customers | **0** (product-attributed Stripe) |
+| Verified revenue | **$0** |
+| SES accepted this run | **0** · Lifetime CRM SENT: **58** |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
