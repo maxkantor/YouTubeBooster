@@ -42,6 +42,19 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-10-29 — DELIVERABILITY_PAUSE blocks COOK-001; mailto re-probe + blocking owner approval
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-001 **Inconclusive** (0 verified payments; treatment unchanged). EXP-002 **Keep**. EXP-003 **Keep** (nested). EXP-004 **Keep** (58 CRM SENT, 1 click, 0 paid; **DELIVERABILITY SAFETY PAUSE** `bounce_rate`). |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-10-28: 0 checkout_started events, 0 verified external customers). Outreach paused blocks top distribution channel. |
+| Distribution | **Not executed.** Weekday-send dry-run: `DELIVERABILITY_PAUSE` / `health_stop:bounce_rate`. CRM: automaticSending **false**, 2 bounced / 58 sent. Re-probed official mailto for @thedefineddish + @lovelemonsfood (OFFICIAL_MAILTO); 2 drafts refreshed; SES accepted **0**. |
+| GA4 7d (events) | session_start **41** · audit_started **3** · audit_completed **1** · pricing_viewed **8** · checkout_started **0** |
+| GA4 30d (events) | session_start **202** · audit_started **6** · audit_completed **4** · pricing_viewed **39** · checkout_started **0** |
+| EXP-002 / EXP-003 | 7d eligible SEO sessions **1**; analyzer sessions **0**. 30d eligible SEO **18**; analyzer **1**. |
+| Verified customers | **0** (existing). New this run: **0**. Observed in window: **0**. |
+| Blocking owner approval | Review bounces; clear DELIVERABILITY SAFETY PAUSE; approve @thedefineddish + @lovelemonsfood drafts; weekday-send **max 2**. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
