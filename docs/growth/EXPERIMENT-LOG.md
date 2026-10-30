@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-10-30 — DELIVERABILITY_PAUSE blocks COOK-001; next-send package prepared
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-001 **Inconclusive** (0 checkout_started / 0 verified payments). EXP-002 **Keep** (7d: 0 eligible SEO form sessions; 30d: 17 EXP-002 sessions). EXP-003 **Keep** (7d: 0 analyzer sessions; 30d: 1). EXP-004 **Keep** (58 lifetime CRM SENT, 2 bounced, 1 click, 0 paid; **DELIVERABILITY SAFETY PAUSE**). |
+| Primary bottleneck | **Distribution blocked** by bounce-rate hold; funnel still **checkout_started → paid** (7d: 0 checkout starts). |
+| Distribution | **Not executed.** Weekday-send stop `DELIVERABILITY_PAUSE` / `health_stop:bounce_rate`. SES accepted **0** this run. |
+| Exact action prepared | `docs/growth/outreach/2026-10-30-deliverability-unblock-send-package.md` — clear pause; then named batch max **2**: @cheaplazyvegan (`hello@thecheaplazyvegan.com`), @cookingfromspain (`hello@cookingfromspain.com`). Do **not** re-mail @thedefineddish / @lovelemonsfood (already contacted). |
+| GA4 7d (through 2026-10-29 ET) | session_start **33** events · audit_started **3** · audit_completed **1** · pricing_viewed **7** · checkout_started **0** |
+| GA4 30d | session_start **199** · audit_started **6** · pricing_viewed **39** · checkout_started **0** |
+| Verified customers | **0** external (product-attributed Stripe). Owner/test entitlements excluded. |
+| Verified revenue | **$0** |
+| Funnel stage | Founder outreach / acquisition distribution (EXP-004). |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
