@@ -42,6 +42,21 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-10-31 — DELIVERABILITY_PAUSE (bounce_rate) + unblock package
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep**. EXP-003 nested **Keep**. EXP-001 **Inconclusive** (0 verified payments). EXP-004 **Keep** with **DELIVERABILITY SAFETY PAUSE** (not a list expansion). |
+| Primary bottleneck | **checkout_started → paid** (7d through 2026-10-30: 0 checkout_started events, 0 verified external customers). |
+| Distribution | **NOT EXECUTED.** COOK-001 weekday-send **0 SES accepted** (`stopReason=DELIVERABILITY_PAUSE`, `health_stop:bounce_rate`). CRM: 2 hard bounces / 58 lifetime sent (both @itdoesnttastelikechicken). Automatic sending **OFF**. |
+| Exact action prepared | `docs/growth/outreach/2026-10-31-deliverability-unblock-send-package.md` — Max: review bounces, clear pause, approve max **2** to @cookingfromspain + @theaspiringhomecook. Never re-mail @thedefineddish / @lovelemonsfood / @itdoesnttastelikechicken. |
+| GA4 7d (through 2026-10-30) | 36 session_start events · 3 audit_started · 1 audit_completed · 8 pricing_viewed · 0 checkout_started |
+| GA4 30d | 193 session_start · 6 audit_started · 4 audit_completed · 43 pricing_viewed · 0 checkout_started |
+| Verified customers | **0** (product-attributed Stripe) |
+| SES accepted this run | **0** |
+| Lifetime CRM SENT | **58** |
+| Blocking approval | **Yes** — deliverability pause + named batch `APR-20261031-PENDING` |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
