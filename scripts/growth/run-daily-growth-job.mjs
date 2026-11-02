@@ -245,8 +245,11 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     customersObservedInWindow: 0,
     experimentAttributedCustomers: crmCustomers > 0 ? String(crmCustomers) : '0',
     verifiedRevenue: '$0.00',
-    requiredOwnerApproval: deliverabilityPaused ? 'Review deliverability pause before re-enabling sends' : 'none',
-    blockingApproval: false,
+    requiredOwnerApproval: deliverabilityPaused
+      ? 'Clear DELIVERABILITY SAFETY PAUSE (bounce_rate ≥3% on COOK-001 CRM cohort) then approve max 2 named sends — see docs/growth/outreach/2026-11-02-deliverability-unblock-send-package.md'
+      : 'none',
+    blockingApproval: deliverabilityPaused,
+    deliverabilityPaused,
     exactActionPrepared: exactAction,
     sesAcceptedThisRun: sesAccepted,
     sesAttemptedThisRun: sesAttempted,

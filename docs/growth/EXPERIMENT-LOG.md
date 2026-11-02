@@ -42,6 +42,17 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-11-02 — DELIVERABILITY_PAUSE · blocking owner approval for first post-pause sends
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (7d through 2026-11-01: 50 session_start events, 3 audit_started, 1 audit_completed, 7 pricing_viewed, 0 checkout_started). EXP-003 nested **Keep**. EXP-001 **Inconclusive** (0 checkout_started / 0 verified customers). EXP-004 **Keep** with **DELIVERABILITY SAFETY PAUSE** (58 CRM sent, 2 bounced, 1 click, 0 paid). |
+| Primary bottleneck | **Distribution blocked** — `bounce_rate` pause (≥3% on COOK-001 CRM cohort). Checkout still 0 sitewide 7d/30d. |
+| Distribution | **NOT EXECUTED** — SES accepted **0** this run (`DELIVERABILITY_PAUSE`). Exact next batch prepared: `docs/growth/outreach/2026-11-02-deliverability-unblock-send-package.md` (@cookingfromspain + @theaspiringhomecook, max 2). **Blocking owner approval** to clear pause + mint `APR-20261102-cook001-unblock`. |
+| COOK-001 CRM | Lifetime SENT **58** · delivered **23** · bounced **2** · clicked **1** · SES accepted this run **0**. |
+| Verified customers | **0** external (product-attributed Stripe). New customers **this run:** **0**. |
+| Funnel stage | Founder outreach / acquisition distribution (EXP-004) — pause is the blocker. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
