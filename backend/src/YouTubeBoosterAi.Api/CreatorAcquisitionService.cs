@@ -1145,11 +1145,9 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         if (remaining == 0)
             return new AcqWeekdaySendResult(true, 0, 0, 0, ["daily_limit_reached"], state.DailyLimit, cohortRunId, state.RampBlockReason);
 
-        var sentAll = all.Count(p => p.LastContactedAt is not null);
-        var bounced = all.Count(p => string.Equals(p.SuppressionStatus, "bounced", StringComparison.OrdinalIgnoreCase));
-        var complaints = all.Count(p => string.Equals(p.SuppressionStatus, "complained", StringComparison.OrdinalIgnoreCase));
-        var unsubs = all.Count(p => string.Equals(p.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase));
-        var health = OutreachPolicy.HealthFromCounts(sentAll, bounced, complaints, unsubs);
+        // Distinct contacted emails (not prospect rows) — duplicate CRM rows for one recipient
+        // must not inflate bounce/complaint/unsub rates past the safety thresholds.
+        var health = OutreachPolicy.HealthFromProspects(all);
         // Full daily capacity drives replenishment/continuation. Soft health reduce only caps SES
         // volume when ramp is enabled — automatic COOK-001 with saved DailyLimit 100 must not be
         // silently reduced to RampStage/2 while the UI shows Remaining = DailyLimit - sentToday.
@@ -1639,7 +1637,8 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         stillNeed = Math.Max(0, dailyCapacityRemaining - usedAfterSend);
 
         var ramp = await _store.GetRampAsync(campaign, cancellationToken);
-        var healthAfter = OutreachPolicy.HealthFromCounts(sentAll + sent, bounced, complaints, unsubs);
+        // Recompute from store so newly contacted rows and duplicate emails stay deduped.
+        var healthAfter = OutreachPolicy.HealthFromProspects(await _store.ListProspectsAsync(cancellationToken));
         var days = string.Equals(ramp.LastSendYmdEt, runYmd, StringComparison.Ordinal) ? ramp.SendingDaysAtStage : ramp.SendingDaysAtStage + (sent > 0 ? 1 : 0);
         var decision = OutreachPolicy.DecideRamp(state.RampStage, days, healthAfter, state.RampEnabled && !dryRun, state.MaxDailyLimit);
         if (!dryRun)

@@ -75,6 +75,51 @@ public static class OutreachPolicy
         return new AcqDeliveryHealth(sent, bounced, complaints, unsubscribes, bounce, complaint, unsub, enough, unhealthy, reason);
     }
 
+    /// <summary>
+    /// Deliverability rates over distinct contacted recipient identities (normalized email).
+    /// Duplicate prospect rows for the same email count once in numerator and denominator.
+    /// Prospects without an email fall back to ProspectId so they stay distinct.
+    /// Worst suppression on an identity wins: complained &gt; bounced &gt; unsubscribed.
+    /// </summary>
+    public static AcqDeliveryHealth HealthFromProspects(IEnumerable<AcqProspectRecord> prospects)
+    {
+        var contacted = prospects.Where(p => p.LastContactedAt is not null).ToList();
+        var byIdentity = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var p in contacted)
+        {
+            var email = AcqSendGuard.NormalizeEmail(p.PublicBusinessEmail);
+            var key = email.Length > 0 ? email : ("id:" + (p.ProspectId ?? "").Trim());
+            if (key.Length == 0 || key == "id:") continue;
+            var status = (p.SuppressionStatus ?? "none").Trim().ToLowerInvariant();
+            if (!byIdentity.TryGetValue(key, out var existing))
+            {
+                byIdentity[key] = status;
+                continue;
+            }
+            byIdentity[key] = WorseSuppression(existing, status);
+        }
+
+        var sent = byIdentity.Count;
+        var bounced = byIdentity.Values.Count(s => s == "bounced");
+        var complaints = byIdentity.Values.Count(s => s == "complained");
+        var unsubs = byIdentity.Values.Count(s => s == "unsubscribed");
+        return HealthFromCounts(sent, bounced, complaints, unsubs);
+    }
+
+    /// <summary>Single-outcome ranking so one identity cannot inflate multiple rate numerators.</summary>
+    internal static string WorseSuppression(string a, string b)
+    {
+        static int Rank(string s) => s switch
+        {
+            "complained" => 3,
+            "bounced" => 2,
+            "unsubscribed" => 1,
+            "suppressed" or "rejected" => 0,
+            _ => -1
+        };
+        return Rank(b) > Rank(a) ? b : a;
+    }
+
     public static AcqRampDecision DecideRamp(
         int currentStage,
         int sendingDaysAtStage,

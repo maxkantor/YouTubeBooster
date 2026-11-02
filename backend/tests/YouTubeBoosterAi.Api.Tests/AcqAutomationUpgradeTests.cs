@@ -531,6 +531,42 @@ public class AcqAutomationUpgradeTests
     }
 
     [Fact]
+    public async Task SesBounceThenDelivery_SameMessageId_KeepsSuppressionBounced()
+    {
+        // Production MessageId pattern: bounce claimed, then delivery ~340ms later.
+        var store = new InMemoryCreatorAcquisitionStore();
+        var mid = "010001a16fc9027a-6205b556-888d-4dc6-ba9f-48e341837b03-000000";
+        var p = ReadyToSend("COOK-001-ses-bounce", "bounce-then-deliv@example-creator.test", "UCsesb") with
+        {
+            OutreachStatus = "sent",
+            LastContactedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            LastSesMessageId = mid,
+            SuppressionStatus = "none"
+        };
+        await store.UpsertProspectAsync(p, CancellationToken.None);
+        var (svc, _) = CreateSendingService(store);
+
+        Assert.True(await svc.ApplySesEventResolvedAsync(
+            null, null, mid, p.PublicBusinessEmail, "bounce", CancellationToken.None));
+        var afterBounce = await store.GetProspectAsync(p.ProspectId, CancellationToken.None);
+        Assert.Equal("bounced", afterBounce!.OutreachStatus);
+        Assert.Equal("bounced", afterBounce.SuppressionStatus);
+
+        Assert.True(await svc.ApplySesEventResolvedAsync(
+            null, null, mid, p.PublicBusinessEmail, "delivery", CancellationToken.None));
+        var afterDelivery = await store.GetProspectAsync(p.ProspectId, CancellationToken.None);
+        // Delivery must not clear bounce suppression; outreach stays terminal bounced.
+        Assert.Equal("bounced", afterDelivery!.OutreachStatus);
+        Assert.Equal("bounced", afterDelivery.SuppressionStatus);
+
+        // Repeated bounce for same MessageId is idempotent.
+        Assert.True(await svc.ApplySesEventResolvedAsync(
+            null, null, mid, p.PublicBusinessEmail, "bounce", CancellationToken.None));
+        var again = await store.GetProspectAsync(p.ProspectId, CancellationToken.None);
+        Assert.Equal("bounced", again!.SuppressionStatus);
+    }
+
+    [Fact]
     public void NormalizeSesMessageId_StripsAmazonSuffix()
     {
         Assert.Equal(

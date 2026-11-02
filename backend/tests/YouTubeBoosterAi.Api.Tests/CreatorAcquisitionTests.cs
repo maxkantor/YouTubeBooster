@@ -557,6 +557,24 @@ public class CreatorAcquisitionTests
 
 public class OutreachPolicyTests
 {
+    private static AcqProspectRecord Contacted(
+        string id,
+        string email,
+        string suppression,
+        DateTimeOffset? lastContacted)
+    {
+        var token = ("tok" + id).PadRight(32, 'a')[..32];
+        return new AcqProspectRecord(
+            id, "Cook", "@cook", "https://www.youtube.com/@cook", "UCcook",
+            "cooking", "en", "US", 12000, 100, DateTimeOffset.UtcNow.AddDays(-7), 5, "8k-20k",
+            "https://example-creator.test", email, "https://example-creator.test/contact",
+            DateTimeOffset.UtcNow, "business", 25, 25, 20, 80, "completed",
+            suppression == "bounced" ? "bounced" : "sent",
+            lastContacted, suppression, CreatorAcquisitionCampaigns.Cook001,
+            $"/api/public/acq/go/{token}", token, null, null, null, null, null, null, null,
+            null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, false);
+    }
+
     [Fact]
     public void DailyLimit_DefaultsToTenAndCapsAtThirty()
     {
@@ -602,7 +620,7 @@ public class OutreachPolicyTests
     [Fact]
     public void Cook001LifetimeCounts_TripBounceRateHold_NotSampleTooSmall()
     {
-        // Production evidence ~Oct 27 2026: 58 contacted, 2 bounced → ≥3% stop.
+        // Raw row counts (pre-dedupe) still trip bounce when numerator is not deduped.
         var health = OutreachPolicy.HealthFromCounts(sent: 58, bounced: 2, complaints: 0, unsubscribes: 5);
         Assert.True(health.EnoughSample);
         Assert.True(health.Unhealthy);
@@ -610,6 +628,74 @@ public class OutreachPolicyTests
         Assert.NotEqual("sample_too_small", health.Reason);
         // Unsubscribe also exceeds 2%, but bounce wins the reason priority.
         Assert.True(health.UnsubscribeRate is >= OutreachPolicy.UnsubscribeStop);
+    }
+
+    [Fact]
+    public void HealthFromProspects_DedupesDuplicateBounceRowsForSameEmail()
+    {
+        var contacted = DateTimeOffset.Parse("2026-10-24T21:20:00Z");
+        var rows = new List<AcqProspectRecord>
+        {
+            // Two CRM rows / one email — production COOK-001 bounce inflation case.
+            Contacted("COOK-001-37c9c167", "hello@itdoesnttastelikechicken.com", "bounced", contacted.AddDays(-19)),
+            Contacted("COOK-001-d90e7418", "hello@itdoesnttastelikechicken.com", "bounced", contacted),
+        };
+        // 48 additional distinct contacted recipients → 49 unique identities.
+        for (var i = 0; i < 48; i++)
+        {
+            var unsub = i < 5 ? "unsubscribed" : "none";
+            rows.Add(Contacted($"COOK-001-ok{i:D3}", $"creator{i}@example-creator.test", unsub, contacted.AddDays(-i - 1)));
+        }
+
+        var health = OutreachPolicy.HealthFromProspects(rows);
+        Assert.Equal(49, health.Sent);
+        Assert.Equal(1, health.Bounced);
+        Assert.Equal(5, health.Unsubscribes);
+        Assert.Equal(0, health.Complaints);
+        Assert.True(health.EnoughSample);
+        // 1/49 ≈ 2.04% < 3% bounce stop; 5/49 ≈ 10.2% ≥ 2% unsub stop.
+        Assert.True(health.BounceRate is < OutreachPolicy.BounceStop);
+        Assert.True(health.UnsubscribeRate is >= OutreachPolicy.UnsubscribeStop);
+        Assert.Equal("unsubscribe_rate", health.Reason);
+    }
+
+    [Fact]
+    public void HealthFromProspects_DistinctRecipientsStillTripBounceRate()
+    {
+        var contacted = DateTimeOffset.UtcNow.AddDays(-1);
+        var rows = new List<AcqProspectRecord>();
+        for (var i = 0; i < 30; i++)
+        {
+            var suppression = i < 2 ? "bounced" : "none";
+            rows.Add(Contacted($"COOK-001-d{i:D3}", $"distinct{i}@example-creator.test", suppression, contacted));
+        }
+
+        var health = OutreachPolicy.HealthFromProspects(rows);
+        Assert.Equal(30, health.Sent);
+        Assert.Equal(2, health.Bounced);
+        Assert.Equal("bounce_rate", health.Reason); // 2/30 ≈ 6.67% ≥ 3%
+    }
+
+    [Fact]
+    public void HealthFromProspects_IgnoresNeverContactedDuplicates()
+    {
+        var contacted = DateTimeOffset.UtcNow.AddDays(-2);
+        var list = new List<AcqProspectRecord>
+        {
+            Contacted("COOK-001-a", "same@example-creator.test", "bounced", contacted),
+            // Never contacted duplicate must not enter denominator or numerator.
+            Contacted("COOK-001-b", "same@example-creator.test", "bounced", null),
+            Contacted("COOK-001-c", "other@example-creator.test", "none", contacted),
+        };
+        // 40 contacted identities → 1/40 = 2.5% < 3% bounce stop.
+        for (var i = 0; i < 38; i++)
+            list.Add(Contacted($"COOK-001-pad{i}", $"pad{i}@example-creator.test", "none", contacted));
+
+        var health = OutreachPolicy.HealthFromProspects(list);
+        Assert.Equal(40, health.Sent);
+        Assert.Equal(1, health.Bounced);
+        Assert.Equal("ok", health.Reason);
+        Assert.True(health.BounceRate is < OutreachPolicy.BounceStop);
     }
 
     [Fact]
