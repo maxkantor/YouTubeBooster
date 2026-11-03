@@ -653,8 +653,14 @@ export function normalizeDistribution(input, ctx = {}) {
   if (!Number.isFinite(d.lifetimeCrmSent)) d.lifetimeCrmSent = null;
 
   if (d.executed) d.blockingApproval = false;
+  else if (input?.blockingApproval === true) d.blockingApproval = true;
   else if (input?.blockingApproval === false) d.blockingApproval = false;
-  else if (d.distributionAttempted) d.blockingApproval = false;
+  else if (
+    input?.deliverabilityPaused === true ||
+    /DELIVERABILITY|SAFETY PAUSE/i.test(String(d.automaticPauseReason || input?.automaticPauseReason || ''))
+  ) {
+    d.blockingApproval = true;
+  } else if (d.distributionAttempted) d.blockingApproval = false;
   else d.blockingApproval = true;
   return d;
 }
