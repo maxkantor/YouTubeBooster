@@ -2,15 +2,10 @@ name: YouTubeBooster Daily Growth Automation
 
 on:
   schedule:
-    # Bounded daytime acquisition window (America/New_York weekdays).
-    # EDT (UTC-4): 8/10/12/14/16 ET → 12/14/16/18/20 UTC
-    # EST (UTC-5): same clock hours shift one hour later in UTC — GH Actions cron is UTC-fixed;
-    # 12–20 UTC covers the business-day send window year-round without overnight sends.
-    - cron: '0 12 * * 1-5'
-    - cron: '0 14 * * 1-5'
-    - cron: '0 16 * * 1-5'
-    - cron: '0 18 * * 1-5'
-    - cron: '0 20 * * 1-5'
+    # Single weekday cloud backup (UTC). ~8:00–9:00 AM America/New_York depending on DST.
+    # Primary = Cursor Automation 08:00 ET; Windows Task = 08:30 ET backup.
+    # SSM /youtubebooster/growth/last-admin-report dedupes Admin email if an earlier runner already sent today.
+    - cron: '0 13 * * 1-5'
   workflow_dispatch:
     inputs:
       dry_run:
