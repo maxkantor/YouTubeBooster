@@ -2,10 +2,12 @@ name: YouTubeBooster Daily Growth Automation
 
 on:
   schedule:
-    # Single weekday cloud backup (UTC). ~8:00–9:00 AM America/New_York depending on DST.
-    # Primary = Cursor Automation 08:00 ET; Windows Task = 08:30 ET backup.
-    # SSM /youtubebooster/growth/last-admin-report dedupes Admin email if an earlier runner already sent today.
+    # 3 weekday cloud slots (UTC). Rough ET (DST shifts ±1h): ~8 AM, ~11 AM, ~2 PM.
+    # Primary = Cursor 08:00 ET; Windows Task = 08:30 ET. Extra slots catch missed morning runs
+    # without the old five-tick daytime spam. SSM last-admin-report dedupes Admin email same ET day.
     - cron: '0 13 * * 1-5'
+    - cron: '0 16 * * 1-5'
+    - cron: '0 19 * * 1-5'
   workflow_dispatch:
     inputs:
       dry_run:

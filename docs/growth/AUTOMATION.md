@@ -3,7 +3,7 @@
 **Name:** YouTubeBooster daily paid growth  
 **Schedule (primary):** Monday–Friday **8:00 AM America/New_York** (Cursor Automation)  
 **Schedule (backup):** Monday–Friday **8:30 AM** local Windows Task `YouTubeBooster Daily Growth` via `scripts/growth/setup-daily-growth-task.ps1` (Admin email + COOK-001; keep Automation Active).  
-**Schedule (cloud backup):** Monday–Friday **once** via GitHub Actions `.github/workflows/daily-growth.yml` (`cron: 0 13 * * 1-5` UTC ≈ 8–9 AM Eastern). Not five daytime ticks.  
+**Schedule (cloud backup):** Monday–Friday **3 slots** via GitHub Actions `.github/workflows/daily-growth.yml` (`13/16/19` UTC ≈ 8 AM / 11 AM / 2 PM Eastern). Not five daytime ticks.  
 **Dedupe:** SSM `/youtubebooster/growth/last-admin-report` so Cursor + Windows + Actions never send two Admin emails the same ET day.  
 **Repo:** `maxkantor/YouTubeBooster` · branch `main`  
 **Notify:** Full Admin email after every run → `scripts/growth/compose-and-send-growth-email.mjs`  
