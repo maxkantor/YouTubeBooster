@@ -95,11 +95,13 @@ $ExitCode = 1
 try {
     # Avoid Start-Process here: under Task Scheduler S4U it has failed with
     # 0x800705AF (paging/commitment) and produced no log. Invoke node in-process.
-    $output = & $NodeExe @RunnerArgs 2>&1
-    $ExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
-    if ($output) {
-        $output | ForEach-Object { "$_" } | Tee-Object -FilePath $LogFile -Append | Out-Null
+    # Stream stdout/stderr as they arrive so the console is not blank for minutes.
+    & $NodeExe @RunnerArgs 2>&1 | ForEach-Object {
+        $line = "$_"
+        $line | Tee-Object -FilePath $LogFile -Append | Out-Null
+        Write-Host $line
     }
+    $ExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
 } catch {
     $ExitCode = 1
     "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] EXCEPTION: $($_.Exception.Message)" | Tee-Object -FilePath $LogFile -Append | Out-Null

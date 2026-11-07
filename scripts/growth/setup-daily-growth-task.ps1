@@ -4,11 +4,11 @@
 
 .DESCRIPTION
     Primary trigger is Cursor Automation "YouTubeBooster daily paid growth"
-    (Mon–Fri 8:00 AM America/New_York).
+    (target 8:00 AM America/New_York).
 
-    This Windows task is the local BACKUP: it runs later the same morning so a
+    This Windows task is the local BACKUP: every day (including weekends) so a
     disabled/rate-limited Cursor Automation still produces the Admin email +
-    COOK-001 weekday send when this PC is on.
+    COOK-001 send when this PC is on.
 
 .PARAMETER Action
     Register (default), Unregister, Status, or RunNow.
@@ -43,7 +43,7 @@ function Show-Status {
         $resultHex = if ($null -ne $info.LastTaskResult) { ("0x{0:X8}" -f [uint32]$info.LastTaskResult) } else { "n/a" }
         Write-Host "Task Name:        $($existing.TaskName)" -ForegroundColor Green
         Write-Host "State:            $($existing.State)" -ForegroundColor Green
-        Write-Host "Role:             BACKUP (Cursor Automation is primary at 08:00 ET)" -ForegroundColor Cyan
+        Write-Host "Role:             BACKUP daily (incl. weekends); Cursor Automation is primary ~08:00 ET" -ForegroundColor Cyan
         Write-Host "Last Run Time:    $($info.LastRunTime)"
         Write-Host "Last Result:      $($info.LastTaskResult) ($resultHex)"
         Write-Host "Next Run Time:    $($info.NextRunTime)"
@@ -94,8 +94,8 @@ switch ($Action) {
         }
 
         $parsedTime = [datetime]::ParseExact($Time, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
-        # Weekdays only — matches Cursor Automation Mon–Fri 08:00 ET primary.
-        $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $parsedTime
+        # Every day including weekends — Admin report must not skip Sat/Sun.
+        $trigger = New-ScheduledTaskTrigger -Daily -At $parsedTime
 
         $powershellExe = (Get-Command powershell.exe).Source
         $argumentList = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$RunnerPs1`""
@@ -118,11 +118,11 @@ switch ($Action) {
             -Action $taskAction `
             -Settings $settings `
             -Principal $principal `
-            -Description "BACKUP for Cursor Automation 'YouTubeBooster daily paid growth'. Primary = Cursor 08:00 ET weekdays; this task = $Time ET weekdays (Admin email + COOK-001)." | Out-Null
+            -Description "BACKUP for Cursor Automation 'YouTubeBooster daily paid growth'. Primary = Cursor ~08:00 ET; this task = daily $Time local (Admin email + COOK-001, weekends included)." | Out-Null
 
         Write-Host "Scheduled task '$TaskName' registered as BACKUP." -ForegroundColor Green
-        Write-Host "Primary:  Cursor Automation Mon-Fri 08:00 ET" -ForegroundColor Cyan
-        Write-Host "Backup:   Windows task Mon-Fri $Time ET (this PC must be on / logged in)" -ForegroundColor Cyan
+        Write-Host "Primary:  Cursor Automation ~08:00 ET" -ForegroundColor Cyan
+        Write-Host "Backup:   Windows task DAILY $Time (weekends included; PC must be on / logged in)" -ForegroundColor Cyan
         Write-Host "Catch-up: StartWhenAvailable if the PC was asleep at $Time." -ForegroundColor Cyan
         Write-Host ""
         Show-Status
