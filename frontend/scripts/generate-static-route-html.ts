@@ -223,40 +223,109 @@ function coreContent(pathname: string): {
         h1: 'YouTube Guides',
         lead:
           'Long-form YouTube growth guides covering SEO, topic planning, retention, content calendars, and practical publishing workflows.',
-        sections: hubArticleSections(guides as { title: string; description: string }[]),
-        links: commonLinks
+        sections: [
+          {
+            h2: 'Start with a clear workflow',
+            body:
+              'Use these guides when you need a repeatable process—keyword research, calendars, retention checks—not just a one-off tip. Pair a guide with a free channel audit when you want channel-specific evidence.'
+          },
+          ...hubArticleSections(guides as { title: string; description: string }[])
+        ],
+        links: [
+          ...commonLinks,
+          ...(guides as { slug: string; title: string }[]).map((item) => ({
+            href: `/guides/${item.slug}`,
+            label: item.title.split(' | ')[0]?.trim() || item.title
+          }))
+        ]
       };
     case '/blog':
       return {
         h1: 'YouTube SEO & Growth Blog',
         lead:
           'Articles on YouTube SEO, AI channel audits, metadata, measurement, and sustainable creator growth.',
-        sections: hubArticleSections(blogPosts as { title: string; description: string }[]),
-        links: commonLinks
+        sections: [
+          {
+            h2: 'Practical creator writing',
+            body:
+              'Blog posts expand on checklists and product explanations so creators can implement packaging, SEO, and audit habits without guessing which metric matters first.'
+          },
+          ...hubArticleSections(blogPosts as { title: string; description: string }[])
+        ],
+        links: [
+          ...commonLinks,
+          ...(blogPosts as { slug: string; title: string }[]).map((item) => ({
+            href: `/blog/${item.slug}`,
+            label: item.title.split(' | ')[0]?.trim() || item.title
+          }))
+        ]
       };
     case '/platform':
       return {
         h1: 'Platform',
         lead:
           'Explore the YouTubeBooster AI workflow for AI-powered channel audits, packaging analysis, CTR review, SEO guidance, and creator recommendations.',
-        sections: [{ h2: 'Audit-first workflow', body: 'The platform helps creators understand which growth bottleneck to fix first.' }],
-        links: commonLinks
+        sections: [
+          {
+            h2: 'Audit-first workflow',
+            body:
+              'The platform helps creators understand which growth bottleneck to fix first—titles, thumbnails, SEO alignment, retention, or publishing consistency—before they change everything at once.'
+          },
+          {
+            h2: 'What you can review',
+            body:
+              'Channel health signals, CTR and packaging clues from public video metadata, keyword and topic fit, and a practical next-step plan after the free preview. Unlock the full report when the findings look useful.'
+          },
+          {
+            h2: 'Built for small channels',
+            body:
+              'Small creators usually need diagnosis more than another dashboard. YouTubeBooster AI is designed to shorten the path from messy public YouTube data to a clear publishing decision.'
+          }
+        ],
+        links: [...commonLinks, { href: '/demo', label: 'Free channel audit' }, { href: '/sample-report', label: 'Sample report' }]
       };
     case '/about':
       return {
         h1: `About ${BRAND.name}`,
         lead:
           'YouTubeBooster AI helps creators identify growth opportunities, improve channel performance, and make better publishing decisions.',
-        sections: [{ h2: 'Built for creator clarity', body: 'The product focuses on practical channel diagnosis rather than fake guarantees or vanity claims.' }],
-        links: commonLinks
+        sections: [
+          {
+            h2: 'Built for creator clarity',
+            body:
+              'The product focuses on practical channel diagnosis rather than fake guarantees or vanity claims. It is independent and not affiliated with YouTube or Google.'
+          },
+          {
+            h2: 'Why we built it',
+            body:
+              'Most small creators do not need another subscription full of scores. They need a clear read on CTR, packaging, SEO, and retention so the next upload has a better chance to grow.'
+          },
+          {
+            h2: 'How to start',
+            body:
+              'Run the free audit preview with a public channel URL, review the findings, then unlock the full report only if the recommendations look useful for your stage.'
+          }
+        ],
+        links: [...commonLinks, { href: '/faq', label: 'FAQ' }, { href: '/contact', label: 'Contact' }]
       };
     case '/contact':
       return {
         h1: 'Contact',
         lead:
           'Contact YouTubeBooster AI for creator support, billing help, partnerships, product feedback, or account questions.',
-        sections: [{ h2: 'Support', body: 'Use the contact page for product questions, support requests, feedback, billing issues, or partnership inquiries.' }],
-        links: commonLinks
+        sections: [
+          {
+            h2: 'Support',
+            body:
+              'Use the contact page for product questions, support requests, feedback, billing issues, or partnership inquiries. Include your channel URL or order email when relevant so we can help faster.'
+          },
+          {
+            h2: 'Before you write',
+            body:
+              'For product how-to questions, check the FAQ and guides first. For privacy requests, mention Privacy in the subject so the message is routed correctly.'
+          }
+        ],
+        links: [...commonLinks, { href: '/faq', label: 'FAQ' }, { href: '/privacy', label: 'Privacy' }]
       };
     case '/privacy':
       return {
@@ -279,16 +348,42 @@ function coreContent(pathname: string): {
         h1: 'YouTube Audit Topics',
         lead:
           'Browse AI-assisted YouTube audit topics for SEO, channel growth, CTR, metadata, thumbnails, and retention improvement.',
-        sections: hubArticleSections(audits as { title: string; description: string }[]),
-        links: commonLinks
+        sections: [
+          {
+            h2: 'How to use these audits',
+            body:
+              'Pick the audit that matches your bottleneck. SEO audits emphasize titles, keywords, and discoverability. Growth audits emphasize patterns across your best videos and publishing cadence.'
+          },
+          ...hubArticleSections(audits as { title: string; description: string }[])
+        ],
+        links: [
+          ...commonLinks,
+          ...(audits as { slug: string; title: string }[]).map((item) => ({
+            href: `/audit/${item.slug}`,
+            label: item.title.split(' | ')[0]?.trim() || item.title
+          }))
+        ]
       };
     case '/solutions':
       return {
         h1: 'YouTube Growth Solutions',
         lead:
           'Problem-focused resources for YouTube CTR, retention, traffic leaks, content positioning, and conversion issues.',
-        sections: hubArticleSections(solutions as { title: string; description: string }[]),
-        links: commonLinks
+        sections: [
+          {
+            h2: 'Fix the bottleneck first',
+            body:
+              'Solutions pages are organized around a specific failure mode—low CTR, traffic that does not convert, weak packaging—so you can act on one constraint at a time.'
+          },
+          ...hubArticleSections(solutions as { title: string; description: string }[])
+        ],
+        links: [
+          ...commonLinks,
+          ...(solutions as { slug: string; title: string }[]).map((item) => ({
+            href: `/solutions/${item.slug}`,
+            label: item.title.split(' | ')[0]?.trim() || item.title
+          }))
+        ]
       };
     case '/site-map':
       return {
@@ -473,8 +568,8 @@ ${content.faq
     .map((link) => `            <li><a href="${escapeAttr(urlFor(link.href))}">${escapeHtml(link.label)}</a></li>`)
     .join('\n');
 
-  return `    <noscript>
-      <main>
+  // Inside #root (not <noscript>): Google indexes initial HTML; React createRoot replaces it on hydrate.
+  return `      <main id="yb-seo-static">
         <h1>${escapeHtml(content.h1)}</h1>
         <p>${escapeHtml(content.lead)}</p>
 ${sections}
@@ -485,8 +580,7 @@ ${faq}
 ${links}
           </ul>
         </nav>
-      </main>
-    </noscript>`;
+      </main>`;
 }
 
 function replaceHeadSeo(html: string, pathname: string): string {
@@ -511,10 +605,17 @@ function replaceHeadSeo(html: string, pathname: string): string {
 }
 
 function replaceFallback(html: string, pathname: string): string {
-  if (/<noscript>[\s\S]*?<\/noscript>/.test(html)) {
-    return html.replace(/    <noscript>[\s\S]*?<\/noscript>/, fallbackMarkup(pathname));
+  const inner = fallbackMarkup(pathname);
+  // Prefer injecting into #root so crawlers see unique body text without relying on noscript.
+  if (/<div id="root"><\/div>/.test(html)) {
+    return html
+      .replace(/    <noscript>[\s\S]*?<\/noscript>\r?\n?/, '')
+      .replace('<div id="root"></div>', `<div id="root">\n${inner}\n    </div>`);
   }
-  return html.replace(/(\s*<div id="root"><\/div>)/, `${fallbackMarkup(pathname)}\n$1`);
+  if (/<noscript>[\s\S]*?<\/noscript>/.test(html)) {
+    return html.replace(/    <noscript>[\s\S]*?<\/noscript>/, `<noscript>\n${inner}\n    </noscript>`);
+  }
+  return `${html}\n${inner}\n`;
 }
 
 function routeOutputPath(pathname: string): string {

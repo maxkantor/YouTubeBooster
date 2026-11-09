@@ -63,9 +63,11 @@ Googlebot was receiving the **homepage HTML** for `/audit`, `/pricing`, `/blog`,
 1. Each indexable path rewrites to its own `/path/index.html` (see `amplify.yml` + generated `dist/_redirects`).
 2. The SPA shell is only used for `/admin`, `/dashboard`, `/auth`, `/checkout`, and similar app routes.
 3. Retired URLs (`/audit-youtube-channel`, `/how-did-youtubebooster-work`, `/low-click-through-rate-youtube`, …) **301** to a live canonical page.
-4. `robots.txt` appearing under this GSC bucket is expected (it is not an HTML page). `www` should 301 to apex.
+4. Route HTML puts unique body copy **inside `#root`** (not only `<noscript>`) so Google sees real content in the first response; React replaces it on hydrate.
+5. `robots.txt` **Blocked** rows for `/admin`, `/signin`, `/checkout`, etc. are expected — do not open those paths to indexing.
+6. `www` should 301 to apex. Redirect rows for legacy URLs are expected.
 
-After Amplify deploys, confirm View Source on `/audit` shows a unique `<title>` and `<link rel="canonical" href="https://youtubeboosterai.com/audit">`. Then in Search Console use **Validate fix**.
+After Amplify deploys, confirm View Source on `/audit` shows a unique `<title>`, canonical, and `<main id="yb-seo-static">` body. Then in Search Console use **Validate fix** on “Crawled - currently not indexed”.
 
 
 - **Verification:** Use DNS or HTML file, or set `VITE_GOOGLE_SITE_VERIFICATION`.

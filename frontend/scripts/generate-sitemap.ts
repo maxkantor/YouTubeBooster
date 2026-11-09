@@ -62,7 +62,7 @@ console.log('Wrote sitemap.xml with', all.length, 'URLs');
 const robots = `User-agent: *
 Allow: /
 
-# Block admin/private areas
+# Private app / checkout (GSC "Blocked by robots.txt" for these is expected)
 Disallow: /signin
 Disallow: /signup
 Disallow: /account
@@ -71,9 +71,13 @@ Disallow: /admin
 Disallow: /api
 Disallow: /auth/
 Disallow: /app
+Disallow: /checkout
 Disallow: /checkout/
 Disallow: /payment-success
 Disallow: /payment-cancel
+Disallow: /unsubscribe
+Disallow: /spa.html
+Disallow: /runner-yt-play.html
 
 # Sitemap
 Sitemap: ${base}/sitemap.xml
