@@ -10,6 +10,12 @@
 **North star:** verified external paying customers (product Stripe only)  
 **Strategy lock:** See `docs/growth/LOCKED-STRATEGY.md` + `docs/growth/strategy-lock.json`. While LOCKED, do not rewrite the overall plan — execute, distribute, measure, learn.
 
+The GitHub backup requires either the repository variable `AWS_GROWTH_ROLE_ARN`
+for a role that trusts this repository's GitHub OIDC identity, or repository
+secrets `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The identity needs
+access to the growth SSM parameters and SES; see `SECRETS-SETUP.md`. An
+unconfigured or invalid identity fails the workflow before growth runs.
+
 ---
 
 ## Rate limits / concurrent runs

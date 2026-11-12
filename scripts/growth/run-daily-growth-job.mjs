@@ -510,6 +510,7 @@ async function main() {
 
     const emailOk = composeAndSendEmail(snapPath, distPath, evalPath, notesPath, opts);
     log(`Email delivery status: ${emailOk ? 'SUCCESS' : 'FAILED'}`);
+    if (!emailOk) throw new Error('Growth report email failed');
     log(`Daily growth job completed successfully.`);
   } catch (err) {
     log(`FATAL ERROR in daily growth run: ${err instanceof Error ? err.stack : String(err)}`);
