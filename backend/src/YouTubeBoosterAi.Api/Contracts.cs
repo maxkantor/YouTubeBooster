@@ -9,6 +9,8 @@ public sealed record PublicAnalyticsEventRequest(
 
 public sealed record DemoTopVideoDto(string VideoId, string Title, long ViewCount);
 
+public sealed record DemoScoreFactorDto(string Label, int Score);
+
 public sealed record DemoAnalysisResponse(
     string DemoId,
     string ChannelInput,
@@ -24,7 +26,14 @@ public sealed record DemoAnalysisResponse(
     int VideoCount = 0,
     double AvgEngagement = 0,
     IReadOnlyList<DemoTopVideoDto>? TopVideos = null,
-    string? ChannelId = null
+    string? ChannelId = null,
+    // Score breakdown computed from the same live videos as HealthScore, so the
+    // headline score and the factor bars can never disagree. Null when no live
+    // video data was available (no-videos / placeholder paths).
+    IReadOnlyList<DemoScoreFactorDto>? ScoreFactors = null,
+    // True when the numbers are the built-in showcase snapshot, not live YouTube
+    // data (API unavailable at request time). The UI must label these as sample.
+    bool IsSampleData = false
 );
 
 public sealed record CreateCheckoutSessionRequest(

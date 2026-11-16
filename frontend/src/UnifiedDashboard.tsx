@@ -151,7 +151,6 @@ type LocalSeoResult = {
 function analyzeSeoLocally(title: string): LocalSeoResult {
   const trimmed = (title || '').trim();
   const length = trimmed.length;
-  const words = trimmed.split(/\s+/).filter(Boolean);
 
   let score = 78;
   const issues: string[] = [];
@@ -181,12 +180,20 @@ function analyzeSeoLocally(title: string): LocalSeoResult {
     recommendations.push('Use emphasis sparingly; prefer clarity over shouting.');
   }
 
-  const keyword = words.find((w) => w.length >= 5) ?? (words[0] ?? 'Recipe');
+  // Suggested titles are built from the FULL original title. The previous
+  // version used only the first word >= 5 chars as the "keyword", so
+  // "Creamy Smoked Bacon Pea Soup" became "Creamy: The Fastest Way…" — the
+  // rest of the dish was dropped. The templates use the subject (title minus
+  // a leading "How to Make…" prefix, which template 2 re-adds), so the dish
+  // or topic is never dropped; over-long candidates are dropped, never
+  // truncated, and a too-long title falls back to itself, complete.
+  const subject = trimmed.replace(/^(how to (make|cook|prepare|bake|create))\s+/i, '').trim() || trimmed;
   const suggestedTitles = [
-    `${keyword}: The Fastest Way (Step-by-Step)`,
-    `How to Make ${keyword} (No Mistakes)`,
-    `${keyword} — 5 Tips for Better Results`
-  ];
+    `${subject}: The Fastest Way (Step-by-Step)`,
+    `How to Make ${subject} (No Mistakes)`,
+    `${subject} — 5 Tips for Better Results`
+  ].filter((t) => t.length <= 70);
+  const finalSuggestedTitles = suggestedTitles.length > 0 ? suggestedTitles : [trimmed];
 
   score = Math.max(0, Math.min(100, score));
   const rating: LocalSeoResult['rating'] = score >= 80 ? 'good' : score >= 60 ? 'fair' : 'needs-work';
@@ -197,7 +204,7 @@ function analyzeSeoLocally(title: string): LocalSeoResult {
     rating,
     issues,
     recommendations,
-    suggestedTitles
+    suggestedTitles: finalSuggestedTitles
   };
 }
 
@@ -421,11 +428,20 @@ export function UnifiedDashboard({
     isDemo && !channelContextAnalyzing && !!(demoError || pyError);
   const channelContextComplete = isDemo && !channelContextAnalyzing && !channelContextError;
 
+  // True while the demo is still waiting on its FIRST live data (either API).
+  // While pending, no canned snapshot may be shown as if it were the channel's
+  // real numbers — previously the stale canned snapshot (5.8K subs, 71 score)
+  // flashed on first paint before the live data arrived.
+  const demoDataPending =
+    isDemo && channelContextAnalyzing && demoData == null && pyOverview == null;
+
   const growthScore = isDemo
-    ? (demoData?.healthScore ?? (isEmbeddedProductDemo ? demoChannelData.growthScore : 0))
+    ? demoDataPending
+      ? 0
+      : (demoData?.healthScore ?? (isEmbeddedProductDemo ? demoChannelData.growthScore : 0))
     : (dashboardOverview?.healthScore ?? 0);
   const growthScoreLabel = isDemo
-    ? isEmbeddedProductDemo
+    ? isEmbeddedProductDemo && demoData == null
       ? demoChannelData.growthScoreLabel
       : growthScore >= 70
         ? 'GOOD'
@@ -437,6 +453,17 @@ export function UnifiedDashboard({
       : growthScore >= 50
         ? 'FAIR'
         : 'NEEDS WORK';
+
+  // Score breakdown: live factors from the API when present (computed from the
+  // same videos as the headline score); the canned snapshot only when no live
+  // demo data exists at all; nothing when live data arrived without factors
+  // (no-videos path) — never mix a live headline with canned factors again.
+  const scoreFactors = demoData?.scoreFactors?.length
+    ? demoData.scoreFactors
+    : demoData == null
+      ? demoChannelData.scoreFactors
+      : null;
+  const scoreFactorsAreSample = demoData == null || demoData.isSampleData === true;
   const scoreAnimated = !isDemo || displayScore >= growthScore;
 
   useEffect(() => {
@@ -512,7 +539,7 @@ export function UnifiedDashboard({
 
   const scoreExplanation = isDemo
     ? isEmbeddedProductDemo
-      ? demoChannelData.scoreExplanation
+      ? demoData?.findings?.[0] ?? demoChannelData.scoreExplanation
       : demoData?.findings?.[0] ?? null
     : null;
   const hasMeaningfulMetrics = Boolean(
@@ -524,7 +551,7 @@ export function UnifiedDashboard({
       : (pyOverview?.channel_info?.subscriber_count ??
           (hasMeaningfulMetrics && demoData?.subscriberCount != null
             ? Number(demoData.subscriberCount)
-            : isEmbeddedProductDemo
+            : isEmbeddedProductDemo && !channelContextAnalyzing
               ? demoChannelData.subscribers
               : 0))
     : 0;
@@ -534,7 +561,7 @@ export function UnifiedDashboard({
       : (pyOverview?.channel_info?.view_count ??
           (hasMeaningfulMetrics && demoData?.totalViews != null
             ? Number(demoData.totalViews)
-            : isEmbeddedProductDemo
+            : isEmbeddedProductDemo && !channelContextAnalyzing
               ? demoChannelData.totalViews
               : 0))
     : 0;
@@ -544,7 +571,7 @@ export function UnifiedDashboard({
       : (pyOverview?.channel_info?.video_count ??
           (hasMeaningfulMetrics && demoData?.videoCount != null
             ? Number(demoData.videoCount)
-            : isEmbeddedProductDemo
+            : isEmbeddedProductDemo && !channelContextAnalyzing
               ? demoChannelData.videos
               : 0))
     : 0;
@@ -554,7 +581,7 @@ export function UnifiedDashboard({
       : (pyOverview?.video_performance?.avg_engagement_rate ??
           (hasMeaningfulMetrics && demoData?.avgEngagement != null
             ? Number(demoData.avgEngagement)
-            : isEmbeddedProductDemo
+            : isEmbeddedProductDemo && !channelContextAnalyzing
               ? demoChannelData.avgEngagement
               : 0))
     : 0;
@@ -593,10 +620,10 @@ export function UnifiedDashboard({
   const paidMetrics = dashboardOverview?.metrics ?? [];
   const statCards = isDemo
     ? [
-        { label: 'Subscribers', value: formatNumber(subscribers) },
-        { label: 'Total Views', value: formatNumber(totalViews) },
-        { label: 'Videos', value: formatNumber(videoCount) },
-        { label: 'Avg Engagement', value: `${avgEngagement.toFixed(2)}%` }
+        { label: 'Subscribers', value: demoDataPending ? '—' : formatNumber(subscribers) },
+        { label: 'Total Views', value: demoDataPending ? '—' : formatNumber(totalViews) },
+        { label: 'Videos', value: demoDataPending ? '—' : formatNumber(videoCount) },
+        { label: 'Avg Engagement', value: demoDataPending ? '—' : `${avgEngagement.toFixed(2)}%` }
       ]
     : paidMetrics.slice(0, 4).map((m) => ({ label: m.label, value: m.value }));
   const statIcons = ['👥', '📺', '🎬', '💚'];
@@ -1456,9 +1483,20 @@ export function UnifiedDashboard({
         {isDemo && (
           <>
             {isFullDemo ? (
-              <p className="dashboard-badge demo-badge">
-                {premiumUnlocked ? 'Premium — full access' : 'Full demo — product showcase'}
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <p className="dashboard-badge demo-badge">
+                  {premiumUnlocked ? 'Premium — full access' : 'Full demo — product showcase'}
+                </p>
+                {!premiumUnlocked && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setPaywallFeature('Full Report')}
+                  >
+                    {`Get My Full Growth Fix — ${oneTimePriceLabel}`}
+                  </button>
+                )}
+              </div>
             ) : (
               <>
                 <div className="dashboard-preview-banner">
@@ -1564,14 +1602,17 @@ export function UnifiedDashboard({
                   {displayScore} <span className="growth-score-max">/ 100</span>
                 </div>
                 <span className="growth-score-label">{growthScoreLabel}</span>
-                {isDemo && isEmbeddedProductDemo && demoChannelData.scoreFactors && (
+                {isDemo && isEmbeddedProductDemo && scoreFactors && (
                   <div className="growth-score-factors">
-                    {demoChannelData.scoreFactors.map((f) => (
+                    {scoreFactors.map((f) => (
                       <span key={f.label} className="growth-score-factor">
                         {f.label}: {f.score}
                       </span>
                     ))}
                   </div>
+                )}
+                {isDemo && isEmbeddedProductDemo && scoreFactorsAreSample && scoreFactors && (
+                  <p className="muted">Sample breakdown — live analysis was unavailable at this moment.</p>
                 )}
                 {scoreExplanation && <p className="growth-score-explanation">{scoreExplanation}</p>}
               </div>
@@ -1587,20 +1628,29 @@ export function UnifiedDashboard({
             </div>
           ) : (
             <>
-              <div className="growth-score-value" data-score={isDemo ? displayScore : growthScore}>
-                {isDemo ? displayScore : growthScore} <span className="growth-score-max">/ 100</span>
-              </div>
-              <span className="growth-score-label">{growthScoreLabel}</span>
-              {isDemo && isEmbeddedProductDemo && demoChannelData.scoreFactors && (
-                <div className="growth-score-factors">
-                  {demoChannelData.scoreFactors.map((f) => (
-                    <span key={f.label} className="growth-score-factor">
-                      {f.label}: {f.score}
-                    </span>
-                  ))}
-                </div>
+              {demoDataPending && isEmbeddedProductDemo ? (
+                <p className="muted">Analyzing live channel data…</p>
+              ) : (
+                <>
+                  <div className="growth-score-value" data-score={isDemo ? displayScore : growthScore}>
+                    {isDemo ? displayScore : growthScore} <span className="growth-score-max">/ 100</span>
+                  </div>
+                  <span className="growth-score-label">{growthScoreLabel}</span>
+                  {isDemo && isEmbeddedProductDemo && scoreFactors && (
+                    <div className="growth-score-factors">
+                      {scoreFactors.map((f) => (
+                        <span key={f.label} className="growth-score-factor">
+                          {f.label}: {f.score}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {isDemo && isEmbeddedProductDemo && scoreFactorsAreSample && scoreFactors && (
+                    <p className="muted">Sample breakdown — live analysis was unavailable at this moment.</p>
+                  )}
+                  {scoreExplanation && <p className="growth-score-explanation">{scoreExplanation}</p>}
+                </>
               )}
-              {scoreExplanation && <p className="growth-score-explanation">{scoreExplanation}</p>}
             </>
           )}
         </div>

@@ -19,6 +19,11 @@ export type DemoPreview = {
   videoCount?: number;
   avgEngagement?: number;
   topVideos?: DemoTopVideo[];
+  // Score breakdown computed by the API from the same live videos as
+  // healthScore. Absent on older API responses and on no-data paths.
+  scoreFactors?: { label: string; score: number }[] | null;
+  // True when the numbers are the built-in showcase sample, not live data.
+  isSampleData?: boolean;
 };
 
 // ---- Public demo dashboard (Python EB parity) ----

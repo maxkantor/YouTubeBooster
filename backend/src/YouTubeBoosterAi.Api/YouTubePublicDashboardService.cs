@@ -591,8 +591,35 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
             CurrentTitle: currentTitle,
             CurrentLength: currentTitle.Length,
             Suggestions: suggestions,
-            OptimizedExamples: []
+            OptimizedExamples: BuildOptimizedExamples(currentTitle)
         );
+    }
+
+    /// <summary>
+    /// Suggested titles built from the FULL original title. The previous version
+    /// never generated examples here (empty list) while the frontend local
+    /// fallback built them from the first word only ("Creamy: The Fastest Way…"
+    /// for "Creamy Smoked Bacon Pea Soup") — same defect class, fixed in both
+    /// places. The templates use the subject (title minus a leading "How to
+    /// Make…" prefix, which the second template re-adds), so the dish or topic
+    /// is never dropped; over-long candidates are dropped, never truncated.
+    /// </summary>
+    private static IReadOnlyList<string> BuildOptimizedExamples(string currentTitle)
+    {
+        var core = (currentTitle ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(core)) return [];
+        var subject = Regex.Replace(core, @"^(how to (make|cook|prepare|bake|create))\s+", "", RegexOptions.IgnoreCase).Trim();
+        if (string.IsNullOrWhiteSpace(subject)) subject = core;
+
+        var candidates = new[]
+        {
+            $"{subject}: The Fastest Way (Step-by-Step)",
+            $"How to Make {subject} (No Mistakes)",
+            $"{subject} — 5 Tips for Better Results"
+        };
+
+        var examples = candidates.Where(c => c.Length <= 70).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return examples.Length > 0 ? examples : [core];
     }
 
     private static PublicSeoDescriptionAnalysisDto AnalyzeDescription(string currentDescription)
@@ -632,10 +659,34 @@ public sealed class YouTubePublicDashboardService : IPublicDashboardService
         );
     }
 
+    /// <summary>
+    /// Topic phrase for tag suggestions, built from the title's content words —
+    /// NOT just the first word. The old version returned only the first word, so
+    /// suggested tags came out as "creamy", "creamy tutorial", "how to creamy".
+    /// Boilerplate ("how to make", "with", "tutorial") is stripped; up to the
+    /// first four content words are kept, in title order.
+    /// </summary>
+    private static readonly HashSet<string> TopicStopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "how", "make", "cook", "prepare", "bake", "create", "with", "from", "your",
+        "this", "that", "into", "over", "when", "then", "than", "they", "them",
+        "their", "there", "here", "what", "which", "while", "about", "after",
+        "before", "between", "through", "during", "under", "again", "further",
+        "once", "only", "very", "just", "also", "more", "most", "other", "some",
+        "such", "too", "can", "will", "would", "should", "could", "easy",
+        "simple", "quick", "best", "ultimate", "complete", "guide", "tips",
+        "tricks", "tutorial", "video", "watch"
+    };
+
     private static string? ExtractTopic(string title)
     {
-        var first = (title ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        return string.IsNullOrWhiteSpace(first) ? null : first;
+        var words = (title ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w.Trim(',', '.', '!', '?', ':', ';', '"', '\'', '(', ')'))
+            .Where(w => w.Length > 3 && !TopicStopWords.Contains(w))
+            .Take(4)
+            .ToArray();
+        return words.Length == 0 ? null : string.Join(' ', words);
     }
 
     private static IReadOnlyList<string> GenerateTags(string? topic, string videoTitle, IReadOnlyList<string> existingTags)

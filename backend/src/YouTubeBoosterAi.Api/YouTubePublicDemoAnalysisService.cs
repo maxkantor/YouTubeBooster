@@ -366,7 +366,8 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
             TotalViews: channel.ViewCount,
             VideoCount: (int)channel.VideoCount,
             AvgEngagement: avgEngagement,
-            TopVideos: topVideoDtos
+            TopVideos: topVideoDtos,
+            ScoreFactors: CalculateScoreFactors(channel, videos)
         );
     }
 
@@ -431,7 +432,19 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
                 TotalViews: 515218,
                 VideoCount: 188,
                 AvgEngagement: 3.42,
-                TopVideos: ShowcaseFallbackTopVideos
+                TopVideos: ShowcaseFallbackTopVideos,
+                // The canned factors belong to this canned 71 score (internally
+                // consistent), but they are NOT live data — IsSampleData makes the
+                // UI label them as a sample instead of presenting them as the
+                // channel's real breakdown.
+                ScoreFactors: new[]
+                {
+                    new DemoScoreFactorDto("Titles", 68),
+                    new DemoScoreFactorDto("SEO", 72),
+                    new DemoScoreFactorDto("Engagement", 74),
+                    new DemoScoreFactorDto("Consistency", 63)
+                },
+                IsSampleData: true
             );
         }
 
@@ -527,6 +540,31 @@ public sealed class YouTubePublicDemoAnalysisService : IDemoAnalysisService
         else if (channel.VideoCount >= 20) score += 2;
 
         return Math.Clamp(score, 25, 95);
+    }
+
+    /// <summary>
+    /// Score breakdown computed from the SAME live videos and the SAME thresholds
+    /// as <see cref="CalculateHealthScore"/>, so the headline score and the factor
+    /// bars can never disagree (previously the UI rendered a hardcoded canned
+    /// snapshot — Titles 68, SEO 72, Engagement 74, Consistency 63 — next to a
+    /// live headline score, which is how one channel showed 80 and 71 at once).
+    /// </summary>
+    private static IReadOnlyList<DemoScoreFactorDto> CalculateScoreFactors(ResolvedChannel channel, IReadOnlyList<VideoSnapshot> videos)
+    {
+        var titles = (int)Math.Round((double)videos.Count(video => video.Title.Length is >= 30 and <= 70) / videos.Count * 100);
+        var seo = (int)Math.Round((double)videos.Count(video => video.DescriptionWordCount >= 80) / videos.Count * 100);
+        var avgEngagement = videos.Average(video => video.EngagementRate);
+        var engagement = (int)Math.Clamp(Math.Round(avgEngagement / 6 * 100), 0, 100);
+        var cadence = CalculateAverageDaysBetweenUploads(videos);
+        var consistency = cadence <= 7 ? 90 : cadence <= 14 ? 70 : cadence <= 30 ? 50 : 25;
+
+        return new[]
+        {
+            new DemoScoreFactorDto("Titles", Math.Clamp(titles, 0, 100)),
+            new DemoScoreFactorDto("SEO", Math.Clamp(seo, 0, 100)),
+            new DemoScoreFactorDto("Engagement", engagement),
+            new DemoScoreFactorDto("Consistency", consistency)
+        };
     }
 
     private static double CalculateAverageDaysBetweenUploads(IReadOnlyList<VideoSnapshot> videos)

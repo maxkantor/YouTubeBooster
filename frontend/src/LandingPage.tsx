@@ -1128,7 +1128,7 @@ export function LandingPage() {
                 </div>
                 <span className="landing-insight-pulse" aria-hidden />
                 <span className="landing-insight-panel-label-single">Live Channel Audit</span>
-                <span className="landing-insight-panel-status">{heroDemo ? 'Live preview' : 'Loading'}</span>
+                <span className="landing-insight-panel-status">{heroDemo ? (heroDemo.isSampleData ? 'Sample preview' : 'Live preview') : 'Loading'}</span>
               </div>
               <div className="landing-insight-health-row">
                 <div
