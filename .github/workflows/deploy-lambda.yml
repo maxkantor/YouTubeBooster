@@ -1,0 +1,70 @@
+name: Deploy Lambda (YouTubeBooster API)
+
+# Deploys the .NET backend to Lambda whenever backend code lands on main.
+# Uses the same OIDC role as the daily-growth job (vars.AWS_GROWTH_ROLE_ARN).
+# No stored AWS keys. See backend/LAMBDA-DEPLOY.md for the manual equivalent.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-lambda.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: us-east-1
+      LAMBDA_FUNCTION: youtubebooster-ai-api
+      API_HEALTH_URL: https://yri8sw6k1h.execute-api.us-east-1.amazonaws.com/health
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Lambda package
+        run: |
+          chmod +x backend/publish-lambda.sh
+          ./backend/publish-lambda.sh
+
+      - name: Configure AWS credentials (OIDC role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_GROWTH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION" \
+            --zip-file fileb://backend/youtubebooster-api.zip \
+            --region "$AWS_REGION"
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION" \
+            --region "$AWS_REGION"
+
+      - name: Smoke-check health endpoint
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsS --max-time 30 "$API_HEALTH_URL"; then
+              echo "Health check OK"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 5 attempts"
+          exit 1
