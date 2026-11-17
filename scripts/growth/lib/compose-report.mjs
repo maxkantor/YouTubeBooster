@@ -865,9 +865,13 @@ export function defaultDecisionText({
   return typographicNormalize(`${compact}\n\n${diagnostics.join(' ')}`);
 }
 
-export function buildSubject({ prefix, et, dist }) {
+export function buildSubject({ prefix, et, dist, paidCustomers7d }) {
   const d = dist || emptyDistribution();
-  const newCust = d.newCustomersThisRun ?? 0;
+  const paidCount = Number(paidCustomers7d);
+  const paidCustomers =
+    paidCustomers7d == null || !Number.isFinite(paidCount)
+      ? 'paid customers (7d): unavailable'
+      : `${paidCount} paid customer${paidCount === 1 ? '' : 's'} (7d)`;
   const ses = Number(d.sesAcceptedThisRun ?? d.cohort?.emailsSent ?? 0) || 0;
   const needs = Number(d.needsApproval ?? d.crmBoard?.needsApproval ?? 0) || 0;
   const autoOn = d.automaticSending === true || d.sendingMode === 'automatic';
@@ -882,7 +886,7 @@ export function buildSubject({ prefix, et, dist }) {
             ? 'Distribution failed'
             : 'Distribution not executed';
   return typographicNormalize(
-    `${prefix || 'YouTubeBooster Growth'} · ${lead} · ${newCust} new customers this run · ${et.date}`
+    `${prefix || 'YouTubeBooster Growth'} · ${lead} · ${paidCustomers} · ${et.date}`
   );
 }
 
@@ -1015,6 +1019,8 @@ export function composeGrowthReport(opts) {
     stripe30,
     m7: windows['7d']?.metrics
   });
+  const m7 = windows['7d']?.metrics;
+  const m30 = windows['30d']?.metrics;
 
   const noteText = (opts.notes && opts.notes.trim()) || '';
   const decision =
@@ -1030,12 +1036,11 @@ export function composeGrowthReport(opts) {
       dist
     });
 
-  const m7 = windows['7d']?.metrics;
-  const m30 = windows['30d']?.metrics;
   const subject = buildSubject({
     prefix: opts.subjectPrefix,
     et,
-    dist
+    dist,
+    paidCustomers7d: cell(m7?.unique_paying_customers)
   });
   const actions = nextActions({ classified, nextFuture, reportYmd, dist });
 

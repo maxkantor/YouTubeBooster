@@ -27,9 +27,10 @@ test('UTF-8 subject uses middot without latin-1 fallback', () => {
   const subject = buildSubject({
     prefix: 'YouTubeBooster Growth',
     et: { date: 'Aug 19, 2026' },
-    dist: { executed: true, newCustomersThisRun: 0, blockingApproval: false }
+    dist: { executed: true, newCustomersThisRun: 0, blockingApproval: false },
+    paidCustomers7d: 1
   });
-  assert.match(subject, /YouTubeBooster Growth · Distribution executed · 0 new customers this run · Aug 19, 2026/);
+  assert.match(subject, /YouTubeBooster Growth · Distribution executed · 1 paid customer \(7d\) · Aug 19, 2026/);
   assert.doesNotMatch(subject, /Â/);
   const json = jsonForAwsCli({ Subject: { Data: subject, Charset: 'UTF-8' } });
   assert.match(json, /\\u00b7/);

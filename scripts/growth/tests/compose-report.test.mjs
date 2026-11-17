@@ -65,7 +65,7 @@ test('subject does not count awaiting-approval as collecting; due eval is not fu
     shipped: false
   });
   assert.match(report.subject, /Blocking approval required/);
-  assert.match(report.subject, /0 new customers this run/);
+  assert.match(report.subject, /0 paid customers \(7d\)/);
   assert.doesNotMatch(report.subject, /4 experiments collecting/);
   assert.doesNotMatch(report.subject, /Change deployed/);
   assert.match(report.text, /ACQUISITION ACTION/);
