@@ -42,6 +42,19 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-11-24 — Daily growth (unsubscribe advisory; blocking send approval)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-001 **Inconclusive** (7d `checkout_started` 1 / 0 verified paid; treatment unchanged). EXP-002 **Keep** (7d: 26 `session_start`, 2 `audit_started`, 10 `pricing_viewed`). EXP-003 nested **Keep**. EXP-004 **Keep** + **Awaiting approval** (deliverability: 4 unsub / 60 contacted = 6.7%; weekday-send **0** SES accepted). |
+| Primary bottleneck | **checkout_started → paid** (7d: 1 checkout start, 0 verified product-attributed customers). **Distribution:** COOK-001 **blocked** — `health_advisory:unsubscribe_rate`, `readyToSend` 0. |
+| GA4 (through 2026-11-23 ET) | 7d: 26 sessions · 2 audit_starts · 2 audit_completions · 10 pricing_viewed · 1 checkout_started · 0 checkout→paid. 30d: 695 sessions · 14 audit_starts · 3 checkout_starts. |
+| Stripe (product-attributed) | Verified external customers **0** · verified net revenue **$0** |
+| Distribution | **NOT EXECUTED.** SES accepted **0** this run. Prepared `docs/growth/outreach/2026-11-24-cook001-unblock-send-package.md` — blocking approval `APR-20261124-cook001-unblock` (max 2: @cookingfromspain + @theaspiringhomecook; never @thedefineddish / @lovelemonsfood). |
+| SES this run / lifetime | **0 / 60** CRM SENT (unchanged). |
+| Production health | `check-production-health.mjs` **ok** (API, homepage, pricing, analyzer, sample report). |
+| Funnel stage | Founder outreach / distribution (EXP-004) |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
