@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 /**
- * Email the Admin inbox a growth-run summary via AWS SES.
- * Uses SSM: /youtubebooster/admin/email, /youtubebooster/ses/from-email
+ * Email the Admin growth-report inbox(es) via AWS SES.
+ *
+ * Recipients (growth reports only — not outreach / reply-to / login):
+ *   1. GROWTH_REPORT_TO env (comma/semicolon list), else
+ *   2. SSM /youtubebooster/growth/email/report-to, else
+ *   3. ADMIN_EMAIL / SES_ADMIN_EMAIL env, else
+ *   4. SSM /youtubebooster/admin/email (single-recipient backward compat)
+ *
+ * From: SES_FROM_EMAIL env or SSM /youtubebooster/ses/from-email
  *
  * Usage:
  *   node scripts/growth/notify-admin-email.mjs --subject "..." --body-file path.txt
@@ -17,6 +24,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const REGION = process.env.AWS_REGION || 'us-east-1';
+export const GROWTH_REPORT_TO_SSM = '/youtubebooster/growth/email/report-to';
 
 function getSsm(name, withDecryption = false) {
   const args = [
@@ -41,6 +49,50 @@ function getSsm(name, withDecryption = false) {
   return value;
 }
 
+function tryGetSsm(name, withDecryption = false) {
+  try {
+    return getSsm(name, withDecryption);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Split comma/semicolon recipient lists; trim; drop empties; de-dupe (case-insensitive).
+ * @param {string|string[]|null|undefined} raw
+ * @returns {string[]}
+ */
+export function parseReportRecipients(raw) {
+  const parts = Array.isArray(raw)
+    ? raw.flatMap((x) => String(x ?? '').split(/[;,]/g))
+    : String(raw ?? '').split(/[;,]/g);
+  const seen = new Set();
+  const out = [];
+  for (const part of parts) {
+    const email = part.trim();
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(email);
+  }
+  return out;
+}
+
+/** Resolve growth-report To: list without changing admin login / outreach addresses. */
+export function resolveGrowthReportRecipients() {
+  const fromEnv = (process.env.GROWTH_REPORT_TO || '').trim();
+  if (fromEnv) return parseReportRecipients(fromEnv);
+
+  const fromReportSsm = tryGetSsm(GROWTH_REPORT_TO_SSM, false);
+  if (fromReportSsm) return parseReportRecipients(fromReportSsm);
+
+  const legacyEnv = (process.env.ADMIN_EMAIL || process.env.SES_ADMIN_EMAIL || '').trim();
+  if (legacyEnv) return parseReportRecipients(legacyEnv);
+
+  return parseReportRecipients(getSsm('/youtubebooster/admin/email', false));
+}
+
 function parseArgs(argv) {
   const out = { subject: null, body: null, bodyFile: null };
   for (let i = 0; i < argv.length; i++) {
@@ -59,26 +111,7 @@ export function jsonForAwsCli(obj) {
   });
 }
 
-export function sendAdminGrowthEmail({ subject, body, htmlBody }) {
-  if (!subject?.trim()) throw new Error('subject required');
-  if (!body?.trim()) throw new Error('body required');
-
-  // Cursor Cloud secrets can supply addresses without SSM (still need AWS keys for ses:SendEmail).
-  const from =
-    (process.env.SES_FROM_EMAIL || '').trim() || getSsm('/youtubebooster/ses/from-email', true);
-  const to =
-    (process.env.ADMIN_EMAIL || process.env.SES_ADMIN_EMAIL || '').trim() ||
-    getSsm('/youtubebooster/admin/email', false);
-  const fromSource = `YouTubeBoosterAI Growth <${from}>`;
-
-  const bodyPayload = {
-    Text: { Data: body, Charset: 'UTF-8' }
-  };
-  if (htmlBody?.trim()) {
-    bodyPayload.Html = { Data: htmlBody, Charset: 'UTF-8' };
-  }
-
-  // Write temp files for AWS CLI (avoids shell escaping issues)
+function sendOne({ fromSource, to, subject, bodyPayload }) {
   const tmpDir = fs.mkdtempSync(path.join(process.env.TEMP || process.env.TMPDIR || '/tmp', 'yb-growth-mail-'));
   const destPath = path.join(tmpDir, 'dest.json');
   const msgPath = path.join(tmpDir, 'msg.json');
@@ -112,7 +145,7 @@ export function sendAdminGrowthEmail({ subject, body, htmlBody }) {
 
     if (r.status !== 0) {
       const err = (r.stderr || r.stdout || '').slice(0, 400);
-      throw new Error(`SES send failed: ${err}`);
+      throw new Error(`SES send failed (${to}): ${err}`);
     }
 
     let messageId = null;
@@ -121,7 +154,7 @@ export function sendAdminGrowthEmail({ subject, body, htmlBody }) {
     } catch {
       /* ignore */
     }
-    return { ok: true, to, messageId, subjectSent: subject };
+    return { to, messageId };
   } finally {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -129,6 +162,41 @@ export function sendAdminGrowthEmail({ subject, body, htmlBody }) {
       /* ignore */
     }
   }
+}
+
+export function sendAdminGrowthEmail({ subject, body, htmlBody }) {
+  if (!subject?.trim()) throw new Error('subject required');
+  if (!body?.trim()) throw new Error('body required');
+
+  // Cursor Cloud secrets can supply addresses without SSM (still need AWS keys for ses:SendEmail).
+  const from =
+    (process.env.SES_FROM_EMAIL || '').trim() || getSsm('/youtubebooster/ses/from-email', true);
+  const recipients = resolveGrowthReportRecipients();
+  if (!recipients.length) throw new Error('no growth report recipients resolved');
+  const fromSource = `YouTubeBoosterAI Growth <${from}>`;
+
+  const bodyPayload = {
+    Text: { Data: body, Charset: 'UTF-8' }
+  };
+  if (htmlBody?.trim()) {
+    bodyPayload.Html = { Data: htmlBody, Charset: 'UTF-8' };
+  }
+
+  // Same composed body for every recipient; one SES SendEmail per address.
+  const deliveries = [];
+  for (const to of recipients) {
+    deliveries.push(sendOne({ fromSource, to, subject, bodyPayload }));
+  }
+
+  return {
+    ok: true,
+    to: recipients.join('; '),
+    recipients,
+    messageId: deliveries[0]?.messageId ?? null,
+    messageIds: deliveries.map((d) => d.messageId).filter(Boolean),
+    deliveries,
+    subjectSent: subject
+  };
 }
 
 const invokedAsCli =

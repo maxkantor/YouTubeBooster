@@ -323,6 +323,8 @@ if (invokedAsCli) {
         {
           ok: true,
           messageId: result.messageId,
+          messageIds: result.messageIds || (result.messageId ? [result.messageId] : []),
+          recipients: result.recipients || (result.to ? [result.to] : []),
           subject: result.subjectSent ?? report.subject,
           snapshotPath: snapPath,
           warnings: report.warnings,
