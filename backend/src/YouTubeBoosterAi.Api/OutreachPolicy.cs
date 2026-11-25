@@ -20,6 +20,10 @@ public static class OutreachPolicy
 
     public static readonly int[] Stages = [10, 20, 30];
 
+    /// <summary>Rate reasons that set ComplaintPause and block automatic SES until owner clears.</summary>
+    public static bool IsDeliverabilitySafetyReason(string? reason) =>
+        reason is "bounce_rate" or "complaint_rate" or "unsubscribe_rate";
+
     public static int ClampDailyLimit(int requested, int maxLimit = DefaultMaxLimit)
     {
         var max = Math.Clamp(maxLimit, Stages[0], DefaultMaxLimit);
@@ -196,6 +200,9 @@ public static class OutreachPolicy
             "duplicate_email" => "DUPLICATE_EMAIL",
             "ses_quota" or "ses_quota_reached" => "SES_QUOTA_REACHED",
             "safety_paused" or "complaint_pause" => "SAFETY_PAUSED",
+            "bounce_rate" => "SAFETY_PAUSED_BOUNCE",
+            "complaint_rate" => "SAFETY_PAUSED_COMPLAINT",
+            "unsubscribe_rate" => "SAFETY_PAUSED_UNSUBSCRIBE",
             "tick_budget" => "EXECUTION_BUDGET",
             "strategic_manual_only" => "STRATEGIC_MANUAL",
             "china_not_a_priority" => "NOT_QUALIFIED",
@@ -216,11 +223,28 @@ public static class OutreachPolicy
             "content_hash_changed" => "NOT_QUALIFIED",
             "pii_in_tags" => "NOT_QUALIFIED",
             "legacy_personal_template" => "NOT_QUALIFIED",
-            _ when r.StartsWith("health_stop", StringComparison.Ordinal) => "SAFETY_PAUSED",
+            _ when r.StartsWith("health_stop", StringComparison.Ordinal) => ClassifyHealthStop(r),
+            _ when r.StartsWith("health_advisory", StringComparison.Ordinal) => ClassifyHealthAdvisory(r),
             _ when r.StartsWith("global_suppression", StringComparison.Ordinal) => r.ToUpperInvariant(),
             _ when string.IsNullOrEmpty(r) => "NOT_QUALIFIED",
             _ => "NOT_QUALIFIED"
         };
+    }
+
+    internal static string ClassifyHealthStop(string r)
+    {
+        if (r.Contains("bounce", StringComparison.Ordinal)) return "SAFETY_PAUSED_BOUNCE";
+        if (r.Contains("complaint", StringComparison.Ordinal)) return "SAFETY_PAUSED_COMPLAINT";
+        if (r.Contains("unsubscribe", StringComparison.Ordinal)) return "SAFETY_PAUSED_UNSUBSCRIBE";
+        return "SAFETY_PAUSED";
+    }
+
+    internal static string ClassifyHealthAdvisory(string r)
+    {
+        if (r.Contains("unsubscribe", StringComparison.Ordinal)) return "SAFETY_ADVISORY_UNSUBSCRIBE";
+        if (r.Contains("bounce", StringComparison.Ordinal)) return "SAFETY_ADVISORY_BOUNCE";
+        if (r.Contains("complaint", StringComparison.Ordinal)) return "SAFETY_ADVISORY_COMPLAINT";
+        return "SAFETY_ADVISORY";
     }
 
     public static Dictionary<string, int> AggregateSkipReasons(IEnumerable<string> reasons)
@@ -229,6 +253,20 @@ public static class OutreachPolicy
         foreach (var line in reasons)
         {
             var raw = line ?? "";
+            // Prefer full-line classification so health_stop / health_advisory are not
+            // sliced to a bare rate token and conflated with each other.
+            if (raw.Contains("health_stop", StringComparison.OrdinalIgnoreCase))
+            {
+                var code = ClassifyHealthStop(raw.Trim().ToLowerInvariant());
+                counts[code] = counts.GetValueOrDefault(code) + 1;
+                continue;
+            }
+            if (raw.Contains("health_advisory", StringComparison.OrdinalIgnoreCase))
+            {
+                var code = ClassifyHealthAdvisory(raw.Trim().ToLowerInvariant());
+                counts[code] = counts.GetValueOrDefault(code) + 1;
+                continue;
+            }
             var colon = raw.LastIndexOf(':');
             var codePart = colon >= 0 ? raw[(colon + 1)..] : raw;
             // prospectId:ses:message → keep ses:message
@@ -237,8 +275,8 @@ public static class OutreachPolicy
                 var sesIdx = raw.IndexOf(":ses:", StringComparison.OrdinalIgnoreCase);
                 codePart = raw[(sesIdx + 1)..];
             }
-            var code = NormalizeSkipReason(codePart);
-            counts[code] = counts.GetValueOrDefault(code) + 1;
+            var mapped = NormalizeSkipReason(codePart);
+            counts[mapped] = counts.GetValueOrDefault(mapped) + 1;
         }
         return counts;
     }

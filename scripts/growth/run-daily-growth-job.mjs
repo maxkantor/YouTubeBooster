@@ -22,9 +22,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getAdminReportSentToday } from './lib/admin-report-once.mjs';
+import {
+  aggregateSkipReasons,
+  dominantSkipReason,
+  resolveAcquisitionSendingStatus
+} from './lib/acq-skip-reasons.mjs';
 import { etDateParts, weekdayNameForYmd } from './lib/time.mjs';
 import { parseActiveExperiments } from './lib/experiment-report.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
+
+export { aggregateSkipReasons, dominantSkipReason, resolveAcquisitionSendingStatus };
+export { buildDistribution };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
@@ -172,10 +180,6 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const evaluated = Number(send.evaluated ?? 0) || 0;
   const reasonCounts = send.reasonCounts || aggregateSkipReasons(send.reasons || []);
   const reasons = send.reasons || [];
-  const healthStop = reasons.find((r) => /health_stop/i.test(String(r)));
-  const healthReason = healthStop
-    ? String(healthStop).replace(/^.*health_stop:/i, '').trim()
-    : null;
   const configuredDailyLimit = Number(
     crm.dailyLimit ?? sendData.dailyLimit ?? send.configuredDailyLimit ?? 100
   ) || 100;
@@ -185,16 +189,24 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     Number.isFinite(reportedDailyLimit) && reportedDailyLimit > 0
       ? reportedDailyLimit
       : configuredDailyLimit;
+  const sendingStatus = resolveAcquisitionSendingStatus({
+    crmAutomaticSending: crm.automaticSending === true,
+    crmAutomaticPauseReason: crm.automaticPauseReason || null,
+    reasons,
+    rampBlockReason:
+      send.rampBlockReason ||
+      crm.automaticPauseReason ||
+      crm.acquisitionStatus?.bottleneck ||
+      null
+  });
+  const healthReason = sendingStatus.healthReason;
+  const deliverabilityPaused = sendingStatus.deliverabilityPaused;
   const rampBlockReason =
     healthReason ||
     send.rampBlockReason ||
     crm.automaticPauseReason ||
     crm.acquisitionStatus?.bottleneck ||
     null;
-  const deliverabilityPaused =
-    Boolean(healthReason) ||
-    /DELIVERABILITY|SAFETY_PAUSED|bounce_rate|complaint_rate/i.test(String(rampBlockReason || '')) ||
-    crm.automaticSending === false && /DELIVERABILITY|SAFETY/i.test(String(crm.automaticPauseReason || ''));
   const crmClicks = Number(cf.clicked ?? funnel.clicked ?? 0) || 0;
   const crmAuditStarts = Number(cf.auditStarts ?? 0) || 0;
   const crmAuditCompletions = Number(cf.auditCompletions ?? 0) || 0;
@@ -223,12 +235,13 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     exactAction = `DISTRIBUTION FAILED / BLOCKED — SES accepted 0. Dominant skip: ${dominant}. Evaluated ${evaluated}, SES attempts ${sesAttempted}. Stop: ${finalStopReason || 'n/a'}.`;
   }
 
-  const automaticSending = crm.automaticSending === true && !deliverabilityPaused;
-  const automaticPauseReason = deliverabilityPaused
-    ? crm.automaticPauseReason || `DELIVERABILITY SAFETY PAUSE (${rampBlockReason || 'unknown'})`
-    : crm.automaticPauseReason || null;
+  const automaticSending = sendingStatus.automaticSending;
+  const automaticPauseReason = sendingStatus.automaticPauseReason;
 
   return {
+    // Scheduler/config may be enabled while distribution is not permitted.
+    schedulerEnabled: crm.sendingMode === 'automatic' || crm.automaticSending === true,
+    distributionPermitted: sendingStatus.distributionPermitted,
     // Truthful: distribution executed ONLY when SES accepted >= 1.
     executed: sesAccepted > 0,
     distributionAttempted: evaluated > 0 || sesAttempted > 0 || (sendData.verifiedProspectIds || []).length > 0,
@@ -299,7 +312,10 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     deliverability: {
       bounceRate: deliverabilityPaused && healthReason === 'bounce_rate' ? 'at/above stop threshold (≥3%)' : 'see CRM',
       complaintRate: deliverabilityPaused && healthReason === 'complaint_rate' ? 'at/above stop threshold' : 'see CRM',
-      unsubscribeRate: 'see CRM',
+      unsubscribeRate:
+        deliverabilityPaused && healthReason === 'unsubscribe_rate'
+          ? 'at/above stop threshold (≥2%)'
+          : 'see CRM',
       dailyLimit: dailyLimit,
       nextRampDecision: deliverabilityPaused
         ? `PAUSED — ${rampBlockReason || healthReason}; configured DailyLimit ${configuredDailyLimit} remains the maximum; effective send capacity 0 until pause clears`
@@ -308,78 +324,6 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
           : `DailyLimit ${configuredDailyLimit} is a maximum (not a send target)`
     }
   };
-}
-
-function aggregateSkipReasons(reasons) {
-  const counts = {};
-  for (const line of reasons || []) {
-    const raw = String(line);
-    // Prefer full-line classification so "health_stop:bounce_rate" is not sliced to "bounce_rate"
-    // and mis-labeled NOT_QUALIFIED.
-    if (/health_stop/i.test(raw)) {
-      const code = normalizeSkipReason(raw);
-      counts[code] = (counts[code] || 0) + 1;
-      continue;
-    }
-    let codePart = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
-    if (raw.toLowerCase().includes(':ses:')) {
-      codePart = raw.slice(raw.toLowerCase().indexOf(':ses:') + 1);
-    }
-    const code = normalizeSkipReason(codePart);
-    counts[code] = (counts[code] || 0) + 1;
-  }
-  return counts;
-}
-
-function normalizeSkipReason(raw) {
-  const r = String(raw || '').trim().toLowerCase();
-  if (r.startsWith('ses:')) return r.includes('reject') ? 'SES_REJECTED' : 'SES_ERROR';
-  if (r.includes('health_stop')) {
-    if (r.includes('bounce')) return 'SAFETY_PAUSED_BOUNCE';
-    if (r.includes('complaint')) return 'SAFETY_PAUSED_COMPLAINT';
-    return 'SAFETY_PAUSED';
-  }
-  const map = {
-    cooldown: 'COOLDOWN',
-    already_contacted: 'ALREADY_CONTACTED',
-    idempotency: 'ALREADY_CONTACTED',
-    public_email_unverified: 'INVALID_EMAIL',
-    invalid_or_spamtrap: 'INVALID_EMAIL',
-    suppressed: 'SUPPRESSED',
-    unsubscribed: 'SUPPRESSED',
-    hard_bounce: 'SUPPRESSED',
-    existing_customer: 'SUPPRESSED',
-    not_approved: 'NOT_APPROVED',
-    approval_expired: 'NOT_APPROVED',
-    approval_cap: 'NOT_APPROVED',
-    approval_invalidated: 'NOT_APPROVED',
-    daily_limit_reached: 'DAILY_LIMIT_REACHED',
-    marketing_sending_disabled: 'MISSING_CONFIG',
-    postal_address_missing: 'MISSING_CONFIG',
-    from_email_unconfigured: 'MISSING_CONFIG',
-    unsubscribe_signing_missing: 'MISSING_CONFIG',
-    weekend_eastern: 'MISSING_CONFIG',
-    score_below_70: 'NOT_QUALIFIED',
-    stale_upload: 'NOT_QUALIFIED',
-    subscriber_out_of_band: 'NOT_QUALIFIED',
-    inspection_incomplete: 'NOT_QUALIFIED',
-    preview_placeholder: 'NOT_QUALIFIED',
-    draft_incomplete: 'NOT_QUALIFIED',
-    content_hash_changed: 'NOT_QUALIFIED',
-    pii_in_tags: 'NOT_QUALIFIED',
-    complaint_pause: 'SUPPRESSED',
-    bounce_rate: 'SAFETY_PAUSED_BOUNCE',
-    complaint_rate: 'SAFETY_PAUSED_COMPLAINT',
-    unsubscribe_rate: 'SAFETY_PAUSED'
-  };
-  return map[r] || 'NOT_QUALIFIED';
-}
-
-function dominantSkipReason(counts) {
-  const entries = Object.entries(counts || {});
-  if (!entries.length) return 'NONE';
-  entries.sort((a, b) => b[1] - a[1]);
-  return `${entries[0][0]} (${entries[0][1]})`;
 }
 
 function evaluateDueExperiments(todayYmd) {
@@ -520,4 +464,9 @@ async function main() {
   }
 }
 
-main();
+const isMain =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main();
+}

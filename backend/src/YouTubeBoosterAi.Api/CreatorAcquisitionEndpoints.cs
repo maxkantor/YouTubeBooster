@@ -664,7 +664,7 @@ public static class CreatorAcquisitionEndpoints
                 approvedEligible = readyLane;
             }
             string? autoPauseReason = null;
-            if (state.ComplaintPause || state.RampBlockReason is "bounce_rate" or "complaint_rate")
+            if (state.ComplaintPause || OutreachPolicy.IsDeliverabilitySafetyReason(state.RampBlockReason))
                 autoPauseReason = "DELIVERABILITY SAFETY PAUSE";
             else if (!state.MarketingSendingEnabled)
                 autoPauseReason = "CAMPAIGN DISABLED";

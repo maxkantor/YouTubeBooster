@@ -1,38 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-
-// Mirrors run-daily-growth-job.mjs aggregation (keep in sync).
-function aggregateSkipReasons(reasons) {
-  const counts = {};
-  for (const line of reasons || []) {
-    const raw = String(line);
-    if (/health_stop/i.test(raw)) {
-      const r = raw.toLowerCase();
-      const code = r.includes('bounce')
-        ? 'SAFETY_PAUSED_BOUNCE'
-        : r.includes('complaint')
-          ? 'SAFETY_PAUSED_COMPLAINT'
-          : 'SAFETY_PAUSED';
-      counts[code] = (counts[code] || 0) + 1;
-      continue;
-    }
-    let codePart = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
-    const r = String(codePart || '').trim().toLowerCase();
-    const map = {
-      bounce_rate: 'SAFETY_PAUSED_BOUNCE',
-      complaint_rate: 'SAFETY_PAUSED_COMPLAINT',
-      score_below_70: 'NOT_QUALIFIED'
-    };
-    const code = map[r] || 'NOT_QUALIFIED';
-    counts[code] = (counts[code] || 0) + 1;
-  }
-  return counts;
-}
+import { aggregateSkipReasons } from '../lib/acq-skip-reasons.mjs';
 
 test('health_stop:bounce_rate is not mislabeled NOT_QUALIFIED', () => {
   const counts = aggregateSkipReasons(['health_stop:bounce_rate']);
   assert.equal(counts.SAFETY_PAUSED_BOUNCE, 1);
   assert.equal(counts.NOT_QUALIFIED || 0, 0);
+});
+
+test('health_advisory:unsubscribe_rate is not SAFETY_PAUSED', () => {
+  const counts = aggregateSkipReasons(['health_advisory:unsubscribe_rate']);
+  assert.equal(counts.SAFETY_ADVISORY_UNSUBSCRIBE, 1);
+  assert.equal(counts.SAFETY_PAUSED || 0, 0);
 });
 
 test('discovery returning no work keeps empty eligible queue distinct from pause', () => {

@@ -631,6 +631,35 @@ public class OutreachPolicyTests
     }
 
     [Fact]
+    public void IsDeliverabilitySafetyReason_IncludesUnsubscribe()
+    {
+        Assert.True(OutreachPolicy.IsDeliverabilitySafetyReason("bounce_rate"));
+        Assert.True(OutreachPolicy.IsDeliverabilitySafetyReason("complaint_rate"));
+        Assert.True(OutreachPolicy.IsDeliverabilitySafetyReason("unsubscribe_rate"));
+        Assert.False(OutreachPolicy.IsDeliverabilitySafetyReason("ramp_disabled"));
+        Assert.False(OutreachPolicy.IsDeliverabilitySafetyReason("ok"));
+        Assert.False(OutreachPolicy.IsDeliverabilitySafetyReason(null));
+    }
+
+    [Fact]
+    public void AggregateSkipReasons_DistinguishesAdvisoryFromHardStop()
+    {
+        var advisory = OutreachPolicy.AggregateSkipReasons(["health_advisory:unsubscribe_rate"]);
+        Assert.Equal(1, advisory["SAFETY_ADVISORY_UNSUBSCRIBE"]);
+        Assert.False(advisory.ContainsKey("SAFETY_PAUSED"));
+        Assert.False(advisory.ContainsKey("SAFETY_PAUSED_UNSUBSCRIBE"));
+
+        var hard = OutreachPolicy.AggregateSkipReasons(["health_stop:unsubscribe_rate"]);
+        Assert.Equal(1, hard["SAFETY_PAUSED_UNSUBSCRIBE"]);
+        Assert.False(hard.ContainsKey("SAFETY_ADVISORY_UNSUBSCRIBE"));
+
+        var bounce = OutreachPolicy.AggregateSkipReasons(["health_stop:bounce_rate"]);
+        Assert.Equal(1, bounce["SAFETY_PAUSED_BOUNCE"]);
+        var complaint = OutreachPolicy.AggregateSkipReasons(["health_stop:complaint_rate"]);
+        Assert.Equal(1, complaint["SAFETY_PAUSED_COMPLAINT"]);
+    }
+
+    [Fact]
     public void HealthFromProspects_DedupesDuplicateBounceRowsForSameEmail()
     {
         var contacted = DateTimeOffset.Parse("2026-10-24T21:20:00Z");

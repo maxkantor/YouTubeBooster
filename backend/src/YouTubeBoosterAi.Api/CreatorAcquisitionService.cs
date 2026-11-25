@@ -1155,7 +1155,9 @@ public sealed partial class CreatorAcquisitionService : ICreatorAcquisitionServi
         if (health.Unhealthy)
         {
             await _store.SaveRampAsync(campaign, new AcqRampPersist(state.RampStage, 0, runYmd, health.Reason), cancellationToken);
-            if (health.Reason is "bounce_rate" or "complaint_rate")
+            // Hard stop for all rate thresholds (bounce 3%, complaint 0.1%, unsubscribe 2%).
+            // Uses existing ComplaintPause + ramp blockReason; owner must clear — no auto-resume.
+            if (OutreachPolicy.IsDeliverabilitySafetyReason(health.Reason))
             {
                 await _store.SaveCampaignFlagsAsync(campaign, state.MarketingSendingEnabled, true, cancellationToken);
                 // Keep configured DailyLimit in the result (do not report 0 — that confuses

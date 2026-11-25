@@ -660,6 +660,120 @@ public class AcqAutomationUpgradeTests
     }
 
     [Fact]
+    public async Task UnsubscribeRate_HardStopsWeekdaySend_SetsComplaintPause()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var contacted = DateTimeOffset.UtcNow.AddDays(-3);
+        // 1 unsub / 30 unique contacted ≈ 3.33% ≥ UnsubscribeStop 2%.
+        for (var i = 0; i < 30; i++)
+        {
+            var suppression = i == 0 ? "unsubscribed" : "none";
+            var row = ReadyToSend($"unsub-hist-{i}", $"hist{i}@channel.test", $"UChist{i}") with
+            {
+                OutreachStatus = "sent",
+                LastContactedAt = contacted.AddHours(-i),
+                LastSesMessageId = $"ses-hist-{i}",
+                SuppressionStatus = suppression,
+                ApprovalId = null
+            };
+            await store.UpsertProspectAsync(row, CancellationToken.None);
+        }
+        // Eligible ready prospect must not send while unsubscribe threshold is exceeded.
+        await store.UpsertProspectAsync(
+            ReadyToSend("unsub-ready", "ready-unsub@channel.test", "UCreadyunsub"),
+            CancellationToken.None);
+        await svc.PromoteAutomaticReadyDraftsAsync(CreatorAcquisitionCampaigns.Cook001, null, CancellationToken.None);
+
+        var result = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, false);
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(0, result.SesAttempted);
+        Assert.Equal(0, ses.SendRawCalls);
+        Assert.Equal("unsubscribe_rate", result.RampBlockReason);
+        Assert.Equal("DELIVERABILITY_PAUSE", result.StopReason);
+        Assert.Contains("health_stop:unsubscribe_rate", result.Reasons);
+        Assert.DoesNotContain(result.Reasons, r => r.StartsWith("health_advisory:", StringComparison.Ordinal));
+        var flags = await store.GetCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None);
+        Assert.True(flags.ComplaintPause);
+        Assert.True(flags.SendingEnabled);
+    }
+
+    [Fact]
+    public async Task BounceRate_HardStop_Unchanged_WhenUnsubscribeAlsoHigh()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var contacted = DateTimeOffset.UtcNow.AddDays(-2);
+        // Bounce wins reason priority (2/30 ≈ 6.67% ≥ 3%); unsub also high (5/30).
+        for (var i = 0; i < 30; i++)
+        {
+            var suppression = i < 2 ? "bounced" : i < 7 ? "unsubscribed" : "none";
+            await store.UpsertProspectAsync(
+                ReadyToSend($"mix-hist-{i}", $"mix{i}@channel.test", $"UCmix{i}") with
+                {
+                    OutreachStatus = "sent",
+                    LastContactedAt = contacted.AddHours(-i),
+                    LastSesMessageId = $"ses-mix-{i}",
+                    SuppressionStatus = suppression,
+                    ApprovalId = null
+                },
+                CancellationToken.None);
+        }
+        await store.UpsertProspectAsync(
+            ReadyToSend("mix-ready", "ready-mix@channel.test", "UCreadymix"),
+            CancellationToken.None);
+        await svc.PromoteAutomaticReadyDraftsAsync(CreatorAcquisitionCampaigns.Cook001, null, CancellationToken.None);
+
+        var result = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, false);
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(0, ses.SendRawCalls);
+        Assert.Equal("bounce_rate", result.RampBlockReason);
+        Assert.Contains("health_stop:bounce_rate", result.Reasons);
+        Assert.Equal("DELIVERABILITY_PAUSE", result.StopReason);
+        var flags = await store.GetCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None);
+        Assert.True(flags.ComplaintPause);
+    }
+
+    [Fact]
+    public async Task ComplaintRate_HardStop_Unchanged()
+    {
+        var store = new InMemoryCreatorAcquisitionStore();
+        var (svc, ses) = CreateSendingService(store);
+        await svc.EnsureCook001PersistedAsync(CancellationToken.None);
+        var contacted = DateTimeOffset.UtcNow.AddDays(-2);
+        // 1 complaint / 30 = 3.33% ≥ ComplaintStop 0.1%.
+        for (var i = 0; i < 30; i++)
+        {
+            var suppression = i == 0 ? "complained" : "none";
+            await store.UpsertProspectAsync(
+                ReadyToSend($"cmp-hist-{i}", $"cmp{i}@channel.test", $"UCcmp{i}") with
+                {
+                    OutreachStatus = "sent",
+                    LastContactedAt = contacted.AddHours(-i),
+                    LastSesMessageId = $"ses-cmp-{i}",
+                    SuppressionStatus = suppression,
+                    ApprovalId = null
+                },
+                CancellationToken.None);
+        }
+        await store.UpsertProspectAsync(
+            ReadyToSend("cmp-ready", "ready-cmp@channel.test", "UCreadycmp"),
+            CancellationToken.None);
+        await svc.PromoteAutomaticReadyDraftsAsync(CreatorAcquisitionCampaigns.Cook001, null, CancellationToken.None);
+
+        var result = await svc.RunWeekdaySendAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None, false);
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(0, ses.SendRawCalls);
+        Assert.Equal("complaint_rate", result.RampBlockReason);
+        Assert.Contains("health_stop:complaint_rate", result.Reasons);
+        Assert.Equal("DELIVERABILITY_PAUSE", result.StopReason);
+        var flags = await store.GetCampaignFlagsAsync(CreatorAcquisitionCampaigns.Cook001, CancellationToken.None);
+        Assert.True(flags.ComplaintPause);
+    }
+
+    [Fact]
     public void SnsEnvelope_DetectsSpacedTypeNotification()
     {
         // Real AWS SNS HTTPS payloads put spaces around the colon.

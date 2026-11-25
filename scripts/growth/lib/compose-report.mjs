@@ -33,6 +33,12 @@ function typographicNormalize(s) {
     .replace(/[\u2026]/g, '...');
 }
 
+/** True only when automatic sending is permitted — not merely scheduled/configured. */
+export function isAcquisitionRunning(dist) {
+  const d = dist || {};
+  return d.automaticSending === true && !d.automaticPauseReason;
+}
+
 function escapeHtml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -239,7 +245,7 @@ export function formatCrmAcquisitionText(dist) {
   const remaining = Number(pipe.dailyRemaining ?? d.dailyRemaining ?? Math.max(0, dailyLimit - sentToday));
   const sesRemaining = d.sesRemaining ?? d.sesQuota?.remaining ?? null;
   const pause = d.automaticPauseReason || '';
-  const automatic = d.automaticSending === true && !pause;
+  const automatic = isAcquisitionRunning(d);
   const deliveryTracking = d.deliveryTracking || (d.deliveryTelemetryAvailable ? 'TRACKED' : 'NOT_TRACKED');
   const delivered =
     deliveryTracking === 'NOT_TRACKED'
@@ -609,7 +615,8 @@ export function normalizeDistribution(input, ctx = {}) {
   d.sesRemaining = input?.sesRemaining ?? d.sesRemaining ?? null;
   d.deliveryTelemetryAvailable = input?.deliveryTelemetryAvailable ?? d.deliveryTelemetryAvailable ?? false;
   // sendingMode === 'automatic' alone is NOT "RUNNING" — pause / safety hold must win.
-  const autoOn = d.automaticSending === true && !d.automaticPauseReason;
+  // Scheduler enabled ≠ distribution permitted ≠ distribution executed.
+  const autoOn = isAcquisitionRunning(d);
   d.crmActionRequired =
     input?.crmActionRequired === true ||
     Boolean(d.automaticPauseReason) ||
@@ -874,17 +881,19 @@ export function buildSubject({ prefix, et, dist, paidCustomers7d }) {
       : `${paidCount} paid customer${paidCount === 1 ? '' : 's'} (7d)`;
   const ses = Number(d.sesAcceptedThisRun ?? d.cohort?.emailsSent ?? 0) || 0;
   const needs = Number(d.needsApproval ?? d.crmBoard?.needsApproval ?? 0) || 0;
-  const autoOn = d.automaticSending === true || d.sendingMode === 'automatic';
+  const autoOn = isAcquisitionRunning(d);
   const lead =
-    !autoOn && needs > 0
-      ? `MAX — ACTION REQUIRED (${needs} need approval)`
-      : ses > 0 || d.executed
-        ? 'Distribution executed'
-        : d.blockingApproval
-          ? 'Blocking approval required'
-          : d.distributionAttempted || (d.prospectsEvaluated || 0) > 0 || (d.sesAttemptedThisRun || 0) > 0
-            ? 'Distribution failed'
-            : 'Distribution not executed';
+    d.automaticPauseReason
+      ? 'Safety paused'
+      : !autoOn && needs > 0
+        ? `MAX — ACTION REQUIRED (${needs} need approval)`
+        : ses > 0 || d.executed
+          ? 'Distribution executed'
+          : d.blockingApproval
+            ? 'Blocking approval required'
+            : d.distributionAttempted || (d.prospectsEvaluated || 0) > 0 || (d.sesAttemptedThisRun || 0) > 0
+              ? 'Distribution failed'
+              : 'Distribution not executed';
   return typographicNormalize(
     `${prefix || 'YouTubeBooster Growth'} · ${lead} · ${paidCustomers} · ${et.date}`
   );
@@ -940,9 +949,13 @@ function nextActions({ classified, nextFuture, reportYmd, dist }) {
   const d = dist || emptyDistribution();
   const dueMissed = classified.filter((e) => e.dueUnevaluated);
   const needs = Number(d.needsApproval ?? d.crmBoard?.needsApproval ?? 0) || 0;
-  const autoOn = d.automaticSending === true || d.sendingMode === 'automatic';
+  const autoOn = isAcquisitionRunning(d);
 
-  if (autoOn && !d.automaticPauseReason) {
+  if (d.automaticPauseReason) {
+    items.push(
+      `AUTOMATIC ACQUISITION: SAFETY_PAUSED — ${d.automaticPauseReason}. Owner action required: Review deliverability pause before re-enabling sends.`
+    );
+  } else if (autoOn) {
     items.push('AUTOMATIC ACQUISITION: RUNNING. Owner action required: NONE.');
   } else if (!autoOn && needs > 0) {
     items.push(
@@ -1251,11 +1264,13 @@ export function composeGrowthReport(opts) {
   );
   t.push(
     `CRM Approvals queue: ${
-      dist.automaticSending === true || dist.sendingMode === 'automatic'
-        ? 'AUTOMATIC ACQUISITION: RUNNING — owner action NONE'
-        : Number(dist.needsApproval ?? 0) > 0
-          ? `ACTION REQUIRED — ${dist.needsApproval} need approval`
-          : 'No drafts waiting'
+      dist.automaticPauseReason
+        ? `AUTOMATIC ACQUISITION: SAFETY_PAUSED — ${dist.automaticPauseReason}`
+        : isAcquisitionRunning(dist)
+          ? 'AUTOMATIC ACQUISITION: RUNNING — owner action NONE'
+          : Number(dist.needsApproval ?? 0) > 0
+            ? `ACTION REQUIRED — ${dist.needsApproval} need approval`
+            : 'No drafts waiting'
     }`
   );
   t.push(`Exact action prepared: ${dist.exactActionPrepared}`);
@@ -1400,33 +1415,39 @@ export function composeGrowthReport(opts) {
     )
     .join('');
 
-  const autoOnHtml = dist.automaticSending === true || dist.sendingMode === 'automatic';
-  const distLeadBg = !autoOnHtml && Number(dist.needsApproval ?? 0) > 0
-    ? '#fef3c7'
-    : dist.blockingApproval
+  const autoOnHtml = isAcquisitionRunning(dist);
+  const distLeadBg = dist.automaticPauseReason
+    ? '#fee2e2'
+    : !autoOnHtml && Number(dist.needsApproval ?? 0) > 0
       ? '#fef3c7'
-      : dist.executed
-        ? '#ecfdf5'
-        : dist.distributionAttempted
-          ? '#fee2e2'
-          : '#f1f5f9';
-  const distLeadBorder = !autoOnHtml && Number(dist.needsApproval ?? 0) > 0
-    ? '#f59e0b'
-    : dist.blockingApproval
+      : dist.blockingApproval
+        ? '#fef3c7'
+        : dist.executed
+          ? '#ecfdf5'
+          : dist.distributionAttempted
+            ? '#fee2e2'
+            : '#f1f5f9';
+  const distLeadBorder = dist.automaticPauseReason
+    ? '#f87171'
+    : !autoOnHtml && Number(dist.needsApproval ?? 0) > 0
       ? '#f59e0b'
-      : dist.executed
-        ? '#6ee7b7'
-        : dist.distributionAttempted
-          ? '#f87171'
-          : '#cbd5e1';
+      : dist.blockingApproval
+        ? '#f59e0b'
+        : dist.executed
+          ? '#6ee7b7'
+          : dist.distributionAttempted
+            ? '#f87171'
+            : '#cbd5e1';
   const distRows = [
     [
       'CRM Approvals queue',
-      autoOnHtml
-        ? 'AUTOMATIC ACQUISITION: RUNNING — owner action NONE'
-        : Number(dist.needsApproval ?? 0) > 0
-          ? `ACTION REQUIRED — ${dist.needsApproval} need approval`
-          : 'No drafts waiting'
+      dist.automaticPauseReason
+        ? `AUTOMATIC ACQUISITION: SAFETY_PAUSED — ${dist.automaticPauseReason}`
+        : autoOnHtml
+          ? 'AUTOMATIC ACQUISITION: RUNNING — owner action NONE'
+          : Number(dist.needsApproval ?? 0) > 0
+            ? `ACTION REQUIRED — ${dist.needsApproval} need approval`
+            : 'No drafts waiting'
     ],
     ...(autoOnHtml
       ? []
@@ -1492,20 +1513,25 @@ export function composeGrowthReport(opts) {
 
   const crmBoardHtml = (() => {
     const needs = Number(dist.needsApproval ?? 0) || 0;
-    const autoOn = dist.automaticSending === true || dist.sendingMode === 'automatic';
-    const bg = !autoOn && needs > 0 ? '#fef3c7' : '#ecfdf5';
-    const border = !autoOn && needs > 0 ? '#f59e0b' : '#6ee7b7';
-    const title = autoOn
-      ? 'AUTOMATIC ACQUISITION: RUNNING'
-      : needs > 0
-        ? 'MAX — ACTION REQUIRED'
-        : 'OWNER ACTION';
-    const msg = autoOn
-      ? 'Owner action required: NONE'
-      : dist.crmActionMessage ||
-        (needs > 0
-          ? `${needs} outreach drafts waiting for approval.`
-          : 'No action required.');
+    const autoOn = isAcquisitionRunning(dist);
+    const paused = Boolean(dist.automaticPauseReason);
+    const bg = paused ? '#fee2e2' : !autoOn && needs > 0 ? '#fef3c7' : '#ecfdf5';
+    const border = paused ? '#f87171' : !autoOn && needs > 0 ? '#f59e0b' : '#6ee7b7';
+    const title = paused
+      ? 'AUTOMATIC ACQUISITION: SAFETY_PAUSED'
+      : autoOn
+        ? 'AUTOMATIC ACQUISITION: RUNNING'
+        : needs > 0
+          ? 'MAX — ACTION REQUIRED'
+          : 'OWNER ACTION';
+    const msg = paused
+      ? String(dist.automaticPauseReason)
+      : autoOn
+        ? 'Owner action required: NONE'
+        : dist.crmActionMessage ||
+          (needs > 0
+            ? `${needs} outreach drafts waiting for approval.`
+            : 'No action required.');
     const url = dist.approvalsUrl || 'https://youtubeboosterai.com/admin/acquisition/approvals';
     return `<div style="margin:0 0 20px;padding:16px 18px;background:${bg};border:1px solid ${border};border-radius:8px;">
       <div style="font-size:17px;font-weight:700;">${escapeHtml(title)}</div>

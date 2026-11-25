@@ -1022,7 +1022,7 @@ public sealed partial class CreatorAcquisitionService
         }
         if (!CreatorAcquisitionScoring.IsVerifiedPublicEmail(p) || OutreachPolicy.IsSpamTrapOrInvalid(p.PublicBusinessEmail))
             return "INVALID_EMAIL";
-        if (state.ComplaintPause || state.RampBlockReason is "bounce_rate" or "complaint_rate")
+        if (state.ComplaintPause || OutreachPolicy.IsDeliverabilitySafetyReason(state.RampBlockReason))
             return "SAFETY_PAUSED";
         if (!state.MarketingSendingEnabled) return "CAMPAIGN_DISABLED";
         var gate = CreatorAcquisitionScoring.ExplainSendEligibility(
@@ -1167,7 +1167,7 @@ public sealed partial class CreatorAcquisitionService
         var unsubs = scoped.Count(p => string.Equals(p.SuppressionStatus, "unsubscribed", StringComparison.OrdinalIgnoreCase));
         string status;
         string? reason = null;
-        if (state.ComplaintPause || !string.IsNullOrWhiteSpace(state.RampBlockReason) && state.RampBlockReason is "bounce_rate" or "complaint_rate")
+        if (state.ComplaintPause || OutreachPolicy.IsDeliverabilitySafetyReason(state.RampBlockReason))
         {
             status = "SAFETY_PAUSED";
             reason = "Deliverability threshold exceeded";
