@@ -42,6 +42,18 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-11-25 — COOK-001 readyToSend 0 + blocking send approval (EXP evals)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep**. EXP-004 **Inconclusive** (60 lifetime SENT; 0 clicks attributed; treatments unchanged). EXP-001 **Inconclusive**. EXP-003 nested **Keep**. |
+| Primary bottleneck | **Qualified distribution → activation** (CRM readyToSend **0**; 6 qualified-unsent blocked NOT_QUALIFIED; automatic discovery no progress). |
+| GA4 7d (through 2026-11-24) | 26 `session_start` · 3 `audit_started` · 3 `audit_completed` · 9 `pricing_viewed` · 1 `checkout_started` · 0 verified customers. |
+| Stripe product-attributed | 0 payments · 0 verified external customers · $0.00 net. |
+| Distribution | **NOT EXECUTED.** Weekday-send dry run: SES **0** accepted. Blocking owner approval prepared: `docs/growth/outreach/2026-11-25-cook001-unblock-send-package.md` (`APR-20261125-cook001-unblock`, max 2: **@theaspiringhomecook** + **@cookingfromspain**). Lifetime CRM SENT **60** (unchanged this run). |
+| COOK-001 CRM | marketingSendingEnabled **true** · approved **0** · readyToSend **0** · unsubscribed **5** · health advisory `unsubscribe_rate`. |
+| Evaluation date | EXP-004 next: first outreach click or 30 additional sends. EXP-002 next: lock review cadence. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
