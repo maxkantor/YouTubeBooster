@@ -42,6 +42,19 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-11-26 — COOK-001 blocking approval package (no SES)
+
+| Field | Value |
+|-------|--------|
+| Status | EXP-002 **Keep** (7d through 2026-11-25: 26 session_start, 5 audit_started, 9 pricing_viewed, 1 checkout_started). EXP-004 **Inconclusive** (0 outreach-attributed clicks; SES 0 this run). EXP-001 **Inconclusive** (0 verified payments). Production health **OK**. |
+| Primary bottleneck | **checkout_started → paid** (1 checkout_started / 0 verified customers, 7d). |
+| Distribution | **NOT EXECUTED.** Cloud agent lacked Admin SSM + outreach cron + postal SSM for `run-cook-001-weekday.mjs`. Prepared exact named batch **`APR-20261126-cook001-two`**: @thecafesucrefarine + @bowlofdelicious (official `mailto` verified 2026-11-26). See `docs/growth/outreach/2026-11-26-cook001-named-send-approval.md`. |
+| SES | **0 accepted this run** (distributionAttempted: false). Lifetime CRM SENT unchanged (CRM summary unavailable in cloud agent). |
+| New customers (this run) | **0** |
+| Verified revenue | **$0** |
+| Evaluation date | EXP-002 next: on lock review or first SEO-attributed payment. EXP-004 next: first outreach click or owner approval send. |
+| Funnel stage | Distribution blocked on owner approval + send-host config; no new CRO. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
