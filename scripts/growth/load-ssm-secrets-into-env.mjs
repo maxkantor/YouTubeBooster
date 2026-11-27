@@ -3,9 +3,9 @@
  * Load /youtubebooster/growth/* from SSM into process.env (for collectors).
  * Does not print values. No-op if AWS CLI / params unavailable.
  */
-import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { spawnAws } from './lib/aws-cli.mjs';
 
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const MAP = [
@@ -41,7 +41,7 @@ export function loadSsmSecretsIntoEnv() {
       'text'
     ];
     if (secure) args.splice(4, 0, '--with-decryption');
-    const r = spawnSync('aws', args, { encoding: 'utf8' });
+    const r = spawnAws(args);
     if (r.status !== 0) {
       missing.push(envName);
       continue;

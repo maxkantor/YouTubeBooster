@@ -4,10 +4,10 @@
  * Discovers / drafts remaining inventory, then calls weekday-send in a continuation
  * loop. Automatic COOK-001 sends qualified contacts without Admin Approvals clicks.
  */
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnAws } from './lib/aws-cli.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '../..');
@@ -31,7 +31,7 @@ function parseArgs(argv) {
 function ssmGet(name, secure = false) {
   const args = ['ssm', 'get-parameter', '--name', name, '--region', REGION, '--query', 'Parameter.Value', '--output', 'text'];
   if (secure) args.splice(4, 0, '--with-decryption');
-  const r = spawnSync('aws', args, { encoding: 'utf8' });
+  const r = spawnAws(args);
   if (r.status !== 0) return null;
   const v = (r.stdout || '').trim();
   return v && v !== 'None' ? v : null;

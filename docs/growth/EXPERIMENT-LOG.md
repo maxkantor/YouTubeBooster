@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-11-27 — AWS CLI path fix + COOK-001 blocking approval (deliverability pause)
+
+| Field | Value |
+|-------|--------|
+| Status | Production health **OK**. EXP-002 **Keep** (overdue eval). EXP-004 **Inconclusive** (overdue eval). EXP-001 **Inconclusive** (0 verified payments). |
+| Primary bottleneck | **checkout_started → verified payment** (7d through 2026-11-26: 1 checkout_started event, 0 verified product-attributed customers). |
+| Blocker removed | Cloud growth scripts failed SSM reads when `aws` was only under `~/.local/bin` — added `scripts/growth/lib/aws-cli.mjs` and wired `load-ssm-secrets-into-env.mjs` + `run-cook-001-weekday.mjs`. |
+| Distribution | **Not executed.** COOK-001 weekday path **health_stop:unsubscribe_rate** (DELIVERABILITY SAFETY PAUSE). SES accepted this run: **0**. Prepared named batch approval `APR-20261127-cook001-two` → `docs/growth/outreach/2026-11-27-cook001-named-send-approval.md` (@bowlofdelicious + @thecafesucrefarine, public mailto verified on contact pages). |
+| GA4 7d (events) | session_start **22** · audit_started **4** · audit_completed **4** · pricing_viewed **7** · checkout_started **1** (data-through **2026-11-26** ET). |
+| GA4 30d (events) | session_start **685** · audit_started **15** · checkout_started **3**. |
+| Verified customers | **0** (product-attributed Stripe). Verified revenue **$0**. |
+| CRM (lifetime) | sent **60** · delivered **25** · clicked **1** · paid **0** (API summary this run). |
+| Evaluation date | EXP-002 next: first verified customer or **2026-12-07**. EXP-004 next: first outreach click or after deliverability unpause + 10 new sends. |
+
 ### 2026-09-01 — COOK-001 cooldown 14d + overdue EXP-002/EXP-004 eval
 
 | Field | Value |
