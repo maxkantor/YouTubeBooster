@@ -80,7 +80,7 @@ A run is successful **only** when it either:
 - Do **not** launch another experiment merely because the current run requires a ship.
 - Measure **visits → activation → checkout → verified payment**.
 - Report **new customers acquired by this run** separately from customers merely **observed** during its date window.
-- If distribution requires Max’s approval and none exists: **prepare the exact action** and make the Admin report **lead with a blocking approval request**. Do not substitute another analytics or formatting task.
+- If distribution requires Max’s approval and none exists: **prepare the exact action** only from **real CRM Admin Approvals / needsApproval > 0** records (eligible, not suppressed, not already contacted). Never invent APR-* packages or named recipients in Agent Notes. Do **not** force `BLOCKING APPROVAL` when CRM `needsApproval` is 0. Preserve deliverability safety pauses; do not recommend clearing them.
 
 ## 30-day targets (targets, not promises)
 

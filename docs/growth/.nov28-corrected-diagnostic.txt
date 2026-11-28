@@ -1,0 +1,367 @@
+YouTubeBooster Growth · Safety paused · paid customers (7d): unavailable · Nov 28, 2026
+
+YouTubeBooster AI - Growth report
+================================
+Generated: Nov 28, 2026 1:00 PM America/New_York
+GA4 data through: Unknown
+7d: missing
+30d: missing
+Do not treat the report calendar day as included when GA4 processing is incomplete.
+Site: https://youtubeboosterai.com/
+Admin: https://youtubeboosterai.com/admin/orders
+
+YOUTUBEBOOSTERAI — DAILY GROWTH
+===============================
+Campaign: COOK-001
+Automatic: PAUSED (DELIVERABILITY SAFETY PAUSE (unsubscribe_rate))
+Owner action: Review deliverability pause before re-enabling sends (owner-authorized only)
+
+CUSTOMERS TODAY
+NEW PAID: 0
+REVENUE: $0.00
+
+EMAIL ACQUISITION
+-----------------
+Discovered: 0
+Contact attempts: 0
+Public emails found: 0
+Qualified: 0
+Drafted: 0
+Eligible: 0
+SES accepted: 0
+Delivered: DELIVERY_UNKNOWN / NOT TRACKED
+Bounced: 0
+Complaints: 0
+Clicks today/7d/lifetime: 0/0/1
+Audit starts: 0
+Audit completions: 0
+Signups: 0
+Checkout starts: 0
+Verified customers: 0
+Revenue: $0.00
+Delivery tracking: NOT_TRACKED
+Stop reason: DELIVERABILITY_PAUSE
+
+ACQUISITION TODAY (legacy detail)
+Discovered: 0
+Public emails found: 0
+Contact attempts: 0
+Qualified: 0
+Drafted (this run): 0
+SES attempted: 0
+SES accepted: 0
+Delivered: NOT TRACKED
+Delivery tracking: NOT_TRACKED
+Clicked today: 0
+Clicked 7d: 0
+Clicked lifetime: 1
+Audit started: 0
+Audit completed: 0
+Signup: 0
+Checkout: 0
+Paid: 0
+Stop reason: DELIVERABILITY_PAUSE
+
+PIPELINE
+Total prospects: 0
+Contactable: 0
+Ready: 0
+Needs approval: 0
+Follow-ups due: 0
+Cooldown: 0
+Suppressed: 0
+Missing email: 0
+Discovery backoff: 0
+Discovery eligible now: 0
+No public email (exhausted): 0
+Daily remaining: 0 / 100
+SES remaining: Unavailable
+Drafts generated (obs+subject): 127 — lifecycle UNAVAILABLE until API deploy
+
+CONTACT DISCOVERY DETAIL
+------------------------
+Attempts this run: 0
+Public emails found: 0
+Creators evaluated: 0
+Valid emails: 0
+Qualified: 0
+Analyzed: 0
+Insufficient personalization: 0
+Audits generated: 0
+Auto-eligible: 0
+Needs approval: 0
+Ready to send: 0
+
+PERSONALIZED AUDIT FUNNEL (CRM)
+--------------------------------
+Discovered: 0
+Contact verified: 0
+Analyzed: 0
+Qualified: 0
+Insufficient personalization: 0
+Audits generated: 0
+Emails sent: 0
+Clicks: 1
+Audit views: 0
+Audit engaged: 0
+Signups: 0
+Checkout starts: 0
+Paid: 0
+
+AUTOMATION STOP REASON: DELIVERABILITY_PAUSE
+
+SENDABILITY
+-----------
+Auto eligible: 0
+Manual review: 0
+Ready to send: 0
+
+APPLICATION GATES (before SES)
+------------------------------
+APP BLOCKED BEFORE SES: 1
+
+SES
+---
+SES ATTEMPTED: 0
+SES ACCEPTED: 0
+SES REJECTED: 0
+SES THROTTLED: 0
+SES did not block sending — no SES attempt was made.
+
+SKIPPED
+-------
+Already contacted: 0
+Duplicate: 0
+Invalid email: 0
+No public email: 0
+Not qualified: 0
+Suppressed: 0
+
+RESULTS
+-------
+Delivered: NOT TRACKED
+Clicks: 1
+Replies: 0
+Audits started: 0
+Signups: 0
+Customers: 0
+Revenue: $0.00
+
+NEXT ACTION
+-----------
+AUTOMATIC SENDING PAUSED — DELIVERABILITY SAFETY PAUSE (unsubscribe_rate)
+
+TODAY (this-run SES ledger)
+---------------------------
+SES accepted this run: 0
+Lifetime CRM SENT (not today): 58
+Recently sent (last 7d): 0
+Clicks today (COOK-001 CRM): 0
+Clicks 7d / lifetime (COOK-001 CRM): 0/1
+Audits: 0 start / 0 complete
+Signups: 0
+Customers: 0
+Revenue: $0.00
+Send → Click: N/A
+Click → Audit start: N/A
+Audit start → Complete: N/A
+Checkout → Paid: N/A
+Send → Paid: N/A
+Revenue per 100 emails: N/A
+Cohort: COOK-001
+
+7-DAY CUSTOMER FUNNEL (site-wide GA4 + CRM)
+------------------------------------------
+External visitors (sessions): Unknown
+Audit started: Unknown
+Audit completed: Unknown
+Signup / pricing: Unknown
+Checkout: Unknown
+Paid (verified): Unknown
+
+SITE FUNNEL
+-----------
+Qualified landing sessions: Unknown
+Audit starts: Unknown
+Audit completions: Unknown
+Signups: Unknown
+Checkout starts: Unknown
+Checkout completed / verified payments: Unknown
+Verified unique customers: Unknown
+
+EMAIL ACQUISITION (CRM)
+-----------------------
+Discovered: 0
+Contact attempts: 0
+Public emails found: 0
+Qualified: 0
+Drafted: 0
+Eligible: 0
+SES accepted: 0
+Delivered: 23
+Bounced: 0
+Complaints: 0
+Clicks: 1
+Audit starts: 0
+Audit completions: 0
+Signups: 0
+Checkout starts: 0
+Verified customers: 0
+Revenue: $0.00
+Automation: HEALTHY
+Acquisition performance: n/a
+
+AUTOMATION HEALTH
+-----------------
+Creator discovery / CRM: OK
+Contact discovery: OK
+SES: OK
+GA4: OK
+Stripe: OK
+Technical automation status: HEALTHY
+Acquisition performance: UNDERPERFORMING (0 verified customers)
+
+DELIVERABILITY
+--------------
+Bounce rate: N/A
+Complaint rate: N/A
+Unsubscribe rate: at/above stop threshold (>=2%)
+Current daily limit: 100
+Next ramp decision: PAUSED — unsubscribe_rate; effective send capacity 0
+
+1) DECISION
+-----------
+Decision: NO DISTRIBUTION
+
+Production application health: OK
+Technical automation: HEALTHY
+Acquisition eligibility: SAFETY_PAUSED
+Acquisition performance: SAFETY_PAUSED
+First measurable broken stage: DELIVERY_MEASUREMENT
+
+COOK-001 SES accepted today: 0.
+0 verified customers / $0 revenue this run.
+
+Current-run funnel (not lifetime):
+0 sent today → 0 clicks today → 0 completed audit (cohort fields) → 0 paid
+COOK-001 clicks today/7d/lifetime: 0/0/1
+
+Daily limit (maximum): 100
+Effective send capacity: 0
+Next eligible ramp: PAUSED - unsubscribe_rate; effective send capacity 0
+
+EXP-004 remains n/a.
+
+Distribution was not executed. This run is not successful unless a proven funnel blocker was removed. New customers this run: 0. Existing customers: 0. Observed in window: 0. Experiment-attributed: Unknown. Verified net revenue: $0.00. Send→Click N/A; Click→Start N/A; Start→Complete N/A; Complete→Signup N/A; Signup→Checkout N/A; Checkout→Paid N/A; Send→Paid N/A; Revenue/100 emails N/A. 0 experiments are collecting attributable traffic.
+
+EXPERIMENTS
+-----------
+(none marked active)
+
+SCOREBOARD (raw events unless noted)
+----------------------------------------
+Audit landing sessions: GA4 sessions on EXP-002 SEO/compare form pages plus EXP-003 /youtube-channel-analyzer (pagePath). Not qualified audits and not unique users.
+7d (missing): sessions=Unknown | audit_landing_sessions=Unknown | audit_starts=Unknown | audit_completions=Unknown | pricing=Unknown | checkout_starts=Unknown | verified_live_payments=Unknown | verified_unique_customers=Unknown | entitled_accounts=Unknown | verified_paid_crm=Unknown | non_customer_entitlements=Unknown | reason=n/a | verified_revenue=Unknown
+30d (missing): sessions=Unknown | audit_landing_sessions=Unknown | audit_starts=Unknown | audit_completions=Unknown | pricing=Unknown | checkout_starts=Unknown | verified_live_payments=Unknown | verified_unique_customers=Unknown | entitled_accounts=Unknown | verified_paid_crm=Unknown | non_customer_entitlements=Unknown | reason=n/a | verified_revenue=Unknown
+Audit start-to-completion (site-wide GA4): Site-wide GA4: Unavailable (raw audit_completed ÷ audit_started is not same-cohort). COOK-001 uses CRM prospect status via opaque yb_oid.
+Do not divide raw site-wide audit_completed by audit_started. COOK-001 rates use CRM status progression only.
+Experiment-attributed paid conversions: Unknown unless CRM outreach status = customer
+A $9.99 live charge is not verified external revenue unless product attribution AND external-customer checks pass. Current verified external revenue baseline is $0.00.
+
+ACQUISITION ACTION
+--------------------
+Distribution executed: no
+Distribution attempted: no
+Audience/channel: none / none
+Attributed visits: 0 clicks today / 0 in 7d / 1 lifetime (COOK-001 CRM)
+Activations: 0 COOK-001 CRM audit_started (site-wide 7d GA4 audit_starts: 5)
+Checkout starts: Unknown checkout_started events (7d window; not this-run attribution unless UTM)
+Newly attributed external customers (this run): 0
+Verified revenue: $0.00
+Channel owner approval (new distribution channel): Review deliverability pause before re-enabling sends (owner-authorized only)
+CRM Approvals queue: AUTOMATIC ACQUISITION: SAFETY_PAUSED — DELIVERABILITY SAFETY PAUSE (unsubscribe_rate)
+Exact action prepared: none
+COOK-001 outreach funnel (CRM; a draft is not distribution):
+  PROSPECTS EVALUATED: 0
+  SES ATTEMPTS (API calls): 0
+  SES ACCEPTED TODAY: 0
+  SKIPPED REASONS (all COOK-001 candidates this run):
+    SAFETY_PAUSED_UNSUBSCRIBE: 1
+  DRAFTS GENERATED (obs+subject, COOK-001): 127
+  NEEDS APPROVAL (Admin queue): 0
+  READY TO SEND: 0
+  RECENTLY SENT (last 7d): 0
+  ELIGIBLE NOW (send gates): 0
+  APPROVED ELIGIBLE NOW: 0
+  BLOCKED BY COOLDOWN (approved): 0
+  BLOCKED BY EMAIL VALIDATION (approved): 0
+  BLOCKED BY QUALIFICATION (approved): 0
+  BLOCKED BY SUPPRESSION (approved): 0
+  BLOCKED BY OTHER (approved): 0
+  DAILY REMAINING: 0 / limit 100
+  EXPECTED TO ATTEMPT: 0
+  SENT LIFETIME (CRM): 58
+  DELIVERED: 23
+  Delivery tracking: NOT_TRACKED
+  CLICKED today: 0
+  CLICKED 7d: 0
+  CLICKED lifetime: 1
+  CONVERTED: 0
+Change deployed: none this run
+Experiment: n/a
+Production URL: n/a
+Primary metric: n/a
+Attribution: n/a
+Commit: n/a
+Amplify deployment: n/a
+Production verification: n/a
+Customer buckets:
+  Existing customers: 0
+  Customers observed during the window: 0
+  Customers causally attributed to a specific experiment: Unknown
+  New customers acquired by the current run: 0
+
+NEXT ACTIONS
+---------------
+1. AUTOMATIC ACQUISITION: SAFETY_PAUSED — DELIVERABILITY SAFETY PAUSE (unsubscribe_rate). Preserve pause until owner-authorized resume under existing bounce (<3%) / complaint (<0.1%) / unsubscribe (<2%) thresholds with unique-email rates. Do not clear suppressions.
+2. Until the first newly attributed external customer: at most one experiment per funnel stage; prefer qualified distribution over additional CRO.
+3. Keep EXP-002 as the main Acquisition/SEO treatment. Treat EXP-003 as a nested URL. EXP-004 outreach stays awaiting named-recipient approval.
+4. Do not launch another experiment merely to have a ship.
+5. Report new customers acquired by this run separately from customers observed in the date window.
+
+Agent notes:
+Corrected diagnostic only — not dispatched. Pause preserved.
+
+TECHNICAL HEALTH
+----------------
+Overall API/site: OK
+- api: ok
+GA4: OK
+Stripe: OK
+SES send API: OK
+
+GROWTH HEALTH
+-------------
+Prospect discovery: n/a
+Contact discovery: n/a
+Outbound inventory: ready=0; needsApproval=0
+SES delivery measurement: NOT_TRACKED
+Clicks today/7d/lifetime: 0/0/1
+Audit activation (COOK-001): starts=0; completes=0
+Checkout conversion (site-wide 7d): Unknown starts → Unknown paid
+Reply tracking: SES receiving → S3 → youtubebooster-inbound-mail → /api/public/acq/inbound (hello@youtubeboosterai.com)
+
+DATA SOURCES
+--------------
+GA4=ok; Stripe=ok; Admin CRM entitlement=ok
+Stripe truth: only YouTubeBooster-attributed verified payments count. Account-wide Stripe is never product revenue. See docs/growth/STRIPE-PRODUCT-ALLOWLIST.md.
+Truth: GA4 is directional funnel signal.
+
+TECHNICAL DETAILS
+--------------------
+UTC generatedAt: 2026-11-28T18:00:00.000Z
+ET calendar day: 2026-11-28
+GA4 data through: Unknown
+Metric units: sessions=session_start events; audit_landing_sessions=pagePath sessions on audit landings; audit_*=raw event counts; payments/customers from Stripe.
+Top-events tables are display-only and must never feed the scoreboard.
+Experiment log: docs/growth/EXPERIMENT-LOG.md

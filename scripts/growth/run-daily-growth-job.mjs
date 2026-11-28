@@ -21,7 +21,11 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getAdminReportSentToday } from './lib/admin-report-once.mjs';
+import {
+  getAdminReportSentToday,
+  releaseAdminReportClaim,
+  tryClaimAdminReportSlot
+} from './lib/admin-report-once.mjs';
 import {
   aggregateSkipReasons,
   dominantSkipReason,
@@ -173,8 +177,21 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
   const cf = sendData.cohortFunnel || {};
   const crm = sendData.crmSummary || sendData.summary || {};
   const m7 = snapshot?.explicit7d || snapshot?.windows?.['7d']?.metrics || {};
-  const checkoutStarts = m7.checkout_started?.value ?? m7.checkout_started ?? 0;
-  const auditStarts = m7.audit_started?.value ?? m7.audit_started ?? 0;
+  const metricNum = (...keys) => {
+    for (const k of keys) {
+      const v = m7?.[k];
+      if (v && typeof v === 'object' && 'value' in v) {
+        const n = Number(v.value);
+        if (Number.isFinite(n)) return n;
+      }
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return 0;
+  };
+  // Canonical scoreboard uses audit_starts / checkout_starts (not raw event-name keys alone).
+  const checkoutStarts = metricNum('checkout_starts', 'checkout_started');
+  const auditStarts = metricNum('audit_starts', 'audit_started');
   const sesAccepted = Number(send.sent ?? 0) || 0;
   const sesAttempted = Number(send.sesAttempted ?? send.attempted ?? 0) || 0;
   const evaluated = Number(send.evaluated ?? 0) || 0;
@@ -207,7 +224,9 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     crm.automaticPauseReason ||
     crm.acquisitionStatus?.bottleneck ||
     null;
-  const crmClicks = Number(cf.clicked ?? funnel.clicked ?? 0) || 0;
+  const crmClicksLifetime = Number(cf.clicked ?? funnel.clicked ?? crm.clicked ?? 0) || 0;
+  const crmClicksToday = Number(crm.clickedToday ?? crm.clicks?.today ?? 0) || 0;
+  const crmClicks7d = Number(crm.clickedLast7Days ?? crm.clicks?.last7Days ?? 0) || 0;
   const crmAuditStarts = Number(cf.auditStarts ?? 0) || 0;
   const crmAuditCompletions = Number(cf.auditCompletions ?? 0) || 0;
   const crmSignups = Number(cf.pricingViewed ?? 0) || 0;
@@ -248,11 +267,18 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
     channel: 'approved SES outreach',
     audience: 'cooking creators (COOK-001 verified mailto)',
     attributedVisits:
-      crmClicks > 0
-        ? `${crmClicks} COOK-001 attributed clicks (CRM / opaque yb_oid)`
-        : '0 (no outreach clicks attributed in CRM)',
-    activations: `${crmAuditStarts} COOK-001 CRM audit_started (site-wide 7d GA4: ${auditStarts})`,
+      crmClicksToday > 0
+        ? `${crmClicksToday} COOK-001 CRM clicks today (opaque yb_oid)`
+        : `0 clicks today / ${crmClicks7d} in 7d / ${crmClicksLifetime} lifetime (COOK-001 CRM)`,
+    activations: `${crmAuditStarts} COOK-001 CRM audit_started (site-wide 7d GA4 audit_starts: ${auditStarts})`,
     checkoutStarts: `${crmCheckout} COOK-001 CRM checkout_started (site-wide 7d GA4: ${checkoutStarts})`,
+    _siteWideAuditStarts7d: auditStarts,
+    clicks: crm.clicks || {
+      today: crmClicksToday,
+      last7Days: crmClicks7d,
+      lifetime: crmClicksLifetime,
+      source: 'COOK-001_CRM'
+    },
     newCustomersThisRun: 0,
     existingCustomers: 0,
     customersObservedInWindow: 0,
@@ -297,7 +323,8 @@ function buildDistribution(sendData, todayYmd, opts, snapshot) {
       qualifiedProspects: Number(sendData.sendEligible ?? 0) || 0,
       emailsAttempted: sesAttempted,
       emailsSent: sesAccepted,
-      auditClicks: crmClicks,
+      // This-run cohort clicks: never substitute lifetime when SES accepted today is 0.
+      auditClicks: sesAccepted > 0 ? crmClicksToday : 0,
       auditStarts: crmAuditStarts,
       auditCompletions: crmAuditCompletions,
       signups: crmSignups,
@@ -360,7 +387,7 @@ function evaluateDueExperiments(todayYmd) {
   return evals;
 }
 
-function composeAndSendEmail(snapshotPath, distPath, evalPath, notesPath, opts) {
+function composeAndSendEmail(snapshotPath, distPath, evalPath, notesPath, opts, claimId = null) {
   log('Step 6: Composing and sending growth report email...');
   const args = [
     path.join(__dirname, 'compose-and-send-growth-email.mjs'),
@@ -375,8 +402,16 @@ function composeAndSendEmail(snapshotPath, distPath, evalPath, notesPath, opts) 
     log('(--dry-run / --skip-email set: printing preview without sending via SES)');
   }
   if (opts.forceEmail) args.push('--force-email');
+  if (claimId) args.push('--resume-claim', claimId);
 
-  const res = spawnSync(process.execPath, args, { encoding: 'utf8', cwd: ROOT });
+  const res = spawnSync(process.execPath, args, {
+    encoding: 'utf8',
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      ...(claimId ? { GROWTH_REPORT_CLAIM_ID: claimId } : {})
+    }
+  });
   log(`Report generator output:\n${res.stdout || res.stderr || '(empty)'}`);
   return res.status === 0;
 }
@@ -396,20 +431,42 @@ async function main() {
 
   fs.mkdirSync(LOG_DIR, { recursive: true });
 
-  // Cursor Automation (cloud) + Windows backup (local) share this SSM marker.
-  if (!opts.dryRun && !opts.forceEmail && !opts.force) {
-    const prior = getAdminReportSentToday(todayYmd);
-    if (prior.alreadySent) {
+  // Claim today's Admin report slot early (before COOK-001 / snapshot) so Cursor + GHA + Windows
+  // cannot both deliver scheduled emails. --force / --force-email remain for authorized diagnostics.
+  let heldClaimId = null;
+  if (!opts.dryRun) {
+    const claim = tryClaimAdminReportSlot({
+      ymd: todayYmd,
+      source: process.env.GROWTH_REPORT_SOURCE || 'run-daily-growth-job',
+      force: opts.forceEmail === true || opts.force === true
+    });
+    if (!claim.ok) {
       log(
-        `Skipping: Admin growth report already sent for ${todayYmd} ` +
-          `(${prior.source}; messageId=${prior.record?.messageId || 'n/a'}). No second email.`
+        `Skipping: Admin growth report already sent/claimed for ${todayYmd} ` +
+          `(${claim.source}; messageId=${claim.record?.messageId || 'n/a'}; status=${claim.record?.status || 'n/a'}). No second email.`
       );
       process.exit(0);
+    }
+    heldClaimId = claim.claim?.claimId || null;
+    log(
+      `Claimed Admin report slot for ${todayYmd} (claimId=${heldClaimId || 'forced'}; ssmOk=${claim.claim?.ssmOk !== false}).`
+    );
+  } else {
+    const prior = getAdminReportSentToday(todayYmd);
+    if (prior.alreadySent) {
+      log(`Dry-run note: prior Admin report marker exists (${prior.source}).`);
     }
   }
 
   const lockRes = acquireLock();
   if (!lockRes.ok) {
+    if (heldClaimId) {
+      releaseAdminReportClaim({
+        ymd: todayYmd,
+        claimId: heldClaimId,
+        source: process.env.GROWTH_REPORT_SOURCE || 'run-daily-growth-job'
+      });
+    }
     log('Terminating run because lock is already held and non-stale.');
     process.exit(0);
   }
@@ -452,11 +509,23 @@ async function main() {
     const notesPath = path.join(ROOT, `docs/growth/.notes-${todayYmd}-run.txt`);
     fs.writeFileSync(notesPath, notes, 'utf8');
 
-    const emailOk = composeAndSendEmail(snapPath, distPath, evalPath, notesPath, opts);
+    const emailOk = composeAndSendEmail(snapPath, distPath, evalPath, notesPath, opts, heldClaimId);
     log(`Email delivery status: ${emailOk ? 'SUCCESS' : 'FAILED'}`);
     if (!emailOk) throw new Error('Growth report email failed');
     log(`Daily growth job completed successfully.`);
   } catch (err) {
+    if (heldClaimId) {
+      const rel = releaseAdminReportClaim({
+        ymd: todayYmd,
+        claimId: heldClaimId,
+        source: process.env.GROWTH_REPORT_SOURCE || 'run-daily-growth-job'
+      });
+      log(
+        rel.released
+          ? `Released Admin report claim after failure (retry allowed).`
+          : `Claim release skipped (${rel.reason || 'n/a'}); sent marker preserved if SES accepted.`
+      );
+    }
     log(`FATAL ERROR in daily growth run: ${err instanceof Error ? err.stack : String(err)}`);
     process.exitCode = 1;
   } finally {

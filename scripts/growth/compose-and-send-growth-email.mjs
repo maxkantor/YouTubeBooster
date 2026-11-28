@@ -25,10 +25,16 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { getAdminReportSentToday, markAdminReportSentToday } from './lib/admin-report-once.mjs';
+import {
+  getAdminReportSentToday,
+  markAdminReportSentToday,
+  releaseAdminReportClaim,
+  tryClaimAdminReportSlot
+} from './lib/admin-report-once.mjs';
 import { composeGrowthReport } from './lib/compose-report.mjs';
 import { parseActiveExperiments } from './lib/experiment-report.mjs';
 import { loadCrmAcquisitionSummary } from './lib/load-crm-acquisition.mjs';
+import { validateGrowthReportConsistency } from './lib/report-consistency.mjs';
 import { loadSsmSecretsIntoEnv } from './load-ssm-secrets-into-env.mjs';
 import { etDateParts } from './lib/time.mjs';
 import { sendAdminGrowthEmail } from './notify-admin-email.mjs';
@@ -52,7 +58,8 @@ function parseArgs(argv) {
     distributionFile: null,
     subjectPrefix: 'YouTubeBooster Growth',
     skipCollect: false,
-    forceEmail: false
+    forceEmail: false,
+    resumeClaimId: null
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -69,6 +76,7 @@ function parseArgs(argv) {
     else if (a === '--subject-prefix') out.subjectPrefix = argv[++i] ?? out.subjectPrefix;
     else if (a === '--skip-collect') out.skipCollect = true;
     else if (a === '--force-email') out.forceEmail = true;
+    else if (a === '--resume-claim') out.resumeClaimId = argv[++i] ?? null;
   }
   return out;
 }
@@ -130,20 +138,40 @@ if (invokedAsCli) {
   (async () => {
   const args = parseArgs(process.argv.slice(2));
   const todayYmd = etDateParts().ymd;
-  if (!args.dryRun && !args.forceEmail) {
-    const prior = getAdminReportSentToday(todayYmd);
-    if (prior.alreadySent) {
+  const resumeClaimId = args.resumeClaimId || process.env.GROWTH_REPORT_CLAIM_ID || null;
+  let heldClaimId = null;
+  if (!args.dryRun) {
+    const claim = tryClaimAdminReportSlot({
+      ymd: todayYmd,
+      source: process.env.GROWTH_REPORT_SOURCE || 'compose-and-send',
+      force: args.forceEmail === true,
+      resumeClaimId: resumeClaimId || undefined
+    });
+    if (!claim.ok) {
       console.log(
         JSON.stringify({
           ok: true,
           skipped: true,
           reason: 'admin_report_already_sent_today',
           ymd: todayYmd,
-          prior: prior.record,
-          source: prior.source
+          prior: claim.record,
+          source: claim.source
         })
       );
       process.exit(0);
+    }
+    heldClaimId = claim.claim?.claimId || resumeClaimId || null;
+  } else {
+    const prior = getAdminReportSentToday(todayYmd);
+    if (prior.alreadySent && !args.forceEmail) {
+      console.log(
+        JSON.stringify({
+          ok: true,
+          dryRun: true,
+          note: 'prior report marker exists for today',
+          prior: prior.record
+        })
+      );
     }
   }
 
@@ -306,17 +334,22 @@ if (invokedAsCli) {
     process.exit(0);
   }
 
+  let sesAccepted = false;
   try {
     const result = sendAdminGrowthEmail({
       subject: report.subject,
       body: report.text,
       htmlBody: report.html
     });
+    sesAccepted = true;
+    // Persist messageId before anything else so retries cannot duplicate after SES accept.
     const marker = markAdminReportSentToday({
       ymd: todayYmd,
       messageId: result.messageId,
+      messageIds: result.messageIds,
       subject: result.subjectSent ?? report.subject,
-      source: process.env.GROWTH_REPORT_SOURCE || 'compose-and-send'
+      source: process.env.GROWTH_REPORT_SOURCE || 'compose-and-send',
+      claimId: heldClaimId || undefined
     });
     console.log(
       JSON.stringify(
@@ -336,6 +369,15 @@ if (invokedAsCli) {
       )
     );
   } catch (e) {
+    // Pre-SES failure: release claiming so an authorized retry can proceed.
+    // After SES accept, release is a no-op when messageId is present.
+    if (!sesAccepted && heldClaimId) {
+      releaseAdminReportClaim({
+        ymd: todayYmd,
+        claimId: heldClaimId,
+        source: process.env.GROWTH_REPORT_SOURCE || 'compose-and-send'
+      });
+    }
     console.error(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     process.exit(1);
   }

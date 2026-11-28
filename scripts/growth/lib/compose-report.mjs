@@ -23,6 +23,7 @@ import {
   formatMonthDayYear,
   ga4DataThroughYmd
 } from './time.mjs';
+import { validateGrowthReportConsistency } from './report-consistency.mjs';
 
 /** Normalize punctuation only. Do not strip Unicode from UTF-8 email bodies. */
 function typographicNormalize(s) {
@@ -193,8 +194,9 @@ export function emptyDistribution() {
     customersObservedInWindow: 0,
     experimentAttributedCustomers: 'Unknown',
     verifiedRevenue: '$0.00',
-    requiredOwnerApproval: DEFAULT_BLOCKING_APPROVAL,
-    blockingApproval: true,
+    requiredOwnerApproval: 'none',
+    // Never default to BLOCKING — requires CRM needsApproval > 0 (see normalizeDistribution).
+    blockingApproval: false,
     exactActionPrepared: 'none',
     outreachFunnel: {
       drafted: 0,
@@ -291,7 +293,9 @@ export function formatCrmAcquisitionText(dist) {
   );
   lines.push(`Bounced: ${ea.bounced ?? funnel.bounced ?? 0}`);
   lines.push(`Complaints: ${ea.complaints ?? 0}`);
-  lines.push(`Clicks: ${ea.clicks ?? clicks.lifetime ?? funnel.clicked ?? 0}`);
+  lines.push(
+    `Clicks today/7d/lifetime: ${clicks.today ?? 'NOT TRACKED'}/${clicks.last7Days ?? ea.clicks ?? 'NOT TRACKED'}/${clicks.lifetime ?? funnel.clicked ?? 0}`
+  );
   lines.push(`Audit starts: ${ea.auditStarts ?? d.cohortFunnel?.auditStarts ?? 0}`);
   lines.push(`Audit completions: ${ea.auditCompletions ?? d.cohortFunnel?.auditCompletions ?? 0}`);
   lines.push(`Signups: ${ea.signups ?? d.cohortFunnel?.accountsCreated ?? 0}`);
@@ -589,8 +593,14 @@ export function normalizeDistribution(input, ctx = {}) {
   if (input?.checkoutStarts == null && ctx.m7?.checkout_starts) {
     d.checkoutStarts = `${cell(ctx.m7.checkout_starts)} checkout_started events (7d window; not this-run attribution unless UTM)`;
   }
-  if (input?.activations == null && ctx.m7?.audit_starts) {
-    d.activations = `${cell(ctx.m7.audit_starts)} audit_started events (7d window; not this-run attribution unless UTM)`;
+  const siteWideAudits7d = (() => {
+    const v = ctx.m7?.audit_starts?.value ?? ctx.m7?.audit_starts ?? ctx.m7?.audit_started?.value ?? ctx.m7?.audit_started;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  })();
+  if (siteWideAudits7d != null) d._siteWideAuditStarts7d = siteWideAudits7d;
+  if (input?.activations == null && siteWideAudits7d != null) {
+    d.activations = `${siteWideAudits7d} site-wide GA4 audit_started (7d; not COOK-001 attributed)`;
   }
   d.executed = d.executed === true;
   // Hard rule: zero SES accepts cannot claim distribution executed.
@@ -659,10 +669,28 @@ export function normalizeDistribution(input, ctx = {}) {
   d.lifetimeCrmSent = Number(d.outreachFunnel?.sent);
   if (!Number.isFinite(d.lifetimeCrmSent)) d.lifetimeCrmSent = null;
 
-  if (d.executed) d.blockingApproval = false;
-  else if (input?.blockingApproval === false) d.blockingApproval = false;
-  else if (d.distributionAttempted) d.blockingApproval = false;
-  else d.blockingApproval = true;
+  // Blocking approval is CRM-authoritative only. Agent notes cannot invent it.
+  const needsApproval = Number(d.needsApproval ?? d.crmBoard?.needsApproval ?? 0) || 0;
+  const paused = Boolean(d.automaticPauseReason);
+  if (paused) {
+    d.blockingApproval = false;
+    d.dailyRemaining = 0;
+    d.requiredOwnerApproval =
+      d.requiredOwnerApproval && /pause|deliverability|safety/i.test(String(d.requiredOwnerApproval))
+        ? d.requiredOwnerApproval
+        : 'Review deliverability pause before re-enabling sends (owner-authorized only)';
+  } else if (needsApproval > 0) {
+    d.blockingApproval = true;
+    if (!d.requiredOwnerApproval || d.requiredOwnerApproval === 'none' || d.requiredOwnerApproval === DEFAULT_BLOCKING_APPROVAL) {
+      d.requiredOwnerApproval = `${needsApproval} CRM draft${needsApproval === 1 ? '' : 's'} in Admin Approvals (eligible queue only)`;
+    }
+  } else {
+    // Explicit false, automatic COOK-001, distribution attempted/executed, or empty queue — never invent BLOCKING.
+    d.blockingApproval = false;
+    // Drop invented APR-* / free-form approval text when CRM queue is empty.
+    d.requiredOwnerApproval = 'none';
+  }
+  d.needsApproval = needsApproval;
   return d;
 }
 
@@ -756,7 +784,9 @@ export function defaultDecisionText({
       : d.executed
         ? 'COLLECTING'
         : 'n/a';
-  const funnel = `${c.emailsSent} sent → ${c.auditClicks} clicks → ${c.auditCompletions} completed audit → ${c.verifiedCustomers} paid`;
+  const clicksToday = Number(d.clicks?.today ?? 0) || 0;
+  const thisRunClicks = Number(d.sesAcceptedThisRun || c.emailsSent || 0) > 0 ? clicksToday : 0;
+  const funnel = `${c.emailsSent} sent today → ${thisRunClicks} clicks today → ${c.auditCompletions} completed audit (cohort fields) → ${c.verifiedCustomers} paid`;
   const gates = d.performanceGates || {};
   // Prefer API gates (COOK-001 CRM 7d cohort). Do not re-derive from lifetime clicks or GA4.
   const firstBroken =
@@ -779,24 +809,30 @@ export function defaultDecisionText({
     gates.acquisitionPerformance ||
     (Number(c.verifiedCustomers || 0) > 0
       ? 'CONVERTING'
-      : firstBroken
-        ? 'UNDERPERFORMING'
-        : 'COLLECTING');
+      : d.automaticPauseReason
+        ? 'SAFETY_PAUSED'
+        : firstBroken
+          ? 'UNDERPERFORMING'
+          : 'COLLECTING');
   const compact = [
     `Decision: ${d.blockingApproval ? 'BLOCKING APPROVAL' : d.executed ? exp004State : d.distributionAttempted || (d.prospectsEvaluated || 0) > 0 ? 'DISTRIBUTION FAILED' : 'NO DISTRIBUTION'}`,
     '',
-    `Automation: ${gates.technicalAutomation || 'HEALTHY'}`,
+    `Production application health: ${health?.ok === false ? 'DEGRADED' : 'OK'}`,
+    `Technical automation: ${gates.technicalAutomation || 'HEALTHY'}`,
+    `Acquisition eligibility: ${d.automaticPauseReason ? 'SAFETY_PAUSED' : d.automaticSending ? 'PERMITTED' : 'NOT RUNNING'}`,
     `Acquisition performance: ${acquisitionHealth}`,
     firstBroken ? `First measurable broken stage: ${firstBroken}` : 'First measurable broken stage: insufficient evidence — COLLECTING',
     Array.isArray(gates.flags) && gates.flags.length ? `Performance flags: ${gates.flags.join(', ')}` : null,
     '',
-    `COOK-001 sent ${c.emailsSent} qualified creator emails today.`,
+    `COOK-001 SES accepted today: ${c.emailsSent}.`,
     `${c.verifiedCustomers} verified customers / $${Number(c.verifiedRevenue || 0).toFixed(0)} revenue this run.`,
     '',
-    `Current funnel:`,
+    `Current-run funnel (not lifetime):`,
     funnel,
+    `COOK-001 clicks today/7d/lifetime: ${d.clicks?.today ?? '?'}/${d.clicks?.last7Days ?? '?'}/${d.clicks?.lifetime ?? d.outreachFunnel?.clicked ?? '?'}`,
     '',
-    `Daily limit: ${d.deliverability?.dailyLimit ?? c.dailyLimit ?? 10}`,
+    `Daily limit (maximum): ${d.deliverability?.dailyLimit ?? c.dailyLimit ?? 10}`,
+    `Effective send capacity: ${d.automaticPauseReason ? 0 : d.dailyRemaining ?? 'see CRM'}`,
     `Next eligible ramp: ${d.deliverability?.nextRampDecision || `hold; ${c.rampBlockReason || 'sample_too_small'}`}`,
     '',
     `EXP-004 remains ${exp004State}.`
@@ -953,7 +989,7 @@ function nextActions({ classified, nextFuture, reportYmd, dist }) {
 
   if (d.automaticPauseReason) {
     items.push(
-      `AUTOMATIC ACQUISITION: SAFETY_PAUSED — ${d.automaticPauseReason}. Owner action required: Review deliverability pause before re-enabling sends.`
+      `AUTOMATIC ACQUISITION: SAFETY_PAUSED — ${d.automaticPauseReason}. Preserve pause until owner-authorized resume under existing bounce (<3%) / complaint (<0.1%) / unsubscribe (<2%) thresholds with unique-email rates. Do not clear suppressions.`
     );
   } else if (autoOn) {
     items.push('AUTOMATIC ACQUISITION: RUNNING. Owner action required: NONE.');
@@ -1035,8 +1071,8 @@ export function composeGrowthReport(opts) {
   const m7 = windows['7d']?.metrics;
   const m30 = windows['30d']?.metrics;
 
-  const noteText = (opts.notes && opts.notes.trim()) || '';
-  const decision =
+  let noteText = (opts.notes && opts.notes.trim()) || '';
+  let decision =
     (opts.decision && opts.decision.trim()) ||
     defaultDecisionText({
       classified,
@@ -1048,6 +1084,41 @@ export function composeGrowthReport(opts) {
       reportYmd,
       dist
     });
+
+  const consistency = validateGrowthReportConsistency({
+    dist,
+    decision,
+    notes: noteText,
+    subject: ''
+  });
+  Object.assign(dist, consistency.dist || {});
+  noteText = consistency.notes || noteText;
+  if (!consistency.ok) {
+    decision =
+      defaultDecisionText({
+        classified,
+        health: opts.health,
+        shipped,
+        ship,
+        stripe30,
+        nextFuture,
+        reportYmd,
+        dist
+      }) +
+      `\n\nREPORT VALIDATION: sanitized unsafe recommendations.\n` +
+      consistency.errors.map((e) => `- ${e}`).join('\n');
+  } else if (!(opts.decision && opts.decision.trim())) {
+    decision = defaultDecisionText({
+      classified,
+      health: opts.health,
+      shipped,
+      ship,
+      stripe30,
+      nextFuture,
+      reportYmd,
+      dist
+    });
+  }
 
   const subject = buildSubject({
     prefix: opts.subjectPrefix,
@@ -1091,7 +1162,8 @@ export function composeGrowthReport(opts) {
   t.push(`SES accepted this run: ${dist.sesAcceptedThisRun ?? cohort.emailsSent}`);
   t.push(`Lifetime CRM SENT (not today): ${dist.lifetimeCrmSent ?? dist.outreachFunnel?.sent ?? 'Unknown'}`);
   t.push(`Recently sent (last ${dist.crmBoard?.recentlySentWindowDays ?? 7}d): ${dist.sentLast7Days ?? dist.crmBoard?.recentlySent ?? 0}`);
-  t.push(`Clicks (this-run cohort): ${cohort.auditClicks}`);
+  t.push(`Clicks today (COOK-001 CRM): ${dist.clicks?.today ?? cohort.auditClicks ?? 'NOT TRACKED'}`);
+  t.push(`Clicks 7d / lifetime (COOK-001 CRM): ${dist.clicks?.last7Days ?? '?'}/${dist.clicks?.lifetime ?? dist.outreachFunnel?.clicked ?? '?'}`);
   t.push(`Audits: ${cohort.auditStarts} start / ${cohort.auditCompletions} complete`);
   t.push(`Signups: ${cohort.signups}`);
   t.push(`Customers: ${cohort.verifiedCustomers}`);
@@ -1205,7 +1277,8 @@ export function composeGrowthReport(opts) {
       t.push(`  Eligible traffic: ${copy.eligible}`);
       t.push(`  Primary result: ${copy.primary}`);
       t.push(`  Sample: ${copy.sample}`);
-      t.push(`  Evaluation date: ${ex.evalDateLabel || ex.evalDate || 'n/a'}`);
+      t.push(`  Evaluation due date (from experiment log): ${ex.evalDateLabel || ex.evalDate || 'n/a'}`);
+    t.push(`  Decision recorded: ${ex.decision || 'none'} ${ex.collecting ? '(COLLECTING)' : ''} ${ex.dueUnevaluated ? '(due — not yet recorded in log)' : ''}`.trim());
       t.push('');
     }
     t.push(`Overlap: ${EXP_OVERLAP_POLICY.summary}`);
@@ -1733,6 +1806,7 @@ export function composeGrowthReport(opts) {
     html,
     decision,
     warnings,
+    consistency,
     experiments: classified,
     nextEval: nextFuture,
     windows,
