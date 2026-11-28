@@ -2,7 +2,7 @@
  * Admin-authenticated CRM acquisition summary for growth reporting.
  * Never prints emails or secrets.
  */
-import { spawnSync } from 'node:child_process';
+import { spawnAws } from './aws-cli.mjs';
 
 const API = process.env.YB_API_BASE || 'https://yri8sw6k1h.execute-api.us-east-1.amazonaws.com';
 const REGION = process.env.AWS_REGION || 'us-east-1';
@@ -10,7 +10,7 @@ const REGION = process.env.AWS_REGION || 'us-east-1';
 function ssmGet(name, secure = false) {
   const args = ['ssm', 'get-parameter', '--name', name, '--region', REGION, '--query', 'Parameter.Value', '--output', 'text'];
   if (secure) args.splice(4, 0, '--with-decryption');
-  const r = spawnSync('aws', args, { encoding: 'utf8' });
+  const r = spawnAws(args);
   if (r.status !== 0) return null;
   const v = (r.stdout || '').trim();
   return v && v !== 'None' ? v : null;
