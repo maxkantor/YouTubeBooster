@@ -42,6 +42,20 @@ Weekday labels are derived from ISO dates in `America/New_York` (never hardcoded
 
 ## Log
 
+### 2026-11-28 — CRM aws-cli wiring + COOK-001 blocking (deliverability pause)
+
+| Field | Value |
+|-------|--------|
+| Status | Production health **OK**. EXP-002 **Keep** (next eval 2026-12-07). EXP-004 **Inconclusive** (60 lifetime CRM sent · 1 clicked · 0 paid; deliverability pause). EXP-001 **Inconclusive** (0 verified payments). |
+| Primary bottleneck | **checkout_started → verified payment** (7d through **2026-11-27**: **0** checkout_started events, 0 verified customers). |
+| Blocker removed | Growth CRM + entitlement scan failed when `aws` was not on PATH — `load-crm-acquisition.mjs`, `crm-entitlements.mjs`, and `notify-admin-email.mjs` now use `spawnAws`. |
+| Distribution | **Not executed.** COOK-001 **DELIVERABILITY_PAUSE** (`health_stop:unsubscribe_rate`). SES accepted this run: **0**. Reconfirmed public contact pages for `APR-20261127-cook001-two` (B01/B02). **Blocking owner approval:** unpause deliverability + **APPROVE** `APR-20261127-cook001-two`. |
+| GA4 7d (events) | session_start **24** · audit_started **5** · audit_completed **5** · pricing_viewed **5** · checkout_started **0** (data-through **2026-11-27** ET). |
+| GA4 30d (events) | session_start **687** · audit_started **16** · checkout_started **3**. |
+| Verified customers | **0** (product-attributed Stripe). Verified revenue **$0**. |
+| CRM (lifetime) | sent **60** · delivered **25** · clicked **1** · paid **0** (API summary this run). SES accepted this run: **0**. |
+| Evaluation date | EXP-002 next: **2026-12-07**. EXP-004 next: after deliverability unpause + first post-pause send or outreach click. |
+
 ### 2026-11-27 — AWS CLI path fix + COOK-001 blocking approval (deliverability pause)
 
 | Field | Value |

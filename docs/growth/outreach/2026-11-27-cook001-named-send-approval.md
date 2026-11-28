@@ -17,8 +17,8 @@
 
 | ID | Handle | Channel URL | Public contact source | Mailto verification (2026-11-27) |
 |----|--------|-------------|----------------------|----------------------------------|
-| B01 | Bowl of Delicious | https://www.youtube.com/@bowlofdelicious | https://www.bowlofdelicious.com/contact/ | **Confirmed** — official contact page lists a public business email (Elizabeth Lindemann). |
-| B02 | The Café Sucre Farine | https://www.youtube.com/@thecafesucrefarine | https://thecafesucrefarine.com/contact/ | **Confirmed** — official contact page lists a public business email (Chris). |
+| B01 | Bowl of Delicious | https://www.youtube.com/@bowlofdelicious | https://www.bowlofdelicious.com/contact/ | **Reconfirmed 2026-11-28** — official contact page still lists a public business email (Elizabeth Lindemann). |
+| B02 | The Café Sucre Farine | https://www.youtube.com/@thecafesucrefarine | https://thecafesucrefarine.com/contact/ | **Reconfirmed 2026-11-28** — official contact page still lists a public business email (Chris). |
 
 **Suggested subjects (approve or edit):**
 

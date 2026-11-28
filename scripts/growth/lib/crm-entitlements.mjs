@@ -2,7 +2,7 @@
  * Admin CRM entitlement/activation from DynamoDB (ybai-purchases + ybai-users).
  * Never includes emails or other PII in returned objects.
  */
-import { spawnSync } from 'node:child_process';
+import { spawnAws } from './aws-cli.mjs';
 
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const PAYMENTS_TABLE = process.env.YB_PAYMENTS_TABLE || 'ybai-purchases';
@@ -15,7 +15,7 @@ export const NON_CUSTOMER_USER_IDS = new Set([
 ]);
 
 function awsJson(args) {
-  const r = spawnSync('aws', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+  const r = spawnAws(args, { maxBuffer: 20 * 1024 * 1024 });
   if (r.status !== 0) {
     return { ok: false, error: (r.stderr || r.stdout || 'aws failed').slice(0, 400) };
   }

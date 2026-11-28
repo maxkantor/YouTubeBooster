@@ -18,8 +18,8 @@
  * Optional: pass htmlBody for multipart HTML+text (Outlook-friendly).
  * Never prints secret values. Exits non-zero if send fails.
  */
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { spawnAws } from './lib/aws-cli.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
@@ -40,7 +40,7 @@ function getSsm(name, withDecryption = false) {
     'text'
   ];
   if (withDecryption) args.splice(4, 0, '--with-decryption');
-  const r = spawnSync('aws', args, { encoding: 'utf8' });
+  const r = spawnAws(args);
   if (r.status !== 0) {
     throw new Error(`SSM get failed for ${name}`);
   }
@@ -126,22 +126,18 @@ function sendOne({ fromSource, to, subject, bodyPayload }) {
       'utf8'
     );
 
-    const r = spawnSync(
-      'aws',
-      [
-        'ses',
-        'send-email',
-        '--region',
-        REGION,
-        '--from',
-        fromSource,
-        '--destination',
-        `file://${destPath.replace(/\\/g, '/')}`,
-        '--message',
-        `file://${msgPath.replace(/\\/g, '/')}`
-      ],
-      { encoding: 'utf8' }
-    );
+    const r = spawnAws([
+      'ses',
+      'send-email',
+      '--region',
+      REGION,
+      '--from',
+      fromSource,
+      '--destination',
+      `file://${destPath.replace(/\\/g, '/')}`,
+      '--message',
+      `file://${msgPath.replace(/\\/g, '/')}`
+    ]);
 
     if (r.status !== 0) {
       const err = (r.stderr || r.stdout || '').slice(0, 400);
